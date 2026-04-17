@@ -48,7 +48,7 @@ workloads.
 | Persistence    | `rusqlite` (bundled SQLite)             |
 | i18n           | Fluent (`.ftl`), 18 locales             |
 | Packaging      | `tauri bundle` (MSI / NSIS / DMG / AppImage / deb / rpm) |
-| License        | MIT **or** Apache-2.0, your choice      |
+| License        | All Rights Reserved (proprietary; source-visible) |
 
 Every dependency is permissively licensed. `cargo deny check` runs in CI and
 fails the build if any transitive dependency falls outside the allowlist
@@ -160,5 +160,13 @@ docs + i18n + smoke test + green build + Conventional-Commits commit.
 
 ## License
 
-Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE)
-at your option. See [`LICENSE`](LICENSE) for the dual-license note.
+**All Rights Reserved.** Copyright (c) 2026 Mike Weaver. See [`LICENSE`](LICENSE)
+for the full terms.
+
+This repository is publicly visible for reference and review only. No license
+or permission is granted to use, copy, modify, distribute, or sell the code,
+in whole or in part, without the express prior written permission of the
+copyright holder. Workspace dependencies remain under their respective
+permissive licenses (MIT / Apache-2.0 / BSD / ISC / CC0 / Unlicense /
+Unicode-DFS / Zlib / MPL-2.0 / BSL-1.0); the `cargo deny` policy enforces
+that allowlist as the dependency tree evolves.

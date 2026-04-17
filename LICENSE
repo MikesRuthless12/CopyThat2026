@@ -1,11 +1,37 @@
-Copy That 2026 is dual-licensed under either of:
+All Rights Reserved
 
-  - MIT License           (see LICENSE-MIT)
-  - Apache License, 2.0   (see LICENSE-APACHE)
+Copyright (c) 2026 Mike Weaver
 
-at your option.
+This source code is made publicly available for reference and review only.
 
-Both licenses are permissive and grant full commercial rights. Unless you
-explicitly state otherwise, any contribution intentionally submitted for
-inclusion in this project, as defined in the Apache-2.0 license, shall be
-dual-licensed as above, without any additional terms or conditions.
+NO LICENSE OR PERMISSION IS GRANTED to use, copy, modify, merge, publish,
+distribute, sublicense, sell, or otherwise exploit the software or any
+portion thereof, in source or binary form, in whole or in part, for any
+purpose whatsoever, without the express prior written permission of the
+copyright holder.
+
+You may NOT, without prior written permission:
+
+  * Use the code in any product, service, or system, commercial or
+    otherwise.
+  * Modify the code or create derivative works based upon it.
+  * Redistribute the code in source or compiled form, in whole or in part.
+  * Reverse-engineer, decompile, or disassemble compiled artifacts.
+  * Use the code to train, fine-tune, or evaluate machine-learning models.
+  * Sell, license, or otherwise transfer rights to the code or any
+    derivative work.
+
+Viewing the code through the hosted source-control platform, and the
+limited forking permitted by that platform's Terms of Service solely for
+the purpose of contributing back via pull request, are not waivers of any
+of the rights reserved above. No implied license arises from the public
+visibility of this repository.
+
+For licensing inquiries, contact the copyright holder.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY
+ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
