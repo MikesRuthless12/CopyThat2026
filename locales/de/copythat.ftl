@@ -1,3 +1,128 @@
 app-name = Copy That 2026
 # MT
+window-title = Copy That 2026
+# MT
 shred-ssd-advisory = Warnung: Das Ziel liegt auf einer SSD. Mehrfaches Überschreiben bereinigt den Flash-Speicher nicht zuverlässig, da Wear-Leveling und Overprovisioning die Daten aus der logischen Blockadresse herausschieben. Für Solid-State-Medien sind ATA SECURE ERASE, NVMe Format mit Secure Erase oder eine vollverschlüsselte Festplatte mit anschließend verworfenem Schlüssel vorzuziehen.
+
+# MT
+state-idle = Leerlauf
+# MT
+state-copying = Kopieren
+# MT
+state-verifying = Prüfen
+# MT
+state-paused = Pausiert
+# MT
+state-error = Fehler
+
+# MT
+state-pending = In Warteschlange
+# MT
+state-running = Läuft
+# MT
+state-cancelled = Abgebrochen
+# MT
+state-succeeded = Fertig
+# MT
+state-failed = Fehlgeschlagen
+
+# MT
+action-pause = Pausieren
+# MT
+action-resume = Fortsetzen
+# MT
+action-cancel = Abbrechen
+# MT
+action-pause-all = Alle Aufgaben pausieren
+# MT
+action-resume-all = Alle Aufgaben fortsetzen
+# MT
+action-cancel-all = Alle Aufgaben abbrechen
+# MT
+action-close = Schließen
+# MT
+action-reveal = Im Ordner anzeigen
+
+# MT
+menu-pause = Pausieren
+# MT
+menu-resume = Fortsetzen
+# MT
+menu-cancel = Abbrechen
+# MT
+menu-remove = Aus Warteschlange entfernen
+# MT
+menu-reveal-source = Quelle im Ordner anzeigen
+# MT
+menu-reveal-destination = Ziel im Ordner anzeigen
+
+# MT
+header-eta-label = Geschätzte Restzeit
+# MT
+header-toolbar-label = Globale Steuerung
+
+# MT
+footer-queued = aktive Aufgaben
+# MT
+footer-total-bytes = in Bearbeitung
+# MT
+footer-errors = Fehler
+# MT
+footer-history = Verlauf
+
+# MT
+empty-title = Dateien oder Ordner zum Kopieren ablegen
+# MT
+empty-hint = Ziehen Sie Elemente auf das Fenster. Wir fragen nach einem Ziel und erstellen dann eine Aufgabe pro Quelle.
+# MT
+empty-region-label = Aufgabenliste
+
+# MT
+details-drawer-label = Aufgabendetails
+# MT
+details-source = Quelle
+# MT
+details-destination = Ziel
+# MT
+details-state = Zustand
+# MT
+details-bytes = Bytes
+# MT
+details-files = Dateien
+# MT
+details-speed = Geschwindigkeit
+# MT
+details-eta = Restzeit
+# MT
+details-error = Fehler
+
+# MT
+drop-dialog-title = Abgelegte Elemente übertragen
+# MT
+drop-dialog-subtitle = { $count } Element(e) bereit zur Übertragung. Wählen Sie einen Zielordner, um zu beginnen.
+# MT
+drop-dialog-mode = Vorgang
+# MT
+drop-dialog-copy = Kopieren
+# MT
+drop-dialog-move = Verschieben
+# MT
+drop-dialog-pick-destination = Ziel auswählen
+# MT
+drop-dialog-change-destination = Ziel ändern
+# MT
+drop-dialog-start-copy = Kopieren starten
+# MT
+drop-dialog-start-move = Verschieben starten
+
+# MT
+eta-calculating = wird berechnet…
+# MT
+eta-unknown = unbekannt
+
+# MT
+toast-job-done = Übertragung abgeschlossen
+# MT
+toast-copy-queued = Kopieren in Warteschlange
+# MT
+toast-move-queued = Verschieben in Warteschlange

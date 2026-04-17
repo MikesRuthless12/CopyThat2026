@@ -1,5 +1,15 @@
 //! Per-copy configuration.
 
+use std::future::Future;
+use std::path::PathBuf;
+use std::pin::Pin;
+use std::sync::Arc;
+
+use tokio::sync::mpsc;
+
+use crate::control::CopyControl;
+use crate::error::CopyError;
+use crate::event::{CopyEvent, CopyReport};
 use crate::verify::Verifier;
 
 pub const DEFAULT_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
@@ -47,6 +57,91 @@ pub struct CopyOptions {
     /// Defaults to `true` — callers who know their filesystem can set
     /// it off.
     pub fsync_before_verify: bool,
+    /// Which copy strategy the engine should attempt. See [`CopyStrategy`].
+    /// Default is [`CopyStrategy::Auto`]. The strategy is only consulted
+    /// when [`fast_copy_hook`](Self::fast_copy_hook) is also set;
+    /// otherwise the engine always runs the async loop regardless of
+    /// strategy.
+    pub strategy: CopyStrategy,
+    /// Optional bridge to the OS-native fast paths.
+    ///
+    /// When `Some`, `copy_file` consults the hook before opening files
+    /// for the standard read/write loop. The hook is responsible for
+    /// reflink, `CopyFileExW`, `copyfile(3)`, `copy_file_range(2)`, and
+    /// any other syscall-level acceleration. Returning
+    /// [`FastCopyHookOutcome::NotSupported`] tells the engine to fall
+    /// through to its async loop. The bridge implementation lives in
+    /// `copythat-platform` to keep this crate `#![forbid(unsafe_code)]`-clean.
+    ///
+    /// The hook is bypassed entirely when [`verify`](Self::verify) is
+    /// `Some`, because the verify pipeline relies on hashing the source
+    /// bytes during the write loop — fast paths don't expose the
+    /// bytes, so verifying through them would require a third-pass
+    /// re-read of both files and lose the integration's perf win.
+    pub fast_copy_hook: Option<Arc<dyn FastCopyHook>>,
+}
+
+/// User-selectable copy strategy.
+///
+/// Controls which acceleration paths `copy_file` attempts when a
+/// [`FastCopyHook`] is installed. With no hook installed, the engine
+/// always uses the async byte-by-byte loop regardless of strategy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CopyStrategy {
+    /// Try reflink → OS-native → async fallback. The default.
+    #[default]
+    Auto,
+    /// Skip every fast path; always use the async byte-by-byte engine.
+    /// Useful for benchmarks and for filesystems where reflink / native
+    /// shortcuts have known correctness issues.
+    AlwaysAsync,
+    /// Try reflink → OS-native; if neither is available, surface an
+    /// `IoOther` error rather than silently falling through to the
+    /// async engine. Useful for tests that need to assert a specific
+    /// fast path actually fired.
+    AlwaysFast,
+    /// Skip the reflink attempt; OS-native and async fallback still apply.
+    /// Useful when the user has observed reflink overhead on a particular
+    /// filesystem (rare, but documented for parity with TeraCopy).
+    NoReflink,
+}
+
+/// Outcome a [`FastCopyHook`] reports back to the engine.
+#[derive(Debug)]
+pub enum FastCopyHookOutcome {
+    /// Hook handled the copy. The included [`CopyReport`] is the truth
+    /// the engine returns to its caller.
+    Done(CopyReport),
+    /// Hook tried every applicable strategy and none was supported on
+    /// this src / dst pair. The engine should fall through to its async
+    /// loop (unless [`CopyStrategy::AlwaysFast`] was requested, in
+    /// which case the engine surfaces an error instead).
+    NotSupported,
+}
+
+/// Bridge contract for the OS-native fast paths.
+///
+/// Implemented by `copythat-platform::PlatformFastCopyHook`. Kept in
+/// this crate so [`CopyOptions`] can hold a trait object without a
+/// dependency cycle.
+///
+/// The hook receives a *clone* of the active [`CopyOptions`] including
+/// itself; implementations must not recursively call back into
+/// [`crate::copy_file`] with the same options or they will infinite-loop.
+/// Real implementations dispatch to the relevant syscall directly.
+pub trait FastCopyHook: Send + Sync + std::fmt::Debug {
+    /// Try to copy `src` to `dst` using a fast path. Emits Started /
+    /// Progress / Completed events on `events` exactly like the async
+    /// engine would. Honours `ctrl` for pause / cancel where the
+    /// underlying syscall supports it (most do).
+    fn try_copy<'a>(
+        &'a self,
+        src: PathBuf,
+        dst: PathBuf,
+        opts: CopyOptions,
+        ctrl: CopyControl,
+        events: mpsc::Sender<CopyEvent>,
+    ) -> Pin<Box<dyn Future<Output = Result<FastCopyHookOutcome, CopyError>> + Send + 'a>>;
 }
 
 impl Default for CopyOptions {
@@ -61,6 +156,8 @@ impl Default for CopyOptions {
             fail_if_exists: false,
             verify: None,
             fsync_before_verify: true,
+            strategy: CopyStrategy::Auto,
+            fast_copy_hook: None,
         }
     }
 }

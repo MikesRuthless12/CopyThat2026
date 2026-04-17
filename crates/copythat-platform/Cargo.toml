@@ -8,7 +8,60 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 
-[lints]
-workspace = true
+[lints.rust]
+# This crate is the *only* place in the workspace where `unsafe` is
+# legal: every fast path we wrap (CopyFileExW / copyfile / copy_file_range
+# / sendfile) is a raw FFI call. The workspace lint is `warn`; we relax to
+# `allow` here so the platform syscalls don't pollute clippy output.
+unsafe_code = "allow"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[features]
+default = []
+# Heavy integration tests (4 GB reflink timing assertion, 2 GB sparse
+# round-trip). Off by default; CI Linux/Btrfs runner opts in.
+slow-tests = []
 
 [dependencies]
+copythat-core = { path = "../copythat-core" }
+reflink-copy = "0.1"
+thiserror = "2"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "test-util",
+    "time",
+] }
+
+# Phase 6 smoke test lives at the workspace root.
+[[test]]
+name = "phase_06_fast_paths"
+path = "../../tests/smoke/phase_06_fast_paths.rs"

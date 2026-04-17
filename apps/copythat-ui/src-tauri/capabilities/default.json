@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Capabilities granted to the main window by default.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:default"]
 }

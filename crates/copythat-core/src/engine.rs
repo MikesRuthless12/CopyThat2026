@@ -18,7 +18,7 @@ use tokio::sync::mpsc;
 use crate::control::CopyControl;
 use crate::error::CopyError;
 use crate::event::{CopyEvent, CopyReport};
-use crate::options::CopyOptions;
+use crate::options::{CopyOptions, CopyStrategy, FastCopyHookOutcome};
 use crate::verify::Hasher;
 
 const PROGRESS_MIN_BYTES: u64 = 16 * 1024;
@@ -48,6 +48,50 @@ pub async fn copy_file(
 
     if !opts.follow_symlinks && src_metadata.file_type().is_symlink() {
         return copy_symlink(&src_path, &dst_path, &opts, &events).await;
+    }
+
+    // Phase 6: consult the fast-copy hook before opening files for the
+    // standard async loop. Bypassed entirely when verify is enabled —
+    // the verify pipeline relies on hashing source bytes during the
+    // write loop, which the hook can't do without a separate read pass
+    // that defeats the integration's perf win.
+    if opts.verify.is_none()
+        && opts.strategy != CopyStrategy::AlwaysAsync
+        && let Some(hook) = opts.fast_copy_hook.clone()
+    {
+        match hook
+            .try_copy(
+                src_path.clone(),
+                dst_path.clone(),
+                opts.clone(),
+                ctrl.clone(),
+                events.clone(),
+            )
+            .await
+        {
+            Ok(FastCopyHookOutcome::Done(report)) => return Ok(report),
+            Ok(FastCopyHookOutcome::NotSupported) => {
+                if opts.strategy == CopyStrategy::AlwaysFast {
+                    let err = CopyError {
+                        kind: crate::error::CopyErrorKind::IoOther,
+                        src: src_path.clone(),
+                        dst: dst_path.clone(),
+                        raw_os_error: None,
+                        message: "no fast path available (CopyStrategy::AlwaysFast)".to_string(),
+                    };
+                    let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+                    return Err(err);
+                }
+                // Auto / NoReflink: fall through to the async engine below.
+            }
+            Err(err) => {
+                if !opts.keep_partial {
+                    let _ = tokio::fs::remove_file(&dst_path).await;
+                }
+                let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+                return Err(err);
+            }
+        }
     }
 
     let total = src_metadata.len();

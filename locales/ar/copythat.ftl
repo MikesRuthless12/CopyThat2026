@@ -1,3 +1,128 @@
 app-name = Copy That 2026
 # MT
+window-title = Copy That 2026
+# MT
 shred-ssd-advisory = تحذير: هذا الهدف موجود على قرص SSD. لا توفر عمليات الكتابة المتعددة تطهيرًا موثوقًا لذاكرة الفلاش لأن موازنة التآكل والتخصيص الإضافي ينقلان البيانات بعيدًا عن عنوان الكتلة المنطقي. بالنسبة لوسائط الحالة الصلبة، يُفضَّل استخدام ATA SECURE ERASE أو NVMe Format مع المحو الآمن أو التشفير الكامل للقرص مع التخلص من المفتاح.
+
+# MT
+state-idle = في وضع الخمول
+# MT
+state-copying = جارٍ النسخ
+# MT
+state-verifying = جارٍ التحقق
+# MT
+state-paused = متوقف مؤقتًا
+# MT
+state-error = خطأ
+
+# MT
+state-pending = في قائمة الانتظار
+# MT
+state-running = قيد التشغيل
+# MT
+state-cancelled = ملغى
+# MT
+state-succeeded = مكتمل
+# MT
+state-failed = فشل
+
+# MT
+action-pause = إيقاف مؤقت
+# MT
+action-resume = استئناف
+# MT
+action-cancel = إلغاء
+# MT
+action-pause-all = إيقاف كل المهام مؤقتًا
+# MT
+action-resume-all = استئناف كل المهام
+# MT
+action-cancel-all = إلغاء كل المهام
+# MT
+action-close = إغلاق
+# MT
+action-reveal = عرض في المجلد
+
+# MT
+menu-pause = إيقاف مؤقت
+# MT
+menu-resume = استئناف
+# MT
+menu-cancel = إلغاء
+# MT
+menu-remove = إزالة من قائمة الانتظار
+# MT
+menu-reveal-source = عرض المصدر في المجلد
+# MT
+menu-reveal-destination = عرض الوجهة في المجلد
+
+# MT
+header-eta-label = الوقت المتبقي المقدَّر
+# MT
+header-toolbar-label = عناصر التحكم العامة
+
+# MT
+footer-queued = مهام نشطة
+# MT
+footer-total-bytes = قيد التنفيذ
+# MT
+footer-errors = أخطاء
+# MT
+footer-history = السجل
+
+# MT
+empty-title = أسقط ملفات أو مجلدات للنسخ
+# MT
+empty-hint = اسحب العناصر إلى النافذة. سنطلب منك وجهة ثم ننشئ مهمة لكل مصدر.
+# MT
+empty-region-label = قائمة المهام
+
+# MT
+details-drawer-label = تفاصيل المهمة
+# MT
+details-source = المصدر
+# MT
+details-destination = الوجهة
+# MT
+details-state = الحالة
+# MT
+details-bytes = البايتات
+# MT
+details-files = الملفات
+# MT
+details-speed = السرعة
+# MT
+details-eta = الوقت المتبقي
+# MT
+details-error = خطأ
+
+# MT
+drop-dialog-title = نقل العناصر المُسقَطة
+# MT
+drop-dialog-subtitle = { $count } عنصر جاهز للنقل. اختر مجلد الوجهة للبدء.
+# MT
+drop-dialog-mode = العملية
+# MT
+drop-dialog-copy = نسخ
+# MT
+drop-dialog-move = نقل
+# MT
+drop-dialog-pick-destination = اختر الوجهة
+# MT
+drop-dialog-change-destination = تغيير الوجهة
+# MT
+drop-dialog-start-copy = بدء النسخ
+# MT
+drop-dialog-start-move = بدء النقل
+
+# MT
+eta-calculating = جارٍ الحساب…
+# MT
+eta-unknown = غير معروف
+
+# MT
+toast-job-done = اكتمل النقل
+# MT
+toast-copy-queued = تم إضافة النسخ إلى قائمة الانتظار
+# MT
+toast-move-queued = تم إضافة النقل إلى قائمة الانتظار

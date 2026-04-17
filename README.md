@@ -5,19 +5,31 @@ matching every feature of TeraCopy and pushing past it, while staying as fast
 as (or faster than) Explorer / Finder / `cp` / `rsync` for typical desktop
 workloads.
 
-> **Status:** Phase 4 — secure deletion (multi-pass shredding).
-> New `copythat-secure-delete` crate delivers `shred_file` /
-> `shred_tree` with nine named overwrite strategies (`Zero`, `Random`,
-> `DoD3Pass`, `DoD7Pass`, `Gutmann35`, `Schneier7`, `Vsitr7`,
-> `Nist80088Clear`, `Nist80088Purge`), the same async signature as the
-> copy engine, and a shared `CopyControl` for pause / resume / cancel.
-> Each pass writes 1 MiB chunks (from `OsRng` or a fixed/tiled
-> pattern), `sync_all`s to the medium, and the finishing flow
-> truncates, renames to a random filename, then unlinks. A best-effort
-> `is_ssd` probe emits a localized advisory before the first pass on
-> flash-backed targets; `Nist80088Purge` refuses cleanly until the
-> privileged helper (Phase 17) wires up ATA SECURE ERASE / NVMe
-> Format. No GUI wiring yet; that's Phase 5.
+> **Status:** Phase 6 — platform-specific fast paths.
+> `crates/copythat-platform` now ships a `fast_copy(src, dst, opts,
+> ctrl, events)` dispatcher that attempts, in order: reflink (Linux
+> Btrfs / XFS-with-reflink / ZFS / bcachefs, macOS APFS, Windows
+> ReFS / Dev Drive via the `reflink-copy` crate); the OS-native
+> accelerated path (`CopyFileExW` with `COPY_FILE_NO_BUFFERING` for
+> files ≥256 MiB on Windows, `copyfile(3)` with `COPYFILE_ALL` on
+> macOS, `copy_file_range(2)` with a `sendfile(2)` fallback for files
+> <2 GiB on Linux); and finally the Phase 1
+> [`copythat_core::copy_file`] async loop. The dispatcher honours
+> `CopyOptions::strategy` (`Auto` / `AlwaysAsync` / `AlwaysFast` /
+> `NoReflink`) and reports back which strategy actually moved the
+> bytes via `FastCopyOutcome::strategy`. New helpers — `is_ssd(path)`,
+> `filesystem_name(path)`, `supports_reflink(path)`, and
+> `recommend_concurrency(src, dst, requested)` (clamps to 1 when
+> either side is on rotational media to avoid HDD seek thrash). The
+> seam into `copythat-core` is a `FastCopyHook` trait carried on
+> `CopyOptions`; drop a `PlatformFastCopyHook` in and every per-file
+> `copy_file` (and therefore every leaf of `copy_tree`) routes through
+> the OS acceleration path. The hook is bypassed when `verify` is
+> set, since the verify pipeline relies on hashing the source bytes
+> during the write loop. Smoke test: Windows runner copies a 64 MiB
+> sparse file via `CopyFileExW` at ~2.6 GiB/s. The next phase
+> (Phase 7) wires the engine into the OS shell context menus and
+> drag-and-drop.
 
 ## Targets
 
@@ -119,6 +131,25 @@ Phase 4 smoke test (10 MiB shred across every `ShredMethod`):
 
 ```sh
 cargo test -p copythat-secure-delete --test phase_04_shred -- --nocapture
+```
+
+Phase 5 smoke test (Tauri shell end-to-end: pnpm check + vite build +
+`copythat-ui` unit & integration tests + i18n-lint):
+
+```sh
+# Windows
+pwsh tests/smoke/phase_05_ui.ps1
+# macOS / Linux
+bash tests/smoke/phase_05_ui.sh
+```
+
+Phase 6 smoke test (sparse-file round-trip through the platform fast
+paths; logs the chosen strategy — `reflink` / `CopyFileExW` /
+`copyfile` / `copy_file_range` / `sendfile` / `async-fallback`):
+
+```sh
+# Default 64 MiB; set COPYTHAT_PHASE_06_FULL=1 for the 2 GiB run.
+cargo test -p copythat-platform --test phase_06_fast_paths -- --nocapture
 ```
 
 ## Roadmap

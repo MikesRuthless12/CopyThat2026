@@ -82,7 +82,12 @@ impl std::fmt::Display for CopyError {
 }
 
 impl CopyError {
-    pub(crate) fn from_io(src: &Path, dst: &Path, err: io::Error) -> Self {
+    /// Build a `CopyError` from an `io::Error` plus the source / destination
+    /// paths the engine was operating on.
+    ///
+    /// Used inside the engine and by sibling crates (e.g. `copythat-platform`)
+    /// that surface OS-native fast-path failures through the same error type.
+    pub fn from_io(src: &Path, dst: &Path, err: io::Error) -> Self {
         let raw = err.raw_os_error();
         Self {
             kind: CopyErrorKind::from_io(err.kind(), raw),

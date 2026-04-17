@@ -95,8 +95,8 @@ pub use engine::copy_file;
 pub use error::{CopyError, CopyErrorKind};
 pub use event::{Collision, CollisionResolution, CopyEvent, CopyReport, TreeReport};
 pub use options::{
-    CopyOptions, DEFAULT_BUFFER_SIZE, DEFAULT_TREE_CONCURRENCY, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE,
-    MoveOptions, TreeOptions,
+    CopyOptions, CopyStrategy, DEFAULT_BUFFER_SIZE, DEFAULT_TREE_CONCURRENCY, FastCopyHook,
+    FastCopyHookOutcome, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, MoveOptions, TreeOptions,
 };
 pub use queue::{Job, JobId, JobKind, JobState, Queue, QueueEvent};
 pub use tree::{copy_tree, move_file, move_tree};
