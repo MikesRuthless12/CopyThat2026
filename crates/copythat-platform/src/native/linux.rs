@@ -363,7 +363,15 @@ fn strip_partition_suffix(name: &str) -> String {
     if name.starts_with("nvme") || name.starts_with("mmcblk") || name.starts_with("loop") {
         if let Some(pos) = name.rfind('p') {
             let (head, tail) = name.split_at(pos);
-            if tail.len() > 1 && tail[1..].chars().all(|c| c.is_ascii_digit()) {
+            // Real partition suffixes look like `nvme0n1p3` or `mmcblk0p2`:
+            // the char immediately before `p` is always a digit (the device
+            // index). Plain `loop0` has its `p` inside the device name, so
+            // the char before is `o` and we must not strip.
+            let head_ends_in_digit = head.chars().next_back().is_some_and(|c| c.is_ascii_digit());
+            if head_ends_in_digit
+                && tail.len() > 1
+                && tail[1..].chars().all(|c| c.is_ascii_digit())
+            {
                 return head.to_string();
             }
         }

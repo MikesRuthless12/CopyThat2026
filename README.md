@@ -152,12 +152,6 @@ paths; logs the chosen strategy — `reflink` / `CopyFileExW` /
 cargo test -p copythat-platform --test phase_06_fast_paths -- --nocapture
 ```
 
-## Roadmap
-
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). Eighteen ordered phases. Each phase
-ships under [Standing Per-Phase Rules](CopyThat2026-Build-Prompts-Guide.md):
-docs + i18n + smoke test + green build + Conventional-Commits commit.
-
 ## License
 
 **All Rights Reserved.** Copyright (c) 2026 Mike Weaver. See [`LICENSE`](LICENSE)
