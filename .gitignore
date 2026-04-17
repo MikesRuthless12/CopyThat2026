@@ -1,0 +1,53 @@
+# --- Rust ---
+target/
+**/*.rs.bk
+*.pdb
+# Cargo.lock IS committed at the workspace root (binary workspace).
+
+# --- Tauri ---
+apps/copythat-ui/src-tauri/target/
+apps/copythat-ui/src-tauri/gen/
+.tauri/
+
+# --- Node / pnpm / Vite ---
+node_modules/
+dist/
+.vite/
+.parcel-cache/
+.pnpm-store/
+
+# --- Logs and runtime data ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- OS noise ---
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# --- Editor / IDE ---
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+.history/
+
+# --- Local secrets / env ---
+.env
+.env.local
+.env.*.local
+
+# --- Claude Code (per-user, not team-shared) ---
+.claude/settings.local.json
+
+# --- Test artifacts ---
+coverage/
+*.profraw
+
+# --- Generated tauri assets we don't want in git ---
+apps/copythat-ui/src-tauri/Cargo.lock

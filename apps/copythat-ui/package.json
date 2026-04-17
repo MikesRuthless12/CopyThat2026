@@ -1,0 +1,27 @@
+{
+  "name": "copythat-ui",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Copy That 2026 — Tauri 2.x + Svelte 5 shell",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5",
+    "@tauri-apps/cli": "^2",
+    "@tsconfig/svelte": "^5",
+    "svelte": "^5",
+    "svelte-check": "^4",
+    "tslib": "^2",
+    "typescript": "^5",
+    "vite": "^6"
+  }
+}

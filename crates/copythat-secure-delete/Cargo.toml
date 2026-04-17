@@ -1,0 +1,14 @@
+[package]
+name = "copythat-secure-delete"
+description = "Multi-pass secure deletion (DoD, Gutmann, Schneier, NIST 800-88) for Copy That 2026."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

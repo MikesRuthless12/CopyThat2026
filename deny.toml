@@ -1,0 +1,69 @@
+# cargo-deny — license, dependency, and supply-chain gate.
+#
+# Phase 0 contract: every transitive dependency must use a permissive license.
+# This file is what makes "$0 to build, commercially shippable" enforceable as
+# the dependency tree evolves. CI runs `cargo deny check` and fails the build
+# on any violation.
+#
+# Reference: https://embarkstudios.github.io/cargo-deny/checks/cfg.html
+
+[graph]
+all-features = true
+
+[output]
+feature-depth = 1
+
+# ----- Licenses ---------------------------------------------------------------
+#
+# Allowlist only. Any license not in `allow` causes a hard failure. The list
+# matches the Phase 0 cost-policy: GPL / AGPL / SSPL / BUSL / CC-BY-NC and
+# any other non-permissive license is rejected.
+[licenses]
+version = 2
+confidence-threshold = 0.92
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "CC0-1.0",
+    "0BSD",
+    "Unlicense",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "Zlib",
+    "MPL-2.0",            # file-scope copyleft only — acceptable for shipping
+                          # a closed-source app that does not modify MPL files.
+]
+
+# Per-crate exceptions — none for Phase 0; add here only with documented reason.
+exceptions = []
+
+# ----- Bans -------------------------------------------------------------------
+[bans]
+multiple-versions = "warn"
+wildcards         = "deny"
+highlight         = "all"
+
+# Crates we will never accept, regardless of license:
+deny = []
+
+# Skip duplicate-version warnings for crates where conflicts are inherited from
+# the ecosystem and out of our control. Populate as needed; empty in Phase 0.
+skip = []
+skip-tree = []
+
+# ----- Sources ----------------------------------------------------------------
+[sources]
+unknown-registry = "deny"
+unknown-git      = "deny"
+allow-registry   = ["https://github.com/rust-lang/crates.io-index"]
+allow-git        = []
+
+# ----- Advisories -------------------------------------------------------------
+[advisories]
+version = 2
+yanked  = "deny"
+ignore  = []
