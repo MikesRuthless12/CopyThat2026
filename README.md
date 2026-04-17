@@ -5,9 +5,10 @@ matching every feature of TeraCopy and pushing past it, while staying as fast
 as (or faster than) Explorer / Finder / `cp` / `rsync` for typical desktop
 workloads.
 
-> **Status:** Phase 0 — scaffold only. Nothing copies yet. The repo compiles,
-> the Tauri shell shows a placeholder window, CI is green, and the engine
-> stubs are ready to be filled in over the next 18 phases.
+> **Status:** Phase 1 — core async single-file copy. `copythat-core` can
+> copy a regular file end-to-end, with pause / resume / cancel, throttled
+> progress events, buffer-size tuning, and portable metadata preservation
+> (mtime / atime / permissions). No GUI wiring yet.
 
 ## Targets
 
@@ -85,6 +86,12 @@ Phase 0 smoke test (runs both):
 
 ```sh
 bash tests/smoke/phase_00_scaffold.sh
+```
+
+Phase 1 smoke test (100 MiB async round-trip through `copy_file`):
+
+```sh
+cargo test -p copythat-core --test phase_01_core_copy -- --nocapture
 ```
 
 ## Roadmap

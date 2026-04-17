@@ -11,4 +11,42 @@ repository.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+# Gate the 1 GiB + disk-full tests behind an opt-in feature so normal
+# `cargo test --workspace` runs in seconds.
+slow-tests = []
+
 [dependencies]
+filetime = "0.2"
+thiserror = "2"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+
+[dev-dependencies]
+rand = "0.8"
+tempfile = "3"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "test-util",
+    "time",
+] }
+
+# Per-phase smoke tests live under /tests/smoke at the workspace root
+# so they're easy to find. Cargo needs an explicit [[test]] entry to
+# pick up a source outside the crate directory.
+[[test]]
+name = "phase_01_core_copy"
+path = "../../tests/smoke/phase_01_core_copy.rs"

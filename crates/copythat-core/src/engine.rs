@@ -1,0 +1,383 @@
+//! The copy loop.
+//!
+//! Shape: `BufReader -> fill_buf/consume -> write_all -> BufWriter ->
+//! destination File`. Between every buffer we check `CopyControl`,
+//! throttle progress events, and accumulate the total. Metadata
+//! (permissions + mtime/atime) is applied after the byte copy
+//! succeeds; cleanup of the partial destination runs on any failure
+//! unless `keep_partial` overrides it.
+
+use std::path::Path;
+use std::time::{Duration, Instant};
+
+use filetime::FileTime;
+use tokio::fs::{File, OpenOptions};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
+use tokio::sync::mpsc;
+
+use crate::control::CopyControl;
+use crate::error::CopyError;
+use crate::event::{CopyEvent, CopyReport};
+use crate::options::CopyOptions;
+
+const PROGRESS_MIN_BYTES: u64 = 16 * 1024;
+const PROGRESS_MIN_INTERVAL: Duration = Duration::from_millis(50);
+
+/// Copy a single regular file from `src` to `dst`.
+///
+/// See crate-level docs for the public contract; the loop is documented
+/// inline here. Returns `Ok(CopyReport)` on success, `Err(CopyError)`
+/// on I/O failure or caller-requested cancellation.
+pub async fn copy_file(
+    src: &Path,
+    dst: &Path,
+    opts: CopyOptions,
+    ctrl: CopyControl,
+    events: mpsc::Sender<CopyEvent>,
+) -> Result<CopyReport, CopyError> {
+    let src_path = src.to_path_buf();
+    let dst_path = dst.to_path_buf();
+
+    let metadata_result = if opts.follow_symlinks {
+        tokio::fs::metadata(&src_path).await
+    } else {
+        tokio::fs::symlink_metadata(&src_path).await
+    };
+    let src_metadata = metadata_result.map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
+
+    if !opts.follow_symlinks && src_metadata.file_type().is_symlink() {
+        return copy_symlink(&src_path, &dst_path, &opts, &events).await;
+    }
+
+    let total = src_metadata.len();
+    let buf_size = opts.clamped_buffer_size();
+
+    let src_file = File::open(&src_path)
+        .await
+        .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
+
+    let mut open = OpenOptions::new();
+    open.write(true).truncate(true);
+    if opts.fail_if_exists {
+        open.create_new(true);
+    } else {
+        open.create(true);
+    }
+    let dst_file = open
+        .open(&dst_path)
+        .await
+        .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
+
+    let _ = events
+        .send(CopyEvent::Started {
+            src: src_path.clone(),
+            dst: dst_path.clone(),
+            total_bytes: total,
+        })
+        .await;
+
+    let mut reader = BufReader::with_capacity(buf_size, src_file);
+    let mut writer = BufWriter::with_capacity(buf_size, dst_file);
+
+    let started_at = Instant::now();
+    let mut copied: u64 = 0;
+    let mut last_emit_at = started_at;
+    let mut last_emit_bytes: u64 = 0;
+    let mut was_paused = false;
+
+    let loop_result: Result<(), CopyError> = loop {
+        if ctrl.is_cancelled() {
+            break Err(CopyError::cancelled(&src_path, &dst_path));
+        }
+        if ctrl.is_paused() {
+            if !was_paused {
+                let _ = events.send(CopyEvent::Paused).await;
+                was_paused = true;
+            }
+            ctrl.wait_while_paused().await;
+            if ctrl.is_cancelled() {
+                break Err(CopyError::cancelled(&src_path, &dst_path));
+            }
+            if was_paused {
+                let _ = events.send(CopyEvent::Resumed).await;
+                was_paused = false;
+            }
+            continue;
+        }
+
+        let buf = match reader.fill_buf().await {
+            Ok(b) => b,
+            Err(e) => break Err(CopyError::from_io(&src_path, &dst_path, e)),
+        };
+        if buf.is_empty() {
+            break Ok(());
+        }
+        let n = buf.len();
+        if let Err(e) = writer.write_all(buf).await {
+            break Err(CopyError::from_io(&src_path, &dst_path, e));
+        }
+        reader.consume(n);
+        copied += n as u64;
+
+        let now = Instant::now();
+        if copied.saturating_sub(last_emit_bytes) >= PROGRESS_MIN_BYTES
+            && now.duration_since(last_emit_at) >= PROGRESS_MIN_INTERVAL
+        {
+            let elapsed = now.duration_since(started_at);
+            let rate = rate_bps(copied, elapsed);
+            let _ = events
+                .send(CopyEvent::Progress {
+                    bytes: copied,
+                    total,
+                    rate_bps: rate,
+                })
+                .await;
+            last_emit_at = now;
+            last_emit_bytes = copied;
+        }
+    };
+
+    match loop_result {
+        Ok(()) => {
+            if let Err(e) = writer.flush().await {
+                return fail(
+                    &src_path,
+                    &dst_path,
+                    &opts,
+                    &events,
+                    CopyError::from_io(&src_path, &dst_path, e),
+                    writer,
+                    reader,
+                )
+                .await;
+            }
+            if opts.fsync_on_close {
+                if let Err(e) = writer.get_mut().sync_all().await {
+                    return fail(
+                        &src_path,
+                        &dst_path,
+                        &opts,
+                        &events,
+                        CopyError::from_io(&src_path, &dst_path, e),
+                        writer,
+                        reader,
+                    )
+                    .await;
+                }
+            }
+            drop(writer);
+            drop(reader);
+
+            if let Err(e) =
+                preserve_metadata(src_path.clone(), dst_path.clone(), &src_metadata, &opts).await
+            {
+                return finalize_error(&opts, &events, e, &dst_path).await;
+            }
+
+            let elapsed = started_at.elapsed();
+            let rate = rate_bps(copied, elapsed);
+            let _ = events
+                .send(CopyEvent::Progress {
+                    bytes: copied,
+                    total,
+                    rate_bps: rate,
+                })
+                .await;
+            let _ = events
+                .send(CopyEvent::Completed {
+                    bytes: copied,
+                    duration: elapsed,
+                    rate_bps: rate,
+                })
+                .await;
+            Ok(CopyReport {
+                src: src_path,
+                dst: dst_path,
+                bytes: copied,
+                duration: elapsed,
+                rate_bps: rate,
+            })
+        }
+        Err(err) => fail(&src_path, &dst_path, &opts, &events, err, writer, reader).await,
+    }
+}
+
+async fn fail(
+    _src: &Path,
+    dst: &Path,
+    opts: &CopyOptions,
+    events: &mpsc::Sender<CopyEvent>,
+    err: CopyError,
+    writer: BufWriter<File>,
+    reader: BufReader<File>,
+) -> Result<CopyReport, CopyError> {
+    drop(writer);
+    drop(reader);
+    finalize_error(opts, events, err, dst).await
+}
+
+async fn finalize_error(
+    opts: &CopyOptions,
+    events: &mpsc::Sender<CopyEvent>,
+    err: CopyError,
+    dst: &Path,
+) -> Result<CopyReport, CopyError> {
+    if !opts.keep_partial {
+        let _ = tokio::fs::remove_file(dst).await;
+    }
+    let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+    Err(err)
+}
+
+fn rate_bps(bytes: u64, elapsed: Duration) -> u64 {
+    let secs = elapsed.as_secs_f64();
+    if secs <= 0.0 {
+        return 0;
+    }
+    (bytes as f64 / secs) as u64
+}
+
+async fn preserve_metadata(
+    src: std::path::PathBuf,
+    dst: std::path::PathBuf,
+    src_metadata: &std::fs::Metadata,
+    opts: &CopyOptions,
+) -> Result<(), CopyError> {
+    // Apply timestamps BEFORE permissions. On Windows a readonly
+    // attribute blocks subsequent `SetFileTime` calls; on Unix the
+    // ordering is harmless either way.
+    if opts.preserve_times {
+        let atime = FileTime::from_last_access_time(src_metadata);
+        let mtime = FileTime::from_last_modification_time(src_metadata);
+        let dst_for_blocking = dst.clone();
+        let join = tokio::task::spawn_blocking(move || {
+            filetime::set_file_times(&dst_for_blocking, atime, mtime)
+        })
+        .await;
+        let io_result = match join {
+            Ok(inner) => inner,
+            Err(_) => {
+                return Err(CopyError {
+                    kind: crate::error::CopyErrorKind::IoOther,
+                    src: src.clone(),
+                    dst: dst.clone(),
+                    raw_os_error: None,
+                    message: "spawn_blocking panicked while setting timestamps".to_string(),
+                });
+            }
+        };
+        if let Err(e) = io_result {
+            return Err(CopyError::from_io(&src, &dst, e));
+        }
+    }
+    if opts.preserve_permissions {
+        let perms = src_metadata.permissions();
+        if let Err(e) = tokio::fs::set_permissions(&dst, perms).await {
+            return Err(CopyError::from_io(&src, &dst, e));
+        }
+    }
+    Ok(())
+}
+
+/// Clone a symlink source as a symlink at `dst` (i.e. `opts.follow_symlinks
+/// == false`). No byte copy happens; progress events reflect a 0-byte
+/// transfer for consistency with the normal path.
+async fn copy_symlink(
+    src: &Path,
+    dst: &Path,
+    opts: &CopyOptions,
+    events: &mpsc::Sender<CopyEvent>,
+) -> Result<CopyReport, CopyError> {
+    let target = match tokio::fs::read_link(src).await {
+        Ok(t) => t,
+        Err(e) => return Err(CopyError::from_io(src, dst, e)),
+    };
+    let _ = events
+        .send(CopyEvent::Started {
+            src: src.to_path_buf(),
+            dst: dst.to_path_buf(),
+            total_bytes: 0,
+        })
+        .await;
+    if opts.fail_if_exists && tokio::fs::symlink_metadata(dst).await.is_ok() {
+        let err = CopyError {
+            kind: crate::error::CopyErrorKind::PermissionDenied,
+            src: src.to_path_buf(),
+            dst: dst.to_path_buf(),
+            raw_os_error: None,
+            message: "destination already exists and fail_if_exists is set".to_string(),
+        };
+        let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+        return Err(err);
+    }
+    let start = Instant::now();
+    let created = create_symlink(&target, dst).await;
+    if let Err(e) = created {
+        let err = CopyError::from_io(src, dst, e);
+        let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+        return Err(err);
+    }
+    let elapsed = start.elapsed();
+    let _ = events
+        .send(CopyEvent::Completed {
+            bytes: 0,
+            duration: elapsed,
+            rate_bps: 0,
+        })
+        .await;
+    Ok(CopyReport {
+        src: src.to_path_buf(),
+        dst: dst.to_path_buf(),
+        bytes: 0,
+        duration: elapsed,
+        rate_bps: 0,
+    })
+}
+
+#[cfg(unix)]
+async fn create_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+    tokio::fs::symlink(target, link).await
+}
+
+#[cfg(windows)]
+async fn create_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+    // Windows distinguishes file vs. directory symlinks. Probe the
+    // target; if it's a directory, use the directory variant so the
+    // resulting link actually points to something traversable.
+    let md = tokio::fs::metadata(target).await;
+    match md {
+        Ok(m) if m.is_dir() => tokio::fs::symlink_dir(target, link).await,
+        _ => tokio::fs::symlink_file(target, link).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rate_bps_sane() {
+        assert_eq!(rate_bps(0, Duration::from_secs(1)), 0);
+        assert_eq!(rate_bps(100, Duration::ZERO), 0);
+        assert_eq!(rate_bps(1000, Duration::from_secs(2)), 500);
+    }
+
+    #[test]
+    fn buffer_size_is_clamped() {
+        let tiny = CopyOptions {
+            buffer_size: 1,
+            ..Default::default()
+        };
+        assert_eq!(tiny.clamped_buffer_size(), crate::options::MIN_BUFFER_SIZE);
+        let huge = CopyOptions {
+            buffer_size: usize::MAX,
+            ..Default::default()
+        };
+        assert_eq!(huge.clamped_buffer_size(), crate::options::MAX_BUFFER_SIZE);
+        let ok = CopyOptions {
+            buffer_size: 256 * 1024,
+            ..Default::default()
+        };
+        assert_eq!(ok.clamped_buffer_size(), 256 * 1024);
+    }
+}
