@@ -44,6 +44,29 @@ pub enum CopyEvent {
     Failed {
         err: CopyError,
     },
+    // ---------- verify pipeline (Phase 3) ----------
+    VerifyStarted {
+        /// Algorithm short name (e.g. `sha256`, `blake3`).
+        algorithm: &'static str,
+        /// Destination total byte count the verify pass will re-read.
+        total_bytes: u64,
+    },
+    VerifyProgress {
+        bytes: u64,
+        total: u64,
+        rate_bps: u64,
+    },
+    VerifyCompleted {
+        algorithm: &'static str,
+        src_hex: String,
+        dst_hex: String,
+        duration: Duration,
+    },
+    VerifyFailed {
+        algorithm: &'static str,
+        src_hex: String,
+        dst_hex: String,
+    },
     // ---------- tree-level aggregates (Phase 2) ----------
     TreeStarted {
         root_src: PathBuf,
@@ -101,6 +124,42 @@ impl Clone for CopyEvent {
                 rate_bps: *rate_bps,
             },
             CopyEvent::Failed { err } => CopyEvent::Failed { err: err.clone() },
+            CopyEvent::VerifyStarted {
+                algorithm,
+                total_bytes,
+            } => CopyEvent::VerifyStarted {
+                algorithm,
+                total_bytes: *total_bytes,
+            },
+            CopyEvent::VerifyProgress {
+                bytes,
+                total,
+                rate_bps,
+            } => CopyEvent::VerifyProgress {
+                bytes: *bytes,
+                total: *total,
+                rate_bps: *rate_bps,
+            },
+            CopyEvent::VerifyCompleted {
+                algorithm,
+                src_hex,
+                dst_hex,
+                duration,
+            } => CopyEvent::VerifyCompleted {
+                algorithm,
+                src_hex: src_hex.clone(),
+                dst_hex: dst_hex.clone(),
+                duration: *duration,
+            },
+            CopyEvent::VerifyFailed {
+                algorithm,
+                src_hex,
+                dst_hex,
+            } => CopyEvent::VerifyFailed {
+                algorithm,
+                src_hex: src_hex.clone(),
+                dst_hex: dst_hex.clone(),
+            },
             CopyEvent::TreeStarted {
                 root_src,
                 root_dst,

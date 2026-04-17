@@ -23,10 +23,18 @@
 //! - `CopyError` / `CopyErrorKind` — typed failure, classified into
 //!   the small set the UI and retry policy branch on.
 //!
+//! Added in Phase 3:
+//! - `CopyOptions::verify` — when `Some(verifier)`, the copy loop
+//!   feeds source bytes into a streaming hasher during the normal
+//!   read pass (no re-read), then post-hashes the destination and
+//!   compares. Mismatch emits `CopyEvent::VerifyFailed` and fails the
+//!   copy with `CopyErrorKind::VerifyFailed`. The `Verifier` /
+//!   `Hasher` abstraction lives in `copythat_core::verify`;
+//!   `copythat-hash` plugs in the concrete algorithms.
+//!
 //! Not yet implemented (deferred by design):
 //! - Platform fast paths (CopyFileExW, copyfile, copy_file_range,
 //!   reflink) — Phase 6.
-//! - Verify / hashing — Phase 3.
 //! - Secure delete — Phase 4.
 //! - Queue persistence — Phase 10.
 //!
@@ -79,6 +87,7 @@ mod event;
 mod options;
 pub mod queue;
 mod tree;
+pub mod verify;
 
 pub use collision::CollisionPolicy;
 pub use control::CopyControl;
@@ -91,3 +100,4 @@ pub use options::{
 };
 pub use queue::{Job, JobId, JobKind, JobState, Queue, QueueEvent};
 pub use tree::{copy_tree, move_file, move_tree};
+pub use verify::{Hasher, Verifier};

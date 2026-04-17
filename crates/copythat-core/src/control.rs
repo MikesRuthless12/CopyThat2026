@@ -78,7 +78,12 @@ impl CopyControl {
     /// Park the caller while the flag is `PAUSED`. Returns as soon as the
     /// flag is anything else (running OR cancelled) so the engine can
     /// re-check `is_cancelled` on the next line.
-    pub(crate) async fn wait_while_paused(&self) {
+    ///
+    /// Also used by sibling pipelines (e.g. `copythat-hash`, and the
+    /// Phase 4 shredder) that share a `CopyControl` with the copy
+    /// engine — if we kept this crate-private they'd have to busy-poll
+    /// the pause flag instead.
+    pub async fn wait_while_paused(&self) {
         loop {
             let notified = self.shared.notify.notified();
             tokio::pin!(notified);

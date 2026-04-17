@@ -14,6 +14,10 @@ pub enum CopyErrorKind {
     PermissionDenied,
     DiskFull,
     Interrupted,
+    /// Post-copy verification detected a hash mismatch between source
+    /// and destination. The partial destination is removed unless
+    /// `CopyOptions::keep_partial` is set.
+    VerifyFailed,
     IoOther,
 }
 
@@ -99,7 +103,27 @@ impl CopyError {
         }
     }
 
+    pub(crate) fn verify_failed(
+        src: &Path,
+        dst: &Path,
+        algorithm: &str,
+        src_hex: &str,
+        dst_hex: &str,
+    ) -> Self {
+        Self {
+            kind: CopyErrorKind::VerifyFailed,
+            src: src.to_path_buf(),
+            dst: dst.to_path_buf(),
+            raw_os_error: None,
+            message: format!("verify mismatch ({algorithm}): src={src_hex} dst={dst_hex}"),
+        }
+    }
+
     pub fn is_cancelled(&self) -> bool {
         self.kind == CopyErrorKind::Interrupted && self.raw_os_error.is_none()
+    }
+
+    pub fn is_verify_failed(&self) -> bool {
+        self.kind == CopyErrorKind::VerifyFailed
     }
 }

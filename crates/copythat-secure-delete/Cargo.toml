@@ -12,3 +12,34 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+copythat-core = { path = "../copythat-core" }
+rand = "0.9"
+thiserror = "2"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "test-util",
+    "time",
+] }
+
+# Phase 4 smoke test lives at the workspace root.
+[[test]]
+name = "phase_04_shred"
+path = "../../tests/smoke/phase_04_shred.rs"

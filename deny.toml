@@ -30,6 +30,9 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "BSL-1.0",            # Boost Software License 1.0 — permissive, OSI-approved,
+                          # compatible with commercial distribution. Pulled in by
+                          # `xxhash-rust` (added Phase 3 for xxHash3 verification).
     "ISC",
     "CC0-1.0",
     "0BSD",

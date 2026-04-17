@@ -19,6 +19,7 @@ use crate::control::CopyControl;
 use crate::error::CopyError;
 use crate::event::{CopyEvent, CopyReport};
 use crate::options::CopyOptions;
+use crate::verify::Hasher;
 
 const PROGRESS_MIN_BYTES: u64 = 16 * 1024;
 const PROGRESS_MIN_INTERVAL: Duration = Duration::from_millis(50);
@@ -79,6 +80,11 @@ pub async fn copy_file(
     let mut reader = BufReader::with_capacity(buf_size, src_file);
     let mut writer = BufWriter::with_capacity(buf_size, dst_file);
 
+    // Source-side hasher: when verify is enabled we reuse the bytes the
+    // copy loop is already reading. Dst-side hashing is a separate
+    // post-pass below.
+    let mut src_hasher: Option<Box<dyn Hasher>> = opts.verify.as_ref().map(|v| v.make());
+
     let started_at = Instant::now();
     let mut copied: u64 = 0;
     let mut last_emit_at = started_at;
@@ -116,6 +122,9 @@ pub async fn copy_file(
         if let Err(e) = writer.write_all(buf).await {
             break Err(CopyError::from_io(&src_path, &dst_path, e));
         }
+        if let Some(h) = src_hasher.as_mut() {
+            h.update(buf);
+        }
         reader.consume(n);
         copied += n as u64;
 
@@ -151,7 +160,15 @@ pub async fn copy_file(
                 )
                 .await;
             }
-            if opts.fsync_on_close {
+            // Fsync semantics:
+            //   - If the caller set `fsync_on_close`, always sync.
+            //   - Otherwise, when verify is enabled and
+            //     `fsync_before_verify` is on (default), sync so the
+            //     post-pass reads the freshly-written bytes without
+            //     racing the page cache.
+            let should_fsync =
+                opts.fsync_on_close || (opts.verify.is_some() && opts.fsync_before_verify);
+            if should_fsync {
                 if let Err(e) = writer.get_mut().sync_all().await {
                     return fail(
                         &src_path,
@@ -183,6 +200,20 @@ pub async fn copy_file(
                     rate_bps: rate,
                 })
                 .await;
+
+            // Verify pass: re-hash the destination and compare against
+            // the source-side hash we built during the write loop.
+            if let (Some(verifier), Some(src_h)) = (opts.verify.as_ref(), src_hasher.take()) {
+                match run_verify_pass(&src_path, &dst_path, &opts, verifier, src_h, &ctrl, &events)
+                    .await
+                {
+                    Ok(()) => {}
+                    Err(err) => {
+                        return finalize_error(&opts, &events, err, &dst_path).await;
+                    }
+                }
+            }
+
             let _ = events
                 .send(CopyEvent::Completed {
                     bytes: copied,
@@ -199,6 +230,142 @@ pub async fn copy_file(
             })
         }
         Err(err) => fail(&src_path, &dst_path, &opts, &events, err, writer, reader).await,
+    }
+}
+
+/// Run the verify post-pass: stream the destination through a fresh
+/// hasher, compare against the source-side digest we accumulated during
+/// the write loop, and emit verify events.
+async fn run_verify_pass(
+    src_path: &Path,
+    dst_path: &Path,
+    opts: &CopyOptions,
+    verifier: &crate::verify::Verifier,
+    src_hasher: Box<dyn Hasher>,
+    ctrl: &CopyControl,
+    events: &mpsc::Sender<CopyEvent>,
+) -> Result<(), CopyError> {
+    let src_digest = src_hasher.finalize();
+    let src_hex = hex_encode(&src_digest);
+    let algorithm_name = verifier.name();
+
+    // Dest size may have shifted (zero-byte files have no page cache
+    // surprises, but we still metadata() so our VerifyStarted total is
+    // accurate).
+    let dst_meta = tokio::fs::metadata(dst_path)
+        .await
+        .map_err(|e| CopyError::from_io(src_path, dst_path, e))?;
+    let total = dst_meta.len();
+
+    let _ = events
+        .send(CopyEvent::VerifyStarted {
+            algorithm: algorithm_name,
+            total_bytes: total,
+        })
+        .await;
+
+    let dst_file = File::open(dst_path)
+        .await
+        .map_err(|e| CopyError::from_io(src_path, dst_path, e))?;
+    let buf_size = opts.clamped_buffer_size();
+    let mut reader = BufReader::with_capacity(buf_size, dst_file);
+    let mut dst_hasher = verifier.make();
+    let started_at = Instant::now();
+    let mut processed: u64 = 0;
+    let mut last_emit_at = started_at;
+    let mut last_emit_bytes: u64 = 0;
+
+    loop {
+        if ctrl.is_cancelled() {
+            return Err(CopyError::cancelled(src_path, dst_path));
+        }
+        if ctrl.is_paused() {
+            ctrl.wait_while_paused().await;
+            if ctrl.is_cancelled() {
+                return Err(CopyError::cancelled(src_path, dst_path));
+            }
+            continue;
+        }
+
+        let buf = reader
+            .fill_buf()
+            .await
+            .map_err(|e| CopyError::from_io(src_path, dst_path, e))?;
+        if buf.is_empty() {
+            break;
+        }
+        let n = buf.len();
+        dst_hasher.update(buf);
+        reader.consume(n);
+        processed += n as u64;
+
+        let now = Instant::now();
+        if processed.saturating_sub(last_emit_bytes) >= PROGRESS_MIN_BYTES
+            && now.duration_since(last_emit_at) >= PROGRESS_MIN_INTERVAL
+        {
+            let elapsed = now.duration_since(started_at);
+            let rate = rate_bps(processed, elapsed);
+            let _ = events
+                .send(CopyEvent::VerifyProgress {
+                    bytes: processed,
+                    total,
+                    rate_bps: rate,
+                })
+                .await;
+            last_emit_at = now;
+            last_emit_bytes = processed;
+        }
+    }
+
+    let dst_digest = dst_hasher.finalize();
+    let dst_hex = hex_encode(&dst_digest);
+    let elapsed = started_at.elapsed();
+
+    if src_digest == dst_digest {
+        let _ = events
+            .send(CopyEvent::VerifyCompleted {
+                algorithm: algorithm_name,
+                src_hex,
+                dst_hex,
+                duration: elapsed,
+            })
+            .await;
+        Ok(())
+    } else {
+        let _ = events
+            .send(CopyEvent::VerifyFailed {
+                algorithm: algorithm_name,
+                src_hex: src_hex.clone(),
+                dst_hex: dst_hex.clone(),
+            })
+            .await;
+        Err(CopyError::verify_failed(
+            src_path,
+            dst_path,
+            algorithm_name,
+            &src_hex,
+            &dst_hex,
+        ))
+    }
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    // Minimal lowercase hex encoder — keeps `copythat-core` free of a
+    // `hex` crate dependency. The happy path is small, error messages
+    // don't warrant pulling in another crate.
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        s.push(nibble(b >> 4));
+        s.push(nibble(b & 0x0f));
+    }
+    s
+}
+
+fn nibble(n: u8) -> char {
+    match n & 0x0f {
+        0..=9 => (b'0' + n) as char,
+        10..=15 => (b'a' + (n - 10)) as char,
+        _ => unreachable!(),
     }
 }
 

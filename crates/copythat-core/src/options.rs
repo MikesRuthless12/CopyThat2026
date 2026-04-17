@@ -1,5 +1,7 @@
 //! Per-copy configuration.
 
+use crate::verify::Verifier;
+
 pub const DEFAULT_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
 pub const MIN_BUFFER_SIZE: usize = 64 * 1024; // 64 KiB
 pub const MAX_BUFFER_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
@@ -28,6 +30,23 @@ pub struct CopyOptions {
     /// return `PermissionDenied`/`AlreadyExists`-flavoured error. The
     /// default (false) truncates and rewrites.
     pub fail_if_exists: bool,
+    /// Optional post-copy verification.
+    ///
+    /// When `Some(verifier)`, the engine hashes the source stream
+    /// during the normal read pass (no re-read) and hashes the
+    /// destination via a dedicated post-pass. On mismatch it emits
+    /// `CopyEvent::VerifyFailed` and fails the copy with
+    /// `CopyErrorKind::VerifyFailed`. `copythat-hash` provides the
+    /// standard set of algorithms via
+    /// `HashAlgorithm::verifier()`.
+    pub verify: Option<Verifier>,
+    /// Automatically enable `fsync_on_close` when `verify` is `Some`.
+    /// The destination post-pass reads the file immediately after the
+    /// write loop, and on some filesystems (notably NFS and several
+    /// network-backed shares) the post-pass can race page-cache state.
+    /// Defaults to `true` — callers who know their filesystem can set
+    /// it off.
+    pub fsync_before_verify: bool,
 }
 
 impl Default for CopyOptions {
@@ -40,6 +59,8 @@ impl Default for CopyOptions {
             preserve_permissions: true,
             keep_partial: false,
             fail_if_exists: false,
+            verify: None,
+            fsync_before_verify: true,
         }
     }
 }

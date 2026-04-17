@@ -5,12 +5,19 @@ matching every feature of TeraCopy and pushing past it, while staying as fast
 as (or faster than) Explorer / Finder / `cp` / `rsync` for typical desktop
 workloads.
 
-> **Status:** Phase 2 — tree operations + in-memory queue.
-> `copythat-core` now does `copy_file`, `copy_tree`, `move_file`, and
-> `move_tree` with pause / resume / cancel, throttled progress events,
-> six collision policies (Skip / Overwrite / OverwriteIfNewer /
-> KeepBoth / Rename / Prompt), and a broadcast-backed job queue. No
-> GUI wiring yet; that's Phase 5.
+> **Status:** Phase 4 — secure deletion (multi-pass shredding).
+> New `copythat-secure-delete` crate delivers `shred_file` /
+> `shred_tree` with nine named overwrite strategies (`Zero`, `Random`,
+> `DoD3Pass`, `DoD7Pass`, `Gutmann35`, `Schneier7`, `Vsitr7`,
+> `Nist80088Clear`, `Nist80088Purge`), the same async signature as the
+> copy engine, and a shared `CopyControl` for pause / resume / cancel.
+> Each pass writes 1 MiB chunks (from `OsRng` or a fixed/tiled
+> pattern), `sync_all`s to the medium, and the finishing flow
+> truncates, renames to a random filename, then unlinks. A best-effort
+> `is_ssd` probe emits a localized advisory before the first pass on
+> flash-backed targets; `Nist80088Purge` refuses cleanly until the
+> privileged helper (Phase 17) wires up ATA SECURE ERASE / NVMe
+> Format. No GUI wiring yet; that's Phase 5.
 
 ## Targets
 
@@ -100,6 +107,18 @@ Phase 2 smoke test (500-file tree copy + move):
 
 ```sh
 cargo test -p copythat-core --test phase_02_tree_queue -- --nocapture
+```
+
+Phase 3 smoke test (500 MiB copy+verify across all 8 hash algorithms):
+
+```sh
+cargo test -p copythat-hash --test phase_03_verify --release -- --nocapture
+```
+
+Phase 4 smoke test (10 MiB shred across every `ShredMethod`):
+
+```sh
+cargo test -p copythat-secure-delete --test phase_04_shred -- --nocapture
 ```
 
 ## Roadmap
