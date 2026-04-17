@@ -115,7 +115,7 @@ async fn verify_fails_when_destination_is_tampered_mid_pipeline() {
     tampered[10_000] ^= 0xFF;
     std::fs::write(&dst, &tampered).unwrap();
 
-    let (tx, _rx) = mpsc::channel::<copythat_hash::HashEvent>(64);
+    let (tx, _) = mpsc::channel::<copythat_hash::HashEvent>(64);
     let outcome =
         copythat_hash::verify_pair(&src, &dst, HashAlgorithm::Sha256, CopyControl::new(), tx)
             .await
@@ -289,7 +289,7 @@ async fn sidecar_contains_correct_sha256_for_copied_file() {
     // Hash the destination and write a sidecar. Assert the sidecar
     // parses back correctly and the digest matches what `sha256sum`
     // would produce on the bytes we just wrote.
-    let (tx, _rx) = mpsc::channel::<copythat_hash::HashEvent>(64);
+    let (tx, _) = mpsc::channel::<copythat_hash::HashEvent>(64);
     let ctrl = CopyControl::new();
     let report = copythat_hash::hash_file_async(&dst, HashAlgorithm::Sha256, ctrl, tx)
         .await

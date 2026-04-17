@@ -107,7 +107,7 @@ async fn nist_purge_refuses_without_hardware_path() {
     let path = dir.path().join("purge.bin");
     write_file(&path, b"will not be touched");
 
-    let (tx, _rx) = mpsc::channel::<ShredEvent>(64);
+    let (tx, _) = mpsc::channel::<ShredEvent>(64);
     let ctrl = CopyControl::new();
     let err = shred_file(&path, ShredMethod::Nist80088Purge, ctrl, tx)
         .await
@@ -123,7 +123,7 @@ async fn nist_purge_refuses_without_hardware_path() {
 #[tokio::test]
 async fn shred_rejects_directories() {
     let dir = tempdir().unwrap();
-    let (tx, _rx) = mpsc::channel::<ShredEvent>(8);
+    let (tx, _) = mpsc::channel::<ShredEvent>(8);
     let ctrl = CopyControl::new();
     let err = shred_file(dir.path(), ShredMethod::Zero, ctrl, tx)
         .await
@@ -141,7 +141,7 @@ async fn cancellation_between_passes_is_clean() {
     let ctrl_for_cancel = ctrl.clone();
     ctrl_for_cancel.cancel(); // cancel before the shred starts
 
-    let (tx, _rx) = mpsc::channel::<ShredEvent>(64);
+    let (tx, _) = mpsc::channel::<ShredEvent>(64);
     let err = shred_file(&path, ShredMethod::Gutmann35, ctrl, tx)
         .await
         .expect_err("cancellation should error");
@@ -156,7 +156,7 @@ async fn empty_file_is_handled() {
     let path = dir.path().join("empty.bin");
     std::fs::File::create(&path).unwrap();
 
-    let (tx, _rx) = mpsc::channel::<ShredEvent>(64);
+    let (tx, _) = mpsc::channel::<ShredEvent>(64);
     let report = shred_file(&path, ShredMethod::DoD3Pass, CopyControl::new(), tx)
         .await
         .expect("empty-file shred");

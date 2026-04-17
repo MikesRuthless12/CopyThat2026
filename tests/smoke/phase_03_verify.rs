@@ -50,7 +50,7 @@ fn generate_source(path: &Path) {
 }
 
 async fn hash_with_our_pipeline(path: &Path, algo: HashAlgorithm) -> String {
-    let (tx, _rx) = mpsc::channel::<HashEvent>(64);
+    let (tx, _) = mpsc::channel::<HashEvent>(64);
     let report = hash_file_async(path, algo, CopyControl::new(), tx)
         .await
         .unwrap();

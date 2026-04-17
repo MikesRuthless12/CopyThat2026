@@ -104,7 +104,7 @@ mod tests {
         tokio::fs::write(&a, &payload).await.unwrap();
         tokio::fs::write(&b, &payload).await.unwrap();
 
-        let (tx, _rx) = mpsc::channel::<HashEvent>(64);
+        let (tx, _) = mpsc::channel::<HashEvent>(64);
         let outcome = verify_pair(&a, &b, HashAlgorithm::Sha256, CopyControl::new(), tx)
             .await
             .unwrap();
@@ -120,7 +120,7 @@ mod tests {
         tokio::fs::write(&a, b"one").await.unwrap();
         tokio::fs::write(&b, b"two").await.unwrap();
 
-        let (tx, _rx) = mpsc::channel::<HashEvent>(64);
+        let (tx, _) = mpsc::channel::<HashEvent>(64);
         let outcome = verify_pair(&a, &b, HashAlgorithm::Sha256, CopyControl::new(), tx)
             .await
             .unwrap();

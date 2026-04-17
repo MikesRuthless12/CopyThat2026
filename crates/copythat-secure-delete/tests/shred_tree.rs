@@ -51,7 +51,7 @@ async fn shred_tree_removes_every_file_and_every_directory() {
     std::fs::create_dir(&root).unwrap();
     let files = seed_tree(&root);
 
-    let (tx, _rx) = mpsc::channel::<ShredEvent>(1024);
+    let (tx, _) = mpsc::channel::<ShredEvent>(1024);
     let ctrl = CopyControl::new();
     let report = shred_tree(&root, ShredMethod::Zero, ctrl, tx)
         .await
@@ -107,7 +107,7 @@ async fn shred_tree_on_file_delegates_to_shred_file() {
     let f = dir.path().join("solo.bin");
     std::fs::write(&f, b"solo").unwrap();
 
-    let (tx, _rx) = mpsc::channel::<ShredEvent>(64);
+    let (tx, _) = mpsc::channel::<ShredEvent>(64);
     let report = shred_tree(&f, ShredMethod::Zero, CopyControl::new(), tx)
         .await
         .expect("solo file");
@@ -121,7 +121,7 @@ async fn shred_tree_handles_empty_directory() {
     let empty = dir.path().join("empty");
     std::fs::create_dir(&empty).unwrap();
 
-    let (tx, _rx) = mpsc::channel::<ShredEvent>(64);
+    let (tx, _) = mpsc::channel::<ShredEvent>(64);
     let report = shred_tree(&empty, ShredMethod::Zero, CopyControl::new(), tx)
         .await
         .expect("empty dir");

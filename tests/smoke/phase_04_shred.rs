@@ -148,7 +148,7 @@ async fn phase_04_smoke_purge_refuses_and_preserves_file() {
     seed(&path);
     let before = std::fs::read(&path).unwrap();
 
-    let (tx, _rx) = mpsc::channel::<ShredEvent>(16);
+    let (tx, _) = mpsc::channel::<ShredEvent>(16);
     let err = shred_file(&path, ShredMethod::Nist80088Purge, CopyControl::new(), tx)
         .await
         .expect_err("purge should refuse without hardware path");

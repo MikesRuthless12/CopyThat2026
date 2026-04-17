@@ -50,7 +50,7 @@
 //! use tokio::sync::mpsc;
 //!
 //! # async fn demo() -> Result<(), copythat_core::CopyError> {
-//! let (tx, _rx) = mpsc::channel::<CopyEvent>(64);
+//! let (tx, _) = mpsc::channel::<CopyEvent>(64);
 //! let opts = CopyOptions {
 //!     fast_copy_hook: Some(Arc::new(PlatformFastCopyHook::default())),
 //!     ..CopyOptions::default()

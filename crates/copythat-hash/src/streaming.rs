@@ -188,7 +188,7 @@ mod tests {
         let p = dir.path().join("empty.bin");
         std::fs::write(&p, b"").unwrap();
 
-        let (tx, _rx) = mpsc::channel::<HashEvent>(8);
+        let (tx, _) = mpsc::channel::<HashEvent>(8);
         let report = hash_file_async(&p, HashAlgorithm::Sha256, CopyControl::new(), tx)
             .await
             .unwrap();
@@ -209,7 +209,7 @@ mod tests {
         let payload: Vec<u8> = (0..250_000u32).map(|x| x as u8).collect();
         std::fs::write(&p, &payload).unwrap();
 
-        let (tx, _rx) = mpsc::channel::<HashEvent>(64);
+        let (tx, _) = mpsc::channel::<HashEvent>(64);
         let report = hash_file_async_with_buffer(
             &p,
             HashAlgorithm::Blake3,
@@ -238,7 +238,7 @@ mod tests {
 
         let ctrl = CopyControl::new();
         let ctrl_clone = ctrl.clone();
-        let (tx, _rx) = mpsc::channel::<HashEvent>(64);
+        let (tx, _) = mpsc::channel::<HashEvent>(64);
 
         // Cancel before the call — tightest possible race, asserts the
         // cooperative check fires on the first iteration.
