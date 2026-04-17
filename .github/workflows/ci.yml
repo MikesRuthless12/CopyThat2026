@@ -51,6 +51,11 @@ jobs:
   clippy-test:
     name: clippy + test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Earlier Phase 3+4 runs hit GitHub's default 6-hour job timeout on every
+    # OS — almost certainly a runner glitch rather than a real test deadlock.
+    # Cap at 30 min so a true hang fails fast and we can investigate, instead
+    # of burning a runner for hours.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -80,6 +85,10 @@ jobs:
   tauri-build:
     name: Tauri debug build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Tauri debug build typically completes in 2-10 minutes; cap at 30 to
+    # match the clippy-test cap and protect against the same runner-glitch
+    # mode that hung Phase 3+4 for 6 hours.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
