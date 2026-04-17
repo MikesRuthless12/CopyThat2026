@@ -20,6 +20,11 @@ authors = ["Copy That 2026 Contributors"]
 repository = "https://github.com/MikesRuthless12/CopyThat2026"
 homepage = "https://github.com/MikesRuthless12/CopyThat2026"
 readme = "README.md"
+# Proprietary, source-visible: workspace crates are not for crates.io.
+# Combined with `[licenses] private.ignore = true` in deny.toml so the
+# license gate skips our own All-Rights-Reserved crates and only checks
+# third-party dependencies.
+publish = false
 
 [workspace.lints.rust]
 unsafe_code = "warn"

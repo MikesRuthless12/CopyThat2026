@@ -24,6 +24,12 @@ confidence-threshold = 0.92
 # Forward-compatible: keep entries even when no current dep uses them, so a
 # later phase pulling such a dep does not surprise us.
 unused-allowed-license = "allow"
+# Skip license checks for our own workspace crates (those marked
+# `publish = false`). They carry the proprietary
+# `LicenseRef-AllRightsReserved` identifier, which is intentionally not
+# in the allowlist below — that allowlist governs *third-party*
+# dependencies only.
+private = { ignore = true }
 allow = [
     "MIT",
     "Apache-2.0",

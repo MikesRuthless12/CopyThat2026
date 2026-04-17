@@ -92,16 +92,24 @@ unsafe extern "C" fn status_callback(
     if stage != COPYFILE_PROGRESS {
         return COPYFILE_CONTINUE;
     }
-    let ctx = &*(ctx_raw as *const CallbackCtx);
+    // SAFETY: ctx_raw was set via copyfile_state_set in the dispatcher
+    // and points at an `Arc<CallbackCtx>` that outlives the copyfile
+    // call.
+    let ctx = unsafe { &*(ctx_raw as *const CallbackCtx) };
     if ctx.ctrl.is_cancelled() {
         return COPYFILE_QUIT;
     }
     let mut copied: i64 = 0;
-    let rc = copyfile_state_get(
-        state,
-        COPYFILE_STATE_COPIED,
-        &mut copied as *mut _ as *mut c_void,
-    );
+    // SAFETY: `state` is the live copyfile_state_t handed in by the
+    // running copyfile call; `copied` is a stack i64 with sufficient
+    // alignment to hold the off_t value `copyfile_state_get` writes.
+    let rc = unsafe {
+        copyfile_state_get(
+            state,
+            COPYFILE_STATE_COPIED,
+            &mut copied as *mut _ as *mut c_void,
+        )
+    };
     if rc == 0 && copied >= 0 {
         let bytes = copied as u64;
         ctx.bytes.store(bytes, Ordering::Relaxed);

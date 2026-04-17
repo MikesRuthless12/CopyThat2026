@@ -20,7 +20,6 @@
 use std::fs::OpenOptions;
 use std::io;
 use std::os::fd::{AsRawFd, RawFd};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -418,14 +417,5 @@ mod tests {
         assert_eq!(strip_partition_suffix("nvme0n1p3"), "nvme0n1");
         assert_eq!(strip_partition_suffix("mmcblk0p2"), "mmcblk0");
         assert_eq!(strip_partition_suffix("loop0"), "loop0");
-    }
-
-    // Stat-based metadata read; here only to confirm `.dev()` compiles
-    // in the build (kept so the import isn't dead code).
-    #[test]
-    fn metadata_dev_compiles() {
-        if let Ok(md) = std::fs::metadata(".") {
-            let _: u64 = md.dev();
-        }
     }
 }

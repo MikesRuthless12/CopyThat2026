@@ -7,6 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+publish.workspace = true
 
 [lints.rust]
 # This crate is the *only* place in the workspace where `unsafe` is
@@ -25,7 +26,7 @@ default = []
 slow-tests = []
 
 [dependencies]
-copythat-core = { path = "../copythat-core" }
+copythat-core = { path = "../copythat-core", version = "0.1" }
 reflink-copy = "0.1"
 thiserror = "2"
 tokio = { version = "1", features = [
