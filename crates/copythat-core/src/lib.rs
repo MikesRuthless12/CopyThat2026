@@ -1,24 +1,36 @@
-//! `copythat-core` — async byte-exact file copy engine.
+//! `copythat-core` — async byte-exact copy engine + in-memory job queue.
 //!
-//! Phase 1 scope: a single-file `copy_file` primitive with pause / resume
-//! / cancel, progress events, buffer-size tuning, and metadata
-//! preservation (mtime, atime, permissions). No platform fast paths
-//! (those land in Phase 6) and no tree / queue logic (Phase 2).
+//! # What's here today (Phases 1 + 2)
 //!
-//! # Public surface
-//!
-//! - [`copy_file`] — the async entry point.
-//! - [`CopyOptions`] — per-call knobs (buffer size, fsync, follow
-//!   symlinks, preserve metadata, keep_partial).
-//! - [`CopyControl`] — cloneable steering handle: `pause` / `resume` /
-//!   `cancel`.
-//! - [`CopyEvent`] — progress / lifecycle notifications on an
-//!   `mpsc::Sender`.
-//! - [`CopyReport`] — final success record.
-//! - [`CopyError`] / [`CopyErrorKind`] — typed failure, classified into
+//! - `copy_file` / `move_file` — async single-file primitives with
+//!   pause / resume / cancel, progress events, buffer-size tuning,
+//!   metadata preservation.
+//! - `copy_tree` / `move_tree` — whole-directory operations with
+//!   bounded-concurrency per-file copies, a `CollisionPolicy` for
+//!   existing destinations, tree-level aggregate progress events,
+//!   and an EXDEV fallback for cross-volume `move_tree`.
+//! - `Queue` + `Job` + `QueueEvent` — in-memory job tracking with
+//!   broadcast pub/sub. Executes nothing by itself; the caller
+//!   (currently the future Tauri bridge, Phase 5) drives jobs through
+//!   `start` / `set_progress` / `mark_completed` / `mark_failed`.
+//! - `CopyControl` — cloneable steering handle shared between the
+//!   caller and the running task. Also how the queue pauses / resumes
+//!   / cancels a job.
+//! - `CopyEvent` — one enum for every lifecycle notification
+//!   (per-file Started / Progress / Paused / Resumed / Completed /
+//!   Failed + tree-level TreeStarted / TreeProgress / TreeCompleted +
+//!   Collision).
+//! - `CopyError` / `CopyErrorKind` — typed failure, classified into
 //!   the small set the UI and retry policy branch on.
 //!
-//! # Example
+//! Not yet implemented (deferred by design):
+//! - Platform fast paths (CopyFileExW, copyfile, copy_file_range,
+//!   reflink) — Phase 6.
+//! - Verify / hashing — Phase 3.
+//! - Secure delete — Phase 4.
+//! - Queue persistence — Phase 10.
+//!
+//! # Example (single-file)
 //!
 //! ```no_run
 //! use copythat_core::{copy_file, CopyControl, CopyEvent, CopyOptions};
@@ -41,7 +53,6 @@
 //!     .await
 //! });
 //!
-//! // Somewhere else: ctrl_for_ui.pause(); ctrl_for_ui.resume();
 //! while let Some(evt) = rx.recv().await {
 //!     match evt {
 //!         CopyEvent::Progress { bytes, total, .. } => {
@@ -60,14 +71,23 @@
 
 #![forbid(unsafe_code)]
 
+pub mod collision;
 mod control;
 mod engine;
 mod error;
 mod event;
 mod options;
+pub mod queue;
+mod tree;
 
+pub use collision::CollisionPolicy;
 pub use control::CopyControl;
 pub use engine::copy_file;
 pub use error::{CopyError, CopyErrorKind};
-pub use event::{CopyEvent, CopyReport};
-pub use options::{CopyOptions, DEFAULT_BUFFER_SIZE, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
+pub use event::{Collision, CollisionResolution, CopyEvent, CopyReport, TreeReport};
+pub use options::{
+    CopyOptions, DEFAULT_BUFFER_SIZE, DEFAULT_TREE_CONCURRENCY, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE,
+    MoveOptions, TreeOptions,
+};
+pub use queue::{Job, JobId, JobKind, JobState, Queue, QueueEvent};
+pub use tree::{copy_tree, move_file, move_tree};

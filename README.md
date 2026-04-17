@@ -5,10 +5,12 @@ matching every feature of TeraCopy and pushing past it, while staying as fast
 as (or faster than) Explorer / Finder / `cp` / `rsync` for typical desktop
 workloads.
 
-> **Status:** Phase 1 — core async single-file copy. `copythat-core` can
-> copy a regular file end-to-end, with pause / resume / cancel, throttled
-> progress events, buffer-size tuning, and portable metadata preservation
-> (mtime / atime / permissions). No GUI wiring yet.
+> **Status:** Phase 2 — tree operations + in-memory queue.
+> `copythat-core` now does `copy_file`, `copy_tree`, `move_file`, and
+> `move_tree` with pause / resume / cancel, throttled progress events,
+> six collision policies (Skip / Overwrite / OverwriteIfNewer /
+> KeepBoth / Rename / Prompt), and a broadcast-backed job queue. No
+> GUI wiring yet; that's Phase 5.
 
 ## Targets
 
@@ -92,6 +94,12 @@ Phase 1 smoke test (100 MiB async round-trip through `copy_file`):
 
 ```sh
 cargo test -p copythat-core --test phase_01_core_copy -- --nocapture
+```
+
+Phase 2 smoke test (500-file tree copy + move):
+
+```sh
+cargo test -p copythat-core --test phase_02_tree_queue -- --nocapture
 ```
 
 ## Roadmap

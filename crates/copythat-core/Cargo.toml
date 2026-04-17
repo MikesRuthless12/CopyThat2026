@@ -29,6 +29,7 @@ tokio = { version = "1", features = [
     "sync",
     "time",
 ] }
+walkdir = "2"
 
 [dev-dependencies]
 rand = "0.9"
@@ -50,3 +51,7 @@ tokio = { version = "1", features = [
 [[test]]
 name = "phase_01_core_copy"
 path = "../../tests/smoke/phase_01_core_copy.rs"
+
+[[test]]
+name = "phase_02_tree_queue"
+path = "../../tests/smoke/phase_02_tree_queue.rs"
