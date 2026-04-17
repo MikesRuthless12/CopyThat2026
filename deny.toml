@@ -21,6 +21,9 @@ feature-depth = 1
 [licenses]
 version = 2
 confidence-threshold = 0.92
+# Forward-compatible: keep entries even when no current dep uses them, so a
+# later phase pulling such a dep does not surprise us.
+unused-allowed-license = "allow"
 allow = [
     "MIT",
     "Apache-2.0",
@@ -63,7 +66,41 @@ allow-registry   = ["https://github.com/rust-lang/crates.io-index"]
 allow-git        = []
 
 # ----- Advisories -------------------------------------------------------------
+#
+# All entries below are "unmaintained" advisories (NOT vulnerabilities),
+# inherited transitively from Tauri 2.x's Linux toolchain. We do not import
+# any of these crates directly and cannot evict them from the tree until the
+# upstream maintainer migrates. Re-audit at every Tauri minor bump and remove
+# entries whose root crate has been replaced. New unmaintained advisories
+# encountered later get added here with the same one-line provenance comment.
+# Any *vulnerability* (RUSTSEC ID without `unmaintained`) must NOT be ignored
+# here — fix it instead.
 [advisories]
 version = 2
 yanked  = "deny"
-ignore  = []
+ignore = [
+    # gtk-rs GTK3 binding family — Tauri 2.x Linux WebView (atk, gdk, gdk-sys,
+    # gdkx11, gdkx11-sys, gdk-pixbuf, gdk-pixbuf-sys, gdkwayland-sys, gtk,
+    # gtk-sys, gtk3-macros). Will clear when Tauri migrates Linux to GTK4.
+    "RUSTSEC-2024-0411",
+    "RUSTSEC-2024-0412",
+    "RUSTSEC-2024-0413",
+    "RUSTSEC-2024-0414",
+    "RUSTSEC-2024-0415",
+    "RUSTSEC-2024-0416",
+    "RUSTSEC-2024-0417",
+    "RUSTSEC-2024-0418",
+    "RUSTSEC-2024-0419",
+    "RUSTSEC-2024-0420",
+    # proc-macro-error — superseded by proc-macro-error2; pulled in transitively.
+    "RUSTSEC-2024-0370",
+    # fxhash — superseded by rustc-hash 2.x; pulled in transitively.
+    "RUSTSEC-2025-0057",
+    # unic-* (unic-char-property, unic-char-range, unic-common, unic-ucd-ident,
+    # unic-ucd-version) — superseded by ICU4X icu_* crates; pulled transitively.
+    "RUSTSEC-2025-0075",
+    "RUSTSEC-2025-0080",
+    "RUSTSEC-2025-0081",
+    "RUSTSEC-2025-0098",
+    "RUSTSEC-2025-0100",
+]
