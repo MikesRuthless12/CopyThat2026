@@ -64,3 +64,9 @@ apps/copythat-ui/src-tauri/Cargo.lock
 /docs/I18N_TODO.md
 /docs/ROADMAP.md
 /packaging/linux/README.md
+
+# --- Icon workshop scratch output ---
+# Per-iteration icon previews (rasterised SVG exports, pre-review
+# renders, etc.) live under `/icon-previews/` and are not tracked.
+# The approved deliverables live under `/icon/` and ARE tracked.
+/icon-previews/
