@@ -356,3 +356,14 @@ duration-zero = 0 ث
 
 # MT
 rate-unit-per-second = { $size }/ث
+
+# MT — Phase 11b Settings modal
+settings-title = الإعدادات
+# MT
+settings-tab-general = عام
+# MT
+settings-tab-appearance = المظهر
+# MT
+settings-section-language = اللغة
+# MT
+settings-phase-12-hint = ستضاف المزيد من الإعدادات (السمة، إعدادات النقل الافتراضية، خوارزمية التحقق، الملفات الشخصية) في المرحلة 12.

@@ -356,3 +356,14 @@ duration-zero = 0 sn
 
 # MT
 rate-unit-per-second = { $size }/sn
+
+# MT — Phase 11b Settings modal
+settings-title = Ayarlar
+# MT
+settings-tab-general = Genel
+# MT
+settings-tab-appearance = Görünüm
+# MT
+settings-section-language = Dil
+# MT
+settings-phase-12-hint = Daha fazla ayar (tema, aktarım varsayılanları, doğrulama algoritması, profiller) 12. aşamada gelecek.

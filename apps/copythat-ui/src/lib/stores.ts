@@ -54,6 +54,10 @@ const historyDetailRowStore = writable<number | null>(null);
 // Phase 10: Totals drawer open flag. The drawer fetches fresh
 // aggregates on open; no store cache.
 const totalsDrawerOpenStore = writable<boolean>(false);
+// Phase 11b: Settings modal open flag. Minimal today — General
+// tab with Language only — Phase 12 extends to Transfer, Shell,
+// Secure-delete, Advanced tabs.
+const settingsOpenStore = writable<boolean>(false);
 
 export const jobs: Readable<JobDto[]> = { subscribe: jobsStore.subscribe };
 export const globals: Readable<GlobalsDto> = {
@@ -111,6 +115,17 @@ export function openTotalsDrawer(): void {
 }
 export function closeTotalsDrawer(): void {
   totalsDrawerOpenStore.set(false);
+}
+
+// Phase 11b Settings modal.
+export const settingsOpen: Readable<boolean> = {
+  subscribe: settingsOpenStore.subscribe,
+};
+export function openSettings(): void {
+  settingsOpenStore.set(true);
+}
+export function closeSettings(): void {
+  settingsOpenStore.set(false);
 }
 
 /// The sum of live per-job rates. `GlobalsDto.rateBps` from Rust is

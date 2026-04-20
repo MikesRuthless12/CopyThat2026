@@ -356,3 +356,14 @@ duration-zero = 0 秒
 
 # MT
 rate-unit-per-second = { $size }/秒
+
+# MT — Phase 11b Settings modal
+settings-title = 設定
+# MT
+settings-tab-general = 一般
+# MT
+settings-tab-appearance = 外観
+# MT
+settings-section-language = 言語
+# MT
+settings-phase-12-hint = 他の設定 (テーマ、転送デフォルト、検証アルゴリズム、プロファイル) は Phase 12 で追加されます。
