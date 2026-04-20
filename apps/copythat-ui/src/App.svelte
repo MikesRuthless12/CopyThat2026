@@ -20,6 +20,7 @@
   import ErrorModal from "./lib/components/ErrorModal.svelte";
   import CollisionModal from "./lib/components/CollisionModal.svelte";
   import ErrorLogDrawer from "./lib/components/ErrorLogDrawer.svelte";
+  import HistoryDrawer from "./lib/components/HistoryDrawer.svelte";
   import Toast from "./lib/components/Toast.svelte";
 
   import { initI18n, t } from "./lib/i18n";
@@ -164,6 +165,9 @@
   <ErrorModal />
   <CollisionModal />
   <ErrorLogDrawer />
+
+  <!-- Phase 9: SQLite history drawer -->
+  <HistoryDrawer />
 
   <Toast />
 </main>

@@ -21,6 +21,7 @@ use copythat_core::{
     Job, JobId, JobKind, JobState, MoveOptions, Queue, TreeOptions, copy_file, copy_tree,
     move_file, move_tree,
 };
+use copythat_history::{ItemRow, JobRowId, JobSummary};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
 
@@ -84,11 +85,23 @@ pub(crate) async fn run_job(job: RunJob) {
     let _ = app.emit(EVENT_JOB_STARTED, JobIdDto { id: id.as_u64() });
     emit_globals(&app, &state);
 
+    // Phase 9 — record the job-start into the SQLite history. `None`
+    // return means history is disabled (in-memory AppState or disk
+    // open failed at boot); the runner still works, just without
+    // persistence.
+    let history_row = record_history_start(&state, kind, &src, dst.as_deref(), &verifier).await;
+
     let (tx, rx) = mpsc::channel::<CopyEvent>(EVENT_CHANNEL);
 
     let app_for_events = app.clone();
     let state_for_events = state.clone();
-    let forwarder = tokio::spawn(forward_events(app_for_events, state_for_events, id, rx));
+    let forwarder = tokio::spawn(forward_events(
+        app_for_events,
+        state_for_events,
+        id,
+        rx,
+        history_row,
+    ));
 
     let mut copy_opts_with_verify = copy_opts;
     copy_opts_with_verify.verify = verifier;
@@ -184,16 +197,30 @@ pub(crate) async fn run_job(job: RunJob) {
     drop(tx);
     let _ = forwarder.await;
 
-    match result {
+    // Terminal status for both the queue-level emit and the
+    // history-level finish stamp.
+    let terminal_status: &'static str = match &result {
         Ok(()) => {
-            // Check cancel: a cancelled job may return Ok from
-            // copy_file if the cancel raced the final write.
             if state
                 .queue
                 .get(id)
                 .map(|j| j.state == JobState::Cancelled)
                 .unwrap_or(false)
             {
+                "cancelled"
+            } else {
+                "succeeded"
+            }
+        }
+        Err(err) if err.is_cancelled() => "cancelled",
+        Err(_) => "failed",
+    };
+
+    match result {
+        Ok(()) => {
+            // Check cancel: a cancelled job may return Ok from
+            // copy_file if the cancel raced the final write.
+            if terminal_status == "cancelled" {
                 let _ = app.emit(EVENT_JOB_CANCELLED, JobIdDto { id: id.as_u64() });
             } else {
                 state.queue.mark_completed(id);
@@ -206,6 +233,30 @@ pub(crate) async fn run_job(job: RunJob) {
                 // `Queue::cancel_job`; just emit the UI-facing event.
                 let _ = app.emit(EVENT_JOB_CANCELLED, JobIdDto { id: id.as_u64() });
             } else {
+                // Single-file / early-abort failure path: the
+                // engine didn't loop through forward_events long
+                // enough to emit a per-file FileError or Completed,
+                // so log the failure as a one-row item now. (Tree
+                // paths already self-emit per-file events above.)
+                if let Some(row) = history_row
+                    && !err.src.as_os_str().is_empty()
+                {
+                    let history = state.history.clone();
+                    if let Some(h) = history {
+                        let item = ItemRow {
+                            job_row_id: row.as_i64(),
+                            src: err.src.clone(),
+                            dst: err.dst.clone(),
+                            size: 0,
+                            status: "failed".into(),
+                            hash_hex: None,
+                            error_code: Some(crate::errors::kind_name(err.kind).to_string()),
+                            error_msg: Some(err.message.clone()),
+                            timestamp_ms: now_ms() as i64,
+                        };
+                        let _ = h.record_item(&item).await;
+                    }
+                }
                 state.queue.mark_failed(id, err.clone());
                 let _ = app.emit(
                     EVENT_JOB_FAILED,
@@ -215,6 +266,23 @@ pub(crate) async fn run_job(job: RunJob) {
                     },
                 );
             }
+        }
+    }
+
+    // Phase 9 — stamp the terminal status + final totals into the
+    // history row.
+    if let Some(row) = history_row {
+        let snapshot = state.queue.get(id);
+        let total_bytes = snapshot.as_ref().map(|j| j.bytes_done).unwrap_or(0);
+        let files_ok = snapshot.as_ref().map(|j| j.files_done).unwrap_or(0);
+        let files_failed = snapshot
+            .as_ref()
+            .and_then(|j| j.files_total.checked_sub(j.files_done))
+            .unwrap_or(0);
+        if let Some(history) = &state.history {
+            let _ = history
+                .record_finish(row, terminal_status, total_bytes, files_ok, files_failed)
+                .await;
         }
     }
     emit_globals(&app, &state);
@@ -244,16 +312,34 @@ async fn forward_events(
     state: AppState,
     id: JobId,
     mut rx: mpsc::Receiver<CopyEvent>,
+    history_row: Option<JobRowId>,
 ) {
     let mut last_files_total: u64 = 0;
     let mut last_bytes_total: u64 = 0;
+    // Phase 9 — per-file history bookkeeping. `Started` sets the
+    // in-flight item; `VerifyCompleted` stashes its hash;
+    // `Completed` flushes it as a successful row. `FileError`
+    // records a failure row directly.
+    let mut current_item: Option<ItemInFlight> = None;
 
     while let Some(evt) = rx.recv().await {
         match evt {
-            CopyEvent::Started { total_bytes, .. } => {
+            CopyEvent::Started {
+                src,
+                dst,
+                total_bytes,
+            } => {
                 last_bytes_total = total_bytes;
                 last_files_total = 1;
                 state.queue.set_progress(id, 0, total_bytes, 0, 1);
+                if history_row.is_some() {
+                    let _ = total_bytes; // size is taken from the Completed event
+                    current_item = Some(ItemInFlight {
+                        src,
+                        dst,
+                        hash_hex: None,
+                    });
+                }
             }
             CopyEvent::TreeStarted {
                 total_files,
@@ -328,9 +414,21 @@ async fn forward_events(
                     rate_bps,
                 );
             }
-            CopyEvent::VerifyCompleted { .. } | CopyEvent::VerifyFailed { .. } => {
-                // Engine will return the final Result — no state
-                // transition here.
+            CopyEvent::VerifyCompleted {
+                algorithm: _,
+                src_hex,
+                ..
+            } => {
+                // Stash the source hash on the in-flight item so
+                // Completed can persist it. Engine still returns
+                // the final Result separately.
+                if let Some(item) = current_item.as_mut() {
+                    item.hash_hex = Some(src_hex);
+                }
+            }
+            CopyEvent::VerifyFailed { .. } => {
+                // Engine returns VerifyFailed as part of the final
+                // Result. No state transition here.
             }
             CopyEvent::Completed { bytes, .. } => {
                 state.queue.set_progress(
@@ -340,6 +438,24 @@ async fn forward_events(
                     last_files_total.max(1),
                     last_files_total.max(1),
                 );
+                // Phase 9 — persist the item row. Only if history
+                // is active and we saw a matching `Started`.
+                if let (Some(row), Some(item)) = (history_row, current_item.take())
+                    && let Some(history) = &state.history
+                {
+                    let entry = ItemRow {
+                        job_row_id: row.as_i64(),
+                        src: item.src,
+                        dst: item.dst,
+                        size: bytes,
+                        status: "ok".into(),
+                        hash_hex: item.hash_hex,
+                        error_code: None,
+                        error_msg: None,
+                        timestamp_ms: now_ms() as i64,
+                    };
+                    let _ = history.record_item(&entry).await;
+                }
             }
             CopyEvent::TreeCompleted { bytes, files, .. } => {
                 state.queue.set_progress(id, bytes, bytes, files, files);
@@ -353,6 +469,26 @@ async fn forward_events(
                 // policy (Skip / exhausted RetryN). Log it and keep
                 // going; the tree continues.
                 state.errors.log_auto(id.as_u64(), &err);
+                // Phase 9 — also record the item in history.
+                if let (Some(row), Some(history)) = (history_row, state.history.clone()) {
+                    let kind_str = crate::errors::kind_name(err.kind);
+                    let entry = ItemRow {
+                        job_row_id: row.as_i64(),
+                        src: err.src.clone(),
+                        dst: err.dst.clone(),
+                        size: 0,
+                        status: "failed".into(),
+                        hash_hex: None,
+                        error_code: Some(kind_str.to_string()),
+                        error_msg: Some(err.message.clone()),
+                        timestamp_ms: now_ms() as i64,
+                    };
+                    let _ = history.record_item(&entry).await;
+                }
+                // Drop any in-flight item that belonged to the
+                // failing file so a subsequent Completed from a
+                // later file doesn't inherit stale paths.
+                current_item = None;
             }
             CopyEvent::Collision(mut coll) => {
                 let job_id = id.as_u64();
@@ -568,4 +704,59 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// In-flight per-file bookkeeping used by `forward_events` to
+/// pair a `Started { src, dst }` event with the matching
+/// `Completed` or `FileError` so the history's `items` row
+/// carries the right path + hash.
+struct ItemInFlight {
+    src: std::path::PathBuf,
+    dst: std::path::PathBuf,
+    hash_hex: Option<String>,
+}
+
+/// Phase 9 — insert the `jobs` row at job start. Returns `None` if
+/// history is disabled (e.g. in-memory `AppState` used by tests)
+/// or if the insert failed; the runner continues regardless.
+async fn record_history_start(
+    state: &AppState,
+    kind: copythat_core::JobKind,
+    src: &std::path::Path,
+    dst: Option<&std::path::Path>,
+    verifier: &Option<copythat_core::Verifier>,
+) -> Option<JobRowId> {
+    let history = state.history.as_ref()?;
+    let summary = JobSummary {
+        row_id: 0,
+        kind: kind_to_wire(kind).to_string(),
+        status: "running".into(),
+        started_at_ms: now_ms() as i64,
+        finished_at_ms: None,
+        src_root: src.to_path_buf(),
+        dst_root: dst.map(|p| p.to_path_buf()).unwrap_or_default(),
+        total_bytes: 0,
+        files_ok: 0,
+        files_failed: 0,
+        // The `Verifier` value doesn't expose its algorithm name
+        // publicly today; Phase 11+ can thread that through. For
+        // now `"sha256"` vs `None` is the interesting distinction
+        // the History column needs — if *any* verifier is set,
+        // record a placeholder so queries on `verify_algo IS NOT
+        // NULL` still work.
+        verify_algo: verifier.as_ref().map(|_| "configured".to_string()),
+        options_json: None,
+    };
+    history.record_start(&summary).await.ok()
+}
+
+fn kind_to_wire(kind: copythat_core::JobKind) -> &'static str {
+    use copythat_core::JobKind;
+    match kind {
+        JobKind::Copy => "copy",
+        JobKind::Move => "move",
+        JobKind::Delete => "delete",
+        JobKind::SecureDelete => "secure-delete",
+        JobKind::Verify => "verify",
+    }
 }

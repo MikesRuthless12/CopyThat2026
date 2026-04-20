@@ -434,3 +434,167 @@ fn parse_collision_resolution(
 fn path_to_string(p: &Path) -> String {
     p.to_string_lossy().to_string()
 }
+
+// ---------------------------------------------------------------------
+// Phase 9 — SQLite history commands
+// ---------------------------------------------------------------------
+
+/// Search the history. Frontend can refine with any subset of
+/// filter fields; the handler forwards into
+/// [`copythat_history::History::search`].
+#[tauri::command]
+pub async fn history_search(
+    filter: Option<crate::ipc::HistoryFilterDto>,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<crate::ipc::HistoryJobDto>, String> {
+    let history = require_history(&state)?;
+    let filter = filter.unwrap_or_default();
+    let f = copythat_history::HistoryFilter {
+        started_since_ms: filter.started_since_ms,
+        started_until_ms: filter.started_until_ms,
+        kind: filter.kind,
+        status: filter.status,
+        text: filter.text,
+        limit: filter.limit,
+    };
+    let rows = history.search(f).await.map_err(|e| e.to_string())?;
+    Ok(rows.into_iter().map(history_job_to_dto).collect())
+}
+
+/// Fetch the per-item rows attached to one history job. The
+/// History drawer calls this when the user clicks a job.
+#[tauri::command]
+pub async fn history_items(
+    row_id: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<crate::ipc::HistoryItemDto>, String> {
+    let history = require_history(&state)?;
+    let id = copythat_history::JobRowId(row_id);
+    let rows = history.items_for(id).await.map_err(|e| e.to_string())?;
+    Ok(rows.into_iter().map(history_item_to_dto).collect())
+}
+
+/// Delete every job older than `days` days. Cascades to the
+/// attached `items` rows via the FK rule.
+#[tauri::command]
+pub async fn history_purge(days: u32, state: tauri::State<'_, AppState>) -> Result<u64, String> {
+    let history = require_history(&state)?;
+    history
+        .purge_older_than(days)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Export the entire history (or a filtered subset) as CSV. Writes
+/// to `path` on disk; returns the byte count written.
+#[tauri::command]
+pub async fn history_export_csv(
+    path: String,
+    filter: Option<crate::ipc::HistoryFilterDto>,
+    state: tauri::State<'_, AppState>,
+) -> Result<u64, String> {
+    let history = require_history(&state)?;
+    let filter = filter.unwrap_or_default();
+    let f = copythat_history::HistoryFilter {
+        started_since_ms: filter.started_since_ms,
+        started_until_ms: filter.started_until_ms,
+        kind: filter.kind,
+        status: filter.status,
+        text: filter.text,
+        limit: filter.limit,
+    };
+    let rows = history.search(f).await.map_err(|e| e.to_string())?;
+    let body = copythat_history::export_csv(&rows);
+    let bytes = body.len() as u64;
+    std::fs::write(&path, body).map_err(|e| format!("history export write failed: {e}"))?;
+    Ok(bytes)
+}
+
+/// Re-run the enqueue described by a history row. Walks the job's
+/// `items` list and enqueues each `src` back into the runner with
+/// the original `dst`'s parent as the destination root.
+///
+/// Intentionally minimal for Phase 9 — parses just what it needs
+/// from the historical row rather than trying to restore every
+/// detail of the original options. Phase 14 "resume interrupted"
+/// will reuse this plumbing.
+#[tauri::command]
+pub async fn history_rerun(
+    row_id: i64,
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<u64>, String> {
+    let history = require_history(&state)?;
+    let id = copythat_history::JobRowId(row_id);
+    let summary = history
+        .get(id)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "history row not found".to_string())?;
+
+    let kind = match summary.kind.as_str() {
+        "copy" => JobKind::Copy,
+        "move" => JobKind::Move,
+        other => return Err(format!("history rerun: unsupported job kind `{other}`")),
+    };
+
+    let sources = vec![summary.src_root];
+    let dst_root = summary.dst_root;
+    if dst_root.as_os_str().is_empty() {
+        return Err("history rerun: destination path is empty".to_string());
+    }
+    // Re-run uses the engine defaults; the original row's opaque
+    // `options_json` is ignored until Phase 12 can round-trip it.
+    Ok(crate::shell::enqueue_jobs(
+        &app,
+        state.inner(),
+        kind,
+        sources,
+        &dst_root,
+        CopyOptions::default(),
+        None,
+        copythat_core::CollisionPolicy::default(),
+        copythat_core::ErrorPolicy::Ask,
+    ))
+}
+
+fn require_history(
+    state: &tauri::State<'_, AppState>,
+) -> Result<copythat_history::History, String> {
+    state
+        .inner()
+        .history
+        .clone()
+        .ok_or_else(|| "history-unavailable".to_string())
+}
+
+fn history_job_to_dto(s: copythat_history::JobSummary) -> crate::ipc::HistoryJobDto {
+    crate::ipc::HistoryJobDto {
+        row_id: s.row_id,
+        kind: s.kind,
+        status: s.status,
+        started_at_ms: s.started_at_ms,
+        finished_at_ms: s.finished_at_ms,
+        src_root: s.src_root.to_string_lossy().into_owned(),
+        dst_root: s.dst_root.to_string_lossy().into_owned(),
+        total_bytes: s.total_bytes,
+        files_ok: s.files_ok,
+        files_failed: s.files_failed,
+        verify_algo: s.verify_algo,
+        options_json: s.options_json,
+    }
+}
+
+fn history_item_to_dto(r: copythat_history::ItemRow) -> crate::ipc::HistoryItemDto {
+    crate::ipc::HistoryItemDto {
+        job_row_id: r.job_row_id,
+        src: r.src.to_string_lossy().into_owned(),
+        dst: r.dst.to_string_lossy().into_owned(),
+        size: r.size,
+        status: r.status,
+        hash_hex: r.hash_hex,
+        error_code: r.error_code,
+        error_msg: r.error_msg,
+        timestamp_ms: r.timestamp_ms,
+    }
+}
