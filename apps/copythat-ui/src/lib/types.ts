@@ -281,3 +281,94 @@ export interface DayTotalDto {
   files: number;
   jobs: number;
 }
+
+// Phase 12 — Settings DTOs. Mirror the Rust `SettingsDto` at
+// apps/copythat-ui/src-tauri/src/ipc.rs. Enum-shaped fields are
+// kebab-case lowercase strings on the wire; the UI formats them.
+
+export interface GeneralSettingsDto {
+  language: string;
+  theme: "auto" | "light" | "dark";
+  startWithOs: boolean;
+  singleInstance: boolean;
+  minimizeToTray: boolean;
+}
+
+export type VerifyChoiceWire =
+  | "off"
+  | "crc32"
+  | "md5"
+  | "sha1"
+  | "sha256"
+  | "sha512"
+  | "xxhash3-64"
+  | "xxhash3-128"
+  | "blake3";
+
+export type ReflinkWire = "prefer" | "avoid" | "disabled";
+
+export interface TransferSettingsDto {
+  bufferSizeBytes: number;
+  verify: VerifyChoiceWire;
+  /// "auto" or "manual-N" for 1..=16
+  concurrency: string;
+  reflink: ReflinkWire;
+  fsyncOnClose: boolean;
+  preserveTimestamps: boolean;
+  preservePermissions: boolean;
+  preserveAcls: boolean;
+}
+
+export interface ShellSettingsDto {
+  contextMenuEnabled: boolean;
+  interceptDefaultCopy: boolean;
+  notifyOnCompletion: boolean;
+}
+
+export type ShredMethodWire =
+  | "zero"
+  | "random"
+  | "dod-3-pass"
+  | "dod-7-pass"
+  | "gutmann"
+  | "nist-800-88";
+
+export interface SecureDeleteSettingsDto {
+  method: ShredMethodWire;
+  confirmTwice: boolean;
+}
+
+export type LogLevelWire =
+  | "off"
+  | "trace"
+  | "debug"
+  | "info"
+  | "warn"
+  | "error";
+
+export type ErrorPolicyDtoV2 =
+  | { kind: "ask" }
+  | { kind: "skip" }
+  | { kind: "abort" }
+  | { kind: "retryN"; maxAttempts: number; backoffMs: number };
+
+export interface AdvancedSettingsDto {
+  logLevel: LogLevelWire;
+  telemetry: boolean;
+  errorPolicy: ErrorPolicyDtoV2;
+  historyRetentionDays: number;
+  databasePath: string | null;
+}
+
+export interface SettingsDto {
+  general: GeneralSettingsDto;
+  transfer: TransferSettingsDto;
+  shell: ShellSettingsDto;
+  secureDelete: SecureDeleteSettingsDto;
+  advanced: AdvancedSettingsDto;
+}
+
+export interface ProfileInfoDto {
+  name: string;
+  path: string;
+}

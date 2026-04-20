@@ -5,7 +5,27 @@ matching every feature of TeraCopy and pushing past it, while staying as fast
 as (or faster than) Explorer / Finder / `cp` / `rsync` for typical desktop
 workloads.
 
-> **Status:** Phase 11 complete (11a + 11b + 11c).
+> **Status:** Phase 12 complete — Settings, Preferences, Profiles.
+>
+> New `copythat-settings` crate (TOML-backed Settings + JSON
+> profile store) plus a six-tab Settings modal: General (language,
+> theme, startup flags), Transfer (buffer size, verify algorithm,
+> concurrency, reflink, fsync, preserve metadata), Shell (context
+> menu, Windows copy-handler intercept, completion notifications),
+> Secure delete (method, double-confirm), Advanced (log level,
+> error policy, history retention, database path — telemetry is
+> hardcoded OFF), and Profiles (save / load / delete / export /
+> import JSON). Settings hot-reload into the engine — change
+> buffer size to 4 MiB in Settings and the next enqueue's
+> `CopyOptions` picks it up without a restart. Branded Windows
+> icon replaces the Phase 0 placeholder; macOS `.icns` and Linux
+> PNGs stay on the Phase 0 scaffold until Phase 16 regenerates
+> them from a shared SVG source. 239 Fluent keys × 18 locales
+> (up from 172). Deferred behind flags-only: `start-with-os`,
+> `minimize-to-tray`, `intercept-default-copy` — Phase 14 / 16
+> wire the OS registration.
+>
+> _Previous status: Phase 11 complete (11a + 11b + 11c)._
 >
 > - **11a — i18n core.** Every user-visible string now flows through
 >   Fluent (172 keys × 18 locales, including the Phase 11b Settings

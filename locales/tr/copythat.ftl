@@ -367,3 +367,145 @@ settings-tab-appearance = Görünüm
 settings-section-language = Dil
 # MT
 settings-phase-12-hint = Daha fazla ayar (tema, aktarım varsayılanları, doğrulama algoritması, profiller) 12. aşamada gelecek.
+
+# MT — Phase 12 Settings window
+settings-loading = Ayarlar yükleniyor…
+# MT
+settings-tab-transfer = Aktarım
+# MT
+settings-tab-shell = Kabuk
+# MT
+settings-tab-secure-delete = Güvenli silme
+# MT
+settings-tab-advanced = Gelişmiş
+# MT
+settings-tab-profiles = Profiller
+
+# MT
+settings-section-theme = Tema
+# MT
+settings-theme-auto = Otomatik
+# MT
+settings-theme-light = Açık
+# MT
+settings-theme-dark = Koyu
+# MT
+settings-start-with-os = Sistem başlangıcında çalıştır
+# MT
+settings-single-instance = Tek çalışan örnek
+# MT
+settings-minimize-to-tray = Kapatırken sistem tepsisine küçült
+
+# MT
+settings-buffer-size = Arabellek boyutu
+# MT
+settings-verify = Kopyalama sonrası doğrula
+# MT
+settings-verify-off = Kapalı
+# MT
+settings-concurrency = Eşzamanlılık
+# MT
+settings-concurrency-auto = Otomatik
+# MT
+settings-reflink = Reflink / hızlı yollar
+# MT
+settings-reflink-prefer = Tercih et
+# MT
+settings-reflink-avoid = Reflinkten kaçın
+# MT
+settings-reflink-disabled = Her zaman async motoru kullan
+# MT
+settings-fsync-on-close = Kapanışta diske senkronize et (daha yavaş, daha güvenli)
+# MT
+settings-preserve-timestamps = Zaman damgalarını koru
+# MT
+settings-preserve-permissions = İzinleri koru
+# MT
+settings-preserve-acls = ACL'leri koru (14. aşama)
+
+# MT
+settings-context-menu = Bağlam menüsü girdilerini etkinleştir
+# MT
+settings-intercept-copy = Varsayılan kopya işleyicisini yakala (Windows)
+# MT
+settings-intercept-copy-hint = Açıkken Explorer'da Ctrl+C / Ctrl+V Copy That üzerinden çalışır. Kayıt 14. aşamada.
+# MT
+settings-notify-completion = İş tamamlandığında bildir
+
+# MT
+settings-shred-method = Varsayılan silme yöntemi
+# MT
+settings-shred-zero = Sıfır (1 geçiş)
+# MT
+settings-shred-random = Rastgele (1 geçiş)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 geçiş)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 geçiş)
+# MT
+settings-shred-gutmann = Gutmann (35 geçiş)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = Silmeden önce çift onay iste
+
+# MT
+settings-log-level = Günlük düzeyi
+# MT
+settings-log-off = Kapalı
+# MT
+settings-telemetry = Telemetri
+# MT
+settings-telemetry-never = Asla — hiçbir günlük düzeyinde veri gönderilmez
+# MT
+settings-error-policy = Varsayılan hata ilkesi
+# MT
+settings-error-policy-ask = Sor
+# MT
+settings-error-policy-skip = Atla
+# MT
+settings-error-policy-retry = Bekleme ile yeniden dene
+# MT
+settings-error-policy-abort = İlk hatada iptal et
+# MT
+settings-history-retention = Geçmiş saklama (gün)
+# MT
+settings-history-retention-hint = 0 = süresiz tut. Başka herhangi bir değer başlangıçta eski işleri otomatik olarak temizler.
+# MT
+settings-database-path = Veritabanı yolu
+# MT
+settings-database-path-default = (varsayılan — OS veri dizini)
+# MT
+settings-reset-all = Varsayılanlara sıfırla
+# MT
+settings-reset-confirm = Tüm tercihler sıfırlansın mı? Profiller etkilenmez.
+
+# MT
+settings-profiles-hint = Mevcut ayarları bir ad altında kaydedin; daha sonra ayrı ayrı tekli düğmeleri değiştirmeden geri yüklemek için yükleyin.
+# MT
+settings-profile-name-placeholder = Profil adı
+# MT
+settings-profile-save = Kaydet
+# MT
+settings-profile-import = İçe aktar…
+# MT
+settings-profile-load = Yükle
+# MT
+settings-profile-export = Dışa aktar…
+# MT
+settings-profile-delete = Sil
+# MT
+settings-profile-empty = Henüz kaydedilmiş profil yok.
+# MT
+settings-profile-import-prompt = İçe aktarılan profil için ad:
+
+# MT
+toast-settings-reset = Ayarlar sıfırlandı
+# MT
+toast-profile-saved = Profil kaydedildi
+# MT
+toast-profile-loaded = Profil yüklendi
+# MT
+toast-profile-exported = Profil dışa aktarıldı
+# MT
+toast-profile-imported = Profil içe aktarıldı

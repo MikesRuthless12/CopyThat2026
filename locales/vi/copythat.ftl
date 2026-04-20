@@ -367,3 +367,145 @@ settings-tab-appearance = Giao diện
 settings-section-language = Ngôn ngữ
 # MT
 settings-phase-12-hint = Các cài đặt khác (chủ đề, mặc định truyền, thuật toán xác minh, hồ sơ) sẽ đến ở Giai đoạn 12.
+
+# MT — Phase 12 Settings window
+settings-loading = Đang tải cài đặt…
+# MT
+settings-tab-transfer = Truyền tải
+# MT
+settings-tab-shell = Shell
+# MT
+settings-tab-secure-delete = Xóa an toàn
+# MT
+settings-tab-advanced = Nâng cao
+# MT
+settings-tab-profiles = Hồ sơ
+
+# MT
+settings-section-theme = Chủ đề
+# MT
+settings-theme-auto = Tự động
+# MT
+settings-theme-light = Sáng
+# MT
+settings-theme-dark = Tối
+# MT
+settings-start-with-os = Khởi chạy cùng hệ thống
+# MT
+settings-single-instance = Chỉ một phiên chạy
+# MT
+settings-minimize-to-tray = Thu nhỏ vào khay khi đóng
+
+# MT
+settings-buffer-size = Kích thước bộ đệm
+# MT
+settings-verify = Xác minh sau khi sao chép
+# MT
+settings-verify-off = Tắt
+# MT
+settings-concurrency = Đồng thời
+# MT
+settings-concurrency-auto = Tự động
+# MT
+settings-reflink = Reflink / đường dẫn nhanh
+# MT
+settings-reflink-prefer = Ưu tiên
+# MT
+settings-reflink-avoid = Tránh reflink
+# MT
+settings-reflink-disabled = Luôn dùng engine bất đồng bộ
+# MT
+settings-fsync-on-close = Đồng bộ đĩa khi đóng (chậm hơn, an toàn hơn)
+# MT
+settings-preserve-timestamps = Giữ dấu thời gian
+# MT
+settings-preserve-permissions = Giữ quyền
+# MT
+settings-preserve-acls = Giữ ACL (Giai đoạn 14)
+
+# MT
+settings-context-menu = Bật các mục menu ngữ cảnh shell
+# MT
+settings-intercept-copy = Chặn trình xử lý sao chép mặc định (Windows)
+# MT
+settings-intercept-copy-hint = Khi bật, Ctrl+C / Ctrl+V trong Explorer đi qua Copy That. Đăng ký ở Giai đoạn 14.
+# MT
+settings-notify-completion = Thông báo khi hoàn thành tác vụ
+
+# MT
+settings-shred-method = Phương thức hủy mặc định
+# MT
+settings-shred-zero = Số không (1 lượt)
+# MT
+settings-shred-random = Ngẫu nhiên (1 lượt)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 lượt)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 lượt)
+# MT
+settings-shred-gutmann = Gutmann (35 lượt)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = Yêu cầu xác nhận kép trước khi hủy
+
+# MT
+settings-log-level = Mức nhật ký
+# MT
+settings-log-off = Tắt
+# MT
+settings-telemetry = Thu thập dữ liệu
+# MT
+settings-telemetry-never = Không bao giờ — không gửi dữ liệu ở bất kỳ mức nhật ký nào
+# MT
+settings-error-policy = Chính sách lỗi mặc định
+# MT
+settings-error-policy-ask = Hỏi
+# MT
+settings-error-policy-skip = Bỏ qua
+# MT
+settings-error-policy-retry = Thử lại với chờ
+# MT
+settings-error-policy-abort = Hủy khi có lỗi đầu tiên
+# MT
+settings-history-retention = Lưu giữ lịch sử (ngày)
+# MT
+settings-history-retention-hint = 0 = giữ mãi. Bất kỳ giá trị nào khác sẽ tự động xóa tác vụ cũ khi khởi động.
+# MT
+settings-database-path = Đường dẫn cơ sở dữ liệu
+# MT
+settings-database-path-default = (mặc định — thư mục dữ liệu hệ điều hành)
+# MT
+settings-reset-all = Đặt lại về mặc định
+# MT
+settings-reset-confirm = Đặt lại mọi tùy chọn? Hồ sơ không bị ảnh hưởng.
+
+# MT
+settings-profiles-hint = Lưu cài đặt hiện tại dưới một tên; tải lại sau để chuyển đổi mà không cần chạm từng nút.
+# MT
+settings-profile-name-placeholder = Tên hồ sơ
+# MT
+settings-profile-save = Lưu
+# MT
+settings-profile-import = Nhập…
+# MT
+settings-profile-load = Tải
+# MT
+settings-profile-export = Xuất…
+# MT
+settings-profile-delete = Xóa
+# MT
+settings-profile-empty = Chưa có hồ sơ nào được lưu.
+# MT
+settings-profile-import-prompt = Tên cho hồ sơ nhập:
+
+# MT
+toast-settings-reset = Cài đặt đã đặt lại
+# MT
+toast-profile-saved = Đã lưu hồ sơ
+# MT
+toast-profile-loaded = Đã tải hồ sơ
+# MT
+toast-profile-exported = Đã xuất hồ sơ
+# MT
+toast-profile-imported = Đã nhập hồ sơ

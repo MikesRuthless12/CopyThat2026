@@ -5,10 +5,12 @@
 //! substate is `Arc`-wrapped so clones are free; the state itself is
 //! `Clone + Send + Sync`.
 
-use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 
 use copythat_core::Queue;
 use copythat_history::History;
+use copythat_settings::{ProfileStore, Settings};
 
 use crate::collisions::CollisionRegistry;
 use crate::errors::ErrorRegistry;
@@ -37,28 +39,76 @@ pub struct AppState {
     /// permission denied). The runner checks `is_some()` before
     /// recording; the Tauri commands surface a typed error.
     pub history: Option<History>,
+    /// Phase 12 — live user preferences. Read-write behind a lock
+    /// so hot-reload (IPC `update_settings` call) is visible to the
+    /// next `enqueue_jobs` without restart. The `settings_path`
+    /// companion field is where the state is persisted on every
+    /// update (atomic write via `Settings::save_to`).
+    pub settings: Arc<RwLock<Settings>>,
+    /// Where the live `settings` are persisted. Defaults to
+    /// `Settings::default_path()` — the OS config dir — but tests
+    /// override with a tempdir path.
+    pub settings_path: Arc<PathBuf>,
+    /// Phase 12 — named profile store. Lazily creates its
+    /// directory on first save; construction has no IO.
+    pub profiles: ProfileStore,
 }
 
 impl AppState {
-    /// Construct with history disabled. Used by tests + the
-    /// `--no-history` CLI flag (Phase 12); production callers use
-    /// [`AppState::with_history`].
+    /// Construct with history disabled and default-path settings.
+    /// Used by tests that don't exercise the filesystem settings
+    /// store; production callers use [`AppState::new_with`].
     pub fn new() -> Self {
+        Self::new_with(
+            None,
+            Settings::default(),
+            PathBuf::new(),
+            ProfileStore::new(PathBuf::new()),
+        )
+    }
+
+    /// Construct with a ready `History` handle, pre-loaded settings,
+    /// and a profile store. All four paths (`history`, `settings`,
+    ///   `settings_path`, `profiles`) are resolved in `lib.rs` at
+    ///   startup so a failing config-dir resolution bubbles up there
+    ///   rather than at every `State<'_, AppState>` access.
+    pub fn new_with(
+        history: Option<History>,
+        settings: Settings,
+        settings_path: PathBuf,
+        profiles: ProfileStore,
+    ) -> Self {
         Self {
             queue: Queue::new(),
             globals: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             errors: ErrorRegistry::new(),
             collisions: CollisionRegistry::new(),
-            history: None,
+            history,
+            settings: Arc::new(RwLock::new(settings)),
+            settings_path: Arc::new(settings_path),
+            profiles,
         }
     }
 
-    /// Construct with a ready `History` handle already open.
+    /// Convenience wrapper preserved for callers that predate
+    /// Phase 12 (tests that only care about the queue +
+    /// history). Uses default settings + an empty profile store.
     pub fn with_history(history: History) -> Self {
-        Self {
-            history: Some(history),
-            ..Self::new()
-        }
+        Self::new_with(
+            Some(history),
+            Settings::default(),
+            PathBuf::new(),
+            ProfileStore::new(PathBuf::new()),
+        )
+    }
+
+    /// Snapshot the current settings. Short lock window; callers
+    /// should drop before any long-running work.
+    pub fn settings_snapshot(&self) -> Settings {
+        self.settings
+            .read()
+            .expect("settings lock poisoned")
+            .clone()
     }
 }
 

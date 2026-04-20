@@ -367,3 +367,145 @@ settings-tab-appearance = Weergave
 settings-section-language = Taal
 # MT
 settings-phase-12-hint = Meer instellingen (thema, overdrachtsstandaarden, verificatie-algoritme, profielen) komen in fase 12.
+
+# MT — Phase 12 Settings window
+settings-loading = Instellingen laden…
+# MT
+settings-tab-transfer = Overdracht
+# MT
+settings-tab-shell = Shell
+# MT
+settings-tab-secure-delete = Veilig verwijderen
+# MT
+settings-tab-advanced = Geavanceerd
+# MT
+settings-tab-profiles = Profielen
+
+# MT
+settings-section-theme = Thema
+# MT
+settings-theme-auto = Automatisch
+# MT
+settings-theme-light = Licht
+# MT
+settings-theme-dark = Donker
+# MT
+settings-start-with-os = Starten bij opstarten systeem
+# MT
+settings-single-instance = Enkele actieve instantie
+# MT
+settings-minimize-to-tray = Minimaliseren naar systeemvak bij sluiten
+
+# MT
+settings-buffer-size = Buffergrootte
+# MT
+settings-verify = Verifiëren na kopiëren
+# MT
+settings-verify-off = Uit
+# MT
+settings-concurrency = Gelijktijdigheid
+# MT
+settings-concurrency-auto = Automatisch
+# MT
+settings-reflink = Reflink / snelle paden
+# MT
+settings-reflink-prefer = Voorkeur
+# MT
+settings-reflink-avoid = Reflink vermijden
+# MT
+settings-reflink-disabled = Altijd async-engine gebruiken
+# MT
+settings-fsync-on-close = Synchroniseren naar schijf bij sluiten (trager, veiliger)
+# MT
+settings-preserve-timestamps = Tijdstempels behouden
+# MT
+settings-preserve-permissions = Rechten behouden
+# MT
+settings-preserve-acls = ACL's behouden (fase 14)
+
+# MT
+settings-context-menu = Contextmenu-items inschakelen
+# MT
+settings-intercept-copy = Standaard kopieerhandler onderscheppen (Windows)
+# MT
+settings-intercept-copy-hint = Indien aan loopt Ctrl+C / Ctrl+V in Verkenner via Copy That. Registratie in fase 14.
+# MT
+settings-notify-completion = Melding bij voltooiing taak
+
+# MT
+settings-shred-method = Standaard vernietigingsmethode
+# MT
+settings-shred-zero = Nul (1 passage)
+# MT
+settings-shred-random = Willekeurig (1 passage)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 passages)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 passages)
+# MT
+settings-shred-gutmann = Gutmann (35 passages)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = Dubbele bevestiging vereisen voor vernietiging
+
+# MT
+settings-log-level = Logniveau
+# MT
+settings-log-off = Uit
+# MT
+settings-telemetry = Telemetrie
+# MT
+settings-telemetry-never = Nooit — geen data-uitwisseling op welk logniveau dan ook
+# MT
+settings-error-policy = Standaard foutbeleid
+# MT
+settings-error-policy-ask = Vragen
+# MT
+settings-error-policy-skip = Overslaan
+# MT
+settings-error-policy-retry = Opnieuw met wachttijd
+# MT
+settings-error-policy-abort = Afbreken bij eerste fout
+# MT
+settings-history-retention = Geschiedenisbehoud (dagen)
+# MT
+settings-history-retention-hint = 0 = voor altijd bewaren. Elke andere waarde purgeert oude taken bij opstarten.
+# MT
+settings-database-path = Databasepad
+# MT
+settings-database-path-default = (standaard — OS-datamap)
+# MT
+settings-reset-all = Herstellen naar standaard
+# MT
+settings-reset-confirm = Alle voorkeuren herstellen? Profielen blijven ongewijzigd.
+
+# MT
+settings-profiles-hint = Sla de huidige instellingen op onder een naam; laad later terug zonder individuele regelaars aan te raken.
+# MT
+settings-profile-name-placeholder = Profielnaam
+# MT
+settings-profile-save = Opslaan
+# MT
+settings-profile-import = Importeren…
+# MT
+settings-profile-load = Laden
+# MT
+settings-profile-export = Exporteren…
+# MT
+settings-profile-delete = Verwijderen
+# MT
+settings-profile-empty = Nog geen profielen opgeslagen.
+# MT
+settings-profile-import-prompt = Naam voor het geïmporteerde profiel:
+
+# MT
+toast-settings-reset = Instellingen hersteld
+# MT
+toast-profile-saved = Profiel opgeslagen
+# MT
+toast-profile-loaded = Profiel geladen
+# MT
+toast-profile-exported = Profiel geëxporteerd
+# MT
+toast-profile-imported = Profiel geïmporteerd

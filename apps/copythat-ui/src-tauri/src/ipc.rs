@@ -425,3 +425,331 @@ fn now_ms() -> u64 {
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 }
+
+// ---------------------------------------------------------------------
+// Phase 12 — Settings + Profiles DTOs
+// ---------------------------------------------------------------------
+
+/// Frontend-facing snapshot of the live settings. Mirrors
+/// `copythat_settings::Settings` with camelCase field naming so
+/// idiomatic TypeScript can consume it directly.
+///
+/// The conversion is one-way at the IPC surface: Rust is the owner,
+/// the frontend receives a fresh snapshot on each `get_settings` /
+/// `update_settings` reply. Partial updates from the frontend go
+/// through `update_settings`, which receives a full replacement blob
+/// (simpler than tracking a patch language across the boundary).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsDto {
+    pub general: GeneralDto,
+    pub transfer: TransferDto,
+    pub shell: ShellDto,
+    pub secure_delete: SecureDeleteDto,
+    pub advanced: AdvancedDto,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneralDto {
+    pub language: String,
+    /// `"auto" | "light" | "dark"`.
+    pub theme: String,
+    pub start_with_os: bool,
+    pub single_instance: bool,
+    pub minimize_to_tray: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferDto {
+    pub buffer_size_bytes: u64,
+    /// `"off" | "crc32" | "md5" | "sha1" | "sha256" | "sha512" |
+    /// "xxhash3-64" | "xxhash3-128" | "blake3"`.
+    pub verify: String,
+    /// `"auto"` or `"manual-N"` where N is 1..=16.
+    pub concurrency: String,
+    /// `"prefer" | "avoid" | "disabled"`.
+    pub reflink: String,
+    pub fsync_on_close: bool,
+    pub preserve_timestamps: bool,
+    pub preserve_permissions: bool,
+    pub preserve_acls: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShellDto {
+    pub context_menu_enabled: bool,
+    pub intercept_default_copy: bool,
+    pub notify_on_completion: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecureDeleteDto {
+    /// `"zero" | "random" | "dod-3-pass" | "dod-7-pass" | "gutmann" |
+    /// "nist-800-88"`.
+    pub method: String,
+    pub confirm_twice: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdvancedDto {
+    /// `"off" | "trace" | "debug" | "info" | "warn" | "error"`.
+    pub log_level: String,
+    /// Always `false` — see `AdvancedSettings::telemetry`. Exposed on
+    /// the wire so the frontend can assert it in a visible "(off)"
+    /// label and so a TOML dump shows the explicit "nope".
+    pub telemetry: bool,
+    pub error_policy: ErrorPolicyDtoV2,
+    pub history_retention_days: u32,
+    /// Absolute path, or `null` for "use default".
+    pub database_path: Option<String>,
+}
+
+/// Settings-shaped error-policy variant. Different from the Phase 8
+/// [`ErrorPolicyDto`] (which is a per-enqueue override) because this
+/// one persists to disk and needs serde tagging that TOML / JSON can
+/// round-trip cleanly. Kept separate to avoid churning the Phase 8
+/// wire contract.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum ErrorPolicyDtoV2 {
+    Ask,
+    Skip,
+    #[serde(rename_all = "camelCase")]
+    RetryN {
+        max_attempts: u8,
+        backoff_ms: u64,
+    },
+    Abort,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileInfoDto {
+    pub name: String,
+    pub path: String,
+}
+
+// --- Settings ⇄ DTO conversions ---------------------------------------
+
+impl From<&copythat_settings::Settings> for SettingsDto {
+    fn from(s: &copythat_settings::Settings) -> Self {
+        Self {
+            general: GeneralDto {
+                language: s.general.language.clone(),
+                theme: s.general.theme.as_str().to_string(),
+                start_with_os: s.general.start_with_os,
+                single_instance: s.general.single_instance,
+                minimize_to_tray: s.general.minimize_to_tray,
+            },
+            transfer: TransferDto {
+                buffer_size_bytes: s.transfer.buffer_size_bytes as u64,
+                verify: verify_wire(s.transfer.verify),
+                concurrency: concurrency_wire(s.transfer.concurrency),
+                reflink: reflink_wire(s.transfer.reflink),
+                fsync_on_close: s.transfer.fsync_on_close,
+                preserve_timestamps: s.transfer.preserve_timestamps,
+                preserve_permissions: s.transfer.preserve_permissions,
+                preserve_acls: s.transfer.preserve_acls,
+            },
+            shell: ShellDto {
+                context_menu_enabled: s.shell.context_menu_enabled,
+                intercept_default_copy: s.shell.intercept_default_copy,
+                notify_on_completion: s.shell.notify_on_completion,
+            },
+            secure_delete: SecureDeleteDto {
+                method: s.secure_delete.method.as_str().to_string(),
+                confirm_twice: s.secure_delete.confirm_twice,
+            },
+            advanced: AdvancedDto {
+                log_level: s.advanced.log_level.as_str().to_string(),
+                telemetry: s.advanced.telemetry,
+                error_policy: match s.advanced.error_policy {
+                    copythat_settings::ErrorPolicyChoice::Ask => ErrorPolicyDtoV2::Ask,
+                    copythat_settings::ErrorPolicyChoice::Skip => ErrorPolicyDtoV2::Skip,
+                    copythat_settings::ErrorPolicyChoice::Abort => ErrorPolicyDtoV2::Abort,
+                    copythat_settings::ErrorPolicyChoice::RetryN {
+                        max_attempts,
+                        backoff_ms,
+                    } => ErrorPolicyDtoV2::RetryN {
+                        max_attempts,
+                        backoff_ms,
+                    },
+                },
+                history_retention_days: s.advanced.history_retention_days,
+                database_path: s
+                    .advanced
+                    .database_path
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string()),
+            },
+        }
+    }
+}
+
+impl SettingsDto {
+    /// Apply a DTO received from the frontend onto a fresh
+    /// `Settings` instance. Unknown / malformed enum strings fall
+    /// back to the `Default` — which keeps old frontends working
+    /// against newer backends and vice versa. `telemetry` is
+    /// unconditionally forced to `false` regardless of what the
+    /// frontend sent, enforcing the "never on" contract at every
+    /// boundary crossing.
+    pub fn into_settings(self) -> copythat_settings::Settings {
+        use copythat_settings::*;
+        let mut s = Settings::default();
+        s.general.language = self.general.language;
+        s.general.theme = match self.general.theme.as_str() {
+            "light" => ThemePreference::Light,
+            "dark" => ThemePreference::Dark,
+            _ => ThemePreference::Auto,
+        };
+        s.general.start_with_os = self.general.start_with_os;
+        s.general.single_instance = self.general.single_instance;
+        s.general.minimize_to_tray = self.general.minimize_to_tray;
+
+        s.transfer.buffer_size_bytes = self.transfer.buffer_size_bytes as usize;
+        s.transfer.verify = parse_verify(&self.transfer.verify);
+        s.transfer.concurrency = parse_concurrency(&self.transfer.concurrency);
+        s.transfer.reflink = parse_reflink(&self.transfer.reflink);
+        s.transfer.fsync_on_close = self.transfer.fsync_on_close;
+        s.transfer.preserve_timestamps = self.transfer.preserve_timestamps;
+        s.transfer.preserve_permissions = self.transfer.preserve_permissions;
+        s.transfer.preserve_acls = self.transfer.preserve_acls;
+
+        s.shell.context_menu_enabled = self.shell.context_menu_enabled;
+        s.shell.intercept_default_copy = self.shell.intercept_default_copy;
+        s.shell.notify_on_completion = self.shell.notify_on_completion;
+
+        s.secure_delete.method = parse_shred(&self.secure_delete.method);
+        s.secure_delete.confirm_twice = self.secure_delete.confirm_twice;
+
+        s.advanced.log_level = parse_log_level(&self.advanced.log_level);
+        // Never honour a `telemetry: true` value, regardless of
+        // source. Same invariant enforced in the settings crate at
+        // deserialize time; reasserted here for defence-in-depth.
+        s.advanced.telemetry = false;
+        s.advanced.error_policy = match self.advanced.error_policy {
+            ErrorPolicyDtoV2::Ask => ErrorPolicyChoice::Ask,
+            ErrorPolicyDtoV2::Skip => ErrorPolicyChoice::Skip,
+            ErrorPolicyDtoV2::Abort => ErrorPolicyChoice::Abort,
+            ErrorPolicyDtoV2::RetryN {
+                max_attempts,
+                backoff_ms,
+            } => ErrorPolicyChoice::RetryN {
+                max_attempts,
+                backoff_ms,
+            },
+        };
+        s.advanced.history_retention_days = self.advanced.history_retention_days;
+        s.advanced.database_path = self.advanced.database_path.map(std::path::PathBuf::from);
+        s
+    }
+}
+
+impl From<&copythat_settings::ProfileInfo> for ProfileInfoDto {
+    fn from(p: &copythat_settings::ProfileInfo) -> Self {
+        Self {
+            name: p.name.clone(),
+            path: p.path.to_string_lossy().to_string(),
+        }
+    }
+}
+
+// --- String helpers ---------------------------------------------------
+
+fn verify_wire(v: copythat_settings::VerifyChoice) -> String {
+    use copythat_settings::VerifyChoice;
+    match v {
+        VerifyChoice::Off => "off",
+        VerifyChoice::Crc32 => "crc32",
+        VerifyChoice::Md5 => "md5",
+        VerifyChoice::Sha1 => "sha1",
+        VerifyChoice::Sha256 => "sha256",
+        VerifyChoice::Sha512 => "sha512",
+        VerifyChoice::XxHash3_64 => "xxhash3-64",
+        VerifyChoice::XxHash3_128 => "xxhash3-128",
+        VerifyChoice::Blake3 => "blake3",
+    }
+    .to_string()
+}
+
+fn parse_verify(s: &str) -> copythat_settings::VerifyChoice {
+    use copythat_settings::VerifyChoice;
+    match s {
+        "crc32" => VerifyChoice::Crc32,
+        "md5" => VerifyChoice::Md5,
+        "sha1" => VerifyChoice::Sha1,
+        "sha256" => VerifyChoice::Sha256,
+        "sha512" => VerifyChoice::Sha512,
+        "xxhash3-64" => VerifyChoice::XxHash3_64,
+        "xxhash3-128" => VerifyChoice::XxHash3_128,
+        "blake3" => VerifyChoice::Blake3,
+        _ => VerifyChoice::Off,
+    }
+}
+
+fn concurrency_wire(c: copythat_settings::ConcurrencyChoice) -> String {
+    use copythat_settings::ConcurrencyChoice;
+    match c {
+        ConcurrencyChoice::Auto => "auto".to_string(),
+        ConcurrencyChoice::Manual(n) => format!("manual-{n}"),
+    }
+}
+
+fn parse_concurrency(s: &str) -> copythat_settings::ConcurrencyChoice {
+    use copythat_settings::ConcurrencyChoice;
+    if let Some(rest) = s.strip_prefix("manual-")
+        && let Ok(n) = rest.parse::<u8>()
+    {
+        return ConcurrencyChoice::Manual(n);
+    }
+    ConcurrencyChoice::Auto
+}
+
+fn reflink_wire(r: copythat_settings::ReflinkPreference) -> String {
+    use copythat_settings::ReflinkPreference;
+    match r {
+        ReflinkPreference::Prefer => "prefer",
+        ReflinkPreference::Avoid => "avoid",
+        ReflinkPreference::Disabled => "disabled",
+    }
+    .to_string()
+}
+
+fn parse_reflink(s: &str) -> copythat_settings::ReflinkPreference {
+    use copythat_settings::ReflinkPreference;
+    match s {
+        "avoid" => ReflinkPreference::Avoid,
+        "disabled" => ReflinkPreference::Disabled,
+        _ => ReflinkPreference::Prefer,
+    }
+}
+
+fn parse_shred(s: &str) -> copythat_settings::ShredMethodChoice {
+    use copythat_settings::ShredMethodChoice;
+    match s {
+        "zero" => ShredMethodChoice::Zero,
+        "random" => ShredMethodChoice::Random,
+        "dod-7-pass" => ShredMethodChoice::DoD7Pass,
+        "gutmann" => ShredMethodChoice::Gutmann,
+        "nist-800-88" => ShredMethodChoice::Nist80088,
+        _ => ShredMethodChoice::DoD3Pass,
+    }
+}
+
+fn parse_log_level(s: &str) -> copythat_settings::LogLevel {
+    use copythat_settings::LogLevel;
+    match s {
+        "off" => LogLevel::Off,
+        "trace" => LogLevel::Trace,
+        "debug" => LogLevel::Debug,
+        "warn" => LogLevel::Warn,
+        "error" => LogLevel::Error,
+        _ => LogLevel::Info,
+    }
+}

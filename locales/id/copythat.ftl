@@ -367,3 +367,145 @@ settings-tab-appearance = Tampilan
 settings-section-language = Bahasa
 # MT
 settings-phase-12-hint = Pengaturan lain (tema, default transfer, algoritma verifikasi, profil) akan hadir di Fase 12.
+
+# MT — Phase 12 Settings window
+settings-loading = Memuat pengaturan…
+# MT
+settings-tab-transfer = Transfer
+# MT
+settings-tab-shell = Shell
+# MT
+settings-tab-secure-delete = Hapus aman
+# MT
+settings-tab-advanced = Lanjutan
+# MT
+settings-tab-profiles = Profil
+
+# MT
+settings-section-theme = Tema
+# MT
+settings-theme-auto = Otomatis
+# MT
+settings-theme-light = Terang
+# MT
+settings-theme-dark = Gelap
+# MT
+settings-start-with-os = Jalankan saat sistem dimulai
+# MT
+settings-single-instance = Satu instansi berjalan
+# MT
+settings-minimize-to-tray = Minimalkan ke baki saat ditutup
+
+# MT
+settings-buffer-size = Ukuran buffer
+# MT
+settings-verify = Verifikasi setelah salin
+# MT
+settings-verify-off = Mati
+# MT
+settings-concurrency = Konkurensi
+# MT
+settings-concurrency-auto = Otomatis
+# MT
+settings-reflink = Reflink / jalur cepat
+# MT
+settings-reflink-prefer = Utamakan
+# MT
+settings-reflink-avoid = Hindari reflink
+# MT
+settings-reflink-disabled = Selalu pakai mesin async
+# MT
+settings-fsync-on-close = Sinkron ke disk saat ditutup (lebih lambat, lebih aman)
+# MT
+settings-preserve-timestamps = Pertahankan stempel waktu
+# MT
+settings-preserve-permissions = Pertahankan izin
+# MT
+settings-preserve-acls = Pertahankan ACL (Fase 14)
+
+# MT
+settings-context-menu = Aktifkan entri menu konteks shell
+# MT
+settings-intercept-copy = Cegat penangan salin default (Windows)
+# MT
+settings-intercept-copy-hint = Saat aktif, Ctrl+C / Ctrl+V di Explorer melalui Copy That. Pendaftaran di Fase 14.
+# MT
+settings-notify-completion = Beritahu saat pekerjaan selesai
+
+# MT
+settings-shred-method = Metode penghancuran default
+# MT
+settings-shred-zero = Nol (1 lintasan)
+# MT
+settings-shred-random = Acak (1 lintasan)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 lintasan)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 lintasan)
+# MT
+settings-shred-gutmann = Gutmann (35 lintasan)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = Butuh konfirmasi ganda sebelum menghancurkan
+
+# MT
+settings-log-level = Level log
+# MT
+settings-log-off = Mati
+# MT
+settings-telemetry = Telemetri
+# MT
+settings-telemetry-never = Tidak pernah — tidak ada pengiriman data di level log manapun
+# MT
+settings-error-policy = Kebijakan error default
+# MT
+settings-error-policy-ask = Tanya
+# MT
+settings-error-policy-skip = Lewati
+# MT
+settings-error-policy-retry = Coba lagi dengan jeda
+# MT
+settings-error-policy-abort = Batalkan pada error pertama
+# MT
+settings-history-retention = Retensi riwayat (hari)
+# MT
+settings-history-retention-hint = 0 = simpan selamanya. Nilai lain menghapus otomatis pekerjaan lama saat mulai.
+# MT
+settings-database-path = Jalur basis data
+# MT
+settings-database-path-default = (default — direktori data OS)
+# MT
+settings-reset-all = Reset ke default
+# MT
+settings-reset-confirm = Reset semua preferensi? Profil tidak terpengaruh.
+
+# MT
+settings-profiles-hint = Simpan pengaturan saat ini di bawah nama; muat nanti untuk beralih tanpa menyentuh kontrol individual.
+# MT
+settings-profile-name-placeholder = Nama profil
+# MT
+settings-profile-save = Simpan
+# MT
+settings-profile-import = Impor…
+# MT
+settings-profile-load = Muat
+# MT
+settings-profile-export = Ekspor…
+# MT
+settings-profile-delete = Hapus
+# MT
+settings-profile-empty = Belum ada profil yang tersimpan.
+# MT
+settings-profile-import-prompt = Nama untuk profil yang diimpor:
+
+# MT
+toast-settings-reset = Pengaturan direset
+# MT
+toast-profile-saved = Profil disimpan
+# MT
+toast-profile-loaded = Profil dimuat
+# MT
+toast-profile-exported = Profil diekspor
+# MT
+toast-profile-imported = Profil diimpor

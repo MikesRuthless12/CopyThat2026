@@ -367,3 +367,145 @@ settings-tab-appearance = Darstellung
 settings-section-language = Sprache
 # MT
 settings-phase-12-hint = Weitere Einstellungen (Design, Übertragungs-Standards, Prüfalgorithmus, Profile) kommen in Phase 12.
+
+# MT — Phase 12 Settings window
+settings-loading = Einstellungen werden geladen…
+# MT
+settings-tab-transfer = Übertragung
+# MT
+settings-tab-shell = Shell
+# MT
+settings-tab-secure-delete = Sicher löschen
+# MT
+settings-tab-advanced = Erweitert
+# MT
+settings-tab-profiles = Profile
+
+# MT
+settings-section-theme = Design
+# MT
+settings-theme-auto = Automatisch
+# MT
+settings-theme-light = Hell
+# MT
+settings-theme-dark = Dunkel
+# MT
+settings-start-with-os = Beim Systemstart starten
+# MT
+settings-single-instance = Einzelne laufende Instanz
+# MT
+settings-minimize-to-tray = Beim Schließen in den Tray minimieren
+
+# MT
+settings-buffer-size = Puffergröße
+# MT
+settings-verify = Nach Kopie prüfen
+# MT
+settings-verify-off = Aus
+# MT
+settings-concurrency = Parallelität
+# MT
+settings-concurrency-auto = Automatisch
+# MT
+settings-reflink = Reflink / schnelle Pfade
+# MT
+settings-reflink-prefer = Bevorzugen
+# MT
+settings-reflink-avoid = Reflink vermeiden
+# MT
+settings-reflink-disabled = Immer Async-Engine verwenden
+# MT
+settings-fsync-on-close = Beim Schließen auf Festplatte synchronisieren (langsamer, sicherer)
+# MT
+settings-preserve-timestamps = Zeitstempel beibehalten
+# MT
+settings-preserve-permissions = Berechtigungen beibehalten
+# MT
+settings-preserve-acls = ACLs beibehalten (Phase 14)
+
+# MT
+settings-context-menu = Shell-Kontextmenü-Einträge aktivieren
+# MT
+settings-intercept-copy = Standard-Kopier-Handler abfangen (Windows)
+# MT
+settings-intercept-copy-hint = Wenn aktiv, wird Strg+C / Strg+V im Explorer über Copy That abgewickelt. Registrierung in Phase 14.
+# MT
+settings-notify-completion = Bei Auftragsende benachrichtigen
+
+# MT
+settings-shred-method = Standard-Shred-Methode
+# MT
+settings-shred-zero = Null (1 Durchgang)
+# MT
+settings-shred-random = Zufall (1 Durchgang)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 Durchgänge)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 Durchgänge)
+# MT
+settings-shred-gutmann = Gutmann (35 Durchgänge)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = Vor dem Schreddern doppelte Bestätigung verlangen
+
+# MT
+settings-log-level = Log-Level
+# MT
+settings-log-off = Aus
+# MT
+settings-telemetry = Telemetrie
+# MT
+settings-telemetry-never = Niemals — keine Datenübertragung bei keinem Log-Level
+# MT
+settings-error-policy = Standard-Fehlerrichtlinie
+# MT
+settings-error-policy-ask = Fragen
+# MT
+settings-error-policy-skip = Überspringen
+# MT
+settings-error-policy-retry = Mit Backoff wiederholen
+# MT
+settings-error-policy-abort = Bei erstem Fehler abbrechen
+# MT
+settings-history-retention = Verlaufsaufbewahrung (Tage)
+# MT
+settings-history-retention-hint = 0 = für immer behalten. Jeder andere Wert löscht ältere Aufträge beim Start automatisch.
+# MT
+settings-database-path = Datenbankpfad
+# MT
+settings-database-path-default = (Standard — OS-Datenverzeichnis)
+# MT
+settings-reset-all = Auf Standards zurücksetzen
+# MT
+settings-reset-confirm = Alle Einstellungen auf Standards zurücksetzen? Profile bleiben unberührt.
+
+# MT
+settings-profiles-hint = Aktuelle Einstellungen unter einem Namen speichern; später laden, um ohne Anpassung einzelner Regler umzuschalten.
+# MT
+settings-profile-name-placeholder = Profilname
+# MT
+settings-profile-save = Speichern
+# MT
+settings-profile-import = Importieren…
+# MT
+settings-profile-load = Laden
+# MT
+settings-profile-export = Exportieren…
+# MT
+settings-profile-delete = Löschen
+# MT
+settings-profile-empty = Noch keine Profile gespeichert.
+# MT
+settings-profile-import-prompt = Name für das importierte Profil:
+
+# MT
+toast-settings-reset = Einstellungen zurückgesetzt
+# MT
+toast-profile-saved = Profil gespeichert
+# MT
+toast-profile-loaded = Profil geladen
+# MT
+toast-profile-exported = Profil exportiert
+# MT
+toast-profile-imported = Profil importiert

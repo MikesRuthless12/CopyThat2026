@@ -367,3 +367,145 @@ settings-tab-appearance = Вигляд
 settings-section-language = Мова
 # MT
 settings-phase-12-hint = Інші налаштування (тема, типові параметри передачі, алгоритм перевірки, профілі) з'являться на етапі 12.
+
+# MT — Phase 12 Settings window
+settings-loading = Завантаження налаштувань…
+# MT
+settings-tab-transfer = Передача
+# MT
+settings-tab-shell = Оболонка
+# MT
+settings-tab-secure-delete = Безпечне видалення
+# MT
+settings-tab-advanced = Додатково
+# MT
+settings-tab-profiles = Профілі
+
+# MT
+settings-section-theme = Тема
+# MT
+settings-theme-auto = Автоматично
+# MT
+settings-theme-light = Світла
+# MT
+settings-theme-dark = Темна
+# MT
+settings-start-with-os = Запускати при старті системи
+# MT
+settings-single-instance = Один запущений екземпляр
+# MT
+settings-minimize-to-tray = Згортати у трей під час закриття
+
+# MT
+settings-buffer-size = Розмір буфера
+# MT
+settings-verify = Перевіряти після копіювання
+# MT
+settings-verify-off = Вимкнено
+# MT
+settings-concurrency = Паралельність
+# MT
+settings-concurrency-auto = Авто
+# MT
+settings-reflink = Reflink / швидкі шляхи
+# MT
+settings-reflink-prefer = Надавати перевагу
+# MT
+settings-reflink-avoid = Уникати reflink
+# MT
+settings-reflink-disabled = Завжди використовувати async-рушій
+# MT
+settings-fsync-on-close = Синхронізувати на диск під час закриття (повільніше, надійніше)
+# MT
+settings-preserve-timestamps = Зберігати мітки часу
+# MT
+settings-preserve-permissions = Зберігати права доступу
+# MT
+settings-preserve-acls = Зберігати ACL (етап 14)
+
+# MT
+settings-context-menu = Увімкнути пункти контекстного меню оболонки
+# MT
+settings-intercept-copy = Перехоплювати стандартний обробник копіювання (Windows)
+# MT
+settings-intercept-copy-hint = Коли увімкнено, Ctrl+C / Ctrl+V у Провіднику йде через Copy That. Реєстрація на етапі 14.
+# MT
+settings-notify-completion = Сповіщати про завершення завдання
+
+# MT
+settings-shred-method = Типовий метод затирання
+# MT
+settings-shred-zero = Нулі (1 прохід)
+# MT
+settings-shred-random = Випадкові (1 прохід)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 проходи)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 проходів)
+# MT
+settings-shred-gutmann = Ґутманна (35 проходів)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = Вимагати подвійне підтвердження перед затиранням
+
+# MT
+settings-log-level = Рівень журналу
+# MT
+settings-log-off = Вимкнено
+# MT
+settings-telemetry = Телеметрія
+# MT
+settings-telemetry-never = Ніколи — дані не надсилаються на жодному рівні
+# MT
+settings-error-policy = Типова політика помилок
+# MT
+settings-error-policy-ask = Питати
+# MT
+settings-error-policy-skip = Пропускати
+# MT
+settings-error-policy-retry = Повторити із затримкою
+# MT
+settings-error-policy-abort = Перервати при першій помилці
+# MT
+settings-history-retention = Зберігання історії (дні)
+# MT
+settings-history-retention-hint = 0 = зберігати завжди. Будь-яке інше значення автоматично видаляє старі завдання при запуску.
+# MT
+settings-database-path = Шлях до бази даних
+# MT
+settings-database-path-default = (типовий — каталог даних ОС)
+# MT
+settings-reset-all = Скинути до типових
+# MT
+settings-reset-confirm = Скинути всі налаштування? Профілі залишаються недоторканими.
+
+# MT
+settings-profiles-hint = Збережіть поточні налаштування під іменем; пізніше завантажте, щоб перемикатися без зміни окремих параметрів.
+# MT
+settings-profile-name-placeholder = Назва профілю
+# MT
+settings-profile-save = Зберегти
+# MT
+settings-profile-import = Імпорт…
+# MT
+settings-profile-load = Завантажити
+# MT
+settings-profile-export = Експорт…
+# MT
+settings-profile-delete = Видалити
+# MT
+settings-profile-empty = Збережених профілів немає.
+# MT
+settings-profile-import-prompt = Назва для імпортованого профілю:
+
+# MT
+toast-settings-reset = Налаштування скинуто
+# MT
+toast-profile-saved = Профіль збережено
+# MT
+toast-profile-loaded = Профіль завантажено
+# MT
+toast-profile-exported = Профіль експортовано
+# MT
+toast-profile-imported = Профіль імпортовано

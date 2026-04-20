@@ -24,6 +24,7 @@ copythat-core = { path = "../../../crates/copythat-core", version = "0.1" }
 copythat-hash = { path = "../../../crates/copythat-hash", version = "0.1" }
 copythat-history = { path = "../../../crates/copythat-history", version = "0.1" }
 copythat-secure-delete = { path = "../../../crates/copythat-secure-delete", version = "0.1" }
+copythat-settings = { path = "../../../crates/copythat-settings", version = "0.1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
@@ -48,6 +49,7 @@ tauri-plugin-single-instance = "2"
 
 [dev-dependencies]
 tempfile = "3"
+copythat-settings = { path = "../../../crates/copythat-settings", version = "0.1" }
 tokio = { version = "1", features = [
     "fs",
     "macros",
@@ -82,3 +84,11 @@ path = "../../../tests/smoke/phase_11a_i18n.rs"
 [[test]]
 name = "phase_11c_substitute"
 path = "../../../tests/smoke/phase_11c_substitute.rs"
+
+# Phase 12 smoke test — settings persistence + profile round-trip
+# + effective-buffer-size clamp. Pure-filesystem; exercises the
+# `copythat-settings` crate through the same surface the Tauri IPC
+# handlers use.
+[[test]]
+name = "phase_12_settings"
+path = "../../../tests/smoke/phase_12_settings.rs"
