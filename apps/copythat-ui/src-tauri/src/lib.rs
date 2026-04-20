@@ -99,9 +99,18 @@ pub fn run() {
         ));
     }
 
+    // Phase 9 — open (or create) the SQLite history at the OS
+    // user-data directory. Failure is non-fatal: the app still
+    // launches with `history: None`, the runner skips recording,
+    // and the history drawer shows a typed "unavailable" message.
+    let app_state = match open_history_blocking() {
+        Some(history) => state::AppState::with_history(history),
+        None => state::AppState::new(),
+    };
+
     builder
         .plugin(tauri_plugin_dialog::init())
-        .manage(state::AppState::new())
+        .manage(app_state)
         .on_window_event(|window, event| {
             if let WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) = event {
                 let dto = ipc::DropReceivedDto {
@@ -137,6 +146,12 @@ pub fn run() {
             commands::clear_error_log,
             commands::error_log_export,
             commands::retry_elevated,
+            // Phase 9 — SQLite history surface.
+            commands::history_search,
+            commands::history_items,
+            commands::history_purge,
+            commands::history_export_csv,
+            commands::history_rerun,
         ])
         .setup(move |app| {
             if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {
@@ -146,4 +161,23 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Copy That 2026");
+}
+
+/// Phase 9 — synchronous helper for opening the SQLite history from
+/// the non-async `run()` entry point. Spins a private 1-thread
+/// Tokio runtime just to call `History::open_default()` (which is
+/// async) and block on its completion. Returns `None` on any error
+/// so the UI can still boot.
+fn open_history_blocking() -> Option<copythat_history::History> {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .ok()?;
+    match rt.block_on(copythat_history::History::open_default()) {
+        Ok(h) => Some(h),
+        Err(e) => {
+            eprintln!("copythat: history open failed: {e}");
+            None
+        }
+    }
 }
