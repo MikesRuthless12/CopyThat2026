@@ -12,6 +12,7 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 
 use crate::error::CopyError;
+use crate::options::ErrorAction;
 
 /// A single event emitted on the `events` channel during a copy or
 /// move. Dropped sends are tolerated: if the receiver disappears the
@@ -89,6 +90,20 @@ pub enum CopyEvent {
     },
     // ---------- collision (Phase 2) ----------
     Collision(Collision),
+    // ---------- error UX (Phase 8) ----------
+    /// A non-fatal per-file error inside a tree copy. Emitted when
+    /// `TreeOptions::on_error` is `Skip` or when `RetryN` exhausts
+    /// its attempts; the tree continues. The `errored` counter on
+    /// `TreeReport` ticks for each of these.
+    FileError {
+        err: CopyError,
+    },
+    /// Interactive error prompt. Emitted when `TreeOptions::on_error`
+    /// is `Ask`. Consumers reply on the enclosed oneshot with
+    /// `Retry` / `Skip` / `Abort`. If the channel drops without a
+    /// reply the engine treats it as `Skip` (mirrors the Collision
+    /// fallback).
+    ErrorPrompt(ErrorPrompt),
 }
 
 impl Clone for CopyEvent {
@@ -198,6 +213,12 @@ impl Clone for CopyEvent {
             // Collision carries a oneshot sender; it can't be cloned.
             // Broadcast subscribers only see a placeholder.
             CopyEvent::Collision(_) => CopyEvent::Collision(Collision::placeholder_for_clone()),
+            CopyEvent::FileError { err } => CopyEvent::FileError { err: err.clone() },
+            // ErrorPrompt carries a oneshot sender; same pattern as
+            // Collision — broadcast subscribers see a placeholder.
+            CopyEvent::ErrorPrompt(_) => {
+                CopyEvent::ErrorPrompt(ErrorPrompt::placeholder_for_clone())
+            }
         }
     }
 }
@@ -223,6 +244,11 @@ pub struct TreeReport {
     pub rate_bps: u64,
     /// Files the caller asked us to skip (via collision policy).
     pub skipped: u64,
+    /// Files that failed their per-file copy and were recorded via
+    /// `FileError` (policy = `Skip` / exhausted `RetryN`). Zero when
+    /// `on_error` is `Abort` — that path bails before the counter
+    /// can tick.
+    pub errored: u64,
 }
 
 /// Destination-already-exists prompt. Consumers reply on the enclosed
@@ -279,4 +305,48 @@ pub enum CollisionResolution {
     Rename(String),
     /// Abort the whole tree operation.
     Abort,
+}
+
+/// Interactive error prompt (Phase 8). Emitted when
+/// `TreeOptions::on_error == Ask` and a per-file copy fails.
+/// Consumers reply on the `resolver` oneshot; dropping it without
+/// a reply is equivalent to `ErrorAction::Skip`.
+#[derive(Debug)]
+pub struct ErrorPrompt {
+    pub err: CopyError,
+    /// Reply channel. `None` only on cloned placeholders — broadcast
+    /// subscribers can't drive the engine forward.
+    pub resolver: Option<oneshot::Sender<ErrorAction>>,
+}
+
+impl ErrorPrompt {
+    pub(crate) fn new(err: CopyError, resolver: oneshot::Sender<ErrorAction>) -> Self {
+        Self {
+            err,
+            resolver: Some(resolver),
+        }
+    }
+
+    fn placeholder_for_clone() -> Self {
+        // A placeholder carries a zeroed error; consumers that see a
+        // cloned ErrorPrompt can't act on it anyway (no resolver).
+        Self {
+            err: CopyError {
+                kind: crate::error::CopyErrorKind::IoOther,
+                src: PathBuf::new(),
+                dst: PathBuf::new(),
+                raw_os_error: None,
+                message: String::new(),
+            },
+            resolver: None,
+        }
+    }
+
+    /// Resolve the prompt. Consumes the oneshot. No-op on a cloned
+    /// placeholder.
+    pub fn resolve(mut self, action: ErrorAction) {
+        if let Some(tx) = self.resolver.take() {
+            let _ = tx.send(action);
+        }
+    }
 }

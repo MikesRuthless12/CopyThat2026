@@ -5,7 +5,7 @@
 <script lang="ts">
   import Icon from "../icons/Icon.svelte";
   import { t } from "../i18n";
-  import { globals } from "../stores";
+  import { globals, openErrorLogDrawer } from "../stores";
   import { formatBytes } from "../format";
 
   let g = $derived($globals);
@@ -21,10 +21,20 @@
     <strong>{total}</strong>
     {t("footer-total-bytes")}
   </span>
-  <span class="stat" data-tone={g.errors > 0 ? "error" : "muted"}>
+  <!--
+    Phase 8: clicking the error counter opens the log drawer so the
+    user can inspect every logged failure and export CSV / TXT.
+  -->
+  <button
+    class="stat errors"
+    data-tone={g.errors > 0 ? "error" : "muted"}
+    type="button"
+    onclick={openErrorLogDrawer}
+    aria-label={t("error-log-title")}
+  >
     <strong>{g.errors}</strong>
     {t("footer-errors")}
-  </span>
+  </button>
   <span class="spacer"></span>
   <button class="history" type="button" disabled aria-disabled="true">
     <Icon name="external-link" size={14} />
@@ -61,6 +71,20 @@
 
   .stat[data-tone="error"] strong {
     color: var(--error, #c24141);
+  }
+
+  button.stat.errors {
+    background: transparent;
+    border: 1px solid transparent;
+    color: inherit;
+    font: inherit;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  button.stat.errors:hover {
+    background: var(--surface-alt, rgba(0, 0, 0, 0.05));
   }
 
   .spacer {

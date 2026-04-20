@@ -32,7 +32,9 @@
 //! into the `drop-received` IPC event for the Svelte layer.
 
 pub mod cli;
+pub mod collisions;
 pub mod commands;
+pub mod errors;
 pub mod i18n;
 pub mod icon;
 pub mod ipc;
@@ -128,6 +130,13 @@ pub fn run() {
             commands::translations,
             commands::available_locales,
             commands::system_locale,
+            // Phase 8 — error / collision / log surface.
+            commands::resolve_error,
+            commands::resolve_collision,
+            commands::error_log,
+            commands::clear_error_log,
+            commands::error_log_export,
+            commands::retry_elevated,
         ])
         .setup(move |app| {
             if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {

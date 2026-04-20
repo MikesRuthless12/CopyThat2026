@@ -9,6 +9,9 @@ use std::sync::Arc;
 
 use copythat_core::Queue;
 
+use crate::collisions::CollisionRegistry;
+use crate::errors::ErrorRegistry;
+
 /// Top-level shared state wired into Tauri.
 #[derive(Clone)]
 pub struct AppState {
@@ -21,6 +24,13 @@ pub struct AppState {
     /// `globals-tick` payload without calling into the frontend
     /// faster than it can repaint.
     pub globals: Arc<std::sync::atomic::AtomicU64>,
+    /// Phase 8 — pending error prompts awaiting user resolution,
+    /// plus the in-memory error log the footer drawer reads from.
+    pub errors: ErrorRegistry,
+    /// Phase 8 — pending collision prompts. Engine emits
+    /// `CopyEvent::Collision` → runner parks the oneshot here →
+    /// frontend's `CollisionModal` replies via `resolve_collision`.
+    pub collisions: CollisionRegistry,
 }
 
 impl AppState {
@@ -28,6 +38,8 @@ impl AppState {
         Self {
             queue: Queue::new(),
             globals: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            errors: ErrorRegistry::new(),
+            collisions: CollisionRegistry::new(),
         }
     }
 }

@@ -17,16 +17,18 @@ use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 
 use copythat_core::{
-    CopyControl, CopyError, CopyErrorKind, CopyEvent, CopyOptions, Job, JobId, JobKind, JobState,
-    MoveOptions, Queue, TreeOptions, copy_file, copy_tree, move_file, move_tree,
+    CollisionPolicy, CopyControl, CopyError, CopyErrorKind, CopyEvent, CopyOptions, ErrorPolicy,
+    Job, JobId, JobKind, JobState, MoveOptions, Queue, TreeOptions, copy_file, copy_tree,
+    move_file, move_tree,
 };
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
 
 use crate::ipc::{
-    EVENT_GLOBALS_TICK, EVENT_JOB_ADDED, EVENT_JOB_CANCELLED, EVENT_JOB_COMPLETED,
-    EVENT_JOB_FAILED, EVENT_JOB_PAUSED, EVENT_JOB_PROGRESS, EVENT_JOB_RESUMED, EVENT_JOB_STARTED,
-    GlobalsDto, JobDto, JobFailedDto, JobIdDto, JobProgressDto,
+    CollisionPromptDto, EVENT_COLLISION_RAISED, EVENT_ERROR_RAISED, EVENT_GLOBALS_TICK,
+    EVENT_JOB_ADDED, EVENT_JOB_CANCELLED, EVENT_JOB_COMPLETED, EVENT_JOB_FAILED, EVENT_JOB_PAUSED,
+    EVENT_JOB_PROGRESS, EVENT_JOB_RESUMED, EVENT_JOB_STARTED, ErrorPromptDto, GlobalsDto, JobDto,
+    JobFailedDto, JobIdDto, JobProgressDto,
 };
 use crate::state::AppState;
 
@@ -51,6 +53,14 @@ pub(crate) struct RunJob {
     pub ctrl: CopyControl,
     pub verifier: Option<copythat_core::Verifier>,
     pub copy_opts: CopyOptions,
+    /// Phase 8 — tree-level collision policy. Defaults to `Skip`
+    /// at the engine level; the command layer upgrades to `Prompt`
+    /// when the user leaves the setting on "Ask".
+    pub collision_policy: CollisionPolicy,
+    /// Phase 8 — how to respond to per-file failures inside a tree
+    /// copy. Defaults to `Abort` (pre-8 behaviour); the command
+    /// layer flips to `Ask` so the frontend can surface prompts.
+    pub error_policy: ErrorPolicy,
 }
 
 /// Entry point for a newly-enqueued job. Caller has already added
@@ -67,6 +77,8 @@ pub(crate) async fn run_job(job: RunJob) {
         ctrl,
         verifier,
         copy_opts,
+        collision_policy,
+        error_policy,
     } = job;
     state.queue.start(id);
     let _ = app.emit(EVENT_JOB_STARTED, JobIdDto { id: id.as_u64() });
@@ -106,6 +118,8 @@ pub(crate) async fn run_job(job: RunJob) {
             if source_is_dir {
                 let tree_opts = TreeOptions {
                     file: copy_opts_with_verify,
+                    collision: collision_policy,
+                    on_error: error_policy,
                     ..TreeOptions::default()
                 };
                 copy_tree(&src, &dst_path, tree_opts, ctrl, tx.clone())
@@ -330,10 +344,79 @@ async fn forward_events(
             CopyEvent::TreeCompleted { bytes, files, .. } => {
                 state.queue.set_progress(id, bytes, bytes, files, files);
             }
-            CopyEvent::Failed { .. } | CopyEvent::Collision(_) => {
-                // Failed is handled after the engine returns. Collision
-                // prompts will get their own flow in Phase 8; today the
-                // default policy (`Skip`) means we never see one here.
+            CopyEvent::Failed { .. } => {
+                // Terminal per-file / per-tree failure — handled after
+                // the engine returns from the top-level copy_* call.
+            }
+            CopyEvent::FileError { err } => {
+                // Per-file failure absorbed by the engine's error
+                // policy (Skip / exhausted RetryN). Log it and keep
+                // going; the tree continues.
+                state.errors.log_auto(id.as_u64(), &err);
+            }
+            CopyEvent::Collision(mut coll) => {
+                let job_id = id.as_u64();
+                // Honour a prior "Apply to all" decision without
+                // bothering the user again.
+                if let Some(cached) = state.collisions.cached_resolution(job_id) {
+                    coll.resolve(cached);
+                    continue;
+                }
+                // Extract the oneshot before we reach for the paths
+                // (taking moves the Sender out of the Option).
+                let Some(tx) = coll.resolver.take() else {
+                    // Cloned placeholder from a broadcast subscriber —
+                    // nothing to drive here.
+                    continue;
+                };
+                let src_path = coll.src.clone();
+                let dst_path = coll.dst.clone();
+                let (src_size, src_modified_ms) = peek_meta(&src_path).await;
+                let (dst_size, dst_modified_ms) = peek_meta(&dst_path).await;
+                let new_id =
+                    state
+                        .collisions
+                        .register(job_id, src_path.clone(), dst_path.clone(), tx);
+                let _ = app.emit(
+                    EVENT_COLLISION_RAISED,
+                    CollisionPromptDto {
+                        id: new_id,
+                        job_id,
+                        src: src_path.to_string_lossy().into_owned(),
+                        dst: dst_path.to_string_lossy().into_owned(),
+                        src_size,
+                        src_modified_ms,
+                        dst_size,
+                        dst_modified_ms,
+                    },
+                );
+            }
+            CopyEvent::ErrorPrompt(mut prompt) => {
+                let job_id = id.as_u64();
+                // Honour an earlier "Skip all of this kind" decision.
+                if let Some(cached) = state.errors.cached_action_for(job_id, &prompt.err) {
+                    prompt.resolve(cached);
+                    continue;
+                }
+                let Some(tx) = prompt.resolver.take() else {
+                    continue;
+                };
+                let err = prompt.err.clone();
+                let new_id = state.errors.register(job_id, err.clone(), tx);
+                let _ = app.emit(
+                    EVENT_ERROR_RAISED,
+                    ErrorPromptDto {
+                        id: new_id,
+                        job_id,
+                        src: err.src.to_string_lossy().into_owned(),
+                        dst: err.dst.to_string_lossy().into_owned(),
+                        kind: crate::errors::kind_name(err.kind),
+                        localized_key: err.localized_key(),
+                        message: err.message.clone(),
+                        raw_os_error: err.raw_os_error,
+                        created_at_ms: now_ms(),
+                    },
+                );
             }
             // `CopyEvent` is `#[non_exhaustive]`; any future variant
             // is forwarded as a no-op so the runner never panics on
@@ -462,4 +545,27 @@ fn emit_globals(app: &AppHandle, state: &AppState) {
 /// runner task even starts.
 pub fn emit_job_added(app: &AppHandle, dto: JobDto) {
     let _ = app.emit(EVENT_JOB_ADDED, dto);
+}
+
+/// Read size + mtime for a filesystem path, returning `(None, None)`
+/// if the path is missing or the call fails. Used by the collision
+/// prompt to prime the modal's source / destination preview panes.
+async fn peek_meta(path: &std::path::Path) -> (Option<u64>, Option<u64>) {
+    let Ok(md) = tokio::fs::metadata(path).await else {
+        return (None, None);
+    };
+    let size = Some(md.len());
+    let mtime = md
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64);
+    (size, mtime)
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }

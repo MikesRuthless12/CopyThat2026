@@ -11,7 +11,11 @@ import { derived, writable, type Readable } from "svelte/store";
 import { listJobs, globals as fetchGlobals, onEvent } from "./ipc";
 import {
   EVENTS,
+  type CollisionPromptDto,
+  type CollisionResolvedDto,
   type DropReceivedDto,
+  type ErrorPromptDto,
+  type ErrorResolvedDto,
   type GlobalsDto,
   type JobDto,
   type JobFailedDto,
@@ -37,6 +41,11 @@ const globalsStore = writable<GlobalsDto>({
 });
 const droppedStore = writable<string[]>([]);
 const toastStore = writable<ToastMessage[]>([]);
+// Phase 8: FIFO of pending prompts. Frontend renders the head;
+// `resolve_error` / `resolve_collision` pops on response.
+const errorQueueStore = writable<ErrorPromptDto[]>([]);
+const collisionQueueStore = writable<CollisionPromptDto[]>([]);
+const errorLogDrawerOpenStore = writable<boolean>(false);
 
 export const jobs: Readable<JobDto[]> = { subscribe: jobsStore.subscribe };
 export const globals: Readable<GlobalsDto> = {
@@ -48,6 +57,21 @@ export const dropped: Readable<string[]> = {
 export const toasts: Readable<ToastMessage[]> = {
   subscribe: toastStore.subscribe,
 };
+export const errorQueue: Readable<ErrorPromptDto[]> = {
+  subscribe: errorQueueStore.subscribe,
+};
+export const collisionQueue: Readable<CollisionPromptDto[]> = {
+  subscribe: collisionQueueStore.subscribe,
+};
+export const errorLogDrawerOpen: Readable<boolean> = {
+  subscribe: errorLogDrawerOpenStore.subscribe,
+};
+export function openErrorLogDrawer(): void {
+  errorLogDrawerOpenStore.set(true);
+}
+export function closeErrorLogDrawer(): void {
+  errorLogDrawerOpenStore.set(false);
+}
 
 /// The sum of live per-job rates. `GlobalsDto.rateBps` from Rust is
 /// intentionally 0 — derivating it in the UI keeps the numbers tied
@@ -133,6 +157,21 @@ export async function initStores(): Promise<() => void> {
     }),
     onEvent<DropReceivedDto>(EVENTS.dropReceived, (p) => {
       droppedStore.set(p.paths ?? []);
+    }),
+    // Phase 8: error / collision prompts + resolution echoes.
+    onEvent<ErrorPromptDto>(EVENTS.errorRaised, (p) => {
+      errorQueueStore.update(($q) => [...$q, p]);
+    }),
+    onEvent<ErrorResolvedDto>(EVENTS.errorResolved, (p) => {
+      errorQueueStore.update(($q) => $q.filter((e) => e.id !== p.id));
+      pushToast("info", "toast-error-resolved");
+    }),
+    onEvent<CollisionPromptDto>(EVENTS.collisionRaised, (p) => {
+      collisionQueueStore.update(($q) => [...$q, p]);
+    }),
+    onEvent<CollisionResolvedDto>(EVENTS.collisionResolved, (p) => {
+      collisionQueueStore.update(($q) => $q.filter((c) => c.id !== p.id));
+      pushToast("info", "toast-collision-resolved");
     }),
   ]);
 

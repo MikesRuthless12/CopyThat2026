@@ -12,7 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
-use copythat_core::{CopyOptions, JobKind, Verifier};
+use copythat_core::{CollisionPolicy, CopyOptions, ErrorPolicy, JobKind, Verifier};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::cli::{CliAction, EnqueueArgs, EnqueueVerb};
@@ -27,6 +27,7 @@ use crate::state::AppState;
 /// Returns the list of newly allocated job ids. The caller is
 /// responsible for reporting them upstream (HTTP-style for commands,
 /// log-only for CLI).
+#[allow(clippy::too_many_arguments)]
 pub fn enqueue_jobs(
     app: &AppHandle,
     state: &AppState,
@@ -35,6 +36,8 @@ pub fn enqueue_jobs(
     dst_root: &Path,
     copy_opts: CopyOptions,
     verifier: Option<Verifier>,
+    collision_policy: CollisionPolicy,
+    error_policy: ErrorPolicy,
 ) -> Vec<u64> {
     let mut ids = Vec::with_capacity(sources.len());
     for src in sources {
@@ -60,6 +63,8 @@ pub fn enqueue_jobs(
             ctrl,
             verifier: verifier.clone(),
             copy_opts: copy_opts.clone(),
+            collision_policy: collision_policy.clone(),
+            error_policy,
         };
         tokio::spawn(async move {
             run_job(run).await;
@@ -125,6 +130,11 @@ fn dispatch_enqueue(app: &AppHandle, args: EnqueueArgs) {
             &dst_root,
             CopyOptions::default(),
             None,
+            // Scripted enqueue inherits the engine default (Skip on
+            // collision, Abort on error) to stay deterministic; an
+            // interactive caller overrides via the commands layer.
+            CollisionPolicy::default(),
+            ErrorPolicy::default(),
         );
     } else {
         // Interactive: hand the paths to the frontend; it reuses the

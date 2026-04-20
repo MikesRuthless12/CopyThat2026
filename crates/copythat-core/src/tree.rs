@@ -16,15 +16,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use filetime::FileTime;
-use tokio::sync::{Semaphore, mpsc};
+use tokio::sync::{Semaphore, mpsc, oneshot};
 use tokio::task::JoinSet;
 
 use crate::collision::{self, Decision};
 use crate::control::CopyControl;
 use crate::engine::copy_file;
 use crate::error::{CopyError, CopyErrorKind};
-use crate::event::{CopyEvent, TreeReport};
-use crate::options::{MoveOptions, TreeOptions};
+use crate::event::{CopyEvent, ErrorPrompt, TreeReport};
+use crate::options::{ErrorAction, ErrorPolicy, MoveOptions, TreeOptions};
 
 /// Copy `src_dir` into `dst_dir`, preserving structure.
 ///
@@ -122,6 +122,7 @@ pub async fn move_tree(
                 duration: Duration::ZERO,
                 rate_bps: 0,
                 skipped: 0,
+                errored: 0,
             };
             let _ = events
                 .send(CopyEvent::TreeCompleted {
@@ -295,6 +296,9 @@ async fn copy_tree_inner(
     let bytes_done = Arc::new(AtomicU64::new(0));
     let files_done = Arc::new(AtomicU64::new(0));
     let skipped = Arc::new(AtomicU64::new(0));
+    let errored = Arc::new(AtomicU64::new(0));
+
+    let on_error = opts.clamped_on_error();
 
     let semaphore = Arc::new(Semaphore::new(opts.clamped_concurrency()));
     let mut set: JoinSet<Result<FileOutcome, CopyError>> = JoinSet::new();
@@ -320,6 +324,8 @@ async fn copy_tree_inner(
         let bytes_done_task = bytes_done.clone();
         let files_done_task = files_done.clone();
         let skipped_task = skipped.clone();
+        let errored_task = errored.clone();
+        let on_error_task = on_error;
         let total_files = plan.total_files;
         let total_bytes = plan.total_bytes;
         let entry = entry.clone();
@@ -337,33 +343,37 @@ async fn copy_tree_inner(
             let decision =
                 collision::resolve(&collision, &entry.src, &dst_initial, &events_task).await;
 
-            let outcome = match decision {
+            let outcome: Result<FileOutcome, CopyError> = match decision {
                 Decision::Skip => {
                     skipped_task.fetch_add(1, Ordering::Relaxed);
-                    FileOutcome::Skipped
+                    Ok(FileOutcome::Skipped)
                 }
-                Decision::Abort => FileOutcome::Aborted,
+                Decision::Abort => Ok(FileOutcome::Aborted),
                 Decision::Write(dst_final) => match entry.kind {
-                    EntryKind::Symlink => {
-                        copy_symlink_entry(&entry.src, &dst_final).await?;
-                        FileOutcome::Done(0)
-                    }
+                    EntryKind::Symlink => match copy_symlink_entry(&entry.src, &dst_final).await {
+                        Ok(()) => Ok(FileOutcome::Done(0)),
+                        Err(err) => {
+                            handle_per_file_error(err, on_error_task, &events_task, &errored_task)
+                                .await
+                        }
+                    },
                     EntryKind::File => {
-                        let per_file_opts = opts_file.clone();
-                        let report = copy_file(
+                        attempt_copy_with_policy(
                             &entry.src,
                             &dst_final,
-                            per_file_opts,
-                            ctrl_task.clone(),
-                            events_task.clone(),
+                            &opts_file,
+                            &ctrl_task,
+                            &events_task,
+                            on_error_task,
+                            &errored_task,
                         )
-                        .await?;
-                        FileOutcome::Done(report.bytes)
+                        .await
                     }
                     EntryKind::Dir => unreachable!("dirs filtered above"),
                 },
             };
 
+            let outcome = outcome?;
             if let FileOutcome::Done(bytes) = &outcome {
                 let done_bytes = bytes_done_task.fetch_add(*bytes, Ordering::Relaxed) + *bytes;
                 let done_files = files_done_task.fetch_add(1, Ordering::Relaxed) + 1;
@@ -475,6 +485,7 @@ async fn copy_tree_inner(
         duration: elapsed,
         rate_bps: rate,
         skipped: skipped.load(Ordering::Relaxed),
+        errored: errored.load(Ordering::Relaxed),
     };
     Ok((report, plan))
 }
@@ -482,7 +493,132 @@ async fn copy_tree_inner(
 enum FileOutcome {
     Done(u64),
     Skipped,
+    /// Per-file failure absorbed by the error policy (Skip or
+    /// RetryN-exhausted). Separate from `Skipped` because the tree
+    /// report tracks each count independently.
+    Errored,
     Aborted,
+}
+
+/// Drive per-file copy with retry / ask / skip / abort semantics.
+///
+/// Split out of the task closure for readability. Returns:
+/// - `Ok(FileOutcome::Done(bytes))` on success.
+/// - `Ok(FileOutcome::Errored)` when the policy absorbed the error
+///   (tree continues).
+/// - `Ok(FileOutcome::Aborted)` when the engine was cancelled via
+///   `CopyControl` mid-attempt.
+/// - `Err(CopyError)` only on `ErrorPolicy::Abort` (fatal) or an
+///   `ErrorAction::Abort` response.
+async fn attempt_copy_with_policy(
+    src: &Path,
+    dst: &Path,
+    opts_file: &crate::options::CopyOptions,
+    ctrl: &CopyControl,
+    events: &mpsc::Sender<CopyEvent>,
+    policy: ErrorPolicy,
+    errored: &Arc<AtomicU64>,
+) -> Result<FileOutcome, CopyError> {
+    let mut retries_left: u32 = match policy {
+        ErrorPolicy::RetryN { max_attempts, .. } => max_attempts as u32,
+        _ => 0,
+    };
+    let backoff = match policy {
+        ErrorPolicy::RetryN { backoff_ms, .. } => Duration::from_millis(backoff_ms),
+        _ => Duration::ZERO,
+    };
+
+    loop {
+        let result = copy_file(src, dst, opts_file.clone(), ctrl.clone(), events.clone()).await;
+        match result {
+            Ok(report) => return Ok(FileOutcome::Done(report.bytes)),
+            Err(err) if err.is_cancelled() => return Ok(FileOutcome::Aborted),
+            Err(err) => {
+                match policy {
+                    ErrorPolicy::Abort => return Err(err),
+                    ErrorPolicy::Skip => {
+                        record_file_error(err, events, errored).await;
+                        return Ok(FileOutcome::Errored);
+                    }
+                    ErrorPolicy::RetryN { .. } => {
+                        if retries_left == 0 {
+                            record_file_error(err, events, errored).await;
+                            return Ok(FileOutcome::Errored);
+                        }
+                        retries_left -= 1;
+                        if !backoff.is_zero() {
+                            tokio::time::sleep(backoff).await;
+                        }
+                        continue;
+                    }
+                    ErrorPolicy::Ask => {
+                        let (tx, rx) = oneshot::channel();
+                        let prompt = ErrorPrompt::new(err.clone(), tx);
+                        // If the receiver is gone (event channel
+                        // closed), treat as Skip — same pattern as
+                        // Collision::resolve.
+                        if events.send(CopyEvent::ErrorPrompt(prompt)).await.is_err() {
+                            record_file_error(err, events, errored).await;
+                            return Ok(FileOutcome::Errored);
+                        }
+                        match rx.await {
+                            Ok(ErrorAction::Retry) => continue,
+                            Ok(ErrorAction::Skip) | Err(_) => {
+                                record_file_error(err, events, errored).await;
+                                return Ok(FileOutcome::Errored);
+                            }
+                            Ok(ErrorAction::Abort) => return Err(err),
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// For paths that hit an error *before* `copy_file` ran (symlink
+/// creation, etc.). Applies the same policy choice, minus the retry
+/// loop (a symlink failure usually retries identically).
+async fn handle_per_file_error(
+    err: CopyError,
+    policy: ErrorPolicy,
+    events: &mpsc::Sender<CopyEvent>,
+    errored: &Arc<AtomicU64>,
+) -> Result<FileOutcome, CopyError> {
+    match policy {
+        ErrorPolicy::Abort => Err(err),
+        ErrorPolicy::Skip | ErrorPolicy::RetryN { .. } => {
+            record_file_error(err, events, errored).await;
+            Ok(FileOutcome::Errored)
+        }
+        ErrorPolicy::Ask => {
+            let (tx, rx) = oneshot::channel();
+            let prompt = ErrorPrompt::new(err.clone(), tx);
+            if events.send(CopyEvent::ErrorPrompt(prompt)).await.is_err() {
+                record_file_error(err, events, errored).await;
+                return Ok(FileOutcome::Errored);
+            }
+            match rx.await {
+                Ok(ErrorAction::Retry) | Ok(ErrorAction::Skip) | Err(_) => {
+                    // Retry doesn't make sense for non-copy_file
+                    // failures; honour the user's intent as best we
+                    // can — skip and keep going.
+                    record_file_error(err, events, errored).await;
+                    Ok(FileOutcome::Errored)
+                }
+                Ok(ErrorAction::Abort) => Err(err),
+            }
+        }
+    }
+}
+
+async fn record_file_error(
+    err: CopyError,
+    events: &mpsc::Sender<CopyEvent>,
+    errored: &Arc<AtomicU64>,
+) {
+    errored.fetch_add(1, Ordering::Relaxed);
+    let _ = events.send(CopyEvent::FileError { err }).await;
 }
 
 async fn enumerate(root: PathBuf, follow_symlinks: bool) -> std::io::Result<Plan> {

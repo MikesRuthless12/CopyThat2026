@@ -126,3 +126,57 @@ toast-job-done = Transferencia completada
 toast-copy-queued = Copia en cola
 # MT
 toast-move-queued = Movimiento en cola
+# Phase 8 additions — MT placeholders; review before 1.0.
+
+# MT — Toast messages
+toast-error-resolved = Error resolved
+toast-collision-resolved = Collision resolved
+toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
+toast-error-log-exported = Error log exported
+
+# MT — Error modal
+error-modal-title = A transfer failed
+error-modal-retry = Retry
+error-modal-retry-elevated = Retry with elevated permissions
+error-modal-skip = Skip
+error-modal-skip-all-kind = Skip all errors of this kind
+error-modal-abort = Abort all
+error-modal-path-label = Path
+error-modal-code-label = Code
+
+# MT — Error-kind labels
+err-not-found = File not found
+err-permission-denied = Permission denied
+err-disk-full = Destination disk is full
+err-interrupted = Operation interrupted
+err-verify-failed = Post-copy verification failed
+err-io-other = Unknown I/O error
+
+# MT — Collision modal
+collision-modal-title = File already exists
+collision-modal-overwrite = Overwrite
+collision-modal-overwrite-if-newer = Overwrite if newer
+collision-modal-skip = Skip
+collision-modal-keep-both = Keep both
+collision-modal-rename = Rename…
+collision-modal-apply-to-all = Apply to all
+collision-modal-source = Source
+collision-modal-destination = Destination
+collision-modal-size = Size
+collision-modal-modified = Modified
+collision-modal-hash-check = Quick hash (SHA-256)
+collision-modal-rename-placeholder = New filename
+collision-modal-confirm-rename = Rename
+
+# MT — Error log drawer
+error-log-title = Error log
+error-log-empty = No errors logged
+error-log-export-csv = Export CSV
+error-log-export-txt = Export text
+error-log-clear = Clear log
+error-log-col-time = Time
+error-log-col-job = Job
+error-log-col-path = Path
+error-log-col-code = Code
+error-log-col-message = Message
+error-log-col-resolution = Resolution

@@ -17,6 +17,9 @@
   import ContextMenu from "./lib/components/ContextMenu.svelte";
   import DetailsDrawer from "./lib/components/DetailsDrawer.svelte";
   import DropStagingDialog from "./lib/components/DropStagingDialog.svelte";
+  import ErrorModal from "./lib/components/ErrorModal.svelte";
+  import CollisionModal from "./lib/components/CollisionModal.svelte";
+  import ErrorLogDrawer from "./lib/components/ErrorLogDrawer.svelte";
   import Toast from "./lib/components/Toast.svelte";
 
   import { initI18n, t } from "./lib/i18n";
@@ -156,6 +159,11 @@
   {#if $dropped.length > 0}
     <DropStagingDialog paths={$dropped} />
   {/if}
+
+  <!-- Phase 8: prompt modals + error-log drawer -->
+  <ErrorModal />
+  <CollisionModal />
+  <ErrorLogDrawer />
 
   <Toast />
 </main>

@@ -44,6 +44,7 @@ $RECYCLE.BIN/
 
 # --- Claude Code (per-user, not team-shared) ---
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # --- Test artifacts ---
 coverage/

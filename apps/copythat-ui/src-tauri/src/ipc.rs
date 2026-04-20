@@ -36,6 +36,21 @@ pub const EVENT_DROP_RECEIVED: &str = "drop-received";
 /// existing drop-staging dialog with the verb pre-selected.
 pub const EVENT_SHELL_ENQUEUE: &str = "shell-enqueue";
 
+/// Phase 8 — the engine emitted `CopyEvent::ErrorPrompt` and the
+/// runner parked the oneshot in the `ErrorRegistry`. The frontend's
+/// `ErrorModal` subscribes to this and replies via `resolve_error`.
+pub const EVENT_ERROR_RAISED: &str = "error-raised";
+/// Phase 8 — mirror of [`EVENT_ERROR_RAISED`] for
+/// `CopyEvent::Collision`. The frontend's `CollisionModal` replies
+/// via `resolve_collision`.
+pub const EVENT_COLLISION_RAISED: &str = "collision-raised";
+/// Phase 8 — terminal notification for an `error-raised` event.
+/// Emitted after `ErrorRegistry::resolve` fires the oneshot; lets
+/// the frontend close the modal and pop a toast.
+pub const EVENT_ERROR_RESOLVED: &str = "error-resolved";
+/// Phase 8 — mirror of [`EVENT_ERROR_RESOLVED`] for collisions.
+pub const EVENT_COLLISION_RESOLVED: &str = "collision-resolved";
+
 /// UI-facing snapshot of a single queue job.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -163,6 +178,81 @@ pub struct FileIconDto {
     pub extension: Option<String>,
 }
 
+/// Phase 8 — payload for `error-raised`. The engine emitted an
+/// `ErrorPrompt` and the runner parked the oneshot in the
+/// `ErrorRegistry`; the frontend replies via `resolve_error(id, …)`.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorPromptDto {
+    pub id: u64,
+    pub job_id: u64,
+    pub src: String,
+    pub dst: String,
+    /// Lowercase-kebab kind name (`"permission-denied"`, …).
+    pub kind: &'static str,
+    /// Fluent key the frontend renders with `t()`.
+    pub localized_key: &'static str,
+    pub message: String,
+    pub raw_os_error: Option<i32>,
+    pub created_at_ms: u64,
+}
+
+/// Phase 8 — payload for `collision-raised`.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollisionPromptDto {
+    pub id: u64,
+    pub job_id: u64,
+    pub src: String,
+    pub dst: String,
+    /// Byte size of the source file. Sent ahead of time so the modal
+    /// can render the preview without a round-trip.
+    pub src_size: Option<u64>,
+    /// mtime in ms since epoch — rendered as a localised date.
+    pub src_modified_ms: Option<u64>,
+    pub dst_size: Option<u64>,
+    pub dst_modified_ms: Option<u64>,
+}
+
+/// Phase 8 — notification that an `error-raised` prompt was
+/// resolved. Mirrors `ErrorPromptDto.id` + the chosen action so the
+/// frontend can close the modal + show the right toast.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorResolvedDto {
+    pub id: u64,
+    pub job_id: u64,
+    /// `"retry"` / `"skip"` / `"abort"`.
+    pub action: &'static str,
+}
+
+/// Phase 8 — mirror of [`ErrorResolvedDto`] for collisions.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollisionResolvedDto {
+    pub id: u64,
+    pub job_id: u64,
+    pub resolution: &'static str,
+}
+
+/// Phase 8 — a single entry in the error log, as exposed to the
+/// Svelte drawer + CSV / TXT exporters.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoggedErrorDto {
+    pub id: u64,
+    pub job_id: u64,
+    pub timestamp_ms: u64,
+    pub src: String,
+    pub dst: String,
+    pub kind: &'static str,
+    pub localized_key: &'static str,
+    pub message: String,
+    pub raw_os_error: Option<i32>,
+    /// `"retry"` / `"skip"` / `"abort"` / `"auto-skip"` / `null`.
+    pub resolution: Option<&'static str>,
+}
+
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CopyOptionsDto {
@@ -174,6 +264,37 @@ pub struct CopyOptionsDto {
     pub preserve_permissions: Option<bool>,
     pub fsync_on_close: Option<bool>,
     pub follow_symlinks: Option<bool>,
+    /// Phase 8 — per-file error policy. Wire-encoded as a JSON
+    /// object so the `RetryN` variant's two knobs round-trip.
+    /// Accepted shapes:
+    /// - `{"kind":"ask"}` (default)
+    /// - `{"kind":"skip"}`
+    /// - `{"kind":"abort"}`
+    /// - `{"kind":"retryN","maxAttempts":3,"backoffMs":250}`
+    pub on_error: Option<ErrorPolicyDto>,
+    /// Phase 8 — collision policy (shadows the engine default,
+    /// which is `Skip`). Wire-encoded as a short string:
+    /// `"skip"` / `"overwrite"` / `"overwrite-if-newer"` /
+    /// `"keep-both"` / `"prompt"`.
+    ///
+    /// `rename(name)` is not exposed here — that's a per-item
+    /// decision made via `CollisionModal`, not a whole-job policy.
+    pub collision: Option<String>,
+}
+
+/// Phase 8 — wire form of `copythat_core::ErrorPolicy`. Tagged by
+/// `kind` so the two knobs on `RetryN` survive the JSON hop.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum ErrorPolicyDto {
+    Ask,
+    Skip,
+    Abort,
+    #[serde(rename = "retryN")]
+    RetryN {
+        max_attempts: u8,
+        backoff_ms: u64,
+    },
 }
 
 fn job_kind_name(kind: JobKind) -> &'static str {

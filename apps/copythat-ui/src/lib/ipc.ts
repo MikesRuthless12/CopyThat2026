@@ -5,10 +5,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
+  CollisionAction,
   CopyOptionsDto,
+  ErrorAction,
   FileIconDto,
   GlobalsDto,
   JobDto,
+  LoggedErrorDto,
 } from "./types";
 
 export async function startCopy(
@@ -90,4 +93,42 @@ export async function onEvent<T>(
   handler: (payload: T) => void,
 ): Promise<UnlistenFn> {
   return listen<T>(name, (event) => handler(event.payload));
+}
+
+// ---------- Phase 8 error / collision / log ----------
+
+export async function resolveError(
+  id: number,
+  action: ErrorAction,
+  applyToAll: boolean = false,
+): Promise<void> {
+  await invoke("resolve_error", { id, action, applyToAll });
+}
+
+export async function resolveCollision(
+  id: number,
+  resolution: CollisionAction,
+  renameTo: string | null = null,
+  applyToAll: boolean = false,
+): Promise<void> {
+  await invoke("resolve_collision", { id, resolution, renameTo, applyToAll });
+}
+
+export async function errorLog(): Promise<LoggedErrorDto[]> {
+  return invoke<LoggedErrorDto[]>("error_log");
+}
+
+export async function clearErrorLog(): Promise<void> {
+  await invoke("clear_error_log");
+}
+
+export async function errorLogExport(
+  format: "csv" | "txt",
+  path: string,
+): Promise<number> {
+  return invoke<number>("error_log_export", { format, path });
+}
+
+export async function retryElevated(id: number): Promise<void> {
+  await invoke("retry_elevated", { id });
 }

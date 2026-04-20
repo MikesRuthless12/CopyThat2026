@@ -87,12 +87,28 @@ export interface FileIconDto {
   extension: string | null;
 }
 
+export type CollisionPolicyWire =
+  | "skip"
+  | "overwrite"
+  | "overwrite-if-newer"
+  | "keep-both"
+  | "prompt";
+
+export type ErrorPolicyDto =
+  | { kind: "ask" }
+  | { kind: "skip" }
+  | { kind: "abort" }
+  | { kind: "retryN"; maxAttempts: number; backoffMs: number };
+
 export interface CopyOptionsDto {
   verify?: string;
   preserveTimes?: boolean;
   preservePermissions?: boolean;
   fsyncOnClose?: boolean;
   followSymlinks?: boolean;
+  // Phase 8
+  onError?: ErrorPolicyDto;
+  collision?: CollisionPolicyWire;
 }
 
 export const EVENTS = {
@@ -107,7 +123,74 @@ export const EVENTS = {
   jobRemoved: "job-removed",
   globalsTick: "globals-tick",
   dropReceived: "drop-received",
+  shellEnqueue: "shell-enqueue",
+  // Phase 8
+  errorRaised: "error-raised",
+  errorResolved: "error-resolved",
+  collisionRaised: "collision-raised",
+  collisionResolved: "collision-resolved",
 } as const;
+
+// Phase 8 DTOs
+export type ErrorKind =
+  | "not-found"
+  | "permission-denied"
+  | "disk-full"
+  | "interrupted"
+  | "verify-failed"
+  | "io-other";
+
+export type ErrorAction = "retry" | "skip" | "abort";
+
+export type CollisionAction = "skip" | "overwrite" | "rename" | "abort";
+
+export interface ErrorPromptDto {
+  id: number;
+  jobId: number;
+  src: string;
+  dst: string;
+  kind: ErrorKind;
+  localizedKey: string;
+  message: string;
+  rawOsError: number | null;
+  createdAtMs: number;
+}
+
+export interface CollisionPromptDto {
+  id: number;
+  jobId: number;
+  src: string;
+  dst: string;
+  srcSize: number | null;
+  srcModifiedMs: number | null;
+  dstSize: number | null;
+  dstModifiedMs: number | null;
+}
+
+export interface ErrorResolvedDto {
+  id: number;
+  jobId: number;
+  action: ErrorAction;
+}
+
+export interface CollisionResolvedDto {
+  id: number;
+  jobId: number;
+  resolution: CollisionAction;
+}
+
+export interface LoggedErrorDto {
+  id: number;
+  jobId: number;
+  timestampMs: number;
+  src: string;
+  dst: string;
+  kind: ErrorKind;
+  localizedKey: string;
+  message: string;
+  rawOsError: number | null;
+  resolution: "retry" | "skip" | "abort" | "auto-skip" | null;
+}
 
 export type ToastKind = "info" | "success" | "error";
 

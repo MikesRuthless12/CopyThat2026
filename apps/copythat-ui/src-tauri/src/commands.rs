@@ -82,6 +82,8 @@ async fn enqueue(
 
     let copy_opts = apply_options(&options)?;
     let verifier = resolve_verifier(&options)?;
+    let collision_policy = parse_collision_policy(options.collision.as_deref())?;
+    let error_policy = parse_error_policy(options.on_error.as_ref());
 
     let srcs: Vec<PathBuf> = sources
         .into_iter()
@@ -99,7 +101,42 @@ async fn enqueue(
         &dst_root,
         copy_opts,
         verifier,
+        collision_policy,
+        error_policy,
     ))
+}
+
+fn parse_collision_policy(raw: Option<&str>) -> Result<copythat_core::CollisionPolicy, String> {
+    use copythat_core::CollisionPolicy;
+    let Some(s) = raw else {
+        return Ok(CollisionPolicy::default());
+    };
+    match s {
+        "" => Ok(CollisionPolicy::default()),
+        "skip" => Ok(CollisionPolicy::Skip),
+        "overwrite" => Ok(CollisionPolicy::Overwrite),
+        "overwrite-if-newer" => Ok(CollisionPolicy::OverwriteIfNewer),
+        "keep-both" => Ok(CollisionPolicy::KeepBoth),
+        "prompt" => Ok(CollisionPolicy::Prompt),
+        other => Err(format!("unknown collision policy: {other}")),
+    }
+}
+
+fn parse_error_policy(raw: Option<&crate::ipc::ErrorPolicyDto>) -> copythat_core::ErrorPolicy {
+    use crate::ipc::ErrorPolicyDto;
+    use copythat_core::ErrorPolicy;
+    match raw {
+        None | Some(ErrorPolicyDto::Ask) => ErrorPolicy::Ask,
+        Some(ErrorPolicyDto::Skip) => ErrorPolicy::Skip,
+        Some(ErrorPolicyDto::Abort) => ErrorPolicy::Abort,
+        Some(ErrorPolicyDto::RetryN {
+            max_attempts,
+            backoff_ms,
+        }) => ErrorPolicy::RetryN {
+            max_attempts: *max_attempts,
+            backoff_ms: *backoff_ms,
+        },
+    }
 }
 
 fn apply_options(dto: &CopyOptionsDto) -> Result<CopyOptions, String> {
@@ -239,4 +276,161 @@ fn job_id(id: u64, state: &State<'_, AppState>) -> Result<copythat_core::JobId, 
         .find(|j| j.id.as_u64() == id)
         .map(|j| j.id)
         .ok_or_else(|| format!("unknown job id: {id}"))
+}
+
+// ---------------------------------------------------------------------
+// Phase 8 — error / collision / error-log commands
+// ---------------------------------------------------------------------
+
+/// Resolve an `error-raised` prompt. The Svelte modal calls this
+/// with the user's choice; the registry fires the oneshot the
+/// engine is awaiting on and logs the decision.
+#[tauri::command]
+pub fn resolve_error(
+    id: u64,
+    action: String,
+    apply_to_all: Option<bool>,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let act = parse_error_action(&action)?;
+    let resolved = state
+        .errors
+        .resolve(id, act, apply_to_all.unwrap_or(false))?;
+    use tauri::Emitter;
+    let _ = app.emit(
+        crate::ipc::EVENT_ERROR_RESOLVED,
+        crate::ipc::ErrorResolvedDto {
+            id: resolved.id,
+            job_id: resolved.job_id,
+            action: crate::errors::action_name(resolved.action),
+        },
+    );
+    Ok(())
+}
+
+/// Resolve a `collision-raised` prompt. `rename_to` is required
+/// when `resolution == "rename"`; ignored otherwise.
+#[tauri::command]
+pub fn resolve_collision(
+    id: u64,
+    resolution: String,
+    rename_to: Option<String>,
+    apply_to_all: Option<bool>,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let res = parse_collision_resolution(&resolution, rename_to)?;
+    let resolved = state
+        .collisions
+        .resolve(id, res, apply_to_all.unwrap_or(false))?;
+    use tauri::Emitter;
+    let _ = app.emit(
+        crate::ipc::EVENT_COLLISION_RESOLVED,
+        crate::ipc::CollisionResolvedDto {
+            id: resolved.id,
+            job_id: resolved.job_id,
+            resolution: crate::collisions::resolution_name(&resolved.resolution),
+        },
+    );
+    Ok(())
+}
+
+/// Snapshot of the in-memory error log, oldest-first. The footer
+/// "errors" link opens a drawer that calls this.
+#[tauri::command]
+pub fn error_log(state: State<'_, AppState>) -> Vec<crate::ipc::LoggedErrorDto> {
+    state
+        .errors
+        .log()
+        .into_iter()
+        .map(|e| crate::ipc::LoggedErrorDto {
+            id: e.id,
+            job_id: e.job_id,
+            timestamp_ms: e.timestamp_ms,
+            src: path_to_string(&e.src),
+            dst: path_to_string(&e.dst),
+            kind: e.kind,
+            localized_key: e.localized_key,
+            message: e.message,
+            raw_os_error: e.raw_os_error,
+            resolution: e.resolution,
+        })
+        .collect()
+}
+
+/// Wipe the in-memory log. Phase 9's SQLite history is untouched.
+#[tauri::command]
+pub fn clear_error_log(state: State<'_, AppState>) -> Result<(), String> {
+    state.errors.clear_log();
+    Ok(())
+}
+
+/// Export the log to a file. Two formats today; a Phase 12 user-
+/// preference switch can pick the default. Writes atomically via
+/// `write_then_rename`.
+#[tauri::command]
+pub fn error_log_export(
+    format: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<u64, String> {
+    let entries = state.errors.log();
+    let body = match format.as_str() {
+        "csv" => crate::errors::export_csv(&entries),
+        "txt" => crate::errors::export_txt(&entries),
+        other => return Err(format!("unknown export format: {other}")),
+    };
+    let bytes = body.len() as u64;
+    std::fs::write(&path, body).map_err(|e| format!("export write failed: {e}"))?;
+    Ok(bytes)
+}
+
+/// Stub for the Phase 8 "Retry with elevated permissions" button.
+/// Full UAC / `AuthorizationServices` / polkit wiring lands with
+/// Phase 17 privilege separation. Until then this surfaces a
+/// localised "not available yet" message — lets the UI carry the
+/// button without us needing to hide it conditionally.
+#[tauri::command]
+pub fn retry_elevated(_id: u64) -> Result<(), String> {
+    Err("retry-elevated-unavailable".to_string())
+}
+
+fn parse_error_action(action: &str) -> Result<copythat_core::ErrorAction, String> {
+    match action {
+        "retry" => Ok(copythat_core::ErrorAction::Retry),
+        "skip" => Ok(copythat_core::ErrorAction::Skip),
+        "abort" => Ok(copythat_core::ErrorAction::Abort),
+        other => Err(format!("unknown error action: {other}")),
+    }
+}
+
+fn parse_collision_resolution(
+    resolution: &str,
+    rename_to: Option<String>,
+) -> Result<copythat_core::CollisionResolution, String> {
+    match resolution {
+        "skip" => Ok(copythat_core::CollisionResolution::Skip),
+        "overwrite" => Ok(copythat_core::CollisionResolution::Overwrite),
+        "rename" => {
+            let name =
+                rename_to.ok_or_else(|| "rename resolution requires rename_to".to_string())?;
+            if name.is_empty() {
+                return Err("rename_to must not be empty".to_string());
+            }
+            // Reject any directory component — keeps the user inside
+            // the same parent folder and matches the engine's
+            // `CollisionResolution::Rename` contract.
+            if name.contains('/') || name.contains('\\') {
+                return Err("rename_to must not contain a directory separator".to_string());
+            }
+            Ok(copythat_core::CollisionResolution::Rename(name))
+        }
+        "abort" => Ok(copythat_core::CollisionResolution::Abort),
+        other => Err(format!("unknown collision resolution: {other}")),
+    }
+}
+
+fn path_to_string(p: &Path) -> String {
+    p.to_string_lossy().to_string()
 }

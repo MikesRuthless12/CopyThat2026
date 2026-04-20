@@ -62,3 +62,9 @@ tokio = { version = "1", features = [
 [[test]]
 name = "phase_07a_cli_enqueue"
 path = "../../../tests/smoke/phase_07a_cli_enqueue.rs"
+
+# Phase 8 smoke test — error handling + collision UX. Drives the
+# engine + `ErrorRegistry` without booting Tauri.
+[[test]]
+name = "phase_08_errors"
+path = "../../../tests/smoke/phase_08_errors.rs"
