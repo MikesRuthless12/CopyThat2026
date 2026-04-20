@@ -126,104 +126,233 @@ toast-job-done = 传输完成
 toast-copy-queued = 已加入复制队列
 # MT
 toast-move-queued = 已加入移动队列
-# Phase 8 additions — MT placeholders; review before 1.0.
-
-# MT — Toast messages
-toast-error-resolved = Error resolved
-toast-collision-resolved = Collision resolved
-toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
-toast-error-log-exported = Error log exported
+# MT — Phase 8 toast messages
+toast-error-resolved = 错误已解决
+# MT
+toast-collision-resolved = 冲突已解决
+# MT
+toast-elevated-unavailable = 以提升权限重试将在第 17 阶段提供 — 目前尚不可用
+# MT
+toast-error-log-exported = 错误日志已导出
 
 # MT — Error modal
-error-modal-title = A transfer failed
-error-modal-retry = Retry
-error-modal-retry-elevated = Retry with elevated permissions
-error-modal-skip = Skip
-error-modal-skip-all-kind = Skip all errors of this kind
-error-modal-abort = Abort all
-error-modal-path-label = Path
-error-modal-code-label = Code
+error-modal-title = 传输失败
+# MT
+error-modal-retry = 重试
+# MT
+error-modal-retry-elevated = 以提升权限重试
+# MT
+error-modal-skip = 跳过
+# MT
+error-modal-skip-all-kind = 跳过所有此类错误
+# MT
+error-modal-abort = 全部中止
+# MT
+error-modal-path-label = 路径
+# MT
+error-modal-code-label = 代码
 
 # MT — Error-kind labels
-err-not-found = File not found
-err-permission-denied = Permission denied
-err-disk-full = Destination disk is full
-err-interrupted = Operation interrupted
-err-verify-failed = Post-copy verification failed
-err-io-other = Unknown I/O error
+err-not-found = 文件未找到
+# MT
+err-permission-denied = 权限被拒绝
+# MT
+err-disk-full = 目标磁盘已满
+# MT
+err-interrupted = 操作被中断
+# MT
+err-verify-failed = 复制后校验失败
+# MT
+err-io-other = 未知 I/O 错误
 
 # MT — Collision modal
-collision-modal-title = File already exists
-collision-modal-overwrite = Overwrite
-collision-modal-overwrite-if-newer = Overwrite if newer
-collision-modal-skip = Skip
-collision-modal-keep-both = Keep both
-collision-modal-rename = Rename…
-collision-modal-apply-to-all = Apply to all
-collision-modal-source = Source
-collision-modal-destination = Destination
-collision-modal-size = Size
-collision-modal-modified = Modified
-collision-modal-hash-check = Quick hash (SHA-256)
-collision-modal-rename-placeholder = New filename
-collision-modal-confirm-rename = Rename
+collision-modal-title = 文件已存在
+# MT
+collision-modal-overwrite = 覆盖
+# MT
+collision-modal-overwrite-if-newer = 较新时覆盖
+# MT
+collision-modal-skip = 跳过
+# MT
+collision-modal-keep-both = 两者都保留
+# MT
+collision-modal-rename = 重命名…
+# MT
+collision-modal-apply-to-all = 应用到全部
+# MT
+collision-modal-source = 源
+# MT
+collision-modal-destination = 目标
+# MT
+collision-modal-size = 大小
+# MT
+collision-modal-modified = 修改时间
+# MT
+collision-modal-hash-check = 快速哈希 (SHA-256)
+# MT
+collision-modal-rename-placeholder = 新文件名
+# MT
+collision-modal-confirm-rename = 重命名
 
 # MT — Error log drawer
-error-log-title = Error log
-error-log-empty = No errors logged
-error-log-export-csv = Export CSV
-error-log-export-txt = Export text
-error-log-clear = Clear log
-error-log-col-time = Time
-error-log-col-job = Job
-error-log-col-path = Path
-error-log-col-code = Code
-error-log-col-message = Message
-error-log-col-resolution = Resolution
+error-log-title = 错误日志
+# MT
+error-log-empty = 没有记录的错误
+# MT
+error-log-export-csv = 导出 CSV
+# MT
+error-log-export-txt = 导出文本
+# MT
+error-log-clear = 清空日志
+# MT
+error-log-col-time = 时间
+# MT
+error-log-col-job = 任务
+# MT
+error-log-col-path = 路径
+# MT
+error-log-col-code = 代码
+# MT
+error-log-col-message = 消息
+# MT
+error-log-col-resolution = 解决方式
 
 # MT — History drawer (Phase 9)
-history-title = History
-history-empty = No jobs recorded yet
-history-unavailable = Copy history isn't available. The app couldn't open the SQLite store at startup.
-history-filter-any = any
-history-filter-kind = Kind
-history-filter-status = Status
-history-filter-text = Search
-history-refresh = Refresh
-history-export-csv = Export CSV
-history-purge-30 = Purge > 30 days
-history-rerun = Re-run
-history-detail-open = Details
-history-detail-title = Job details
-history-detail-empty = No items recorded
-history-col-date = Date
-history-col-kind = Kind
-history-col-src = Source
-history-col-dst = Destination
-history-col-files = Files
-history-col-size = Size
-history-col-status = Status
-history-col-duration = Duration
-history-col-error = Error
+history-title = 历史记录
+# MT
+history-empty = 尚无任务记录
+# MT
+history-unavailable = 复制历史不可用。启动时应用未能打开 SQLite 存储。
+# MT
+history-filter-any = 任何
+# MT
+history-filter-kind = 类型
+# MT
+history-filter-status = 状态
+# MT
+history-filter-text = 搜索
+# MT
+history-refresh = 刷新
+# MT
+history-export-csv = 导出 CSV
+# MT
+history-purge-30 = 清除超过 30 天
+# MT
+history-rerun = 重新执行
+# MT
+history-detail-open = 详情
+# MT
+history-detail-title = 任务详情
+# MT
+history-detail-empty = 没有记录的项目
+# MT
+history-col-date = 日期
+# MT
+history-col-kind = 类型
+# MT
+history-col-src = 源
+# MT
+history-col-dst = 目标
+# MT
+history-col-files = 文件
+# MT
+history-col-size = 大小
+# MT
+history-col-status = 状态
+# MT
+history-col-duration = 持续时间
+# MT
+history-col-error = 错误
 
-# MT — Phase 9 toasts
-toast-history-exported = History exported
-toast-history-rerun-queued = Re-run queued
+# MT
+toast-history-exported = 历史已导出
+# MT
+toast-history-rerun-queued = 重新执行已加入队列
 
 # MT — Totals drawer (Phase 10)
-footer-totals = Totals
-totals-title = Totals
-totals-loading = Loading totals…
-totals-card-bytes = Total bytes copied
-totals-card-files = Files
-totals-card-jobs = Jobs
-totals-card-avg-rate = Average throughput
-totals-errors = errors
-totals-spark-title = Last 30 days
-totals-kinds-title = By kind
-totals-saved-title = Time saved (estimated)
-totals-saved-note = Estimated vs a baseline file-manager copy of the same workload.
-totals-reset = Reset statistics
-totals-reset-confirm = This deletes every stored job and item. Continue?
-totals-reset-confirm-yes = Yes, reset
-toast-totals-reset = Statistics reset
+footer-totals = 总计
+# MT
+totals-title = 总计
+# MT
+totals-loading = 正在加载总计…
+# MT
+totals-card-bytes = 累计复制字节数
+# MT
+totals-card-files = 文件
+# MT
+totals-card-jobs = 任务
+# MT
+totals-card-avg-rate = 平均吞吐量
+# MT
+totals-errors = 错误
+# MT
+totals-spark-title = 最近 30 天
+# MT
+totals-kinds-title = 按类型
+# MT
+totals-saved-title = 节省时间 (估算)
+# MT
+totals-saved-note = 与标准文件管理器以相同工作负载复制作为基准的估算比较。
+# MT
+totals-reset = 重置统计
+# MT
+totals-reset-confirm = 这将删除所有已存储的任务和项目。继续吗?
+# MT
+totals-reset-confirm-yes = 是,重置
+# MT
+toast-totals-reset = 统计已重置
+
+# MT — Phase 11a additions
+header-language-label = 语言
+# MT
+header-language-title = 更改语言
+
+# MT
+kind-copy = 复制
+# MT
+kind-move = 移动
+# MT
+kind-delete = 删除
+# MT
+kind-secure-delete = 安全删除
+
+# MT
+status-running = 进行中
+# MT
+status-succeeded = 成功
+# MT
+status-failed = 失败
+# MT
+status-cancelled = 已取消
+# MT
+status-ok = 确定
+# MT
+status-skipped = 已跳过
+
+# MT
+history-search-placeholder = /路径
+# MT
+toast-history-purged = 已清除 { $count } 个超过 30 天的任务
+
+# MT
+err-source-required = 至少需要一个源路径。
+# MT
+err-destination-empty = 目标路径为空。
+# MT
+err-source-empty = 源路径为空。
+
+# MT
+duration-lt-1s = < 1 秒
+# MT
+duration-ms = { $ms } 毫秒
+# MT
+duration-seconds = { $s } 秒
+# MT
+duration-minutes-seconds = { $m } 分 { $s } 秒
+# MT
+duration-hours-minutes = { $h } 小时 { $m } 分
+# MT
+duration-zero = 0 秒
+
+# MT
+rate-unit-per-second = { $size }/秒

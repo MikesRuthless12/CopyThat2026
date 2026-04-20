@@ -69,3 +69,9 @@ path = "../../../tests/smoke/phase_07a_cli_enqueue.rs"
 [[test]]
 name = "phase_08_errors"
 path = "../../../tests/smoke/phase_08_errors.rs"
+
+# Phase 11a smoke test — i18n placeable parity + required-key guard.
+# Pure-filesystem test; no Tauri / webview involved.
+[[test]]
+name = "phase_11a_i18n"
+path = "../../../tests/smoke/phase_11a_i18n.rs"

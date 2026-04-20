@@ -126,104 +126,233 @@ toast-job-done = 전송 완료
 toast-copy-queued = 복사가 대기열에 추가됨
 # MT
 toast-move-queued = 이동이 대기열에 추가됨
-# Phase 8 additions — MT placeholders; review before 1.0.
-
-# MT — Toast messages
-toast-error-resolved = Error resolved
-toast-collision-resolved = Collision resolved
-toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
-toast-error-log-exported = Error log exported
+# MT — Phase 8 toast messages
+toast-error-resolved = 오류가 해결되었습니다
+# MT
+toast-collision-resolved = 충돌이 해결되었습니다
+# MT
+toast-elevated-unavailable = 상승 권한으로 재시도 기능은 17단계에서 제공됩니다 — 아직 사용할 수 없음
+# MT
+toast-error-log-exported = 오류 로그를 내보냈습니다
 
 # MT — Error modal
-error-modal-title = A transfer failed
-error-modal-retry = Retry
-error-modal-retry-elevated = Retry with elevated permissions
-error-modal-skip = Skip
-error-modal-skip-all-kind = Skip all errors of this kind
-error-modal-abort = Abort all
-error-modal-path-label = Path
-error-modal-code-label = Code
+error-modal-title = 전송이 실패했습니다
+# MT
+error-modal-retry = 다시 시도
+# MT
+error-modal-retry-elevated = 상승 권한으로 다시 시도
+# MT
+error-modal-skip = 건너뛰기
+# MT
+error-modal-skip-all-kind = 이 종류의 오류를 모두 건너뛰기
+# MT
+error-modal-abort = 모두 중단
+# MT
+error-modal-path-label = 경로
+# MT
+error-modal-code-label = 코드
 
 # MT — Error-kind labels
-err-not-found = File not found
-err-permission-denied = Permission denied
-err-disk-full = Destination disk is full
-err-interrupted = Operation interrupted
-err-verify-failed = Post-copy verification failed
-err-io-other = Unknown I/O error
+err-not-found = 파일을 찾을 수 없습니다
+# MT
+err-permission-denied = 권한이 거부되었습니다
+# MT
+err-disk-full = 대상 디스크가 가득 찼습니다
+# MT
+err-interrupted = 작업이 중단되었습니다
+# MT
+err-verify-failed = 복사 후 확인 실패
+# MT
+err-io-other = 알 수 없는 I/O 오류
 
 # MT — Collision modal
-collision-modal-title = File already exists
-collision-modal-overwrite = Overwrite
-collision-modal-overwrite-if-newer = Overwrite if newer
-collision-modal-skip = Skip
-collision-modal-keep-both = Keep both
-collision-modal-rename = Rename…
-collision-modal-apply-to-all = Apply to all
-collision-modal-source = Source
-collision-modal-destination = Destination
-collision-modal-size = Size
-collision-modal-modified = Modified
-collision-modal-hash-check = Quick hash (SHA-256)
-collision-modal-rename-placeholder = New filename
-collision-modal-confirm-rename = Rename
+collision-modal-title = 파일이 이미 있습니다
+# MT
+collision-modal-overwrite = 덮어쓰기
+# MT
+collision-modal-overwrite-if-newer = 더 새 파일이면 덮어쓰기
+# MT
+collision-modal-skip = 건너뛰기
+# MT
+collision-modal-keep-both = 둘 다 유지
+# MT
+collision-modal-rename = 이름 바꾸기…
+# MT
+collision-modal-apply-to-all = 모두 적용
+# MT
+collision-modal-source = 원본
+# MT
+collision-modal-destination = 대상
+# MT
+collision-modal-size = 크기
+# MT
+collision-modal-modified = 수정됨
+# MT
+collision-modal-hash-check = 빠른 해시 (SHA-256)
+# MT
+collision-modal-rename-placeholder = 새 파일 이름
+# MT
+collision-modal-confirm-rename = 이름 바꾸기
 
 # MT — Error log drawer
-error-log-title = Error log
-error-log-empty = No errors logged
-error-log-export-csv = Export CSV
-error-log-export-txt = Export text
-error-log-clear = Clear log
-error-log-col-time = Time
-error-log-col-job = Job
-error-log-col-path = Path
-error-log-col-code = Code
-error-log-col-message = Message
-error-log-col-resolution = Resolution
+error-log-title = 오류 로그
+# MT
+error-log-empty = 기록된 오류가 없습니다
+# MT
+error-log-export-csv = CSV 내보내기
+# MT
+error-log-export-txt = 텍스트 내보내기
+# MT
+error-log-clear = 로그 지우기
+# MT
+error-log-col-time = 시간
+# MT
+error-log-col-job = 작업
+# MT
+error-log-col-path = 경로
+# MT
+error-log-col-code = 코드
+# MT
+error-log-col-message = 메시지
+# MT
+error-log-col-resolution = 해결
 
 # MT — History drawer (Phase 9)
-history-title = History
-history-empty = No jobs recorded yet
-history-unavailable = Copy history isn't available. The app couldn't open the SQLite store at startup.
-history-filter-any = any
-history-filter-kind = Kind
-history-filter-status = Status
-history-filter-text = Search
-history-refresh = Refresh
-history-export-csv = Export CSV
-history-purge-30 = Purge > 30 days
-history-rerun = Re-run
-history-detail-open = Details
-history-detail-title = Job details
-history-detail-empty = No items recorded
-history-col-date = Date
-history-col-kind = Kind
-history-col-src = Source
-history-col-dst = Destination
-history-col-files = Files
-history-col-size = Size
-history-col-status = Status
-history-col-duration = Duration
-history-col-error = Error
+history-title = 기록
+# MT
+history-empty = 기록된 작업이 없습니다
+# MT
+history-unavailable = 복사 기록을 사용할 수 없습니다. 앱이 시작 시 SQLite 저장소를 열지 못했습니다.
+# MT
+history-filter-any = 모두
+# MT
+history-filter-kind = 종류
+# MT
+history-filter-status = 상태
+# MT
+history-filter-text = 검색
+# MT
+history-refresh = 새로 고침
+# MT
+history-export-csv = CSV 내보내기
+# MT
+history-purge-30 = 30일 이전 삭제
+# MT
+history-rerun = 다시 실행
+# MT
+history-detail-open = 세부 정보
+# MT
+history-detail-title = 작업 세부 정보
+# MT
+history-detail-empty = 기록된 항목이 없습니다
+# MT
+history-col-date = 날짜
+# MT
+history-col-kind = 종류
+# MT
+history-col-src = 원본
+# MT
+history-col-dst = 대상
+# MT
+history-col-files = 파일
+# MT
+history-col-size = 크기
+# MT
+history-col-status = 상태
+# MT
+history-col-duration = 소요 시간
+# MT
+history-col-error = 오류
 
-# MT — Phase 9 toasts
-toast-history-exported = History exported
-toast-history-rerun-queued = Re-run queued
+# MT
+toast-history-exported = 기록을 내보냈습니다
+# MT
+toast-history-rerun-queued = 다시 실행을 대기열에 추가했습니다
 
 # MT — Totals drawer (Phase 10)
-footer-totals = Totals
-totals-title = Totals
-totals-loading = Loading totals…
-totals-card-bytes = Total bytes copied
-totals-card-files = Files
-totals-card-jobs = Jobs
-totals-card-avg-rate = Average throughput
-totals-errors = errors
-totals-spark-title = Last 30 days
-totals-kinds-title = By kind
-totals-saved-title = Time saved (estimated)
-totals-saved-note = Estimated vs a baseline file-manager copy of the same workload.
-totals-reset = Reset statistics
-totals-reset-confirm = This deletes every stored job and item. Continue?
-totals-reset-confirm-yes = Yes, reset
-toast-totals-reset = Statistics reset
+footer-totals = 합계
+# MT
+totals-title = 합계
+# MT
+totals-loading = 합계 불러오는 중…
+# MT
+totals-card-bytes = 총 복사 바이트
+# MT
+totals-card-files = 파일
+# MT
+totals-card-jobs = 작업
+# MT
+totals-card-avg-rate = 평균 처리량
+# MT
+totals-errors = 오류
+# MT
+totals-spark-title = 지난 30일
+# MT
+totals-kinds-title = 종류별
+# MT
+totals-saved-title = 절약된 시간 (추정)
+# MT
+totals-saved-note = 표준 파일 관리자로 동일한 작업을 복사한 기준과 비교한 추정치입니다.
+# MT
+totals-reset = 통계 재설정
+# MT
+totals-reset-confirm = 저장된 모든 작업과 항목이 삭제됩니다. 계속하시겠습니까?
+# MT
+totals-reset-confirm-yes = 예, 재설정
+# MT
+toast-totals-reset = 통계가 재설정되었습니다
+
+# MT — Phase 11a additions
+header-language-label = 언어
+# MT
+header-language-title = 언어 변경
+
+# MT
+kind-copy = 복사
+# MT
+kind-move = 이동
+# MT
+kind-delete = 삭제
+# MT
+kind-secure-delete = 안전하게 삭제
+
+# MT
+status-running = 실행 중
+# MT
+status-succeeded = 성공
+# MT
+status-failed = 실패
+# MT
+status-cancelled = 취소됨
+# MT
+status-ok = 확인
+# MT
+status-skipped = 건너뜀
+
+# MT
+history-search-placeholder = /경로
+# MT
+toast-history-purged = 30일보다 오래된 작업 { $count }개 삭제됨
+
+# MT
+err-source-required = 하나 이상의 원본 경로가 필요합니다.
+# MT
+err-destination-empty = 대상 경로가 비어 있습니다.
+# MT
+err-source-empty = 원본 경로가 비어 있습니다.
+
+# MT
+duration-lt-1s = < 1초
+# MT
+duration-ms = { $ms } ms
+# MT
+duration-seconds = { $s }초
+# MT
+duration-minutes-seconds = { $m }분 { $s }초
+# MT
+duration-hours-minutes = { $h }시간 { $m }분
+# MT
+duration-zero = 0초
+
+# MT
+rate-unit-per-second = { $size }/초

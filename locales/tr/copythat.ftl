@@ -126,104 +126,233 @@ toast-job-done = Aktarım tamamlandı
 toast-copy-queued = Kopyalama kuyruğa alındı
 # MT
 toast-move-queued = Taşıma kuyruğa alındı
-# Phase 8 additions — MT placeholders; review before 1.0.
-
-# MT — Toast messages
-toast-error-resolved = Error resolved
-toast-collision-resolved = Collision resolved
-toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
-toast-error-log-exported = Error log exported
+# MT — Phase 8 toast messages
+toast-error-resolved = Hata çözüldü
+# MT
+toast-collision-resolved = Çakışma çözüldü
+# MT
+toast-elevated-unavailable = Yükseltilmiş izinle yeniden deneme 17. aşamada gelecek — henüz kullanılamıyor
+# MT
+toast-error-log-exported = Hata günlüğü dışa aktarıldı
 
 # MT — Error modal
-error-modal-title = A transfer failed
-error-modal-retry = Retry
-error-modal-retry-elevated = Retry with elevated permissions
-error-modal-skip = Skip
-error-modal-skip-all-kind = Skip all errors of this kind
-error-modal-abort = Abort all
-error-modal-path-label = Path
-error-modal-code-label = Code
+error-modal-title = Bir aktarım başarısız oldu
+# MT
+error-modal-retry = Yeniden dene
+# MT
+error-modal-retry-elevated = Yükseltilmiş izinle yeniden dene
+# MT
+error-modal-skip = Atla
+# MT
+error-modal-skip-all-kind = Bu türdeki tüm hataları atla
+# MT
+error-modal-abort = Tümünü iptal et
+# MT
+error-modal-path-label = Yol
+# MT
+error-modal-code-label = Kod
 
 # MT — Error-kind labels
-err-not-found = File not found
-err-permission-denied = Permission denied
-err-disk-full = Destination disk is full
-err-interrupted = Operation interrupted
-err-verify-failed = Post-copy verification failed
-err-io-other = Unknown I/O error
+err-not-found = Dosya bulunamadı
+# MT
+err-permission-denied = İzin reddedildi
+# MT
+err-disk-full = Hedef disk dolu
+# MT
+err-interrupted = İşlem kesildi
+# MT
+err-verify-failed = Kopya sonrası doğrulama başarısız
+# MT
+err-io-other = Bilinmeyen G/Ç hatası
 
 # MT — Collision modal
-collision-modal-title = File already exists
-collision-modal-overwrite = Overwrite
-collision-modal-overwrite-if-newer = Overwrite if newer
-collision-modal-skip = Skip
-collision-modal-keep-both = Keep both
-collision-modal-rename = Rename…
-collision-modal-apply-to-all = Apply to all
-collision-modal-source = Source
-collision-modal-destination = Destination
-collision-modal-size = Size
-collision-modal-modified = Modified
-collision-modal-hash-check = Quick hash (SHA-256)
-collision-modal-rename-placeholder = New filename
-collision-modal-confirm-rename = Rename
+collision-modal-title = Dosya zaten var
+# MT
+collision-modal-overwrite = Üzerine yaz
+# MT
+collision-modal-overwrite-if-newer = Daha yeniyse üzerine yaz
+# MT
+collision-modal-skip = Atla
+# MT
+collision-modal-keep-both = İkisini de sakla
+# MT
+collision-modal-rename = Yeniden adlandır…
+# MT
+collision-modal-apply-to-all = Tümüne uygula
+# MT
+collision-modal-source = Kaynak
+# MT
+collision-modal-destination = Hedef
+# MT
+collision-modal-size = Boyut
+# MT
+collision-modal-modified = Değiştirilme
+# MT
+collision-modal-hash-check = Hızlı özet (SHA-256)
+# MT
+collision-modal-rename-placeholder = Yeni dosya adı
+# MT
+collision-modal-confirm-rename = Yeniden adlandır
 
 # MT — Error log drawer
-error-log-title = Error log
-error-log-empty = No errors logged
-error-log-export-csv = Export CSV
-error-log-export-txt = Export text
-error-log-clear = Clear log
-error-log-col-time = Time
-error-log-col-job = Job
-error-log-col-path = Path
-error-log-col-code = Code
-error-log-col-message = Message
-error-log-col-resolution = Resolution
+error-log-title = Hata günlüğü
+# MT
+error-log-empty = Kaydedilmiş hata yok
+# MT
+error-log-export-csv = CSV dışa aktar
+# MT
+error-log-export-txt = Metin dışa aktar
+# MT
+error-log-clear = Günlüğü temizle
+# MT
+error-log-col-time = Zaman
+# MT
+error-log-col-job = İş
+# MT
+error-log-col-path = Yol
+# MT
+error-log-col-code = Kod
+# MT
+error-log-col-message = Mesaj
+# MT
+error-log-col-resolution = Çözüm
 
 # MT — History drawer (Phase 9)
-history-title = History
-history-empty = No jobs recorded yet
-history-unavailable = Copy history isn't available. The app couldn't open the SQLite store at startup.
-history-filter-any = any
-history-filter-kind = Kind
-history-filter-status = Status
-history-filter-text = Search
-history-refresh = Refresh
-history-export-csv = Export CSV
-history-purge-30 = Purge > 30 days
-history-rerun = Re-run
-history-detail-open = Details
-history-detail-title = Job details
-history-detail-empty = No items recorded
-history-col-date = Date
-history-col-kind = Kind
-history-col-src = Source
-history-col-dst = Destination
-history-col-files = Files
-history-col-size = Size
-history-col-status = Status
-history-col-duration = Duration
-history-col-error = Error
+history-title = Geçmiş
+# MT
+history-empty = Henüz kaydedilmiş iş yok
+# MT
+history-unavailable = Kopyalama geçmişi kullanılamıyor. Uygulama başlangıçta SQLite deposunu açamadı.
+# MT
+history-filter-any = herhangi
+# MT
+history-filter-kind = Tür
+# MT
+history-filter-status = Durum
+# MT
+history-filter-text = Ara
+# MT
+history-refresh = Yenile
+# MT
+history-export-csv = CSV dışa aktar
+# MT
+history-purge-30 = 30 günden eskiyi sil
+# MT
+history-rerun = Yeniden çalıştır
+# MT
+history-detail-open = Ayrıntılar
+# MT
+history-detail-title = İş ayrıntıları
+# MT
+history-detail-empty = Kaydedilmiş öğe yok
+# MT
+history-col-date = Tarih
+# MT
+history-col-kind = Tür
+# MT
+history-col-src = Kaynak
+# MT
+history-col-dst = Hedef
+# MT
+history-col-files = Dosyalar
+# MT
+history-col-size = Boyut
+# MT
+history-col-status = Durum
+# MT
+history-col-duration = Süre
+# MT
+history-col-error = Hata
 
-# MT — Phase 9 toasts
-toast-history-exported = History exported
-toast-history-rerun-queued = Re-run queued
+# MT
+toast-history-exported = Geçmiş dışa aktarıldı
+# MT
+toast-history-rerun-queued = Yeniden çalıştırma kuyruğa alındı
 
 # MT — Totals drawer (Phase 10)
-footer-totals = Totals
-totals-title = Totals
-totals-loading = Loading totals…
-totals-card-bytes = Total bytes copied
-totals-card-files = Files
-totals-card-jobs = Jobs
-totals-card-avg-rate = Average throughput
-totals-errors = errors
-totals-spark-title = Last 30 days
-totals-kinds-title = By kind
-totals-saved-title = Time saved (estimated)
-totals-saved-note = Estimated vs a baseline file-manager copy of the same workload.
-totals-reset = Reset statistics
-totals-reset-confirm = This deletes every stored job and item. Continue?
-totals-reset-confirm-yes = Yes, reset
-toast-totals-reset = Statistics reset
+footer-totals = Toplamlar
+# MT
+totals-title = Toplamlar
+# MT
+totals-loading = Toplamlar yükleniyor…
+# MT
+totals-card-bytes = Toplam kopyalanan bayt
+# MT
+totals-card-files = Dosyalar
+# MT
+totals-card-jobs = İşler
+# MT
+totals-card-avg-rate = Ortalama hız
+# MT
+totals-errors = hatalar
+# MT
+totals-spark-title = Son 30 gün
+# MT
+totals-kinds-title = Türe göre
+# MT
+totals-saved-title = Kazanılan süre (tahmini)
+# MT
+totals-saved-note = Aynı iş yükünü standart dosya yöneticisiyle kopyalamaya kıyasla tahmini değerdir.
+# MT
+totals-reset = İstatistikleri sıfırla
+# MT
+totals-reset-confirm = Bu, depolanan tüm iş ve öğeleri siler. Devam edilsin mi?
+# MT
+totals-reset-confirm-yes = Evet, sıfırla
+# MT
+toast-totals-reset = İstatistikler sıfırlandı
+
+# MT — Phase 11a additions
+header-language-label = Dil
+# MT
+header-language-title = Dili değiştir
+
+# MT
+kind-copy = Kopyala
+# MT
+kind-move = Taşı
+# MT
+kind-delete = Sil
+# MT
+kind-secure-delete = Güvenli sil
+
+# MT
+status-running = Çalışıyor
+# MT
+status-succeeded = Başarılı
+# MT
+status-failed = Başarısız
+# MT
+status-cancelled = İptal edildi
+# MT
+status-ok = Tamam
+# MT
+status-skipped = Atlandı
+
+# MT
+history-search-placeholder = /yol
+# MT
+toast-history-purged = 30 günden eski { $count } iş silindi
+
+# MT
+err-source-required = En az bir kaynak yolu gerekli.
+# MT
+err-destination-empty = Hedef yolu boş.
+# MT
+err-source-empty = Kaynak yolu boş.
+
+# MT
+duration-lt-1s = < 1 sn
+# MT
+duration-ms = { $ms } ms
+# MT
+duration-seconds = { $s } sn
+# MT
+duration-minutes-seconds = { $m } dk { $s } sn
+# MT
+duration-hours-minutes = { $h } sa { $m } dk
+# MT
+duration-zero = 0 sn
+
+# MT
+rate-unit-per-second = { $size }/sn

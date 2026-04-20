@@ -176,3 +176,56 @@ totals-reset = Reset statistics
 totals-reset-confirm = This deletes every stored job and item. Continue?
 totals-reset-confirm-yes = Yes, reset
 toast-totals-reset = Statistics reset
+
+# Phase 11a — i18n core: surface remaining user-visible strings so
+# every string on a main-window screen flows through Fluent.
+
+# Header language switcher (temporary placement — folds into
+# Settings → General in Phase 12).
+header-language-label = Language
+header-language-title = Change language
+
+# Job-kind labels. History filter, Totals breakdown, and history
+# rows all map wire-format `kind` strings to these labels.
+kind-copy = Copy
+kind-move = Move
+kind-delete = Delete
+kind-secure-delete = Secure delete
+
+# History status labels. Distinct from `state-*` because the
+# history wire format uses plain `running`/`succeeded`/... rather
+# than the live `JobState` enum the queue exposes.
+status-running = Running
+status-succeeded = Succeeded
+status-failed = Failed
+status-cancelled = Cancelled
+# Per-item status (not job-level): `ok` / `skipped` are only
+# reachable from the history detail view.
+status-ok = OK
+status-skipped = Skipped
+
+# History drawer: search field placeholder + purge toast.
+history-search-placeholder = /path
+toast-history-purged = Purged { $count } jobs older than 30 days
+
+# User-facing command-layer validation errors. The Rust side
+# returns these keys when input is missing; the toast layer looks
+# them up rather than showing the raw English.
+err-source-required = At least one source path is required.
+err-destination-empty = Destination path is empty.
+err-source-empty = Source path is empty.
+
+# Localised duration formatting for the Totals drawer and ETA
+# fields. `{ $ms }`, `{ $s }`, `{ $m }`, `{ $h }` are integer
+# placeables — the formatter passes pre-computed values in.
+duration-lt-1s = < 1s
+duration-ms = { $ms } ms
+duration-seconds = { $s }s
+duration-minutes-seconds = { $m }m { $s }s
+duration-hours-minutes = { $h }h { $m }m
+duration-zero = 0s
+
+# Rate unit. Appended to a formatted byte size. Some languages
+# render this with a leading space ("Ko/s"); keep it translatable
+# even though the SI-derived "/s" is near-universal.
+rate-unit-per-second = { $size }/s

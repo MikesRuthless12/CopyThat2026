@@ -126,104 +126,233 @@ toast-job-done = स्थानांतरण पूरा हुआ
 toast-copy-queued = कॉपी कतारबद्ध
 # MT
 toast-move-queued = मूव कतारबद्ध
-# Phase 8 additions — MT placeholders; review before 1.0.
-
-# MT — Toast messages
-toast-error-resolved = Error resolved
-toast-collision-resolved = Collision resolved
-toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
-toast-error-log-exported = Error log exported
+# MT — Phase 8 toast messages
+toast-error-resolved = त्रुटि हल हुई
+# MT
+toast-collision-resolved = टकराव हल हुआ
+# MT
+toast-elevated-unavailable = बढ़े हुए अधिकारों से पुनः प्रयास चरण 17 में आएगा — अभी उपलब्ध नहीं
+# MT
+toast-error-log-exported = त्रुटि लॉग निर्यात किया गया
 
 # MT — Error modal
-error-modal-title = A transfer failed
-error-modal-retry = Retry
-error-modal-retry-elevated = Retry with elevated permissions
-error-modal-skip = Skip
-error-modal-skip-all-kind = Skip all errors of this kind
-error-modal-abort = Abort all
-error-modal-path-label = Path
-error-modal-code-label = Code
+error-modal-title = एक स्थानांतरण विफल हुआ
+# MT
+error-modal-retry = पुनः प्रयास
+# MT
+error-modal-retry-elevated = बढ़े हुए अधिकारों से पुनः प्रयास
+# MT
+error-modal-skip = छोड़ें
+# MT
+error-modal-skip-all-kind = इस प्रकार की सभी त्रुटियाँ छोड़ें
+# MT
+error-modal-abort = सभी निरस्त करें
+# MT
+error-modal-path-label = पथ
+# MT
+error-modal-code-label = कोड
 
 # MT — Error-kind labels
-err-not-found = File not found
-err-permission-denied = Permission denied
-err-disk-full = Destination disk is full
-err-interrupted = Operation interrupted
-err-verify-failed = Post-copy verification failed
-err-io-other = Unknown I/O error
+err-not-found = फ़ाइल नहीं मिली
+# MT
+err-permission-denied = अनुमति अस्वीकृत
+# MT
+err-disk-full = गंतव्य डिस्क भर गई है
+# MT
+err-interrupted = ऑपरेशन बाधित
+# MT
+err-verify-failed = प्रतिलिपि के बाद सत्यापन विफल
+# MT
+err-io-other = अज्ञात I/O त्रुटि
 
 # MT — Collision modal
-collision-modal-title = File already exists
-collision-modal-overwrite = Overwrite
-collision-modal-overwrite-if-newer = Overwrite if newer
-collision-modal-skip = Skip
-collision-modal-keep-both = Keep both
-collision-modal-rename = Rename…
-collision-modal-apply-to-all = Apply to all
-collision-modal-source = Source
-collision-modal-destination = Destination
-collision-modal-size = Size
-collision-modal-modified = Modified
-collision-modal-hash-check = Quick hash (SHA-256)
-collision-modal-rename-placeholder = New filename
-collision-modal-confirm-rename = Rename
+collision-modal-title = फ़ाइल पहले से मौजूद है
+# MT
+collision-modal-overwrite = अधिलेखित करें
+# MT
+collision-modal-overwrite-if-newer = यदि नया हो तो अधिलेखित करें
+# MT
+collision-modal-skip = छोड़ें
+# MT
+collision-modal-keep-both = दोनों रखें
+# MT
+collision-modal-rename = नाम बदलें…
+# MT
+collision-modal-apply-to-all = सभी पर लागू करें
+# MT
+collision-modal-source = स्रोत
+# MT
+collision-modal-destination = गंतव्य
+# MT
+collision-modal-size = आकार
+# MT
+collision-modal-modified = संशोधित
+# MT
+collision-modal-hash-check = त्वरित हैश (SHA-256)
+# MT
+collision-modal-rename-placeholder = नया फ़ाइल नाम
+# MT
+collision-modal-confirm-rename = नाम बदलें
 
 # MT — Error log drawer
-error-log-title = Error log
-error-log-empty = No errors logged
-error-log-export-csv = Export CSV
-error-log-export-txt = Export text
-error-log-clear = Clear log
-error-log-col-time = Time
-error-log-col-job = Job
-error-log-col-path = Path
-error-log-col-code = Code
-error-log-col-message = Message
-error-log-col-resolution = Resolution
+error-log-title = त्रुटि लॉग
+# MT
+error-log-empty = कोई त्रुटि दर्ज नहीं
+# MT
+error-log-export-csv = CSV निर्यात करें
+# MT
+error-log-export-txt = टेक्स्ट निर्यात करें
+# MT
+error-log-clear = लॉग साफ़ करें
+# MT
+error-log-col-time = समय
+# MT
+error-log-col-job = कार्य
+# MT
+error-log-col-path = पथ
+# MT
+error-log-col-code = कोड
+# MT
+error-log-col-message = संदेश
+# MT
+error-log-col-resolution = समाधान
 
 # MT — History drawer (Phase 9)
-history-title = History
-history-empty = No jobs recorded yet
-history-unavailable = Copy history isn't available. The app couldn't open the SQLite store at startup.
-history-filter-any = any
-history-filter-kind = Kind
-history-filter-status = Status
-history-filter-text = Search
-history-refresh = Refresh
-history-export-csv = Export CSV
-history-purge-30 = Purge > 30 days
-history-rerun = Re-run
-history-detail-open = Details
-history-detail-title = Job details
-history-detail-empty = No items recorded
-history-col-date = Date
-history-col-kind = Kind
-history-col-src = Source
-history-col-dst = Destination
-history-col-files = Files
-history-col-size = Size
-history-col-status = Status
-history-col-duration = Duration
-history-col-error = Error
+history-title = इतिहास
+# MT
+history-empty = अभी तक कोई कार्य दर्ज नहीं
+# MT
+history-unavailable = प्रतिलिपि इतिहास उपलब्ध नहीं है। ऐप स्टार्टअप पर SQLite संग्रहण नहीं खोल सका।
+# MT
+history-filter-any = कोई भी
+# MT
+history-filter-kind = प्रकार
+# MT
+history-filter-status = स्थिति
+# MT
+history-filter-text = खोजें
+# MT
+history-refresh = ताज़ा करें
+# MT
+history-export-csv = CSV निर्यात करें
+# MT
+history-purge-30 = > 30 दिन पुराने हटाएँ
+# MT
+history-rerun = पुनः चलाएँ
+# MT
+history-detail-open = विवरण
+# MT
+history-detail-title = कार्य विवरण
+# MT
+history-detail-empty = कोई आइटम दर्ज नहीं
+# MT
+history-col-date = दिनांक
+# MT
+history-col-kind = प्रकार
+# MT
+history-col-src = स्रोत
+# MT
+history-col-dst = गंतव्य
+# MT
+history-col-files = फ़ाइलें
+# MT
+history-col-size = आकार
+# MT
+history-col-status = स्थिति
+# MT
+history-col-duration = अवधि
+# MT
+history-col-error = त्रुटि
 
-# MT — Phase 9 toasts
-toast-history-exported = History exported
-toast-history-rerun-queued = Re-run queued
+# MT
+toast-history-exported = इतिहास निर्यात किया गया
+# MT
+toast-history-rerun-queued = पुनः चलाना कतार में है
 
 # MT — Totals drawer (Phase 10)
-footer-totals = Totals
-totals-title = Totals
-totals-loading = Loading totals…
-totals-card-bytes = Total bytes copied
-totals-card-files = Files
-totals-card-jobs = Jobs
-totals-card-avg-rate = Average throughput
-totals-errors = errors
-totals-spark-title = Last 30 days
-totals-kinds-title = By kind
-totals-saved-title = Time saved (estimated)
-totals-saved-note = Estimated vs a baseline file-manager copy of the same workload.
-totals-reset = Reset statistics
-totals-reset-confirm = This deletes every stored job and item. Continue?
-totals-reset-confirm-yes = Yes, reset
-toast-totals-reset = Statistics reset
+footer-totals = कुल
+# MT
+totals-title = कुल
+# MT
+totals-loading = कुल लोड हो रहा है…
+# MT
+totals-card-bytes = कुल बाइट्स कॉपी किए
+# MT
+totals-card-files = फ़ाइलें
+# MT
+totals-card-jobs = कार्य
+# MT
+totals-card-avg-rate = औसत गति
+# MT
+totals-errors = त्रुटियाँ
+# MT
+totals-spark-title = पिछले 30 दिन
+# MT
+totals-kinds-title = प्रकार के अनुसार
+# MT
+totals-saved-title = बचाया गया समय (अनुमानित)
+# MT
+totals-saved-note = मानक फ़ाइल प्रबंधक द्वारा समान कार्यभार की मूल प्रतिलिपि की तुलना में अनुमानित।
+# MT
+totals-reset = आँकड़े रीसेट करें
+# MT
+totals-reset-confirm = यह सभी संग्रहित कार्य और आइटम हटा देता है। जारी रखें?
+# MT
+totals-reset-confirm-yes = हाँ, रीसेट करें
+# MT
+toast-totals-reset = आँकड़े रीसेट किए गए
+
+# MT — Phase 11a additions
+header-language-label = भाषा
+# MT
+header-language-title = भाषा बदलें
+
+# MT
+kind-copy = कॉपी
+# MT
+kind-move = मूव
+# MT
+kind-delete = हटाएँ
+# MT
+kind-secure-delete = सुरक्षित हटाएँ
+
+# MT
+status-running = चल रहा है
+# MT
+status-succeeded = सफल
+# MT
+status-failed = विफल
+# MT
+status-cancelled = रद्द
+# MT
+status-ok = ठीक
+# MT
+status-skipped = छोड़ा गया
+
+# MT
+history-search-placeholder = /पथ
+# MT
+toast-history-purged = 30 दिन से पुराने { $count } कार्य हटाए गए
+
+# MT
+err-source-required = कम से कम एक स्रोत पथ आवश्यक है।
+# MT
+err-destination-empty = गंतव्य पथ खाली है।
+# MT
+err-source-empty = स्रोत पथ खाली है।
+
+# MT
+duration-lt-1s = < 1 से
+# MT
+duration-ms = { $ms } मि.से
+# MT
+duration-seconds = { $s } से
+# MT
+duration-minutes-seconds = { $m } मि { $s } से
+# MT
+duration-hours-minutes = { $h } घ { $m } मि
+# MT
+duration-zero = 0 से
+
+# MT
+rate-unit-per-second = { $size }/से

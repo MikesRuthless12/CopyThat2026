@@ -126,104 +126,233 @@ toast-job-done = 転送が完了しました
 toast-copy-queued = コピーをキューに追加しました
 # MT
 toast-move-queued = 移動をキューに追加しました
-# Phase 8 additions — MT placeholders; review before 1.0.
-
-# MT — Toast messages
-toast-error-resolved = Error resolved
-toast-collision-resolved = Collision resolved
-toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
-toast-error-log-exported = Error log exported
+# MT — Phase 8 toast messages
+toast-error-resolved = エラーを解決しました
+# MT
+toast-collision-resolved = 競合を解決しました
+# MT
+toast-elevated-unavailable = 昇格権限での再試行は Phase 17 で提供されます — まだ利用できません
+# MT
+toast-error-log-exported = エラーログをエクスポートしました
 
 # MT — Error modal
-error-modal-title = A transfer failed
-error-modal-retry = Retry
-error-modal-retry-elevated = Retry with elevated permissions
-error-modal-skip = Skip
-error-modal-skip-all-kind = Skip all errors of this kind
-error-modal-abort = Abort all
-error-modal-path-label = Path
-error-modal-code-label = Code
+error-modal-title = 転送が失敗しました
+# MT
+error-modal-retry = 再試行
+# MT
+error-modal-retry-elevated = 昇格権限で再試行
+# MT
+error-modal-skip = スキップ
+# MT
+error-modal-skip-all-kind = この種類のエラーをすべてスキップ
+# MT
+error-modal-abort = すべて中止
+# MT
+error-modal-path-label = パス
+# MT
+error-modal-code-label = コード
 
 # MT — Error-kind labels
-err-not-found = File not found
-err-permission-denied = Permission denied
-err-disk-full = Destination disk is full
-err-interrupted = Operation interrupted
-err-verify-failed = Post-copy verification failed
-err-io-other = Unknown I/O error
+err-not-found = ファイルが見つかりません
+# MT
+err-permission-denied = アクセスが拒否されました
+# MT
+err-disk-full = 転送先ディスクに空き容量がありません
+# MT
+err-interrupted = 操作が中断されました
+# MT
+err-verify-failed = コピー後の検証に失敗しました
+# MT
+err-io-other = 不明な I/O エラー
 
 # MT — Collision modal
-collision-modal-title = File already exists
-collision-modal-overwrite = Overwrite
-collision-modal-overwrite-if-newer = Overwrite if newer
-collision-modal-skip = Skip
-collision-modal-keep-both = Keep both
-collision-modal-rename = Rename…
-collision-modal-apply-to-all = Apply to all
-collision-modal-source = Source
-collision-modal-destination = Destination
-collision-modal-size = Size
-collision-modal-modified = Modified
-collision-modal-hash-check = Quick hash (SHA-256)
-collision-modal-rename-placeholder = New filename
-collision-modal-confirm-rename = Rename
+collision-modal-title = ファイルが既に存在します
+# MT
+collision-modal-overwrite = 上書き
+# MT
+collision-modal-overwrite-if-newer = 新しい場合は上書き
+# MT
+collision-modal-skip = スキップ
+# MT
+collision-modal-keep-both = 両方を保持
+# MT
+collision-modal-rename = 名前を変更…
+# MT
+collision-modal-apply-to-all = すべてに適用
+# MT
+collision-modal-source = ソース
+# MT
+collision-modal-destination = 宛先
+# MT
+collision-modal-size = サイズ
+# MT
+collision-modal-modified = 更新日時
+# MT
+collision-modal-hash-check = 簡易ハッシュ (SHA-256)
+# MT
+collision-modal-rename-placeholder = 新しいファイル名
+# MT
+collision-modal-confirm-rename = 名前を変更
 
 # MT — Error log drawer
-error-log-title = Error log
-error-log-empty = No errors logged
-error-log-export-csv = Export CSV
-error-log-export-txt = Export text
-error-log-clear = Clear log
-error-log-col-time = Time
-error-log-col-job = Job
-error-log-col-path = Path
-error-log-col-code = Code
-error-log-col-message = Message
-error-log-col-resolution = Resolution
+error-log-title = エラーログ
+# MT
+error-log-empty = エラーは記録されていません
+# MT
+error-log-export-csv = CSV をエクスポート
+# MT
+error-log-export-txt = テキストをエクスポート
+# MT
+error-log-clear = ログをクリア
+# MT
+error-log-col-time = 時刻
+# MT
+error-log-col-job = ジョブ
+# MT
+error-log-col-path = パス
+# MT
+error-log-col-code = コード
+# MT
+error-log-col-message = メッセージ
+# MT
+error-log-col-resolution = 解決方法
 
 # MT — History drawer (Phase 9)
-history-title = History
-history-empty = No jobs recorded yet
-history-unavailable = Copy history isn't available. The app couldn't open the SQLite store at startup.
-history-filter-any = any
-history-filter-kind = Kind
-history-filter-status = Status
-history-filter-text = Search
-history-refresh = Refresh
-history-export-csv = Export CSV
-history-purge-30 = Purge > 30 days
-history-rerun = Re-run
-history-detail-open = Details
-history-detail-title = Job details
-history-detail-empty = No items recorded
-history-col-date = Date
-history-col-kind = Kind
-history-col-src = Source
-history-col-dst = Destination
-history-col-files = Files
-history-col-size = Size
-history-col-status = Status
-history-col-duration = Duration
-history-col-error = Error
+history-title = 履歴
+# MT
+history-empty = 記録されたジョブはありません
+# MT
+history-unavailable = コピー履歴は利用できません。アプリ起動時に SQLite ストアを開けませんでした。
+# MT
+history-filter-any = すべて
+# MT
+history-filter-kind = 種類
+# MT
+history-filter-status = 状態
+# MT
+history-filter-text = 検索
+# MT
+history-refresh = 更新
+# MT
+history-export-csv = CSV をエクスポート
+# MT
+history-purge-30 = 30 日より古いものを削除
+# MT
+history-rerun = 再実行
+# MT
+history-detail-open = 詳細
+# MT
+history-detail-title = ジョブの詳細
+# MT
+history-detail-empty = 記録された項目はありません
+# MT
+history-col-date = 日付
+# MT
+history-col-kind = 種類
+# MT
+history-col-src = ソース
+# MT
+history-col-dst = 宛先
+# MT
+history-col-files = ファイル
+# MT
+history-col-size = サイズ
+# MT
+history-col-status = 状態
+# MT
+history-col-duration = 所要時間
+# MT
+history-col-error = エラー
 
-# MT — Phase 9 toasts
-toast-history-exported = History exported
-toast-history-rerun-queued = Re-run queued
+# MT
+toast-history-exported = 履歴をエクスポートしました
+# MT
+toast-history-rerun-queued = 再実行をキューに追加しました
 
 # MT — Totals drawer (Phase 10)
-footer-totals = Totals
-totals-title = Totals
-totals-loading = Loading totals…
-totals-card-bytes = Total bytes copied
-totals-card-files = Files
-totals-card-jobs = Jobs
-totals-card-avg-rate = Average throughput
-totals-errors = errors
-totals-spark-title = Last 30 days
-totals-kinds-title = By kind
-totals-saved-title = Time saved (estimated)
-totals-saved-note = Estimated vs a baseline file-manager copy of the same workload.
-totals-reset = Reset statistics
-totals-reset-confirm = This deletes every stored job and item. Continue?
-totals-reset-confirm-yes = Yes, reset
-toast-totals-reset = Statistics reset
+footer-totals = 合計
+# MT
+totals-title = 合計
+# MT
+totals-loading = 合計を読み込み中…
+# MT
+totals-card-bytes = 総コピーバイト数
+# MT
+totals-card-files = ファイル
+# MT
+totals-card-jobs = ジョブ
+# MT
+totals-card-avg-rate = 平均スループット
+# MT
+totals-errors = エラー
+# MT
+totals-spark-title = 直近 30 日
+# MT
+totals-kinds-title = 種類別
+# MT
+totals-saved-title = 節約時間 (推定)
+# MT
+totals-saved-note = 標準のファイルマネージャーで同じ作業をコピーした場合との推定比較です。
+# MT
+totals-reset = 統計をリセット
+# MT
+totals-reset-confirm = 保存されているすべてのジョブと項目が削除されます。続行しますか?
+# MT
+totals-reset-confirm-yes = はい、リセット
+# MT
+toast-totals-reset = 統計をリセットしました
+
+# MT — Phase 11a additions
+header-language-label = 言語
+# MT
+header-language-title = 言語を変更
+
+# MT
+kind-copy = コピー
+# MT
+kind-move = 移動
+# MT
+kind-delete = 削除
+# MT
+kind-secure-delete = セキュア削除
+
+# MT
+status-running = 実行中
+# MT
+status-succeeded = 成功
+# MT
+status-failed = 失敗
+# MT
+status-cancelled = キャンセル
+# MT
+status-ok = OK
+# MT
+status-skipped = スキップ
+
+# MT
+history-search-placeholder = /パス
+# MT
+toast-history-purged = 30 日より古い { $count } 件のジョブを削除しました
+
+# MT
+err-source-required = 少なくとも 1 つのソースパスが必要です。
+# MT
+err-destination-empty = 宛先のパスが空です。
+# MT
+err-source-empty = ソースのパスが空です。
+
+# MT
+duration-lt-1s = < 1 秒
+# MT
+duration-ms = { $ms } ミリ秒
+# MT
+duration-seconds = { $s } 秒
+# MT
+duration-minutes-seconds = { $m } 分 { $s } 秒
+# MT
+duration-hours-minutes = { $h } 時間 { $m } 分
+# MT
+duration-zero = 0 秒
+
+# MT
+rate-unit-per-second = { $size }/秒

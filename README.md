@@ -5,7 +5,22 @@ matching every feature of TeraCopy and pushing past it, while staying as fast
 as (or faster than) Explorer / Finder / `cp` / `rsync` for typical desktop
 workloads.
 
-> **Status:** Phase 6 — platform-specific fast paths.
+> **Status:** Phase 11a — i18n core + MT drafts + RTL + ICU formatting.
+> Every user-visible string in the app now flows through Fluent
+> (167 keys across 18 locales). All 17 non-English locales ship
+> full MT drafts (Phase 4/5/8/9/10 translations plus the 20
+> Phase 11a additions), each line marked `# MT` for human review.
+> RTL is wired for Arabic (`dir="rtl"` on `<html>`), the temporary
+> header language-switcher hot-swaps locales without a restart
+> (Phase 12's Settings window will host the permanent control),
+> `Intl.NumberFormat` renders in the active locale for byte /
+> percent / number output, and `formatEta` routes every unit word
+> through Fluent. `xtask i18n-lint` now also verifies literal-key
+> coverage from source and Fluent syntax (duplicate-key reject),
+> in addition to the existing key-parity check. Per-locale
+> pixelmatch visual-regression is deferred to Phase 18 polish.
+>
+> _Previous status: Phase 6 — platform-specific fast paths._
 > `crates/copythat-platform` now ships a `fast_copy(src, dst, opts,
 > ctrl, events)` dispatcher that attempts, in order: reflink (Linux
 > Btrfs / XFS-with-reflink / ZFS / bcachefs, macOS APFS, Windows
