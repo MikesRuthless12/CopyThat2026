@@ -303,6 +303,39 @@ pub struct HistoryFilterDto {
     pub limit: Option<u32>,
 }
 
+/// Phase 10 — lifetime aggregates for the Totals drawer. Mirrors
+/// [`copythat_history::Totals`] with serialisable types.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TotalsDto {
+    pub bytes: u64,
+    pub files: u64,
+    pub jobs: u64,
+    pub errors: u64,
+    pub duration_ms: u64,
+    pub by_kind: Vec<KindBreakdownDto>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KindBreakdownDto {
+    pub kind: String,
+    pub bytes: u64,
+    pub files: u64,
+    pub jobs: u64,
+}
+
+/// Phase 10 — one bucket of the 30-day sparkline. `dateMs` is the
+/// UTC-midnight timestamp so the frontend can render in local tz.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DayTotalDto {
+    pub date_ms: i64,
+    pub bytes: u64,
+    pub files: u64,
+    pub jobs: u64,
+}
+
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CopyOptionsDto {

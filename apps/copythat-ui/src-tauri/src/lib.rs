@@ -152,6 +152,10 @@ pub fn run() {
             commands::history_purge,
             commands::history_export_csv,
             commands::history_rerun,
+            // Phase 10 — cumulative totals + daily buckets + reset.
+            commands::history_totals,
+            commands::history_daily,
+            commands::history_clear_all,
         ])
         .setup(move |app| {
             if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {

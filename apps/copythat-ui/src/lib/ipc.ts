@@ -136,9 +136,11 @@ export async function retryElevated(id: number): Promise<void> {
 // ---------- Phase 9 history ----------
 
 import type {
+  DayTotalDto,
   HistoryFilterDto,
   HistoryItemDto,
   HistoryJobDto,
+  TotalsDto,
 } from "./types";
 
 export async function historySearch(
@@ -164,4 +166,18 @@ export async function historyExportCsv(
 
 export async function historyRerun(rowId: number): Promise<number[]> {
   return invoke<number[]>("history_rerun", { rowId });
+}
+
+// ---------- Phase 10 totals ----------
+
+export async function historyTotals(sinceMs?: number): Promise<TotalsDto> {
+  return invoke<TotalsDto>("history_totals", { sinceMs });
+}
+
+export async function historyDaily(sinceMs: number): Promise<DayTotalDto[]> {
+  return invoke<DayTotalDto[]>("history_daily", { sinceMs });
+}
+
+export async function historyClearAll(): Promise<number> {
+  return invoke<number>("history_clear_all");
 }

@@ -51,6 +51,9 @@ const errorLogDrawerOpenStore = writable<boolean>(false);
 // source of truth).
 const historyDrawerOpenStore = writable<boolean>(false);
 const historyDetailRowStore = writable<number | null>(null);
+// Phase 10: Totals drawer open flag. The drawer fetches fresh
+// aggregates on open; no store cache.
+const totalsDrawerOpenStore = writable<boolean>(false);
 
 export const jobs: Readable<JobDto[]> = { subscribe: jobsStore.subscribe };
 export const globals: Readable<GlobalsDto> = {
@@ -97,6 +100,17 @@ export function openHistoryDetail(rowId: number): void {
 }
 export function closeHistoryDetail(): void {
   historyDetailRowStore.set(null);
+}
+
+// Phase 10 Totals drawer.
+export const totalsDrawerOpen: Readable<boolean> = {
+  subscribe: totalsDrawerOpenStore.subscribe,
+};
+export function openTotalsDrawer(): void {
+  totalsDrawerOpenStore.set(true);
+}
+export function closeTotalsDrawer(): void {
+  totalsDrawerOpenStore.set(false);
 }
 
 /// The sum of live per-job rates. `GlobalsDto.rateBps` from Rust is

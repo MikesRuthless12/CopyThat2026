@@ -9,6 +9,7 @@
     globals,
     openErrorLogDrawer,
     openHistoryDrawer,
+    openTotalsDrawer,
   } from "../stores";
   import { formatBytes } from "../format";
 
@@ -40,6 +41,15 @@
     {t("footer-errors")}
   </button>
   <span class="spacer"></span>
+  <button
+    class="history"
+    type="button"
+    onclick={openTotalsDrawer}
+    aria-label={t("footer-totals")}
+  >
+    <Icon name="info" size={14} />
+    {t("footer-totals")}
+  </button>
   <button
     class="history"
     type="button"
