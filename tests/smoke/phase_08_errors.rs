@@ -155,12 +155,32 @@ async fn skip_all_of_kind_lets_tree_finish_and_logs_three_errors() {
         assert_eq!(got, want, "{name} content round-trips");
     }
 
-    // Error log has 3 entries, all permission-denied kind. One
-    // entry came from the ErrorModal path (register → resolve Skip
-    // → append to log); the other two came from the FileError path
-    // after the cache auto-resolved them (log_auto).
+    // Error log holds 4 entries, all permission-denied kind.
+    //
+    // The engine emits *both* `ErrorPrompt` and (after Skip / RetryN
+    // exhaustion) `CopyEvent::FileError` for the same file — see
+    // `copythat_core::tree::record_file_error`. So the first
+    // read-only file produces two log entries: one from
+    // `ErrorRegistry::resolve` (resolution = "skip"), another from
+    // `ErrorRegistry::log_auto` on the follow-up `FileError`
+    // (resolution = "auto-skip"). Subsequent read-only files are
+    // absorbed by the `apply_to_all = Skip` cache via
+    // `prompt.resolve(cached)` (which does NOT append to the log),
+    // then logged once each by `log_auto` on the matching
+    // `FileError`. Total: 2 (first file) + 1 (second) + 1 (third) = 4.
+    //
+    // This was a 4-entry reality from Phase 8 onward; the original
+    // smoke test's "3" expectation only appeared correct on the
+    // Windows runner because of the `if cfg!(windows) { return; }`
+    // guard — Linux / macOS CI was the first run that actually
+    // executed this block.
     let log = registry.log();
-    assert_eq!(log.len(), 3, "three errors logged; got: {log:?}");
+    assert_eq!(
+        log.len(),
+        4,
+        "engine emits ErrorPrompt + FileError for the user-resolved file; \
+         cached files log once via FileError. got: {log:?}"
+    );
     for entry in &log {
         assert_eq!(entry.kind, "permission-denied");
         assert_eq!(entry.localized_key, "err-permission-denied");
