@@ -1,0 +1,113 @@
+[Desktop Entry]
+Type=Application
+Version=1.1
+Name=Copy That 2026
+Name[es]=Copy That 2026
+Name[zh-CN]=Copy That 2026
+Name[hi]=कॉपी दैट 2026
+Name[ar]=Copy That 2026
+Name[pt-BR]=Copy That 2026
+Name[ru]=Copy That 2026
+Name[ja]=Copy That 2026
+Name[de]=Copy That 2026
+Name[fr]=Copy That 2026
+Name[ko]=Copy That 2026
+Name[it]=Copy That 2026
+Name[tr]=Copy That 2026
+Name[vi]=Copy That 2026
+Name[pl]=Copy That 2026
+Name[nl]=Copy That 2026
+Name[id]=Copy That 2026
+Name[uk]=Copy That 2026
+GenericName=File Copier
+GenericName[es]=Copiador de archivos
+GenericName[zh-CN]=文件复制工具
+GenericName[hi]=फ़ाइल कॉपीयर
+GenericName[ar]=ناسخ الملفات
+GenericName[pt-BR]=Copiador de arquivos
+GenericName[ru]=Копировщик файлов
+GenericName[ja]=ファイルコピー
+GenericName[de]=Dateikopierer
+GenericName[fr]=Copieur de fichiers
+GenericName[ko]=파일 복사기
+GenericName[it]=Copiatore di file
+GenericName[tr]=Dosya Kopyalayıcı
+GenericName[vi]=Trình sao chép tệp
+GenericName[pl]=Kopiarka plików
+GenericName[nl]=Bestandskopieerder
+GenericName[id]=Penyalin Berkas
+GenericName[uk]=Копіювач файлів
+Comment=Byte-exact async file and folder copier
+Comment[es]=Copiador asíncrono byte-exacto de archivos y carpetas
+Comment[zh-CN]=字节精确的异步文件与文件夹复制工具
+Comment[hi]=बाइट-सटीक असिंक फ़ाइल और फ़ोल्डर कॉपीयर
+Comment[ar]=ناسخ ملفات ومجلدات غير متزامن دقيق بالبايت
+Comment[pt-BR]=Copiador assíncrono e byte-exato de arquivos e pastas
+Comment[ru]=Побайтно точный асинхронный копировщик файлов и папок
+Comment[ja]=バイト単位で正確な非同期ファイル・フォルダコピー
+Comment[de]=Byte-genauer asynchroner Datei- und Ordnerkopierer
+Comment[fr]=Copieur asynchrone octet par octet de fichiers et de dossiers
+Comment[ko]=바이트 단위 정확한 비동기 파일 및 폴더 복사기
+Comment[it]=Copiatore asincrono byte-esatto di file e cartelle
+Comment[tr]=Bayt-tam asenkron dosya ve klasör kopyalayıcı
+Comment[vi]=Trình sao chép tệp và thư mục không đồng bộ chính xác theo byte
+Comment[pl]=Asynchroniczny, dokładny co do bajtu, kopiarka plików i folderów
+Comment[nl]=Byte-exacte asynchrone bestands- en mapkopieerder
+Comment[id]=Penyalin berkas dan folder asinkron yang presisi per byte
+Comment[uk]=Побайтно точний асинхронний копіювач файлів і тек
+Exec=copythat %F
+Icon=copythat
+Terminal=false
+Categories=Utility;FileTools;FileManager;
+MimeType=inode/directory;application/octet-stream;
+Actions=Copy;Move;
+Keywords=copy;move;verify;checksum;tera;
+
+# Per-Phase-7 rule: these two Desktop Actions expose the shell-
+# integration verbs. The file manager renders them as sub-entries
+# under the application; right-clicking on files/folders with the
+# `MimeType` above will offer them via the MIME system.
+
+[Desktop Action Copy]
+Name=Copy with Copy That
+Name[es]=Copiar con Copy That
+Name[zh-CN]=用 Copy That 复制
+Name[hi]=Copy That के साथ कॉपी करें
+Name[ar]=انسخ باستخدام Copy That
+Name[pt-BR]=Copiar com Copy That
+Name[ru]=Копировать через Copy That
+Name[ja]=Copy That でコピー
+Name[de]=Mit Copy That kopieren
+Name[fr]=Copier avec Copy That
+Name[ko]=Copy That로 복사
+Name[it]=Copia con Copy That
+Name[tr]=Copy That ile kopyala
+Name[vi]=Sao chép bằng Copy That
+Name[pl]=Kopiuj za pomocą Copy That
+Name[nl]=Kopiëren met Copy That
+Name[id]=Salin dengan Copy That
+Name[uk]=Копіювати через Copy That
+Exec=copythat --enqueue copy %F
+Icon=copythat
+
+[Desktop Action Move]
+Name=Move with Copy That
+Name[es]=Mover con Copy That
+Name[zh-CN]=用 Copy That 移动
+Name[hi]=Copy That के साथ मूव करें
+Name[ar]=انقل باستخدام Copy That
+Name[pt-BR]=Mover com Copy That
+Name[ru]=Переместить через Copy That
+Name[ja]=Copy That で移動
+Name[de]=Mit Copy That verschieben
+Name[fr]=Déplacer avec Copy That
+Name[ko]=Copy That로 이동
+Name[it]=Sposta con Copy That
+Name[tr]=Copy That ile taşı
+Name[vi]=Di chuyển bằng Copy That
+Name[pl]=Przenieś za pomocą Copy That
+Name[nl]=Verplaatsen met Copy That
+Name[id]=Pindahkan dengan Copy That
+Name[uk]=Перемістити через Copy That
+Exec=copythat --enqueue move %F
+Icon=copythat
