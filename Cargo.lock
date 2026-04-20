@@ -588,6 +588,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "copythat-shellext"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "windows",
+ "windows-core 0.61.2",
+ "windows-implement",
+]
+
+[[package]]
 name = "copythat-ui"
 version = "0.1.0"
 dependencies = [
