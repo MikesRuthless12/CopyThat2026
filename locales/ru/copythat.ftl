@@ -367,3 +367,145 @@ settings-tab-appearance = Внешний вид
 settings-section-language = Язык
 # MT
 settings-phase-12-hint = Другие настройки (тема, параметры передачи по умолчанию, алгоритм проверки, профили) появятся на этапе 12.
+
+# MT — Phase 12 Settings window
+settings-loading = Загрузка настроек…
+# MT
+settings-tab-transfer = Передача
+# MT
+settings-tab-shell = Оболочка
+# MT
+settings-tab-secure-delete = Безопасное удаление
+# MT
+settings-tab-advanced = Дополнительно
+# MT
+settings-tab-profiles = Профили
+
+# MT
+settings-section-theme = Тема
+# MT
+settings-theme-auto = Автоматически
+# MT
+settings-theme-light = Светлая
+# MT
+settings-theme-dark = Тёмная
+# MT
+settings-start-with-os = Запускать при старте системы
+# MT
+settings-single-instance = Один запущенный экземпляр
+# MT
+settings-minimize-to-tray = Сворачивать в трей при закрытии
+
+# MT
+settings-buffer-size = Размер буфера
+# MT
+settings-verify = Проверять после копирования
+# MT
+settings-verify-off = Выключено
+# MT
+settings-concurrency = Параллельность
+# MT
+settings-concurrency-auto = Авто
+# MT
+settings-reflink = Reflink / быстрые пути
+# MT
+settings-reflink-prefer = Предпочитать
+# MT
+settings-reflink-avoid = Избегать reflink
+# MT
+settings-reflink-disabled = Всегда использовать async-движок
+# MT
+settings-fsync-on-close = Синхронизировать на диск при закрытии (медленнее, надёжнее)
+# MT
+settings-preserve-timestamps = Сохранять временные метки
+# MT
+settings-preserve-permissions = Сохранять права доступа
+# MT
+settings-preserve-acls = Сохранять ACL (этап 14)
+
+# MT
+settings-context-menu = Включить пункты контекстного меню оболочки
+# MT
+settings-intercept-copy = Перехватывать стандартный обработчик копирования (Windows)
+# MT
+settings-intercept-copy-hint = Когда включено, Ctrl+C / Ctrl+V в Проводнике идёт через Copy That. Регистрация на этапе 14.
+# MT
+settings-notify-completion = Уведомлять по завершении задания
+
+# MT
+settings-shred-method = Метод затирания по умолчанию
+# MT
+settings-shred-zero = Нули (1 проход)
+# MT
+settings-shred-random = Случайные (1 проход)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 прохода)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 проходов)
+# MT
+settings-shred-gutmann = Гуттманна (35 проходов)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = Требовать двойное подтверждение перед затиранием
+
+# MT
+settings-log-level = Уровень журнала
+# MT
+settings-log-off = Выключено
+# MT
+settings-telemetry = Телеметрия
+# MT
+settings-telemetry-never = Никогда — данные не отправляются ни на одном уровне
+# MT
+settings-error-policy = Политика ошибок по умолчанию
+# MT
+settings-error-policy-ask = Спрашивать
+# MT
+settings-error-policy-skip = Пропускать
+# MT
+settings-error-policy-retry = Повтор с задержкой
+# MT
+settings-error-policy-abort = Прервать при первой ошибке
+# MT
+settings-history-retention = Хранение истории (дней)
+# MT
+settings-history-retention-hint = 0 = хранить всегда. Любое другое значение автоматически удаляет старые задания при запуске.
+# MT
+settings-database-path = Путь к базе данных
+# MT
+settings-database-path-default = (по умолчанию — каталог данных ОС)
+# MT
+settings-reset-all = Сбросить по умолчанию
+# MT
+settings-reset-confirm = Сбросить все настройки к значениям по умолчанию? Профили не изменятся.
+
+# MT
+settings-profiles-hint = Сохраняйте текущие настройки под именем; позже загружайте их, чтобы переключаться без настройки каждого параметра.
+# MT
+settings-profile-name-placeholder = Имя профиля
+# MT
+settings-profile-save = Сохранить
+# MT
+settings-profile-import = Импорт…
+# MT
+settings-profile-load = Загрузить
+# MT
+settings-profile-export = Экспорт…
+# MT
+settings-profile-delete = Удалить
+# MT
+settings-profile-empty = Сохранённых профилей нет.
+# MT
+settings-profile-import-prompt = Имя для импортируемого профиля:
+
+# MT
+toast-settings-reset = Настройки сброшены
+# MT
+toast-profile-saved = Профиль сохранён
+# MT
+toast-profile-loaded = Профиль загружен
+# MT
+toast-profile-exported = Профиль экспортирован
+# MT
+toast-profile-imported = Профиль импортирован

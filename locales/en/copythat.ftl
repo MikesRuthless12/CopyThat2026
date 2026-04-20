@@ -230,11 +230,99 @@ duration-zero = 0s
 # even though the SI-derived "/s" is near-universal.
 rate-unit-per-second = { $size }/s
 
-# Phase 11b — Settings modal. Minimal today (General tab with
-# Language only); Phase 12 extends with Transfer / Shell /
-# Secure-delete / Advanced tabs.
+# Phase 11b — Settings modal skeleton. Phase 12 expanded this into a
+# full six-tab preferences window; the `settings-phase-12-hint` key
+# is retired in favour of `settings-tab-profiles` + concrete labels.
 settings-title = Settings
 settings-tab-general = General
 settings-tab-appearance = Appearance
 settings-section-language = Language
 settings-phase-12-hint = More settings (theme, transfer defaults, verify algorithm, profiles) arrive in Phase 12.
+
+# Phase 12 — full Settings window keys. Grouped by tab so the
+# human-review pass can pick one section at a time. Every field
+# label and every option label that the user will actually read
+# has its own key; dynamic wire values (enum discriminants like
+# "auto" / "prefer") stay untranslated on the wire.
+
+settings-loading = Loading settings…
+settings-tab-transfer = Transfer
+settings-tab-shell = Shell
+settings-tab-secure-delete = Secure delete
+settings-tab-advanced = Advanced
+settings-tab-profiles = Profiles
+
+# General tab additions
+settings-section-theme = Theme
+settings-theme-auto = Auto
+settings-theme-light = Light
+settings-theme-dark = Dark
+settings-start-with-os = Launch on system startup
+settings-single-instance = Single running instance
+settings-minimize-to-tray = Minimize to tray on close
+
+# Transfer tab
+settings-buffer-size = Buffer size
+settings-verify = Verify after copy
+settings-verify-off = Off
+settings-concurrency = Concurrency
+settings-concurrency-auto = Auto
+settings-reflink = Reflink / fast paths
+settings-reflink-prefer = Prefer
+settings-reflink-avoid = Avoid reflink
+settings-reflink-disabled = Always use async engine
+settings-fsync-on-close = Sync to disk on close (slower, safer)
+settings-preserve-timestamps = Preserve timestamps
+settings-preserve-permissions = Preserve permissions
+settings-preserve-acls = Preserve ACLs (Phase 14)
+
+# Shell tab
+settings-context-menu = Enable shell context menu entries
+settings-intercept-copy = Intercept default copy handler (Windows)
+settings-intercept-copy-hint = When on, Explorer's Ctrl+C / Ctrl+V routes through Copy That. Registration lands in Phase 14.
+settings-notify-completion = Notify on job completion
+
+# Secure delete tab
+settings-shred-method = Default shred method
+settings-shred-zero = Zero (1 pass)
+settings-shred-random = Random (1 pass)
+settings-shred-dod3 = DoD 5220.22-M (3 passes)
+settings-shred-dod7 = DoD 5220.22-M (7 passes)
+settings-shred-gutmann = Gutmann (35 passes)
+settings-shred-nist = NIST 800-88
+settings-shred-confirm-twice = Require double confirmation before shredding
+
+# Advanced tab
+settings-log-level = Log level
+settings-log-off = Off
+settings-telemetry = Telemetry
+settings-telemetry-never = Never — no phone-home at any log level
+settings-error-policy = Default error policy
+settings-error-policy-ask = Ask
+settings-error-policy-skip = Skip
+settings-error-policy-retry = Retry with backoff
+settings-error-policy-abort = Abort on first failure
+settings-history-retention = History retention (days)
+settings-history-retention-hint = 0 = keep forever. Any other value auto-purges older jobs on startup.
+settings-database-path = Database path
+settings-database-path-default = (default — OS data directory)
+settings-reset-all = Reset to defaults
+settings-reset-confirm = Reset every preference to its default? Profiles are unaffected.
+
+# Profiles tab
+settings-profiles-hint = Save the current settings under a name; load it later to flip back without touching individual knobs.
+settings-profile-name-placeholder = Profile name
+settings-profile-save = Save
+settings-profile-import = Import…
+settings-profile-load = Load
+settings-profile-export = Export…
+settings-profile-delete = Delete
+settings-profile-empty = No profiles saved yet.
+settings-profile-import-prompt = Name for the imported profile:
+
+# Toasts driven by Phase 12 profile actions
+toast-settings-reset = Settings reset
+toast-profile-saved = Profile saved
+toast-profile-loaded = Profile loaded
+toast-profile-exported = Profile exported
+toast-profile-imported = Profile imported

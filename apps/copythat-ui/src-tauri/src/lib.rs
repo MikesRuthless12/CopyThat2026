@@ -103,10 +103,23 @@ pub fn run() {
     // user-data directory. Failure is non-fatal: the app still
     // launches with `history: None`, the runner skips recording,
     // and the history drawer shows a typed "unavailable" message.
-    let app_state = match open_history_blocking() {
-        Some(history) => state::AppState::with_history(history),
-        None => state::AppState::new(),
+    let history = open_history_blocking();
+
+    // Phase 12 — load persisted preferences. Failure is non-fatal
+    // too: a missing / unreadable `settings.toml` falls through to
+    // `Settings::default()`, and a bogus `settings-profiles/`
+    // directory just surfaces an empty profile list. Errors get
+    // logged to stderr so the first-run log captures them.
+    let (settings, settings_path) = load_settings_blocking();
+    let profiles = match copythat_settings::ProfileStore::default_store() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("copythat: profiles store init failed: {e}");
+            copythat_settings::ProfileStore::new(std::path::PathBuf::new())
+        }
     };
+
+    let app_state = state::AppState::new_with(history, settings, settings_path, profiles);
 
     builder
         .plugin(tauri_plugin_dialog::init())
@@ -156,6 +169,17 @@ pub fn run() {
             commands::history_totals,
             commands::history_daily,
             commands::history_clear_all,
+            // Phase 12 — settings + profiles + debug hook.
+            commands::get_settings,
+            commands::update_settings,
+            commands::reset_settings,
+            commands::effective_buffer_size,
+            commands::list_profiles,
+            commands::save_profile,
+            commands::load_profile,
+            commands::delete_profile,
+            commands::export_profile,
+            commands::import_profile,
         ])
         .setup(move |app| {
             if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {
@@ -182,6 +206,29 @@ fn open_history_blocking() -> Option<copythat_history::History> {
         Err(e) => {
             eprintln!("copythat: history open failed: {e}");
             None
+        }
+    }
+}
+
+/// Phase 12 — load `settings.toml` from the OS config dir. Returns
+/// `(Settings, path)` — the companion path is handed to `AppState`
+/// so every subsequent `update_settings` writes back to the same
+/// file without re-resolving.
+fn load_settings_blocking() -> (copythat_settings::Settings, std::path::PathBuf) {
+    match copythat_settings::Settings::default_path() {
+        Ok(path) => {
+            let settings = copythat_settings::Settings::load_from(&path).unwrap_or_else(|e| {
+                eprintln!("copythat: settings load failed ({e}); falling back to defaults");
+                copythat_settings::Settings::default()
+            });
+            (settings, path)
+        }
+        Err(e) => {
+            eprintln!("copythat: settings path resolution failed: {e}");
+            (
+                copythat_settings::Settings::default(),
+                std::path::PathBuf::new(),
+            )
         }
     }
 }

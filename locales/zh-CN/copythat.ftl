@@ -367,3 +367,145 @@ settings-tab-appearance = 外观
 settings-section-language = 语言
 # MT
 settings-phase-12-hint = 更多设置(主题、传输默认值、验证算法、配置文件)将在第 12 阶段推出。
+
+# MT — Phase 12 Settings window
+settings-loading = 正在加载设置…
+# MT
+settings-tab-transfer = 传输
+# MT
+settings-tab-shell = 外壳
+# MT
+settings-tab-secure-delete = 安全删除
+# MT
+settings-tab-advanced = 高级
+# MT
+settings-tab-profiles = 配置文件
+
+# MT
+settings-section-theme = 主题
+# MT
+settings-theme-auto = 自动
+# MT
+settings-theme-light = 浅色
+# MT
+settings-theme-dark = 深色
+# MT
+settings-start-with-os = 开机启动
+# MT
+settings-single-instance = 单实例运行
+# MT
+settings-minimize-to-tray = 关闭时最小化到托盘
+
+# MT
+settings-buffer-size = 缓冲区大小
+# MT
+settings-verify = 复制后校验
+# MT
+settings-verify-off = 关闭
+# MT
+settings-concurrency = 并发
+# MT
+settings-concurrency-auto = 自动
+# MT
+settings-reflink = Reflink / 快速路径
+# MT
+settings-reflink-prefer = 优先
+# MT
+settings-reflink-avoid = 避免 reflink
+# MT
+settings-reflink-disabled = 始终使用异步引擎
+# MT
+settings-fsync-on-close = 关闭时同步到磁盘(较慢,更安全)
+# MT
+settings-preserve-timestamps = 保留时间戳
+# MT
+settings-preserve-permissions = 保留权限
+# MT
+settings-preserve-acls = 保留 ACL(第 14 阶段)
+
+# MT
+settings-context-menu = 启用外壳上下文菜单项
+# MT
+settings-intercept-copy = 拦截默认复制处理程序(Windows)
+# MT
+settings-intercept-copy-hint = 启用后,资源管理器的 Ctrl+C / Ctrl+V 通过 Copy That。注册在第 14 阶段。
+# MT
+settings-notify-completion = 任务完成时通知
+
+# MT
+settings-shred-method = 默认粉碎方法
+# MT
+settings-shred-zero = 零(1 遍)
+# MT
+settings-shred-random = 随机(1 遍)
+# MT
+settings-shred-dod3 = DoD 5220.22-M(3 遍)
+# MT
+settings-shred-dod7 = DoD 5220.22-M(7 遍)
+# MT
+settings-shred-gutmann = Gutmann(35 遍)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = 粉碎前要求双重确认
+
+# MT
+settings-log-level = 日志级别
+# MT
+settings-log-off = 关闭
+# MT
+settings-telemetry = 遥测
+# MT
+settings-telemetry-never = 从不 — 任何日志级别下都不发送数据
+# MT
+settings-error-policy = 默认错误策略
+# MT
+settings-error-policy-ask = 询问
+# MT
+settings-error-policy-skip = 跳过
+# MT
+settings-error-policy-retry = 带退避重试
+# MT
+settings-error-policy-abort = 首次错误时中止
+# MT
+settings-history-retention = 历史保留(天)
+# MT
+settings-history-retention-hint = 0 = 永久保留。其他值会在启动时自动清理旧任务。
+# MT
+settings-database-path = 数据库路径
+# MT
+settings-database-path-default = (默认 — 系统数据目录)
+# MT
+settings-reset-all = 重置为默认
+# MT
+settings-reset-confirm = 重置所有偏好设置?配置文件不受影响。
+
+# MT
+settings-profiles-hint = 将当前设置另存为命名配置;稍后加载,无需逐项调整即可切换。
+# MT
+settings-profile-name-placeholder = 配置文件名称
+# MT
+settings-profile-save = 保存
+# MT
+settings-profile-import = 导入…
+# MT
+settings-profile-load = 加载
+# MT
+settings-profile-export = 导出…
+# MT
+settings-profile-delete = 删除
+# MT
+settings-profile-empty = 尚未保存任何配置文件。
+# MT
+settings-profile-import-prompt = 导入配置文件的名称:
+
+# MT
+toast-settings-reset = 设置已重置
+# MT
+toast-profile-saved = 配置文件已保存
+# MT
+toast-profile-loaded = 配置文件已加载
+# MT
+toast-profile-exported = 配置文件已导出
+# MT
+toast-profile-imported = 配置文件已导入

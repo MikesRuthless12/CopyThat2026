@@ -80,10 +80,17 @@ async fn enqueue(
         return Err("err-destination-empty".to_string());
     }
 
-    let copy_opts = apply_options(&options)?;
-    let verifier = resolve_verifier(&options)?;
+    // Phase 12: per-enqueue `CopyOptionsDto` overrides come from the
+    // frontend's drop-dialog and still win (highest precedence);
+    // anything the UI didn't set falls back to the live Settings
+    // snapshot so defaults hot-reload from Settings → General /
+    // Transfer without a restart. `effective_buffer_size` clamps to
+    // the engine's window.
+    let settings = state.settings_snapshot();
+    let copy_opts = apply_options(&options, &settings)?;
+    let verifier = resolve_verifier(&options, &settings)?;
     let collision_policy = parse_collision_policy(options.collision.as_deref())?;
-    let error_policy = parse_error_policy(options.on_error.as_ref());
+    let error_policy = parse_error_policy(options.on_error.as_ref(), &settings);
 
     let srcs: Vec<PathBuf> = sources
         .into_iter()
@@ -122,11 +129,14 @@ fn parse_collision_policy(raw: Option<&str>) -> Result<copythat_core::CollisionP
     }
 }
 
-fn parse_error_policy(raw: Option<&crate::ipc::ErrorPolicyDto>) -> copythat_core::ErrorPolicy {
+fn parse_error_policy(
+    raw: Option<&crate::ipc::ErrorPolicyDto>,
+    settings: &copythat_settings::Settings,
+) -> copythat_core::ErrorPolicy {
     use crate::ipc::ErrorPolicyDto;
     use copythat_core::ErrorPolicy;
     match raw {
-        None | Some(ErrorPolicyDto::Ask) => ErrorPolicy::Ask,
+        Some(ErrorPolicyDto::Ask) => ErrorPolicy::Ask,
         Some(ErrorPolicyDto::Skip) => ErrorPolicy::Skip,
         Some(ErrorPolicyDto::Abort) => ErrorPolicy::Abort,
         Some(ErrorPolicyDto::RetryN {
@@ -136,11 +146,44 @@ fn parse_error_policy(raw: Option<&crate::ipc::ErrorPolicyDto>) -> copythat_core
             max_attempts: *max_attempts,
             backoff_ms: *backoff_ms,
         },
+        None => match settings.advanced.error_policy {
+            copythat_settings::ErrorPolicyChoice::Ask => ErrorPolicy::Ask,
+            copythat_settings::ErrorPolicyChoice::Skip => ErrorPolicy::Skip,
+            copythat_settings::ErrorPolicyChoice::Abort => ErrorPolicy::Abort,
+            copythat_settings::ErrorPolicyChoice::RetryN {
+                max_attempts,
+                backoff_ms,
+            } => ErrorPolicy::RetryN {
+                max_attempts,
+                backoff_ms,
+            },
+        },
     }
 }
 
-fn apply_options(dto: &CopyOptionsDto) -> Result<CopyOptions, String> {
-    let mut opts = CopyOptions::default();
+fn apply_options(
+    dto: &CopyOptionsDto,
+    settings: &copythat_settings::Settings,
+) -> Result<CopyOptions, String> {
+    // Start from the engine's `CopyOptions::default()`, then layer on
+    // Settings (Phase 12 baseline), then the per-enqueue DTO (UI
+    // override). DTO-level `Some(_)` always wins so individual copies
+    // can still opt out of Settings on a case-by-case basis.
+    let mut opts = CopyOptions {
+        buffer_size: settings.transfer.effective_buffer_size(),
+        fsync_on_close: settings.transfer.fsync_on_close,
+        preserve_times: settings.transfer.preserve_timestamps,
+        preserve_permissions: settings.transfer.preserve_permissions,
+        strategy: match settings.transfer.reflink {
+            copythat_settings::ReflinkPreference::Prefer => copythat_core::CopyStrategy::Auto,
+            copythat_settings::ReflinkPreference::Avoid => copythat_core::CopyStrategy::NoReflink,
+            copythat_settings::ReflinkPreference::Disabled => {
+                copythat_core::CopyStrategy::AlwaysAsync
+            }
+        },
+        ..Default::default()
+    };
+
     if let Some(v) = dto.preserve_times {
         opts.preserve_times = v;
     }
@@ -156,15 +199,29 @@ fn apply_options(dto: &CopyOptionsDto) -> Result<CopyOptions, String> {
     Ok(opts)
 }
 
-fn resolve_verifier(dto: &CopyOptionsDto) -> Result<Option<copythat_core::Verifier>, String> {
-    let Some(name) = dto.verify.as_deref() else {
+fn resolve_verifier(
+    dto: &CopyOptionsDto,
+    settings: &copythat_settings::Settings,
+) -> Result<Option<copythat_core::Verifier>, String> {
+    // Per-enqueue override takes precedence; otherwise read from
+    // Settings → Transfer → Verify.
+    let name_override = dto
+        .verify
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let name = match name_override {
+        Some(n) => Some(n.to_string()),
+        None => settings
+            .transfer
+            .verify
+            .as_algorithm()
+            .map(|s| s.to_string()),
+    };
+    let Some(name) = name else {
         return Ok(None);
     };
-    let name = name.trim();
-    if name.is_empty() {
-        return Ok(None);
-    }
-    let algo = copythat_hash::HashAlgorithm::from_str(name)
+    let algo = copythat_hash::HashAlgorithm::from_str(&name)
         .map_err(|e| format!("unknown verify algorithm: {e}"))?;
     Ok(Some(algo.verifier()))
 }
@@ -660,4 +717,143 @@ fn history_item_to_dto(r: copythat_history::ItemRow) -> crate::ipc::HistoryItemD
         error_msg: r.error_msg,
         timestamp_ms: r.timestamp_ms,
     }
+}
+
+// ---------------------------------------------------------------------
+// Phase 12 — Settings + Profile commands
+// ---------------------------------------------------------------------
+
+/// Snapshot the live settings. Never fails — missing backing file
+/// means the store is holding defaults.
+#[tauri::command]
+pub fn get_settings(state: State<'_, AppState>) -> crate::ipc::SettingsDto {
+    let s = state.settings_snapshot();
+    (&s).into()
+}
+
+/// Replace the live settings with a frontend-authored blob. Persists
+/// to `settings_path` atomically; subsequent enqueues read the new
+/// values from the in-memory `RwLock` without a restart. Returns the
+/// resulting DTO so the frontend can re-bind controls in one step
+/// (avoids a racy round-trip through a follow-up `get_settings`).
+#[tauri::command]
+pub fn update_settings(
+    dto: crate::ipc::SettingsDto,
+    state: State<'_, AppState>,
+) -> Result<crate::ipc::SettingsDto, String> {
+    let next = dto.into_settings();
+    // Persist first — we'd rather keep the old in-memory value if
+    // disk write fails than lie to the user that the save succeeded.
+    let path = state.settings_path.as_ref();
+    if !path.as_os_str().is_empty() {
+        next.save_to(path).map_err(|e| e.to_string())?;
+    }
+    {
+        let mut live = state
+            .settings
+            .write()
+            .map_err(|_| "settings-lock-poisoned".to_string())?;
+        *live = next.clone();
+    }
+    Ok((&next).into())
+}
+
+/// Replace the live settings with `Settings::default()` and persist.
+#[tauri::command]
+pub fn reset_settings(state: State<'_, AppState>) -> Result<crate::ipc::SettingsDto, String> {
+    let next = copythat_settings::Settings::default();
+    let path = state.settings_path.as_ref();
+    if !path.as_os_str().is_empty() {
+        next.save_to(path).map_err(|e| e.to_string())?;
+    }
+    {
+        let mut live = state
+            .settings
+            .write()
+            .map_err(|_| "settings-lock-poisoned".to_string())?;
+        *live = next.clone();
+    }
+    Ok((&next).into())
+}
+
+/// Debug hook used by the Phase 12 smoke test. Returns the clamped
+/// buffer size the engine would actually use given the current
+/// `transfer.buffer_size_bytes`. Lets the test round-trip "change
+/// to 4 MiB" without spinning up a real copy.
+#[tauri::command]
+pub fn effective_buffer_size(state: State<'_, AppState>) -> u64 {
+    state.settings_snapshot().transfer.effective_buffer_size() as u64
+}
+
+#[tauri::command]
+pub fn list_profiles(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::ipc::ProfileInfoDto>, String> {
+    let entries = state.profiles.list().map_err(|e| e.to_string())?;
+    Ok(entries.iter().map(|p| p.into()).collect())
+}
+
+#[tauri::command]
+pub fn save_profile(
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<crate::ipc::ProfileInfoDto, String> {
+    let settings = state.settings_snapshot();
+    let info = state
+        .profiles
+        .save_replacing(&name, &settings)
+        .map_err(|e| e.to_string())?;
+    Ok((&info).into())
+}
+
+#[tauri::command]
+pub fn load_profile(
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<crate::ipc::SettingsDto, String> {
+    let profile = state.profiles.load(&name).map_err(|e| e.to_string())?;
+    // Loading a profile also activates it — persist + publish on the
+    // live settings. Saves the caller a follow-up `update_settings`.
+    let path = state.settings_path.as_ref();
+    if !path.as_os_str().is_empty() {
+        profile.save_to(path).map_err(|e| e.to_string())?;
+    }
+    {
+        let mut live = state
+            .settings
+            .write()
+            .map_err(|_| "settings-lock-poisoned".to_string())?;
+        *live = profile.clone();
+    }
+    Ok((&profile).into())
+}
+
+#[tauri::command]
+pub fn delete_profile(name: String, state: State<'_, AppState>) -> Result<(), String> {
+    state.profiles.delete(&name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn export_profile(
+    name: String,
+    dest: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state
+        .profiles
+        .export(&name, std::path::Path::new(&dest))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn import_profile(
+    name: String,
+    src: String,
+    state: State<'_, AppState>,
+) -> Result<crate::ipc::ProfileInfoDto, String> {
+    let info = state
+        .profiles
+        .import(&name, std::path::Path::new(&src))
+        .map_err(|e| e.to_string())?;
+    Ok((&info).into())
 }

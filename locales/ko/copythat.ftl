@@ -367,3 +367,145 @@ settings-tab-appearance = 모양
 settings-section-language = 언어
 # MT
 settings-phase-12-hint = 더 많은 설정(테마, 전송 기본값, 확인 알고리즘, 프로필)은 12단계에서 추가됩니다.
+
+# MT — Phase 12 Settings window
+settings-loading = 설정 불러오는 중…
+# MT
+settings-tab-transfer = 전송
+# MT
+settings-tab-shell = 셸
+# MT
+settings-tab-secure-delete = 안전하게 삭제
+# MT
+settings-tab-advanced = 고급
+# MT
+settings-tab-profiles = 프로필
+
+# MT
+settings-section-theme = 테마
+# MT
+settings-theme-auto = 자동
+# MT
+settings-theme-light = 라이트
+# MT
+settings-theme-dark = 다크
+# MT
+settings-start-with-os = 시스템 시작 시 실행
+# MT
+settings-single-instance = 단일 인스턴스 실행
+# MT
+settings-minimize-to-tray = 닫을 때 트레이로 최소화
+
+# MT
+settings-buffer-size = 버퍼 크기
+# MT
+settings-verify = 복사 후 확인
+# MT
+settings-verify-off = 끄기
+# MT
+settings-concurrency = 동시성
+# MT
+settings-concurrency-auto = 자동
+# MT
+settings-reflink = Reflink / 빠른 경로
+# MT
+settings-reflink-prefer = 선호
+# MT
+settings-reflink-avoid = reflink 피하기
+# MT
+settings-reflink-disabled = 항상 비동기 엔진 사용
+# MT
+settings-fsync-on-close = 닫을 때 디스크에 동기화 (느림, 안전함)
+# MT
+settings-preserve-timestamps = 타임스탬프 유지
+# MT
+settings-preserve-permissions = 권한 유지
+# MT
+settings-preserve-acls = ACL 유지 (14단계)
+
+# MT
+settings-context-menu = 셸 컨텍스트 메뉴 항목 사용
+# MT
+settings-intercept-copy = 기본 복사 처리기 가로채기 (Windows)
+# MT
+settings-intercept-copy-hint = 켜면 Explorer의 Ctrl+C / Ctrl+V가 Copy That을 거칩니다. 등록은 14단계.
+# MT
+settings-notify-completion = 작업 완료 시 알림
+
+# MT
+settings-shred-method = 기본 파쇄 방법
+# MT
+settings-shred-zero = 영 (1회)
+# MT
+settings-shred-random = 무작위 (1회)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3회)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7회)
+# MT
+settings-shred-gutmann = Gutmann (35회)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = 파쇄 전 이중 확인 요구
+
+# MT
+settings-log-level = 로그 수준
+# MT
+settings-log-off = 끄기
+# MT
+settings-telemetry = 원격 측정
+# MT
+settings-telemetry-never = 사용 안 함 — 어떤 로그 수준에서도 데이터 전송 없음
+# MT
+settings-error-policy = 기본 오류 정책
+# MT
+settings-error-policy-ask = 물어보기
+# MT
+settings-error-policy-skip = 건너뛰기
+# MT
+settings-error-policy-retry = 대기 후 재시도
+# MT
+settings-error-policy-abort = 첫 오류에 중단
+# MT
+settings-history-retention = 기록 보존 (일)
+# MT
+settings-history-retention-hint = 0 = 영구 보관. 다른 값은 시작 시 오래된 작업을 자동 정리합니다.
+# MT
+settings-database-path = 데이터베이스 경로
+# MT
+settings-database-path-default = (기본값 — OS 데이터 디렉터리)
+# MT
+settings-reset-all = 기본값으로 재설정
+# MT
+settings-reset-confirm = 모든 기본 설정을 재설정하시겠습니까? 프로필은 영향받지 않습니다.
+
+# MT
+settings-profiles-hint = 현재 설정을 이름으로 저장하세요; 나중에 불러오면 개별 조정 없이 전환할 수 있습니다.
+# MT
+settings-profile-name-placeholder = 프로필 이름
+# MT
+settings-profile-save = 저장
+# MT
+settings-profile-import = 가져오기…
+# MT
+settings-profile-load = 불러오기
+# MT
+settings-profile-export = 내보내기…
+# MT
+settings-profile-delete = 삭제
+# MT
+settings-profile-empty = 저장된 프로필이 없습니다.
+# MT
+settings-profile-import-prompt = 가져올 프로필의 이름:
+
+# MT
+toast-settings-reset = 설정이 재설정되었습니다
+# MT
+toast-profile-saved = 프로필이 저장되었습니다
+# MT
+toast-profile-loaded = 프로필을 불러왔습니다
+# MT
+toast-profile-exported = 프로필을 내보냈습니다
+# MT
+toast-profile-imported = 프로필을 가져왔습니다

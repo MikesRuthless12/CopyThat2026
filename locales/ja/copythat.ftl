@@ -367,3 +367,145 @@ settings-tab-appearance = 外観
 settings-section-language = 言語
 # MT
 settings-phase-12-hint = 他の設定 (テーマ、転送デフォルト、検証アルゴリズム、プロファイル) は Phase 12 で追加されます。
+
+# MT — Phase 12 Settings window
+settings-loading = 設定を読み込み中…
+# MT
+settings-tab-transfer = 転送
+# MT
+settings-tab-shell = シェル
+# MT
+settings-tab-secure-delete = セキュア削除
+# MT
+settings-tab-advanced = 詳細
+# MT
+settings-tab-profiles = プロファイル
+
+# MT
+settings-section-theme = テーマ
+# MT
+settings-theme-auto = 自動
+# MT
+settings-theme-light = ライト
+# MT
+settings-theme-dark = ダーク
+# MT
+settings-start-with-os = システム起動時に起動
+# MT
+settings-single-instance = インスタンスを 1 つだけ実行
+# MT
+settings-minimize-to-tray = 閉じるときにトレイに最小化
+
+# MT
+settings-buffer-size = バッファサイズ
+# MT
+settings-verify = コピー後に検証
+# MT
+settings-verify-off = オフ
+# MT
+settings-concurrency = 並行処理
+# MT
+settings-concurrency-auto = 自動
+# MT
+settings-reflink = Reflink / 高速パス
+# MT
+settings-reflink-prefer = 優先する
+# MT
+settings-reflink-avoid = reflink を避ける
+# MT
+settings-reflink-disabled = 常に非同期エンジンを使用
+# MT
+settings-fsync-on-close = 閉じるときにディスクへ同期 (低速、安全)
+# MT
+settings-preserve-timestamps = タイムスタンプを保持
+# MT
+settings-preserve-permissions = パーミッションを保持
+# MT
+settings-preserve-acls = ACL を保持 (Phase 14)
+
+# MT
+settings-context-menu = シェルのコンテキストメニュー項目を有効化
+# MT
+settings-intercept-copy = 既定のコピーハンドラを横取り (Windows)
+# MT
+settings-intercept-copy-hint = オン時、Explorer の Ctrl+C / Ctrl+V は Copy That を経由します。登録は Phase 14。
+# MT
+settings-notify-completion = ジョブ完了時に通知
+
+# MT
+settings-shred-method = 既定の抹消方式
+# MT
+settings-shred-zero = ゼロ (1 回)
+# MT
+settings-shred-random = ランダム (1 回)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 回)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 回)
+# MT
+settings-shred-gutmann = Gutmann (35 回)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = 抹消前に二重確認を要求
+
+# MT
+settings-log-level = ログレベル
+# MT
+settings-log-off = オフ
+# MT
+settings-telemetry = テレメトリ
+# MT
+settings-telemetry-never = 行わない — ログレベルに関わらずデータ送信なし
+# MT
+settings-error-policy = 既定のエラーポリシー
+# MT
+settings-error-policy-ask = 確認
+# MT
+settings-error-policy-skip = スキップ
+# MT
+settings-error-policy-retry = バックオフ付きで再試行
+# MT
+settings-error-policy-abort = 最初の失敗で中止
+# MT
+settings-history-retention = 履歴の保持期間 (日)
+# MT
+settings-history-retention-hint = 0 = 永久に保持。それ以外の値は起動時に古いジョブを自動削除します。
+# MT
+settings-database-path = データベースのパス
+# MT
+settings-database-path-default = (既定 — OS データディレクトリ)
+# MT
+settings-reset-all = 既定にリセット
+# MT
+settings-reset-confirm = すべての設定を既定にリセットしますか? プロファイルは変更されません。
+
+# MT
+settings-profiles-hint = 現在の設定に名前を付けて保存し、後で読み込んで個別のつまみを触らずに切り替えます。
+# MT
+settings-profile-name-placeholder = プロファイル名
+# MT
+settings-profile-save = 保存
+# MT
+settings-profile-import = インポート…
+# MT
+settings-profile-load = 読み込み
+# MT
+settings-profile-export = エクスポート…
+# MT
+settings-profile-delete = 削除
+# MT
+settings-profile-empty = 保存されたプロファイルはありません。
+# MT
+settings-profile-import-prompt = インポートされるプロファイルの名前:
+
+# MT
+toast-settings-reset = 設定をリセットしました
+# MT
+toast-profile-saved = プロファイルを保存しました
+# MT
+toast-profile-loaded = プロファイルを読み込みました
+# MT
+toast-profile-exported = プロファイルをエクスポートしました
+# MT
+toast-profile-imported = プロファイルをインポートしました
