@@ -78,10 +78,16 @@ fn probe(path: &Path) -> Option<bool> {
 fn strip_partition_suffix(name: &str) -> String {
     // nvme0n1p3 -> nvme0n1 ; sda1 -> sda ; mmcblk0p2 -> mmcblk0
     if name.starts_with("nvme") || name.starts_with("mmcblk") || name.starts_with("loop") {
-        // Split at the last "p<digits>" suffix.
+        // Split at the last "p<digits>" suffix. A real partition
+        // suffix always has a digit *immediately before* the `p`
+        // (the device index — e.g. `nvme0n1p3`, `mmcblk0p2`); plain
+        // `loop0` has its `p` inside the device name itself, so the
+        // char before the `p` is `o` and the match must not strip.
         if let Some(pos) = name.rfind('p') {
             let (head, tail) = name.split_at(pos);
-            if tail.len() > 1 && tail[1..].chars().all(|c| c.is_ascii_digit()) {
+            let head_ends_in_digit = head.chars().next_back().is_some_and(|c| c.is_ascii_digit());
+            if head_ends_in_digit && tail.len() > 1 && tail[1..].chars().all(|c| c.is_ascii_digit())
+            {
                 return head.to_string();
             }
         }
