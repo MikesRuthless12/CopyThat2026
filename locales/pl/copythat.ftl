@@ -367,3 +367,145 @@ settings-tab-appearance = Wygląd
 settings-section-language = Język
 # MT
 settings-phase-12-hint = Więcej ustawień (motyw, domyślne transferu, algorytm weryfikacji, profile) pojawi się w fazie 12.
+
+# MT — Phase 12 Settings window
+settings-loading = Ładowanie ustawień…
+# MT
+settings-tab-transfer = Transfer
+# MT
+settings-tab-shell = Powłoka
+# MT
+settings-tab-secure-delete = Bezpieczne usuwanie
+# MT
+settings-tab-advanced = Zaawansowane
+# MT
+settings-tab-profiles = Profile
+
+# MT
+settings-section-theme = Motyw
+# MT
+settings-theme-auto = Automatyczny
+# MT
+settings-theme-light = Jasny
+# MT
+settings-theme-dark = Ciemny
+# MT
+settings-start-with-os = Uruchom z systemem
+# MT
+settings-single-instance = Pojedyncza aktywna instancja
+# MT
+settings-minimize-to-tray = Minimalizuj do zasobnika przy zamknięciu
+
+# MT
+settings-buffer-size = Rozmiar bufora
+# MT
+settings-verify = Weryfikuj po kopiowaniu
+# MT
+settings-verify-off = Wyłączone
+# MT
+settings-concurrency = Równoległość
+# MT
+settings-concurrency-auto = Automatycznie
+# MT
+settings-reflink = Reflink / szybkie ścieżki
+# MT
+settings-reflink-prefer = Preferuj
+# MT
+settings-reflink-avoid = Unikaj reflink
+# MT
+settings-reflink-disabled = Zawsze używaj silnika async
+# MT
+settings-fsync-on-close = Synchronizuj na dysk przy zamknięciu (wolniej, bezpieczniej)
+# MT
+settings-preserve-timestamps = Zachowaj znaczniki czasu
+# MT
+settings-preserve-permissions = Zachowaj uprawnienia
+# MT
+settings-preserve-acls = Zachowaj ACL (faza 14)
+
+# MT
+settings-context-menu = Włącz wpisy menu kontekstowego
+# MT
+settings-intercept-copy = Przechwytuj domyślny uchwyt kopiowania (Windows)
+# MT
+settings-intercept-copy-hint = Gdy aktywne, Ctrl+C / Ctrl+V w Eksploratorze przechodzi przez Copy That. Rejestracja w fazie 14.
+# MT
+settings-notify-completion = Powiadamiaj po zakończeniu zadania
+
+# MT
+settings-shred-method = Domyślna metoda niszczenia
+# MT
+settings-shred-zero = Zero (1 przebieg)
+# MT
+settings-shred-random = Losowo (1 przebieg)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 przebiegi)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 przebiegów)
+# MT
+settings-shred-gutmann = Gutmann (35 przebiegów)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = Wymagaj podwójnego potwierdzenia przed niszczeniem
+
+# MT
+settings-log-level = Poziom logowania
+# MT
+settings-log-off = Wyłączone
+# MT
+settings-telemetry = Telemetria
+# MT
+settings-telemetry-never = Nigdy — brak wysyłania danych na żadnym poziomie logowania
+# MT
+settings-error-policy = Domyślna polityka błędów
+# MT
+settings-error-policy-ask = Zapytaj
+# MT
+settings-error-policy-skip = Pomiń
+# MT
+settings-error-policy-retry = Ponów z opóźnieniem
+# MT
+settings-error-policy-abort = Przerwij przy pierwszym błędzie
+# MT
+settings-history-retention = Przechowywanie historii (dni)
+# MT
+settings-history-retention-hint = 0 = zachowaj na zawsze. Dowolna inna wartość usuwa stare zadania przy starcie.
+# MT
+settings-database-path = Ścieżka bazy danych
+# MT
+settings-database-path-default = (domyślna — katalog danych systemu)
+# MT
+settings-reset-all = Przywróć domyślne
+# MT
+settings-reset-confirm = Zresetować wszystkie preferencje? Profile nie zostaną zmienione.
+
+# MT
+settings-profiles-hint = Zapisz bieżące ustawienia pod nazwą; później załaduj, aby przełączać się bez dotykania pojedynczych regulatorów.
+# MT
+settings-profile-name-placeholder = Nazwa profilu
+# MT
+settings-profile-save = Zapisz
+# MT
+settings-profile-import = Importuj…
+# MT
+settings-profile-load = Załaduj
+# MT
+settings-profile-export = Eksportuj…
+# MT
+settings-profile-delete = Usuń
+# MT
+settings-profile-empty = Brak zapisanych profili.
+# MT
+settings-profile-import-prompt = Nazwa dla importowanego profilu:
+
+# MT
+toast-settings-reset = Ustawienia zresetowane
+# MT
+toast-profile-saved = Profil zapisany
+# MT
+toast-profile-loaded = Profil załadowany
+# MT
+toast-profile-exported = Profil wyeksportowany
+# MT
+toast-profile-imported = Profil zaimportowany

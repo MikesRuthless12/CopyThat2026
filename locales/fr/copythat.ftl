@@ -367,3 +367,145 @@ settings-tab-appearance = Apparence
 settings-section-language = Langue
 # MT
 settings-phase-12-hint = D'autres paramètres (thème, valeurs par défaut de transfert, algorithme de vérification, profils) arrivent en phase 12.
+
+# MT — Phase 12 Settings window
+settings-loading = Chargement des paramètres…
+# MT
+settings-tab-transfer = Transfert
+# MT
+settings-tab-shell = Shell
+# MT
+settings-tab-secure-delete = Suppression sécurisée
+# MT
+settings-tab-advanced = Avancé
+# MT
+settings-tab-profiles = Profils
+
+# MT
+settings-section-theme = Thème
+# MT
+settings-theme-auto = Automatique
+# MT
+settings-theme-light = Clair
+# MT
+settings-theme-dark = Sombre
+# MT
+settings-start-with-os = Lancer au démarrage du système
+# MT
+settings-single-instance = Instance unique
+# MT
+settings-minimize-to-tray = Réduire dans la zone de notification à la fermeture
+
+# MT
+settings-buffer-size = Taille du tampon
+# MT
+settings-verify = Vérifier après la copie
+# MT
+settings-verify-off = Désactivé
+# MT
+settings-concurrency = Concurrence
+# MT
+settings-concurrency-auto = Automatique
+# MT
+settings-reflink = Reflink / chemins rapides
+# MT
+settings-reflink-prefer = Préférer
+# MT
+settings-reflink-avoid = Éviter reflink
+# MT
+settings-reflink-disabled = Toujours utiliser le moteur asynchrone
+# MT
+settings-fsync-on-close = Synchroniser sur le disque à la fermeture (plus lent, plus sûr)
+# MT
+settings-preserve-timestamps = Conserver les horodatages
+# MT
+settings-preserve-permissions = Conserver les permissions
+# MT
+settings-preserve-acls = Conserver les ACL (phase 14)
+
+# MT
+settings-context-menu = Activer les entrées du menu contextuel
+# MT
+settings-intercept-copy = Intercepter le gestionnaire de copie par défaut (Windows)
+# MT
+settings-intercept-copy-hint = Quand activé, Ctrl+C / Ctrl+V dans l'Explorateur passe par Copy That. Enregistrement en phase 14.
+# MT
+settings-notify-completion = Notifier à la fin de la tâche
+
+# MT
+settings-shred-method = Méthode de destruction par défaut
+# MT
+settings-shred-zero = Zéro (1 passe)
+# MT
+settings-shred-random = Aléatoire (1 passe)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 passes)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 passes)
+# MT
+settings-shred-gutmann = Gutmann (35 passes)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = Exiger une double confirmation avant destruction
+
+# MT
+settings-log-level = Niveau de journalisation
+# MT
+settings-log-off = Désactivé
+# MT
+settings-telemetry = Télémétrie
+# MT
+settings-telemetry-never = Jamais — aucun envoi de données quel que soit le niveau
+# MT
+settings-error-policy = Politique d'erreur par défaut
+# MT
+settings-error-policy-ask = Demander
+# MT
+settings-error-policy-skip = Ignorer
+# MT
+settings-error-policy-retry = Réessayer avec délai
+# MT
+settings-error-policy-abort = Annuler à la première erreur
+# MT
+settings-history-retention = Conservation de l'historique (jours)
+# MT
+settings-history-retention-hint = 0 = conserver indéfiniment. Toute autre valeur purge les anciennes tâches au démarrage.
+# MT
+settings-database-path = Chemin de la base de données
+# MT
+settings-database-path-default = (par défaut — répertoire de données du système)
+# MT
+settings-reset-all = Réinitialiser les valeurs par défaut
+# MT
+settings-reset-confirm = Réinitialiser toutes les préférences ? Les profils ne sont pas affectés.
+
+# MT
+settings-profiles-hint = Enregistrez les paramètres actuels sous un nom ; rechargez-les pour basculer sans toucher à chaque réglage.
+# MT
+settings-profile-name-placeholder = Nom du profil
+# MT
+settings-profile-save = Enregistrer
+# MT
+settings-profile-import = Importer…
+# MT
+settings-profile-load = Charger
+# MT
+settings-profile-export = Exporter…
+# MT
+settings-profile-delete = Supprimer
+# MT
+settings-profile-empty = Aucun profil enregistré.
+# MT
+settings-profile-import-prompt = Nom pour le profil importé :
+
+# MT
+toast-settings-reset = Paramètres réinitialisés
+# MT
+toast-profile-saved = Profil enregistré
+# MT
+toast-profile-loaded = Profil chargé
+# MT
+toast-profile-exported = Profil exporté
+# MT
+toast-profile-imported = Profil importé

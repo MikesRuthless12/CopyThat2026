@@ -367,3 +367,145 @@ settings-tab-appearance = المظهر
 settings-section-language = اللغة
 # MT
 settings-phase-12-hint = ستضاف المزيد من الإعدادات (السمة، إعدادات النقل الافتراضية، خوارزمية التحقق، الملفات الشخصية) في المرحلة 12.
+
+# MT — Phase 12 Settings window
+settings-loading = جارٍ تحميل الإعدادات…
+# MT
+settings-tab-transfer = النقل
+# MT
+settings-tab-shell = الصدفة
+# MT
+settings-tab-secure-delete = الحذف الآمن
+# MT
+settings-tab-advanced = متقدم
+# MT
+settings-tab-profiles = الملفات الشخصية
+
+# MT
+settings-section-theme = السمة
+# MT
+settings-theme-auto = تلقائي
+# MT
+settings-theme-light = فاتح
+# MT
+settings-theme-dark = داكن
+# MT
+settings-start-with-os = تشغيل عند بدء النظام
+# MT
+settings-single-instance = مثيل واحد فقط قيد التشغيل
+# MT
+settings-minimize-to-tray = التصغير إلى صينية النظام عند الإغلاق
+
+# MT
+settings-buffer-size = حجم المخزن المؤقت
+# MT
+settings-verify = التحقق بعد النسخ
+# MT
+settings-verify-off = معطل
+# MT
+settings-concurrency = التزامن
+# MT
+settings-concurrency-auto = تلقائي
+# MT
+settings-reflink = Reflink / المسارات السريعة
+# MT
+settings-reflink-prefer = تفضيل
+# MT
+settings-reflink-avoid = تجنب reflink
+# MT
+settings-reflink-disabled = استخدم محرك async دائمًا
+# MT
+settings-fsync-on-close = مزامنة على القرص عند الإغلاق (أبطأ، أكثر أمانًا)
+# MT
+settings-preserve-timestamps = الاحتفاظ بطوابع الوقت
+# MT
+settings-preserve-permissions = الاحتفاظ بالأذونات
+# MT
+settings-preserve-acls = الاحتفاظ بقوائم التحكم في الوصول (المرحلة 14)
+
+# MT
+settings-context-menu = تفعيل عناصر قائمة السياق
+# MT
+settings-intercept-copy = اعتراض معالج النسخ الافتراضي (Windows)
+# MT
+settings-intercept-copy-hint = عند التفعيل، يمر Ctrl+C / Ctrl+V في Explorer عبر Copy That. التسجيل في المرحلة 14.
+# MT
+settings-notify-completion = إشعار عند اكتمال المهمة
+
+# MT
+settings-shred-method = طريقة الإتلاف الافتراضية
+# MT
+settings-shred-zero = صفر (مرور واحد)
+# MT
+settings-shred-random = عشوائي (مرور واحد)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 مرور)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 مرور)
+# MT
+settings-shred-gutmann = Gutmann (35 مرور)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = طلب تأكيد مزدوج قبل الإتلاف
+
+# MT
+settings-log-level = مستوى السجل
+# MT
+settings-log-off = معطل
+# MT
+settings-telemetry = القياسات عن بُعد
+# MT
+settings-telemetry-never = أبدًا — لا يُرسَل أي بيانات عند أي مستوى للسجل
+# MT
+settings-error-policy = سياسة الخطأ الافتراضية
+# MT
+settings-error-policy-ask = السؤال
+# MT
+settings-error-policy-skip = تخطّي
+# MT
+settings-error-policy-retry = إعادة المحاولة مع تأخير
+# MT
+settings-error-policy-abort = إلغاء عند أول خطأ
+# MT
+settings-history-retention = مدة الاحتفاظ بالسجل (أيام)
+# MT
+settings-history-retention-hint = 0 = الاحتفاظ دائمًا. أي قيمة أخرى تحذف تلقائيًا المهام القديمة عند بدء التشغيل.
+# MT
+settings-database-path = مسار قاعدة البيانات
+# MT
+settings-database-path-default = (افتراضي — مجلد بيانات النظام)
+# MT
+settings-reset-all = إعادة التعيين إلى الافتراضيات
+# MT
+settings-reset-confirm = إعادة تعيين كل التفضيلات؟ لن تتأثر الملفات الشخصية.
+
+# MT
+settings-profiles-hint = احفظ الإعدادات الحالية باسم؛ حمِّلها لاحقًا للتبديل دون لمس كل عنصر تحكم على حدة.
+# MT
+settings-profile-name-placeholder = اسم الملف الشخصي
+# MT
+settings-profile-save = حفظ
+# MT
+settings-profile-import = استيراد…
+# MT
+settings-profile-load = تحميل
+# MT
+settings-profile-export = تصدير…
+# MT
+settings-profile-delete = حذف
+# MT
+settings-profile-empty = لا توجد ملفات شخصية محفوظة بعد.
+# MT
+settings-profile-import-prompt = اسم الملف الشخصي المستورد:
+
+# MT
+toast-settings-reset = تمت إعادة تعيين الإعدادات
+# MT
+toast-profile-saved = تم حفظ الملف الشخصي
+# MT
+toast-profile-loaded = تم تحميل الملف الشخصي
+# MT
+toast-profile-exported = تم تصدير الملف الشخصي
+# MT
+toast-profile-imported = تم استيراد الملف الشخصي

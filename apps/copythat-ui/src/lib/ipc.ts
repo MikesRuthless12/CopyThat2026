@@ -181,3 +181,55 @@ export async function historyDaily(sinceMs: number): Promise<DayTotalDto[]> {
 export async function historyClearAll(): Promise<number> {
   return invoke<number>("history_clear_all");
 }
+
+// ---------- Phase 12 settings + profiles ----------
+
+import type { ProfileInfoDto, SettingsDto } from "./types";
+
+export async function getSettings(): Promise<SettingsDto> {
+  return invoke<SettingsDto>("get_settings");
+}
+
+export async function updateSettings(dto: SettingsDto): Promise<SettingsDto> {
+  return invoke<SettingsDto>("update_settings", { dto });
+}
+
+export async function resetSettings(): Promise<SettingsDto> {
+  return invoke<SettingsDto>("reset_settings");
+}
+
+/// Debug hook used by the Phase 12 smoke test; returns the clamped
+/// buffer size the engine would use given current settings.
+export async function effectiveBufferSize(): Promise<number> {
+  return invoke<number>("effective_buffer_size");
+}
+
+export async function listProfiles(): Promise<ProfileInfoDto[]> {
+  return invoke<ProfileInfoDto[]>("list_profiles");
+}
+
+export async function saveProfile(name: string): Promise<ProfileInfoDto> {
+  return invoke<ProfileInfoDto>("save_profile", { name });
+}
+
+export async function loadProfile(name: string): Promise<SettingsDto> {
+  return invoke<SettingsDto>("load_profile", { name });
+}
+
+export async function deleteProfile(name: string): Promise<void> {
+  await invoke("delete_profile", { name });
+}
+
+export async function exportProfile(
+  name: string,
+  dest: string,
+): Promise<void> {
+  await invoke("export_profile", { name, dest });
+}
+
+export async function importProfile(
+  name: string,
+  src: string,
+): Promise<ProfileInfoDto> {
+  return invoke<ProfileInfoDto>("import_profile", { name, src });
+}

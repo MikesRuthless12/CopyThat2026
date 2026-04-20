@@ -8,6 +8,7 @@ members = [
     "crates/copythat-platform",
     "crates/copythat-shellext",
     "crates/copythat-i18n",
+    "crates/copythat-settings",
     "xtask",
     "apps/copythat-ui/src-tauri",
 ]

@@ -367,3 +367,145 @@ settings-tab-appearance = Aparência
 settings-section-language = Idioma
 # MT
 settings-phase-12-hint = Mais configurações (tema, padrões de transferência, algoritmo de verificação, perfis) chegarão na fase 12.
+
+# MT — Phase 12 Settings window
+settings-loading = Carregando configurações…
+# MT
+settings-tab-transfer = Transferência
+# MT
+settings-tab-shell = Shell
+# MT
+settings-tab-secure-delete = Exclusão segura
+# MT
+settings-tab-advanced = Avançado
+# MT
+settings-tab-profiles = Perfis
+
+# MT
+settings-section-theme = Tema
+# MT
+settings-theme-auto = Automático
+# MT
+settings-theme-light = Claro
+# MT
+settings-theme-dark = Escuro
+# MT
+settings-start-with-os = Iniciar com o sistema
+# MT
+settings-single-instance = Instância única em execução
+# MT
+settings-minimize-to-tray = Minimizar para a bandeja ao fechar
+
+# MT
+settings-buffer-size = Tamanho do buffer
+# MT
+settings-verify = Verificar após copiar
+# MT
+settings-verify-off = Desativado
+# MT
+settings-concurrency = Concorrência
+# MT
+settings-concurrency-auto = Automática
+# MT
+settings-reflink = Reflink / caminhos rápidos
+# MT
+settings-reflink-prefer = Preferir
+# MT
+settings-reflink-avoid = Evitar reflink
+# MT
+settings-reflink-disabled = Sempre usar o motor assíncrono
+# MT
+settings-fsync-on-close = Sincronizar com o disco ao fechar (mais lento, mais seguro)
+# MT
+settings-preserve-timestamps = Preservar carimbos de data/hora
+# MT
+settings-preserve-permissions = Preservar permissões
+# MT
+settings-preserve-acls = Preservar ACLs (Fase 14)
+
+# MT
+settings-context-menu = Habilitar entradas do menu de contexto
+# MT
+settings-intercept-copy = Interceptar gerenciador de cópia padrão (Windows)
+# MT
+settings-intercept-copy-hint = Quando ativo, Ctrl+C / Ctrl+V no Explorer passa pelo Copy That. Registro na Fase 14.
+# MT
+settings-notify-completion = Notificar ao concluir tarefa
+
+# MT
+settings-shred-method = Método de destruição padrão
+# MT
+settings-shred-zero = Zero (1 passagem)
+# MT
+settings-shred-random = Aleatório (1 passagem)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 passagens)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 passagens)
+# MT
+settings-shred-gutmann = Gutmann (35 passagens)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = Exigir dupla confirmação antes da destruição
+
+# MT
+settings-log-level = Nível de log
+# MT
+settings-log-off = Desativado
+# MT
+settings-telemetry = Telemetria
+# MT
+settings-telemetry-never = Nunca — sem envio de dados em nenhum nível
+# MT
+settings-error-policy = Política de erro padrão
+# MT
+settings-error-policy-ask = Perguntar
+# MT
+settings-error-policy-skip = Ignorar
+# MT
+settings-error-policy-retry = Repetir com espera
+# MT
+settings-error-policy-abort = Cancelar ao primeiro erro
+# MT
+settings-history-retention = Retenção do histórico (dias)
+# MT
+settings-history-retention-hint = 0 = manter para sempre. Qualquer outro valor remove tarefas antigas na inicialização.
+# MT
+settings-database-path = Caminho do banco de dados
+# MT
+settings-database-path-default = (padrão — diretório de dados do SO)
+# MT
+settings-reset-all = Restaurar padrões
+# MT
+settings-reset-confirm = Redefinir todas as preferências? Os perfis não são afetados.
+
+# MT
+settings-profiles-hint = Salve as configurações atuais com um nome; carregue depois para alternar sem mexer nos controles individuais.
+# MT
+settings-profile-name-placeholder = Nome do perfil
+# MT
+settings-profile-save = Salvar
+# MT
+settings-profile-import = Importar…
+# MT
+settings-profile-load = Carregar
+# MT
+settings-profile-export = Exportar…
+# MT
+settings-profile-delete = Excluir
+# MT
+settings-profile-empty = Nenhum perfil salvo.
+# MT
+settings-profile-import-prompt = Nome para o perfil importado:
+
+# MT
+toast-settings-reset = Configurações redefinidas
+# MT
+toast-profile-saved = Perfil salvo
+# MT
+toast-profile-loaded = Perfil carregado
+# MT
+toast-profile-exported = Perfil exportado
+# MT
+toast-profile-imported = Perfil importado

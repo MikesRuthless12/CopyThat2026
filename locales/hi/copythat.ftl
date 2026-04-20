@@ -367,3 +367,145 @@ settings-tab-appearance = रूप
 settings-section-language = भाषा
 # MT
 settings-phase-12-hint = और सेटिंग्स (थीम, स्थानांतरण डिफ़ॉल्ट, सत्यापन एल्गोरिथम, प्रोफ़ाइल) चरण 12 में आएँगी।
+
+# MT — Phase 12 Settings window
+settings-loading = सेटिंग्स लोड हो रही हैं…
+# MT
+settings-tab-transfer = स्थानांतरण
+# MT
+settings-tab-shell = शेल
+# MT
+settings-tab-secure-delete = सुरक्षित हटाएँ
+# MT
+settings-tab-advanced = उन्नत
+# MT
+settings-tab-profiles = प्रोफ़ाइल
+
+# MT
+settings-section-theme = थीम
+# MT
+settings-theme-auto = स्वचालित
+# MT
+settings-theme-light = हल्का
+# MT
+settings-theme-dark = गहरा
+# MT
+settings-start-with-os = सिस्टम शुरू होने पर चलाएँ
+# MT
+settings-single-instance = एकल चलने वाला इंस्टेंस
+# MT
+settings-minimize-to-tray = बंद करने पर ट्रे में छोटा करें
+
+# MT
+settings-buffer-size = बफर का आकार
+# MT
+settings-verify = कॉपी के बाद सत्यापन
+# MT
+settings-verify-off = बंद
+# MT
+settings-concurrency = समवर्तीता
+# MT
+settings-concurrency-auto = स्वचालित
+# MT
+settings-reflink = Reflink / तेज़ रास्ते
+# MT
+settings-reflink-prefer = प्राथमिकता दें
+# MT
+settings-reflink-avoid = reflink से बचें
+# MT
+settings-reflink-disabled = हमेशा async इंजन का उपयोग करें
+# MT
+settings-fsync-on-close = बंद करते समय डिस्क पर सिंक करें (धीमा, सुरक्षित)
+# MT
+settings-preserve-timestamps = टाइमस्टैम्प बनाए रखें
+# MT
+settings-preserve-permissions = अनुमतियाँ बनाए रखें
+# MT
+settings-preserve-acls = ACL बनाए रखें (चरण 14)
+
+# MT
+settings-context-menu = शेल संदर्भ मेनू प्रविष्टियाँ सक्षम करें
+# MT
+settings-intercept-copy = डिफ़ॉल्ट कॉपी हैंडलर को बीच में रोकें (Windows)
+# MT
+settings-intercept-copy-hint = चालू होने पर, Explorer का Ctrl+C / Ctrl+V Copy That के माध्यम से चलता है। पंजीकरण चरण 14 में।
+# MT
+settings-notify-completion = कार्य पूरा होने पर सूचित करें
+
+# MT
+settings-shred-method = डिफ़ॉल्ट श्रेड विधि
+# MT
+settings-shred-zero = शून्य (1 पास)
+# MT
+settings-shred-random = यादृच्छिक (1 पास)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 पास)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 पास)
+# MT
+settings-shred-gutmann = Gutmann (35 पास)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = श्रेड से पहले दोहरी पुष्टि आवश्यक
+
+# MT
+settings-log-level = लॉग स्तर
+# MT
+settings-log-off = बंद
+# MT
+settings-telemetry = टेलीमेट्री
+# MT
+settings-telemetry-never = कभी नहीं — किसी भी लॉग स्तर पर डेटा नहीं भेजा जाता
+# MT
+settings-error-policy = डिफ़ॉल्ट त्रुटि नीति
+# MT
+settings-error-policy-ask = पूछें
+# MT
+settings-error-policy-skip = छोड़ें
+# MT
+settings-error-policy-retry = देरी के साथ पुनः प्रयास
+# MT
+settings-error-policy-abort = पहली त्रुटि पर निरस्त करें
+# MT
+settings-history-retention = इतिहास प्रतिधारण (दिन)
+# MT
+settings-history-retention-hint = 0 = हमेशा के लिए रखें। अन्य मान स्टार्टअप पर पुराने कार्य स्वतः हटा देता है।
+# MT
+settings-database-path = डेटाबेस पथ
+# MT
+settings-database-path-default = (डिफ़ॉल्ट — OS डेटा निर्देशिका)
+# MT
+settings-reset-all = डिफ़ॉल्ट पर रीसेट करें
+# MT
+settings-reset-confirm = सभी प्राथमिकताएँ रीसेट करें? प्रोफ़ाइल प्रभावित नहीं होंगी।
+
+# MT
+settings-profiles-hint = वर्तमान सेटिंग्स को एक नाम से सहेजें; बाद में लोड करके अलग-अलग नियंत्रण छुए बिना स्विच करें।
+# MT
+settings-profile-name-placeholder = प्रोफ़ाइल का नाम
+# MT
+settings-profile-save = सहेजें
+# MT
+settings-profile-import = आयात करें…
+# MT
+settings-profile-load = लोड करें
+# MT
+settings-profile-export = निर्यात करें…
+# MT
+settings-profile-delete = हटाएँ
+# MT
+settings-profile-empty = अभी तक कोई प्रोफ़ाइल सहेजी नहीं गई।
+# MT
+settings-profile-import-prompt = आयातित प्रोफ़ाइल का नाम:
+
+# MT
+toast-settings-reset = सेटिंग्स रीसेट की गईं
+# MT
+toast-profile-saved = प्रोफ़ाइल सहेजी गई
+# MT
+toast-profile-loaded = प्रोफ़ाइल लोड की गई
+# MT
+toast-profile-exported = प्रोफ़ाइल निर्यात की गई
+# MT
+toast-profile-imported = प्रोफ़ाइल आयात की गई
