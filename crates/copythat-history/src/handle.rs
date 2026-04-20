@@ -22,7 +22,10 @@ use tokio::task;
 
 use crate::error::HistoryError;
 use crate::migrations;
-use crate::types::{DEFAULT_SEARCH_LIMIT, HistoryFilter, ItemRow, JobRowId, JobSummary};
+use crate::types::{
+    DEFAULT_SEARCH_LIMIT, DayTotal, HistoryFilter, ItemRow, JobRowId, JobSummary, KindBreakdown,
+    Totals,
+};
 
 /// Cheap clonable handle. Every `tauri::command` takes one out of
 /// `AppState`; cloning is `Arc::clone`.
@@ -346,6 +349,165 @@ impl History {
         .await
         .map_err(|_| HistoryError::WorkerPanicked)?
     }
+
+    /// Wipe every row from both tables. Used by the Phase 10
+    /// "Reset statistics" button. `VACUUM` is intentionally *not*
+    /// run here — the file stays allocated so subsequent inserts
+    /// don't re-grow from zero.
+    pub async fn clear_all(&self) -> Result<u64, HistoryError> {
+        let inner = self.inner.clone();
+        task::spawn_blocking(move || -> Result<u64, HistoryError> {
+            let conn = inner.conn.lock().expect("history conn poisoned");
+            // Items cascade via the FK rule, but an explicit delete
+            // also covers pathological cases where the cascade was
+            // disabled (some SQLite builds disable it by default).
+            conn.execute("DELETE FROM items", [])?;
+            let n = conn.execute("DELETE FROM jobs", [])?;
+            Ok(n as u64)
+        })
+        .await
+        .map_err(|_| HistoryError::WorkerPanicked)?
+    }
+
+    // ---------- aggregates (Phase 10) ----------
+
+    /// Lifetime aggregates. `since_ms` filters by
+    /// `jobs.started_at_ms >= since_ms`; pass `None` for "all time".
+    ///
+    /// Computed in a single read-only transaction so the numbers
+    /// are internally consistent even if the Tauri runner is
+    /// writing a fresh row while this runs.
+    pub async fn totals(&self, since_ms: Option<i64>) -> Result<Totals, HistoryError> {
+        let inner = self.inner.clone();
+        task::spawn_blocking(move || -> Result<Totals, HistoryError> {
+            let conn = inner.conn.lock().expect("history conn poisoned");
+            let tx = conn.unchecked_transaction()?;
+            let (where_clause, since_param) = since_clause(since_ms);
+
+            // Overall counters.
+            let mut totals = Totals::default();
+            let overall_sql = format!(
+                "SELECT COUNT(*) AS jobs,
+                        COALESCE(SUM(total_bytes), 0) AS bytes,
+                        COALESCE(SUM(files_ok), 0) AS files,
+                        COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS errors,
+                        COALESCE(SUM(CASE
+                            WHEN finished_at_ms IS NOT NULL AND finished_at_ms >= started_at_ms
+                            THEN finished_at_ms - started_at_ms
+                            ELSE 0
+                        END), 0) AS duration_ms
+                   FROM jobs{where_clause}"
+            );
+            let mut stmt = tx.prepare(&overall_sql)?;
+            let rows = stmt.query_map(rusqlite::params_from_iter(since_param.clone()), |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, i64>(4)?,
+                ))
+            })?;
+            for r in rows {
+                let (j, b, f, e, d) = r?;
+                totals.jobs = j as u64;
+                totals.bytes = b as u64;
+                totals.files = f as u64;
+                totals.errors = e as u64;
+                totals.duration_ms = d as u64;
+            }
+            drop(stmt);
+
+            // Per-kind breakdown.
+            let kind_sql = format!(
+                "SELECT kind,
+                        COALESCE(SUM(total_bytes), 0) AS bytes,
+                        COALESCE(SUM(files_ok), 0) AS files,
+                        COUNT(*) AS jobs
+                   FROM jobs{where_clause}
+                  GROUP BY kind
+                  ORDER BY kind"
+            );
+            let mut stmt = tx.prepare(&kind_sql)?;
+            let rows = stmt.query_map(rusqlite::params_from_iter(since_param), |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
+            })?;
+            for r in rows {
+                let (kind, b, f, j) = r?;
+                totals.by_kind.insert(
+                    kind,
+                    KindBreakdown {
+                        bytes: b as u64,
+                        files: f as u64,
+                        jobs: j as u64,
+                    },
+                );
+            }
+
+            Ok(totals)
+        })
+        .await
+        .map_err(|_| HistoryError::WorkerPanicked)?
+    }
+
+    /// Per-day buckets for the sparkline. Results are oldest-first;
+    /// callers fill gaps (days with zero jobs) client-side so the
+    /// chart has a dense 30-point series.
+    ///
+    /// `since_ms` is typically "30 days ago at UTC midnight"; the
+    /// UI computes that and hands it in.
+    pub async fn daily_totals(&self, since_ms: i64) -> Result<Vec<DayTotal>, HistoryError> {
+        let inner = self.inner.clone();
+        task::spawn_blocking(move || -> Result<Vec<DayTotal>, HistoryError> {
+            let conn = inner.conn.lock().expect("history conn poisoned");
+            // SQLite's `strftime('%s', ...)` works on seconds; our
+            // `started_at_ms` is milliseconds. Divide inline; group
+            // by the floored day-count. `86400000` ms / day.
+            let sql = "
+                SELECT (started_at_ms / 86400000) * 86400000 AS day_ms,
+                       COALESCE(SUM(total_bytes), 0) AS bytes,
+                       COALESCE(SUM(files_ok), 0)   AS files,
+                       COUNT(*)                      AS jobs
+                  FROM jobs
+                 WHERE started_at_ms >= ?1
+              GROUP BY day_ms
+              ORDER BY day_ms ASC";
+            let mut stmt = conn.prepare(sql)?;
+            let rows = stmt.query_map(params![since_ms], |row| {
+                Ok(DayTotal {
+                    date_ms: row.get(0)?,
+                    bytes: row.get::<_, i64>(1)? as u64,
+                    files: row.get::<_, i64>(2)? as u64,
+                    jobs: row.get::<_, i64>(3)? as u64,
+                })
+            })?;
+            let mut out = Vec::new();
+            for r in rows {
+                out.push(r?);
+            }
+            Ok(out)
+        })
+        .await
+        .map_err(|_| HistoryError::WorkerPanicked)?
+    }
+}
+
+/// Build the `WHERE started_at_ms >= ?1` suffix + the param vector
+/// that goes with it. Returns an empty suffix + empty params when
+/// the caller asked for "all time".
+fn since_clause(since_ms: Option<i64>) -> (&'static str, Vec<rusqlite::types::Value>) {
+    match since_ms {
+        Some(v) => (
+            " WHERE started_at_ms >= ?1",
+            vec![rusqlite::types::Value::Integer(v)],
+        ),
+        None => ("", Vec::new()),
+    }
 }
 
 fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<JobSummary> {
@@ -586,5 +748,145 @@ mod tests {
         assert_eq!(rows.len(), 3);
         // Newest-first ordering — started_at_ms = 9 first.
         assert_eq!(rows[0].started_at_ms, 9);
+    }
+
+    // ---------- Phase 10 aggregates ----------
+
+    #[tokio::test]
+    async fn totals_sums_bytes_files_jobs_errors_duration() {
+        let h = fresh().await;
+        // Three copy jobs: two succeed (1000 + 2000 bytes, 2 + 3
+        // files, each 50 ms duration), one fails (no bytes / files,
+        // but the duration_ms still includes the 25-ms window).
+        for (bytes, files, status, dur) in [
+            (1_000u64, 2u64, "succeeded", 50i64),
+            (2_000u64, 3u64, "succeeded", 50i64),
+            (0u64, 0u64, "failed", 25i64),
+        ] {
+            let mut j = dummy_job();
+            j.started_at_ms = 10_000;
+            j.finished_at_ms = Some(10_000 + dur);
+            j.status = status.into();
+            j.total_bytes = bytes;
+            j.files_ok = files;
+            let id = h.record_start(&j).await.unwrap();
+            h.record_finish(id, status, bytes, files, 0).await.unwrap();
+        }
+        let t = h.totals(None).await.unwrap();
+        // record_finish stamps `finished_at_ms = now()`, so the
+        // duration calc in SQL is "now - 10_000" per job — at least
+        // a few milliseconds. The test just asserts monotone > 0.
+        assert_eq!(t.jobs, 3);
+        assert_eq!(t.bytes, 3_000);
+        assert_eq!(t.files, 5);
+        assert_eq!(t.errors, 1);
+        assert!(t.duration_ms > 0);
+
+        let copy = t.by_kind.get("copy").expect("by_kind must include `copy`");
+        assert_eq!(copy.jobs, 3);
+        assert_eq!(copy.bytes, 3_000);
+        assert_eq!(copy.files, 5);
+    }
+
+    #[tokio::test]
+    async fn totals_by_kind_splits_copy_and_move() {
+        let h = fresh().await;
+
+        let mut copy = dummy_job();
+        copy.started_at_ms = 10_000;
+        copy.total_bytes = 500;
+        copy.files_ok = 1;
+        let id = h.record_start(&copy).await.unwrap();
+        h.record_finish(id, "succeeded", 500, 1, 0).await.unwrap();
+
+        let mut mv = dummy_job();
+        mv.kind = "move".into();
+        mv.started_at_ms = 20_000;
+        mv.total_bytes = 2_000;
+        mv.files_ok = 4;
+        let id = h.record_start(&mv).await.unwrap();
+        h.record_finish(id, "succeeded", 2_000, 4, 0).await.unwrap();
+
+        let t = h.totals(None).await.unwrap();
+        let c = t.by_kind.get("copy").unwrap();
+        assert_eq!(c.bytes, 500);
+        assert_eq!(c.files, 1);
+        let m = t.by_kind.get("move").unwrap();
+        assert_eq!(m.bytes, 2_000);
+        assert_eq!(m.files, 4);
+    }
+
+    #[tokio::test]
+    async fn totals_since_filter_excludes_older_rows() {
+        let h = fresh().await;
+        for ts in [1_000i64, 5_000, 9_000] {
+            let mut j = dummy_job();
+            j.started_at_ms = ts;
+            j.total_bytes = 100;
+            j.files_ok = 1;
+            let id = h.record_start(&j).await.unwrap();
+            h.record_finish(id, "succeeded", 100, 1, 0).await.unwrap();
+        }
+        let recent = h.totals(Some(5_000)).await.unwrap();
+        assert_eq!(recent.jobs, 2);
+        assert_eq!(recent.bytes, 200);
+    }
+
+    #[tokio::test]
+    async fn daily_totals_buckets_by_utc_day() {
+        let h = fresh().await;
+        const DAY: i64 = 86_400_000;
+        // Three jobs on the same UTC day, two on the next, one on
+        // the day after that. SQL floors to day_ms via integer
+        // division; we mirror that here when picking timestamps.
+        for ts in [
+            10 * DAY + 1_000,
+            10 * DAY + 50_000,
+            10 * DAY + 3_600_000,
+            11 * DAY + 10_000,
+            11 * DAY + 20_000,
+            12 * DAY + 100,
+        ] {
+            let mut j = dummy_job();
+            j.started_at_ms = ts;
+            j.total_bytes = 100;
+            j.files_ok = 1;
+            let id = h.record_start(&j).await.unwrap();
+            h.record_finish(id, "succeeded", 100, 1, 0).await.unwrap();
+        }
+        let buckets = h.daily_totals(0).await.unwrap();
+        assert_eq!(buckets.len(), 3);
+        assert_eq!(buckets[0].date_ms, 10 * DAY);
+        assert_eq!(buckets[0].jobs, 3);
+        assert_eq!(buckets[0].bytes, 300);
+        assert_eq!(buckets[1].date_ms, 11 * DAY);
+        assert_eq!(buckets[1].jobs, 2);
+        assert_eq!(buckets[2].date_ms, 12 * DAY);
+        assert_eq!(buckets[2].jobs, 1);
+    }
+
+    #[tokio::test]
+    async fn clear_all_wipes_jobs_and_items() {
+        let h = fresh().await;
+        let id = h.record_start(&dummy_job()).await.unwrap();
+        h.record_item(&ItemRow {
+            job_row_id: id.as_i64(),
+            src: "/s".into(),
+            dst: "/d".into(),
+            size: 1,
+            status: "ok".into(),
+            hash_hex: None,
+            error_code: None,
+            error_msg: None,
+            timestamp_ms: 0,
+        })
+        .await
+        .unwrap();
+        assert_eq!(h.totals(None).await.unwrap().jobs, 1);
+
+        let dropped = h.clear_all().await.unwrap();
+        assert_eq!(dropped, 1);
+        assert_eq!(h.totals(None).await.unwrap().jobs, 0);
+        assert_eq!(h.items_for(id).await.unwrap().len(), 0);
     }
 }

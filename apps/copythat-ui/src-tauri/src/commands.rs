@@ -585,6 +585,69 @@ fn history_job_to_dto(s: copythat_history::JobSummary) -> crate::ipc::HistoryJob
     }
 }
 
+/// Phase 10 — lifetime aggregates for the Totals drawer.
+#[tauri::command]
+pub async fn history_totals(
+    since_ms: Option<i64>,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::ipc::TotalsDto, String> {
+    let history = require_history(&state)?;
+    let t = history.totals(since_ms).await.map_err(|e| e.to_string())?;
+    Ok(totals_to_dto(t))
+}
+
+/// Phase 10 — per-day buckets for the sparkline. `since_ms` should
+/// be "30 days ago UTC-midnight" or similar; the handler forwards
+/// verbatim.
+#[tauri::command]
+pub async fn history_daily(
+    since_ms: i64,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<crate::ipc::DayTotalDto>, String> {
+    let history = require_history(&state)?;
+    let rows = history
+        .daily_totals(since_ms)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(rows
+        .into_iter()
+        .map(|d| crate::ipc::DayTotalDto {
+            date_ms: d.date_ms,
+            bytes: d.bytes,
+            files: d.files,
+            jobs: d.jobs,
+        })
+        .collect())
+}
+
+/// Phase 10 — reset every stored job/item. Cascades to items.
+/// Returns the count of `jobs` rows that were deleted.
+#[tauri::command]
+pub async fn history_clear_all(state: tauri::State<'_, AppState>) -> Result<u64, String> {
+    let history = require_history(&state)?;
+    history.clear_all().await.map_err(|e| e.to_string())
+}
+
+fn totals_to_dto(t: copythat_history::Totals) -> crate::ipc::TotalsDto {
+    crate::ipc::TotalsDto {
+        bytes: t.bytes,
+        files: t.files,
+        jobs: t.jobs,
+        errors: t.errors,
+        duration_ms: t.duration_ms,
+        by_kind: t
+            .by_kind
+            .into_iter()
+            .map(|(kind, v)| crate::ipc::KindBreakdownDto {
+                kind,
+                bytes: v.bytes,
+                files: v.files,
+                jobs: v.jobs,
+            })
+            .collect(),
+    }
+}
+
 fn history_item_to_dto(r: copythat_history::ItemRow) -> crate::ipc::HistoryItemDto {
     crate::ipc::HistoryItemDto {
         job_row_id: r.job_row_id,

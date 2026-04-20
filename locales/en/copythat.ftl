@@ -158,3 +158,21 @@ history-col-duration = Duration
 history-col-error = Error
 toast-history-exported = History exported
 toast-history-rerun-queued = Re-run queued
+
+# Totals drawer (Phase 10)
+footer-totals = Totals
+totals-title = Totals
+totals-loading = Loading totals…
+totals-card-bytes = Total bytes copied
+totals-card-files = Files
+totals-card-jobs = Jobs
+totals-card-avg-rate = Average throughput
+totals-errors = errors
+totals-spark-title = Last 30 days
+totals-kinds-title = By kind
+totals-saved-title = Time saved (estimated)
+totals-saved-note = Estimated vs a baseline file-manager copy of the same workload.
+totals-reset = Reset statistics
+totals-reset-confirm = This deletes every stored job and item. Continue?
+totals-reset-confirm-yes = Yes, reset
+toast-totals-reset = Statistics reset
