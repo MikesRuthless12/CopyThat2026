@@ -93,3 +93,51 @@ pub struct HistoryFilter {
 /// Phase 9 doesn't paginate; 5000 rows × the JSON DTO is ~1 MiB
 /// which is comfortable for a single IPC round trip.
 pub const DEFAULT_SEARCH_LIMIT: u32 = 5_000;
+
+/// Phase 10 — lifetime aggregates over the `jobs` + `items` tables.
+///
+/// Built by a single pass per table (counting rows, summing bytes,
+/// bucketing by `kind`). Matches the shape the Totals drawer's
+/// big-number cards + by-kind bars consume.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Totals {
+    /// Sum of `jobs.total_bytes` across matched rows. Represents
+    /// the bytes the engine actually transferred (per-item sums
+    /// would include skipped / failed rows with size = 0 which are
+    /// uninteresting for "how much did I copy").
+    pub bytes: u64,
+    /// Sum of `jobs.files_ok` across matched rows.
+    pub files: u64,
+    /// Count of `jobs` rows.
+    pub jobs: u64,
+    /// Count of `jobs` rows whose `status = 'failed'`.
+    pub errors: u64,
+    /// Sum of `finished_at_ms - started_at_ms` for every finished
+    /// job. Unfinished (`running`) jobs contribute zero.
+    pub duration_ms: u64,
+    /// Per-`kind` breakdown: `(bytes, files)` per row's `kind`
+    /// value. Keys are the same short wire strings the schema
+    /// stores (`"copy"` / `"move"` / …).
+    pub by_kind: std::collections::BTreeMap<String, KindBreakdown>,
+}
+
+/// One row of the by-kind breakdown. Kept as a struct rather than a
+/// tuple so the Tauri DTO mirror stays readable.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KindBreakdown {
+    pub bytes: u64,
+    pub files: u64,
+    pub jobs: u64,
+}
+
+/// Phase 10 — one bucket of the daily sparkline. `date_ms` is the
+/// UTC-midnight timestamp for the bucket's day so the frontend can
+/// format it with the local timezone.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DayTotal {
+    /// UTC-midnight timestamp marking the start of this day.
+    pub date_ms: i64,
+    pub bytes: u64,
+    pub files: u64,
+    pub jobs: u64,
+}

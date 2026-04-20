@@ -41,3 +41,8 @@ tokio = { version = "1", features = [
 [[test]]
 name = "phase_09_history"
 path = "../../tests/smoke/phase_09_history.rs"
+
+# Phase 10 smoke test — totals + 30-day sparkline + clear_all.
+[[test]]
+name = "phase_10_totals"
+path = "../../tests/smoke/phase_10_totals.rs"
