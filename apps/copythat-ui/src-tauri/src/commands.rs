@@ -15,7 +15,7 @@ use copythat_core::{CopyOptions, JobKind};
 use tauri::{AppHandle, State};
 
 use crate::ipc::{CopyOptionsDto, FileIconDto, JobDto};
-use crate::runner::{RunJob, emit_job_added, run_job};
+use crate::shell::enqueue_jobs;
 use crate::state::AppState;
 
 /// Start one or more copy jobs. Each source path becomes its own
@@ -83,49 +83,23 @@ async fn enqueue(
     let copy_opts = apply_options(&options)?;
     let verifier = resolve_verifier(&options)?;
 
-    let mut ids = Vec::with_capacity(sources.len());
-    for raw in sources {
-        let src = PathBuf::from(raw.trim());
-        if src.as_os_str().is_empty() {
-            return Err("source path is empty".to_string());
-        }
-        // Destination for this source: append its basename under the
-        // dst root so a drop of multiple items lands in separate
-        // subfolders / files rather than overwriting each other.
-        let dst = destination_for(&src, &dst_root);
-
-        let (id, ctrl) = state.queue.add(kind, src.clone(), Some(dst.clone()));
-        let snapshot = state
-            .queue
-            .get(id)
-            .expect("just-added job must be in queue");
-        emit_job_added(&app, JobDto::from_job(&snapshot));
-
-        let run = RunJob {
-            app: app.clone(),
-            state: state.inner().clone(),
-            id,
-            kind,
-            src,
-            dst: Some(dst),
-            ctrl,
-            verifier: verifier.clone(),
-            copy_opts: copy_opts.clone(),
-        };
-        tokio::spawn(async move {
-            run_job(run).await;
-        });
-        ids.push(id.as_u64());
+    let srcs: Vec<PathBuf> = sources
+        .into_iter()
+        .map(|raw| PathBuf::from(raw.trim()))
+        .filter(|p| !p.as_os_str().is_empty())
+        .collect();
+    if srcs.is_empty() {
+        return Err("source path is empty".to_string());
     }
-    Ok(ids)
-}
-
-fn destination_for(src: &Path, dst_root: &Path) -> PathBuf {
-    let name = src
-        .file_name()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("copy"));
-    dst_root.join(name)
+    Ok(enqueue_jobs(
+        &app,
+        state.inner(),
+        kind,
+        srcs,
+        &dst_root,
+        copy_opts,
+        verifier,
+    ))
 }
 
 fn apply_options(dto: &CopyOptionsDto) -> Result<CopyOptions, String> {

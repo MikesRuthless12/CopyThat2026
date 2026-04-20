@@ -2,11 +2,18 @@
 //!
 //! The Rust side wires the Phase 1–4 engines to the Svelte frontend:
 //!
+//! - `cli` — argv parsing for shell-integration entry points
+//!   (`copythat --enqueue <verb> <paths…>`). Stable across Phase 7
+//!   (Windows COM DLL, macOS Finder Sync, Linux `.desktop` / KDE
+//!   ServiceMenu / Thunar UCA all funnel through this surface).
 //! - `commands` — the `#[tauri::command]` surface the UI calls into.
 //! - `runner` — spawns one tokio task per queued job, bridges engine
 //!   [`copythat_core::CopyEvent`] onto the Tauri event bus, and keeps
 //!   the queue's `bytes_done` / `files_done` / `state` fields in sync
 //!   so a fresh `list_jobs` after a reconnect re-renders cleanly.
+//! - `shell` — shared enqueue helper plus a dispatcher the
+//!   single-instance plugin and the initial-launch setup hook both
+//!   call to route a parsed [`cli::CliAction`] into the running app.
 //! - `state::AppState` — shared `Queue` + globals incarnation, cloned
 //!   into every command through `State<'_, AppState>`.
 //! - `ipc` — serde DTOs that cross the boundary. Field names are
@@ -24,19 +31,73 @@
 //! the `tauri://drag-drop` window event which this crate translates
 //! into the `drop-received` IPC event for the Svelte layer.
 
+pub mod cli;
 pub mod commands;
 pub mod i18n;
 pub mod icon;
 pub mod ipc;
 pub mod reveal;
 pub mod runner;
+pub mod shell;
 pub mod state;
+
+use std::sync::Mutex;
 
 use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
 
+use crate::cli::CliAction;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let argv: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    let action = cli::parse_args(argv).unwrap_or_else(|err| {
+        // Flag errors print the reason + the usage block and launch
+        // normally, so a mis-typed shell extension argv never strands
+        // the user with a silent no-op. The binary's primary purpose
+        // is still the GUI.
+        eprintln!("copythat: {err}");
+        eprintln!("{}", cli::HELP);
+        CliAction::Run
+    });
+
+    match &action {
+        CliAction::PrintHelp => {
+            println!("{}", cli::HELP);
+            return;
+        }
+        CliAction::PrintVersion => {
+            println!("copythat {}", cli::VERSION);
+            return;
+        }
+        _ => {}
+    }
+
+    // The setup hook consumes this once; the Mutex<Option<_>> lets
+    // the closure be `Fn` (Tauri's setup bound) while still allowing
+    // a one-shot move-out on first call.
+    let initial_action = Mutex::new(Some(action));
+
+    let mut builder = tauri::Builder::default();
+
+    // Single-instance plugin: routes a second launch's argv back to
+    // the first live instance, which re-parses and dispatches.
+    #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(
+            |app: &tauri::AppHandle, argv: Vec<String>, _cwd: String| {
+                let os_argv: Vec<std::ffi::OsString> =
+                    argv.into_iter().map(std::ffi::OsString::from).collect();
+                match cli::parse_args(os_argv) {
+                    Ok(a) => shell::dispatch_cli_action(app, a),
+                    Err(err) => {
+                        eprintln!("copythat: second invocation rejected: {err}");
+                    }
+                }
+            },
+        ));
+    }
+
+    builder
         .plugin(tauri_plugin_dialog::init())
         .manage(state::AppState::new())
         .on_window_event(|window, event| {
@@ -68,7 +129,12 @@ pub fn run() {
             commands::available_locales,
             commands::system_locale,
         ])
-        .setup(|_app| Ok(()))
+        .setup(move |app| {
+            if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {
+                shell::dispatch_cli_action(&app.handle().clone(), action);
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running Copy That 2026");
 }

@@ -368,9 +368,7 @@ fn strip_partition_suffix(name: &str) -> String {
             // index). Plain `loop0` has its `p` inside the device name, so
             // the char before is `o` and we must not strip.
             let head_ends_in_digit = head.chars().next_back().is_some_and(|c| c.is_ascii_digit());
-            if head_ends_in_digit
-                && tail.len() > 1
-                && tail[1..].chars().all(|c| c.is_ascii_digit())
+            if head_ends_in_digit && tail.len() > 1 && tail[1..].chars().all(|c| c.is_ascii_digit())
             {
                 return head.to_string();
             }
