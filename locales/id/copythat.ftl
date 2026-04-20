@@ -126,104 +126,233 @@ toast-job-done = Transfer selesai
 toast-copy-queued = Salinan dalam antrean
 # MT
 toast-move-queued = Perpindahan dalam antrean
-# Phase 8 additions — MT placeholders; review before 1.0.
-
-# MT — Toast messages
-toast-error-resolved = Error resolved
-toast-collision-resolved = Collision resolved
-toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
-toast-error-log-exported = Error log exported
+# MT — Phase 8 toast messages
+toast-error-resolved = Kesalahan teratasi
+# MT
+toast-collision-resolved = Konflik teratasi
+# MT
+toast-elevated-unavailable = Coba lagi dengan izin tinggi akan hadir di Fase 17 — belum tersedia
+# MT
+toast-error-log-exported = Log kesalahan diekspor
 
 # MT — Error modal
-error-modal-title = A transfer failed
-error-modal-retry = Retry
-error-modal-retry-elevated = Retry with elevated permissions
-error-modal-skip = Skip
-error-modal-skip-all-kind = Skip all errors of this kind
-error-modal-abort = Abort all
-error-modal-path-label = Path
-error-modal-code-label = Code
+error-modal-title = Sebuah transfer gagal
+# MT
+error-modal-retry = Coba lagi
+# MT
+error-modal-retry-elevated = Coba lagi dengan izin tinggi
+# MT
+error-modal-skip = Lewati
+# MT
+error-modal-skip-all-kind = Lewati semua kesalahan jenis ini
+# MT
+error-modal-abort = Batalkan semua
+# MT
+error-modal-path-label = Jalur
+# MT
+error-modal-code-label = Kode
 
 # MT — Error-kind labels
-err-not-found = File not found
-err-permission-denied = Permission denied
-err-disk-full = Destination disk is full
-err-interrupted = Operation interrupted
-err-verify-failed = Post-copy verification failed
-err-io-other = Unknown I/O error
+err-not-found = File tidak ditemukan
+# MT
+err-permission-denied = Izin ditolak
+# MT
+err-disk-full = Disk tujuan penuh
+# MT
+err-interrupted = Operasi terputus
+# MT
+err-verify-failed = Verifikasi pasca-salin gagal
+# MT
+err-io-other = Kesalahan I/O tidak dikenal
 
 # MT — Collision modal
-collision-modal-title = File already exists
-collision-modal-overwrite = Overwrite
-collision-modal-overwrite-if-newer = Overwrite if newer
-collision-modal-skip = Skip
-collision-modal-keep-both = Keep both
-collision-modal-rename = Rename…
-collision-modal-apply-to-all = Apply to all
-collision-modal-source = Source
-collision-modal-destination = Destination
-collision-modal-size = Size
-collision-modal-modified = Modified
-collision-modal-hash-check = Quick hash (SHA-256)
-collision-modal-rename-placeholder = New filename
-collision-modal-confirm-rename = Rename
+collision-modal-title = File sudah ada
+# MT
+collision-modal-overwrite = Timpa
+# MT
+collision-modal-overwrite-if-newer = Timpa jika lebih baru
+# MT
+collision-modal-skip = Lewati
+# MT
+collision-modal-keep-both = Simpan keduanya
+# MT
+collision-modal-rename = Ubah nama…
+# MT
+collision-modal-apply-to-all = Terapkan ke semua
+# MT
+collision-modal-source = Sumber
+# MT
+collision-modal-destination = Tujuan
+# MT
+collision-modal-size = Ukuran
+# MT
+collision-modal-modified = Diubah
+# MT
+collision-modal-hash-check = Hash cepat (SHA-256)
+# MT
+collision-modal-rename-placeholder = Nama file baru
+# MT
+collision-modal-confirm-rename = Ubah nama
 
 # MT — Error log drawer
-error-log-title = Error log
-error-log-empty = No errors logged
-error-log-export-csv = Export CSV
-error-log-export-txt = Export text
-error-log-clear = Clear log
-error-log-col-time = Time
-error-log-col-job = Job
-error-log-col-path = Path
-error-log-col-code = Code
-error-log-col-message = Message
-error-log-col-resolution = Resolution
+error-log-title = Log kesalahan
+# MT
+error-log-empty = Tidak ada kesalahan tercatat
+# MT
+error-log-export-csv = Ekspor CSV
+# MT
+error-log-export-txt = Ekspor teks
+# MT
+error-log-clear = Bersihkan log
+# MT
+error-log-col-time = Waktu
+# MT
+error-log-col-job = Pekerjaan
+# MT
+error-log-col-path = Jalur
+# MT
+error-log-col-code = Kode
+# MT
+error-log-col-message = Pesan
+# MT
+error-log-col-resolution = Penyelesaian
 
 # MT — History drawer (Phase 9)
-history-title = History
-history-empty = No jobs recorded yet
-history-unavailable = Copy history isn't available. The app couldn't open the SQLite store at startup.
-history-filter-any = any
-history-filter-kind = Kind
+history-title = Riwayat
+# MT
+history-empty = Belum ada pekerjaan tercatat
+# MT
+history-unavailable = Riwayat salin tidak tersedia. Aplikasi tidak dapat membuka penyimpanan SQLite saat mulai.
+# MT
+history-filter-any = semua
+# MT
+history-filter-kind = Jenis
+# MT
 history-filter-status = Status
-history-filter-text = Search
-history-refresh = Refresh
-history-export-csv = Export CSV
-history-purge-30 = Purge > 30 days
-history-rerun = Re-run
-history-detail-open = Details
-history-detail-title = Job details
-history-detail-empty = No items recorded
-history-col-date = Date
-history-col-kind = Kind
-history-col-src = Source
-history-col-dst = Destination
-history-col-files = Files
-history-col-size = Size
+# MT
+history-filter-text = Cari
+# MT
+history-refresh = Segarkan
+# MT
+history-export-csv = Ekspor CSV
+# MT
+history-purge-30 = Hapus lebih dari 30 hari
+# MT
+history-rerun = Jalankan ulang
+# MT
+history-detail-open = Detail
+# MT
+history-detail-title = Detail pekerjaan
+# MT
+history-detail-empty = Tidak ada item tercatat
+# MT
+history-col-date = Tanggal
+# MT
+history-col-kind = Jenis
+# MT
+history-col-src = Sumber
+# MT
+history-col-dst = Tujuan
+# MT
+history-col-files = File
+# MT
+history-col-size = Ukuran
+# MT
 history-col-status = Status
-history-col-duration = Duration
-history-col-error = Error
+# MT
+history-col-duration = Durasi
+# MT
+history-col-error = Kesalahan
 
-# MT — Phase 9 toasts
-toast-history-exported = History exported
-toast-history-rerun-queued = Re-run queued
+# MT
+toast-history-exported = Riwayat diekspor
+# MT
+toast-history-rerun-queued = Jalankan ulang masuk antrean
 
 # MT — Totals drawer (Phase 10)
-footer-totals = Totals
-totals-title = Totals
-totals-loading = Loading totals…
-totals-card-bytes = Total bytes copied
-totals-card-files = Files
-totals-card-jobs = Jobs
-totals-card-avg-rate = Average throughput
-totals-errors = errors
-totals-spark-title = Last 30 days
-totals-kinds-title = By kind
-totals-saved-title = Time saved (estimated)
-totals-saved-note = Estimated vs a baseline file-manager copy of the same workload.
-totals-reset = Reset statistics
-totals-reset-confirm = This deletes every stored job and item. Continue?
-totals-reset-confirm-yes = Yes, reset
-toast-totals-reset = Statistics reset
+footer-totals = Total
+# MT
+totals-title = Total
+# MT
+totals-loading = Memuat total…
+# MT
+totals-card-bytes = Total byte disalin
+# MT
+totals-card-files = File
+# MT
+totals-card-jobs = Pekerjaan
+# MT
+totals-card-avg-rate = Throughput rata-rata
+# MT
+totals-errors = kesalahan
+# MT
+totals-spark-title = 30 hari terakhir
+# MT
+totals-kinds-title = Menurut jenis
+# MT
+totals-saved-title = Waktu dihemat (perkiraan)
+# MT
+totals-saved-note = Perkiraan dibandingkan dengan salinan referensi beban yang sama menggunakan pengelola file standar.
+# MT
+totals-reset = Atur ulang statistik
+# MT
+totals-reset-confirm = Ini menghapus semua pekerjaan dan item tersimpan. Lanjutkan?
+# MT
+totals-reset-confirm-yes = Ya, atur ulang
+# MT
+toast-totals-reset = Statistik diatur ulang
+
+# MT — Phase 11a additions
+header-language-label = Bahasa
+# MT
+header-language-title = Ubah bahasa
+
+# MT
+kind-copy = Salin
+# MT
+kind-move = Pindahkan
+# MT
+kind-delete = Hapus
+# MT
+kind-secure-delete = Hapus aman
+
+# MT
+status-running = Berjalan
+# MT
+status-succeeded = Berhasil
+# MT
+status-failed = Gagal
+# MT
+status-cancelled = Dibatalkan
+# MT
+status-ok = OK
+# MT
+status-skipped = Dilewati
+
+# MT
+history-search-placeholder = /jalur
+# MT
+toast-history-purged = { $count } pekerjaan lebih dari 30 hari dihapus
+
+# MT
+err-source-required = Setidaknya satu jalur sumber diperlukan.
+# MT
+err-destination-empty = Jalur tujuan kosong.
+# MT
+err-source-empty = Jalur sumber kosong.
+
+# MT
+duration-lt-1s = < 1 d
+# MT
+duration-ms = { $ms } md
+# MT
+duration-seconds = { $s } d
+# MT
+duration-minutes-seconds = { $m } mnt { $s } d
+# MT
+duration-hours-minutes = { $h } j { $m } mnt
+# MT
+duration-zero = 0 d
+
+# MT
+rate-unit-per-second = { $size }/d

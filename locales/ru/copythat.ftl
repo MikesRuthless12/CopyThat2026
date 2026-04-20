@@ -126,104 +126,233 @@ toast-job-done = Передача завершена
 toast-copy-queued = Копирование поставлено в очередь
 # MT
 toast-move-queued = Перемещение поставлено в очередь
-# Phase 8 additions — MT placeholders; review before 1.0.
-
-# MT — Toast messages
-toast-error-resolved = Error resolved
-toast-collision-resolved = Collision resolved
-toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
-toast-error-log-exported = Error log exported
+# MT — Phase 8 toast messages
+toast-error-resolved = Ошибка устранена
+# MT
+toast-collision-resolved = Конфликт разрешён
+# MT
+toast-elevated-unavailable = Повтор с повышенными правами появится на этапе 17 — пока недоступно
+# MT
+toast-error-log-exported = Журнал ошибок экспортирован
 
 # MT — Error modal
-error-modal-title = A transfer failed
-error-modal-retry = Retry
-error-modal-retry-elevated = Retry with elevated permissions
-error-modal-skip = Skip
-error-modal-skip-all-kind = Skip all errors of this kind
-error-modal-abort = Abort all
-error-modal-path-label = Path
-error-modal-code-label = Code
+error-modal-title = Передача не удалась
+# MT
+error-modal-retry = Повторить
+# MT
+error-modal-retry-elevated = Повторить с повышенными правами
+# MT
+error-modal-skip = Пропустить
+# MT
+error-modal-skip-all-kind = Пропустить все ошибки этого типа
+# MT
+error-modal-abort = Прервать все
+# MT
+error-modal-path-label = Путь
+# MT
+error-modal-code-label = Код
 
 # MT — Error-kind labels
-err-not-found = File not found
-err-permission-denied = Permission denied
-err-disk-full = Destination disk is full
-err-interrupted = Operation interrupted
-err-verify-failed = Post-copy verification failed
-err-io-other = Unknown I/O error
+err-not-found = Файл не найден
+# MT
+err-permission-denied = Доступ запрещён
+# MT
+err-disk-full = Целевой диск переполнен
+# MT
+err-interrupted = Операция прервана
+# MT
+err-verify-failed = Ошибка проверки после копирования
+# MT
+err-io-other = Неизвестная ошибка ввода-вывода
 
 # MT — Collision modal
-collision-modal-title = File already exists
-collision-modal-overwrite = Overwrite
-collision-modal-overwrite-if-newer = Overwrite if newer
-collision-modal-skip = Skip
-collision-modal-keep-both = Keep both
-collision-modal-rename = Rename…
-collision-modal-apply-to-all = Apply to all
-collision-modal-source = Source
-collision-modal-destination = Destination
-collision-modal-size = Size
-collision-modal-modified = Modified
-collision-modal-hash-check = Quick hash (SHA-256)
-collision-modal-rename-placeholder = New filename
-collision-modal-confirm-rename = Rename
+collision-modal-title = Файл уже существует
+# MT
+collision-modal-overwrite = Заменить
+# MT
+collision-modal-overwrite-if-newer = Заменить, если новее
+# MT
+collision-modal-skip = Пропустить
+# MT
+collision-modal-keep-both = Сохранить оба
+# MT
+collision-modal-rename = Переименовать…
+# MT
+collision-modal-apply-to-all = Применить ко всем
+# MT
+collision-modal-source = Источник
+# MT
+collision-modal-destination = Назначение
+# MT
+collision-modal-size = Размер
+# MT
+collision-modal-modified = Изменён
+# MT
+collision-modal-hash-check = Быстрый хеш (SHA-256)
+# MT
+collision-modal-rename-placeholder = Новое имя файла
+# MT
+collision-modal-confirm-rename = Переименовать
 
 # MT — Error log drawer
-error-log-title = Error log
-error-log-empty = No errors logged
-error-log-export-csv = Export CSV
-error-log-export-txt = Export text
-error-log-clear = Clear log
-error-log-col-time = Time
-error-log-col-job = Job
-error-log-col-path = Path
-error-log-col-code = Code
-error-log-col-message = Message
-error-log-col-resolution = Resolution
+error-log-title = Журнал ошибок
+# MT
+error-log-empty = Ошибки не зарегистрированы
+# MT
+error-log-export-csv = Экспорт CSV
+# MT
+error-log-export-txt = Экспорт текста
+# MT
+error-log-clear = Очистить журнал
+# MT
+error-log-col-time = Время
+# MT
+error-log-col-job = Задача
+# MT
+error-log-col-path = Путь
+# MT
+error-log-col-code = Код
+# MT
+error-log-col-message = Сообщение
+# MT
+error-log-col-resolution = Решение
 
 # MT — History drawer (Phase 9)
-history-title = History
-history-empty = No jobs recorded yet
-history-unavailable = Copy history isn't available. The app couldn't open the SQLite store at startup.
-history-filter-any = any
-history-filter-kind = Kind
-history-filter-status = Status
-history-filter-text = Search
-history-refresh = Refresh
-history-export-csv = Export CSV
-history-purge-30 = Purge > 30 days
-history-rerun = Re-run
-history-detail-open = Details
-history-detail-title = Job details
-history-detail-empty = No items recorded
-history-col-date = Date
-history-col-kind = Kind
-history-col-src = Source
-history-col-dst = Destination
-history-col-files = Files
-history-col-size = Size
-history-col-status = Status
-history-col-duration = Duration
-history-col-error = Error
+history-title = История
+# MT
+history-empty = Пока задач не зарегистрировано
+# MT
+history-unavailable = История копирования недоступна. Не удалось открыть хранилище SQLite при запуске.
+# MT
+history-filter-any = любой
+# MT
+history-filter-kind = Тип
+# MT
+history-filter-status = Состояние
+# MT
+history-filter-text = Поиск
+# MT
+history-refresh = Обновить
+# MT
+history-export-csv = Экспорт CSV
+# MT
+history-purge-30 = Удалить старше 30 дней
+# MT
+history-rerun = Повторить
+# MT
+history-detail-open = Подробности
+# MT
+history-detail-title = Подробности задачи
+# MT
+history-detail-empty = Нет зарегистрированных элементов
+# MT
+history-col-date = Дата
+# MT
+history-col-kind = Тип
+# MT
+history-col-src = Источник
+# MT
+history-col-dst = Назначение
+# MT
+history-col-files = Файлы
+# MT
+history-col-size = Размер
+# MT
+history-col-status = Состояние
+# MT
+history-col-duration = Длительность
+# MT
+history-col-error = Ошибка
 
-# MT — Phase 9 toasts
-toast-history-exported = History exported
-toast-history-rerun-queued = Re-run queued
+# MT
+toast-history-exported = История экспортирована
+# MT
+toast-history-rerun-queued = Повтор поставлен в очередь
 
 # MT — Totals drawer (Phase 10)
-footer-totals = Totals
-totals-title = Totals
-totals-loading = Loading totals…
-totals-card-bytes = Total bytes copied
-totals-card-files = Files
-totals-card-jobs = Jobs
-totals-card-avg-rate = Average throughput
-totals-errors = errors
-totals-spark-title = Last 30 days
-totals-kinds-title = By kind
-totals-saved-title = Time saved (estimated)
-totals-saved-note = Estimated vs a baseline file-manager copy of the same workload.
-totals-reset = Reset statistics
-totals-reset-confirm = This deletes every stored job and item. Continue?
-totals-reset-confirm-yes = Yes, reset
-toast-totals-reset = Statistics reset
+footer-totals = Итого
+# MT
+totals-title = Итого
+# MT
+totals-loading = Загрузка итогов…
+# MT
+totals-card-bytes = Всего скопировано байт
+# MT
+totals-card-files = Файлы
+# MT
+totals-card-jobs = Задачи
+# MT
+totals-card-avg-rate = Средняя пропускная способность
+# MT
+totals-errors = ошибки
+# MT
+totals-spark-title = Последние 30 дней
+# MT
+totals-kinds-title = По типу
+# MT
+totals-saved-title = Сэкономленное время (оценка)
+# MT
+totals-saved-note = Оценка по сравнению с эталонным копированием той же нагрузки стандартным файловым менеджером.
+# MT
+totals-reset = Сбросить статистику
+# MT
+totals-reset-confirm = Это удалит все сохранённые задачи и элементы. Продолжить?
+# MT
+totals-reset-confirm-yes = Да, сбросить
+# MT
+toast-totals-reset = Статистика сброшена
+
+# MT — Phase 11a additions
+header-language-label = Язык
+# MT
+header-language-title = Изменить язык
+
+# MT
+kind-copy = Копировать
+# MT
+kind-move = Переместить
+# MT
+kind-delete = Удалить
+# MT
+kind-secure-delete = Безопасное удаление
+
+# MT
+status-running = Выполняется
+# MT
+status-succeeded = Успешно
+# MT
+status-failed = Не удалось
+# MT
+status-cancelled = Отменено
+# MT
+status-ok = ОК
+# MT
+status-skipped = Пропущено
+
+# MT
+history-search-placeholder = /путь
+# MT
+toast-history-purged = Удалено { $count } задач старше 30 дней
+
+# MT
+err-source-required = Требуется хотя бы один путь источника.
+# MT
+err-destination-empty = Путь назначения пуст.
+# MT
+err-source-empty = Путь источника пуст.
+
+# MT
+duration-lt-1s = < 1 с
+# MT
+duration-ms = { $ms } мс
+# MT
+duration-seconds = { $s } с
+# MT
+duration-minutes-seconds = { $m } мин { $s } с
+# MT
+duration-hours-minutes = { $h } ч { $m } мин
+# MT
+duration-zero = 0 с
+
+# MT
+rate-unit-per-second = { $size }/с

@@ -33,11 +33,11 @@ action-resume = Reanudar
 # MT
 action-cancel = Cancelar
 # MT
-action-pause-all = Pausar todos los trabajos
+action-pause-all = Pausar todas las tareas
 # MT
-action-resume-all = Reanudar todos los trabajos
+action-resume-all = Reanudar todas las tareas
 # MT
-action-cancel-all = Cancelar todos los trabajos
+action-cancel-all = Cancelar todas las tareas
 # MT
 action-close = Cerrar
 # MT
@@ -57,12 +57,12 @@ menu-reveal-source = Mostrar origen en la carpeta
 menu-reveal-destination = Mostrar destino en la carpeta
 
 # MT
-header-eta-label = Tiempo estimado restante
+header-eta-label = Tiempo restante estimado
 # MT
 header-toolbar-label = Controles globales
 
 # MT
-footer-queued = trabajos activos
+footer-queued = tareas activas
 # MT
 footer-total-bytes = en curso
 # MT
@@ -73,12 +73,12 @@ footer-history = Historial
 # MT
 empty-title = Suelte archivos o carpetas para copiar
 # MT
-empty-hint = Arrastre elementos a la ventana. Le preguntaremos el destino y luego agregaremos un trabajo por cada origen.
+empty-hint = Arrastre elementos a la ventana. Le pediremos un destino y luego crearemos una tarea por origen.
 # MT
-empty-region-label = Lista de trabajos
+empty-region-label = Lista de tareas
 
 # MT
-details-drawer-label = Detalles del trabajo
+details-drawer-label = Detalles de la tarea
 # MT
 details-source = Origen
 # MT
@@ -99,7 +99,7 @@ details-error = Error
 # MT
 drop-dialog-title = Transferir elementos soltados
 # MT
-drop-dialog-subtitle = { $count } elementos listos para transferir. Elija una carpeta de destino para empezar.
+drop-dialog-subtitle = { $count } elemento(s) listos para transferir. Elija una carpeta de destino para comenzar.
 # MT
 drop-dialog-mode = Operación
 # MT
@@ -111,9 +111,9 @@ drop-dialog-pick-destination = Elegir destino
 # MT
 drop-dialog-change-destination = Cambiar destino
 # MT
-drop-dialog-start-copy = Comenzar a copiar
+drop-dialog-start-copy = Iniciar copia
 # MT
-drop-dialog-start-move = Comenzar a mover
+drop-dialog-start-move = Iniciar movimiento
 
 # MT
 eta-calculating = calculando…
@@ -126,104 +126,233 @@ toast-job-done = Transferencia completada
 toast-copy-queued = Copia en cola
 # MT
 toast-move-queued = Movimiento en cola
-# Phase 8 additions — MT placeholders; review before 1.0.
-
-# MT — Toast messages
-toast-error-resolved = Error resolved
-toast-collision-resolved = Collision resolved
-toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
-toast-error-log-exported = Error log exported
+# MT
+toast-error-resolved = Error resuelto
+# MT
+toast-collision-resolved = Conflicto resuelto
+# MT
+toast-elevated-unavailable = Reintento con permisos elevados llegará en la fase 17 — aún no disponible
+# MT
+toast-error-log-exported = Registro de errores exportado
 
 # MT — Error modal
-error-modal-title = A transfer failed
-error-modal-retry = Retry
-error-modal-retry-elevated = Retry with elevated permissions
-error-modal-skip = Skip
-error-modal-skip-all-kind = Skip all errors of this kind
-error-modal-abort = Abort all
-error-modal-path-label = Path
-error-modal-code-label = Code
+error-modal-title = Una transferencia falló
+# MT
+error-modal-retry = Reintentar
+# MT
+error-modal-retry-elevated = Reintentar con permisos elevados
+# MT
+error-modal-skip = Omitir
+# MT
+error-modal-skip-all-kind = Omitir todos los errores de este tipo
+# MT
+error-modal-abort = Cancelar todo
+# MT
+error-modal-path-label = Ruta
+# MT
+error-modal-code-label = Código
 
 # MT — Error-kind labels
-err-not-found = File not found
-err-permission-denied = Permission denied
-err-disk-full = Destination disk is full
-err-interrupted = Operation interrupted
-err-verify-failed = Post-copy verification failed
-err-io-other = Unknown I/O error
+err-not-found = Archivo no encontrado
+# MT
+err-permission-denied = Permiso denegado
+# MT
+err-disk-full = El disco de destino está lleno
+# MT
+err-interrupted = Operación interrumpida
+# MT
+err-verify-failed = Verificación posterior a la copia fallida
+# MT
+err-io-other = Error de E/S desconocido
 
 # MT — Collision modal
-collision-modal-title = File already exists
-collision-modal-overwrite = Overwrite
-collision-modal-overwrite-if-newer = Overwrite if newer
-collision-modal-skip = Skip
-collision-modal-keep-both = Keep both
-collision-modal-rename = Rename…
-collision-modal-apply-to-all = Apply to all
-collision-modal-source = Source
-collision-modal-destination = Destination
-collision-modal-size = Size
-collision-modal-modified = Modified
-collision-modal-hash-check = Quick hash (SHA-256)
-collision-modal-rename-placeholder = New filename
-collision-modal-confirm-rename = Rename
+collision-modal-title = El archivo ya existe
+# MT
+collision-modal-overwrite = Sobrescribir
+# MT
+collision-modal-overwrite-if-newer = Sobrescribir si es más reciente
+# MT
+collision-modal-skip = Omitir
+# MT
+collision-modal-keep-both = Conservar ambos
+# MT
+collision-modal-rename = Renombrar…
+# MT
+collision-modal-apply-to-all = Aplicar a todos
+# MT
+collision-modal-source = Origen
+# MT
+collision-modal-destination = Destino
+# MT
+collision-modal-size = Tamaño
+# MT
+collision-modal-modified = Modificado
+# MT
+collision-modal-hash-check = Hash rápido (SHA-256)
+# MT
+collision-modal-rename-placeholder = Nuevo nombre de archivo
+# MT
+collision-modal-confirm-rename = Renombrar
 
 # MT — Error log drawer
-error-log-title = Error log
-error-log-empty = No errors logged
-error-log-export-csv = Export CSV
-error-log-export-txt = Export text
-error-log-clear = Clear log
-error-log-col-time = Time
-error-log-col-job = Job
-error-log-col-path = Path
-error-log-col-code = Code
-error-log-col-message = Message
-error-log-col-resolution = Resolution
+error-log-title = Registro de errores
+# MT
+error-log-empty = No hay errores registrados
+# MT
+error-log-export-csv = Exportar CSV
+# MT
+error-log-export-txt = Exportar texto
+# MT
+error-log-clear = Borrar registro
+# MT
+error-log-col-time = Hora
+# MT
+error-log-col-job = Tarea
+# MT
+error-log-col-path = Ruta
+# MT
+error-log-col-code = Código
+# MT
+error-log-col-message = Mensaje
+# MT
+error-log-col-resolution = Resolución
 
 # MT — History drawer (Phase 9)
-history-title = History
-history-empty = No jobs recorded yet
-history-unavailable = Copy history isn't available. The app couldn't open the SQLite store at startup.
-history-filter-any = any
-history-filter-kind = Kind
-history-filter-status = Status
-history-filter-text = Search
-history-refresh = Refresh
-history-export-csv = Export CSV
-history-purge-30 = Purge > 30 days
-history-rerun = Re-run
-history-detail-open = Details
-history-detail-title = Job details
-history-detail-empty = No items recorded
-history-col-date = Date
-history-col-kind = Kind
-history-col-src = Source
-history-col-dst = Destination
-history-col-files = Files
-history-col-size = Size
-history-col-status = Status
-history-col-duration = Duration
+history-title = Historial
+# MT
+history-empty = Aún no hay tareas registradas
+# MT
+history-unavailable = El historial de copias no está disponible. La aplicación no pudo abrir el almacén SQLite al iniciar.
+# MT
+history-filter-any = cualquiera
+# MT
+history-filter-kind = Tipo
+# MT
+history-filter-status = Estado
+# MT
+history-filter-text = Buscar
+# MT
+history-refresh = Actualizar
+# MT
+history-export-csv = Exportar CSV
+# MT
+history-purge-30 = Eliminar > 30 días
+# MT
+history-rerun = Repetir
+# MT
+history-detail-open = Detalles
+# MT
+history-detail-title = Detalles de la tarea
+# MT
+history-detail-empty = No hay elementos registrados
+# MT
+history-col-date = Fecha
+# MT
+history-col-kind = Tipo
+# MT
+history-col-src = Origen
+# MT
+history-col-dst = Destino
+# MT
+history-col-files = Archivos
+# MT
+history-col-size = Tamaño
+# MT
+history-col-status = Estado
+# MT
+history-col-duration = Duración
+# MT
 history-col-error = Error
 
-# MT — Phase 9 toasts
-toast-history-exported = History exported
-toast-history-rerun-queued = Re-run queued
+# MT
+toast-history-exported = Historial exportado
+# MT
+toast-history-rerun-queued = Repetición en cola
 
 # MT — Totals drawer (Phase 10)
-footer-totals = Totals
-totals-title = Totals
-totals-loading = Loading totals…
-totals-card-bytes = Total bytes copied
-totals-card-files = Files
-totals-card-jobs = Jobs
-totals-card-avg-rate = Average throughput
-totals-errors = errors
-totals-spark-title = Last 30 days
-totals-kinds-title = By kind
-totals-saved-title = Time saved (estimated)
-totals-saved-note = Estimated vs a baseline file-manager copy of the same workload.
-totals-reset = Reset statistics
-totals-reset-confirm = This deletes every stored job and item. Continue?
-totals-reset-confirm-yes = Yes, reset
-toast-totals-reset = Statistics reset
+footer-totals = Totales
+# MT
+totals-title = Totales
+# MT
+totals-loading = Cargando totales…
+# MT
+totals-card-bytes = Bytes totales copiados
+# MT
+totals-card-files = Archivos
+# MT
+totals-card-jobs = Tareas
+# MT
+totals-card-avg-rate = Rendimiento promedio
+# MT
+totals-errors = errores
+# MT
+totals-spark-title = Últimos 30 días
+# MT
+totals-kinds-title = Por tipo
+# MT
+totals-saved-title = Tiempo ahorrado (estimado)
+# MT
+totals-saved-note = Estimado en comparación con una copia de referencia del mismo trabajo con un administrador de archivos estándar.
+# MT
+totals-reset = Restablecer estadísticas
+# MT
+totals-reset-confirm = Esto eliminará todas las tareas y elementos almacenados. ¿Continuar?
+# MT
+totals-reset-confirm-yes = Sí, restablecer
+# MT
+toast-totals-reset = Estadísticas restablecidas
+
+# MT — Phase 11a additions
+header-language-label = Idioma
+# MT
+header-language-title = Cambiar idioma
+
+# MT
+kind-copy = Copiar
+# MT
+kind-move = Mover
+# MT
+kind-delete = Eliminar
+# MT
+kind-secure-delete = Borrado seguro
+
+# MT
+status-running = En curso
+# MT
+status-succeeded = Completado
+# MT
+status-failed = Fallido
+# MT
+status-cancelled = Cancelado
+# MT
+status-ok = OK
+# MT
+status-skipped = Omitido
+
+# MT
+history-search-placeholder = /ruta
+# MT
+toast-history-purged = Se eliminaron { $count } tareas de más de 30 días
+
+# MT
+err-source-required = Se requiere al menos una ruta de origen.
+# MT
+err-destination-empty = La ruta de destino está vacía.
+# MT
+err-source-empty = La ruta de origen está vacía.
+
+# MT
+duration-lt-1s = < 1 s
+# MT
+duration-ms = { $ms } ms
+# MT
+duration-seconds = { $s } s
+# MT
+duration-minutes-seconds = { $m } min { $s } s
+# MT
+duration-hours-minutes = { $h } h { $m } min
+# MT
+duration-zero = 0 s
+
+# MT
+rate-unit-per-second = { $size }/s

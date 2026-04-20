@@ -8,7 +8,7 @@
 <script lang="ts">
   import Icon from "../icons/Icon.svelte";
   import StateBadge from "./StateBadge.svelte";
-  import { t } from "../i18n";
+  import { locale, setLocale, t } from "../i18n";
   import { globals, liveRateBps } from "../stores";
   import { pauseAll, resumeAll, cancelAll } from "../ipc";
   import { formatEta, formatRate } from "../format";
@@ -19,6 +19,34 @@
   let hasWork = $derived(
     g.state !== "idle" && g.activeJobs + g.queuedJobs + g.pausedJobs > 0,
   );
+
+  // Phase 11a — temporary language dropdown. Folds into Settings →
+  // General when Phase 12 lands the Settings window.
+  const LANGUAGE_LABELS: Record<string, string> = {
+    en: "English",
+    es: "Español",
+    "zh-CN": "中文 (简)",
+    hi: "हिन्दी",
+    ar: "العربية",
+    "pt-BR": "Português (BR)",
+    ru: "Русский",
+    ja: "日本語",
+    de: "Deutsch",
+    fr: "Français",
+    ko: "한국어",
+    it: "Italiano",
+    tr: "Türkçe",
+    vi: "Tiếng Việt",
+    pl: "Polski",
+    nl: "Nederlands",
+    id: "Bahasa Indonesia",
+    uk: "Українська",
+  };
+
+  async function onLocaleChange(e: Event) {
+    const target = e.currentTarget as HTMLSelectElement;
+    await setLocale(target.value);
+  }
 </script>
 
 <header class="header" aria-label={t("window-title")}>
@@ -35,6 +63,28 @@
     </div>
   </div>
   <div class="actions" role="toolbar" aria-label={t("header-toolbar-label")}>
+    <!--
+      Phase 11a — temporary language dropdown. Lives here until the
+      Phase 12 Settings window can host a proper Appearance → Language
+      control. Keep the markup minimal: a <select> hot-swaps the
+      locale without a restart via `setLocale`.
+    -->
+    <label
+      class="lang"
+      title={t("header-language-title")}
+      aria-label={t("header-language-label")}
+    >
+      <Icon name="info" size={14} />
+      <select
+        value={$locale.code}
+        onchange={onLocaleChange}
+        aria-label={t("header-language-label")}
+      >
+        {#each $locale.available as code (code)}
+          <option value={code}>{LANGUAGE_LABELS[code] ?? code}</option>
+        {/each}
+      </select>
+    </label>
     <button
       type="button"
       class="icon-btn"
@@ -122,6 +172,39 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
+  }
+
+  /* Phase 11a temporary locale picker — neutral styling so it
+     doesn't compete with the primary action buttons. */
+  .lang {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    margin-right: 4px;
+    border-radius: 6px;
+    color: var(--fg-dim, #6a6a6a);
+    cursor: pointer;
+  }
+
+  .lang select {
+    background: transparent;
+    border: 1px solid transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 12px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .lang select:hover {
+    background: var(--hover, rgba(128, 128, 128, 0.14));
+  }
+
+  .lang select:focus-visible {
+    outline: 2px solid var(--accent, #4f8cff);
+    outline-offset: 2px;
   }
 
   .icon-btn {

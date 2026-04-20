@@ -126,104 +126,233 @@ toast-job-done = Transferência concluída
 toast-copy-queued = Cópia enfileirada
 # MT
 toast-move-queued = Movimentação enfileirada
-# Phase 8 additions — MT placeholders; review before 1.0.
-
-# MT — Toast messages
-toast-error-resolved = Error resolved
-toast-collision-resolved = Collision resolved
-toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
-toast-error-log-exported = Error log exported
+# MT — Phase 8 toast messages
+toast-error-resolved = Erro resolvido
+# MT
+toast-collision-resolved = Conflito resolvido
+# MT
+toast-elevated-unavailable = A nova tentativa com permissões elevadas chega na fase 17 — ainda não disponível
+# MT
+toast-error-log-exported = Registro de erros exportado
 
 # MT — Error modal
-error-modal-title = A transfer failed
-error-modal-retry = Retry
-error-modal-retry-elevated = Retry with elevated permissions
-error-modal-skip = Skip
-error-modal-skip-all-kind = Skip all errors of this kind
-error-modal-abort = Abort all
-error-modal-path-label = Path
-error-modal-code-label = Code
+error-modal-title = Uma transferência falhou
+# MT
+error-modal-retry = Tentar novamente
+# MT
+error-modal-retry-elevated = Tentar novamente com permissões elevadas
+# MT
+error-modal-skip = Ignorar
+# MT
+error-modal-skip-all-kind = Ignorar todos os erros desse tipo
+# MT
+error-modal-abort = Cancelar tudo
+# MT
+error-modal-path-label = Caminho
+# MT
+error-modal-code-label = Código
 
 # MT — Error-kind labels
-err-not-found = File not found
-err-permission-denied = Permission denied
-err-disk-full = Destination disk is full
-err-interrupted = Operation interrupted
-err-verify-failed = Post-copy verification failed
-err-io-other = Unknown I/O error
+err-not-found = Arquivo não encontrado
+# MT
+err-permission-denied = Permissão negada
+# MT
+err-disk-full = O disco de destino está cheio
+# MT
+err-interrupted = Operação interrompida
+# MT
+err-verify-failed = Verificação pós-cópia falhou
+# MT
+err-io-other = Erro de E/S desconhecido
 
 # MT — Collision modal
-collision-modal-title = File already exists
-collision-modal-overwrite = Overwrite
-collision-modal-overwrite-if-newer = Overwrite if newer
-collision-modal-skip = Skip
-collision-modal-keep-both = Keep both
-collision-modal-rename = Rename…
-collision-modal-apply-to-all = Apply to all
-collision-modal-source = Source
-collision-modal-destination = Destination
-collision-modal-size = Size
-collision-modal-modified = Modified
-collision-modal-hash-check = Quick hash (SHA-256)
-collision-modal-rename-placeholder = New filename
-collision-modal-confirm-rename = Rename
+collision-modal-title = O arquivo já existe
+# MT
+collision-modal-overwrite = Sobrescrever
+# MT
+collision-modal-overwrite-if-newer = Sobrescrever se mais recente
+# MT
+collision-modal-skip = Ignorar
+# MT
+collision-modal-keep-both = Manter ambos
+# MT
+collision-modal-rename = Renomear…
+# MT
+collision-modal-apply-to-all = Aplicar a todos
+# MT
+collision-modal-source = Origem
+# MT
+collision-modal-destination = Destino
+# MT
+collision-modal-size = Tamanho
+# MT
+collision-modal-modified = Modificado
+# MT
+collision-modal-hash-check = Hash rápido (SHA-256)
+# MT
+collision-modal-rename-placeholder = Novo nome do arquivo
+# MT
+collision-modal-confirm-rename = Renomear
 
 # MT — Error log drawer
-error-log-title = Error log
-error-log-empty = No errors logged
-error-log-export-csv = Export CSV
-error-log-export-txt = Export text
-error-log-clear = Clear log
-error-log-col-time = Time
-error-log-col-job = Job
-error-log-col-path = Path
-error-log-col-code = Code
-error-log-col-message = Message
-error-log-col-resolution = Resolution
+error-log-title = Registro de erros
+# MT
+error-log-empty = Nenhum erro registrado
+# MT
+error-log-export-csv = Exportar CSV
+# MT
+error-log-export-txt = Exportar texto
+# MT
+error-log-clear = Limpar registro
+# MT
+error-log-col-time = Hora
+# MT
+error-log-col-job = Tarefa
+# MT
+error-log-col-path = Caminho
+# MT
+error-log-col-code = Código
+# MT
+error-log-col-message = Mensagem
+# MT
+error-log-col-resolution = Resolução
 
 # MT — History drawer (Phase 9)
-history-title = History
-history-empty = No jobs recorded yet
-history-unavailable = Copy history isn't available. The app couldn't open the SQLite store at startup.
-history-filter-any = any
-history-filter-kind = Kind
-history-filter-status = Status
-history-filter-text = Search
-history-refresh = Refresh
-history-export-csv = Export CSV
-history-purge-30 = Purge > 30 days
-history-rerun = Re-run
-history-detail-open = Details
-history-detail-title = Job details
-history-detail-empty = No items recorded
-history-col-date = Date
-history-col-kind = Kind
-history-col-src = Source
-history-col-dst = Destination
-history-col-files = Files
-history-col-size = Size
-history-col-status = Status
-history-col-duration = Duration
-history-col-error = Error
+history-title = Histórico
+# MT
+history-empty = Nenhuma tarefa registrada ainda
+# MT
+history-unavailable = O histórico de cópias não está disponível. O aplicativo não conseguiu abrir o armazenamento SQLite na inicialização.
+# MT
+history-filter-any = qualquer
+# MT
+history-filter-kind = Tipo
+# MT
+history-filter-status = Estado
+# MT
+history-filter-text = Pesquisar
+# MT
+history-refresh = Atualizar
+# MT
+history-export-csv = Exportar CSV
+# MT
+history-purge-30 = Eliminar > 30 dias
+# MT
+history-rerun = Executar novamente
+# MT
+history-detail-open = Detalhes
+# MT
+history-detail-title = Detalhes da tarefa
+# MT
+history-detail-empty = Nenhum item registrado
+# MT
+history-col-date = Data
+# MT
+history-col-kind = Tipo
+# MT
+history-col-src = Origem
+# MT
+history-col-dst = Destino
+# MT
+history-col-files = Arquivos
+# MT
+history-col-size = Tamanho
+# MT
+history-col-status = Estado
+# MT
+history-col-duration = Duração
+# MT
+history-col-error = Erro
 
-# MT — Phase 9 toasts
-toast-history-exported = History exported
-toast-history-rerun-queued = Re-run queued
+# MT
+toast-history-exported = Histórico exportado
+# MT
+toast-history-rerun-queued = Nova execução na fila
 
 # MT — Totals drawer (Phase 10)
-footer-totals = Totals
-totals-title = Totals
-totals-loading = Loading totals…
-totals-card-bytes = Total bytes copied
-totals-card-files = Files
-totals-card-jobs = Jobs
-totals-card-avg-rate = Average throughput
-totals-errors = errors
-totals-spark-title = Last 30 days
-totals-kinds-title = By kind
-totals-saved-title = Time saved (estimated)
-totals-saved-note = Estimated vs a baseline file-manager copy of the same workload.
-totals-reset = Reset statistics
-totals-reset-confirm = This deletes every stored job and item. Continue?
-totals-reset-confirm-yes = Yes, reset
-toast-totals-reset = Statistics reset
+footer-totals = Totais
+# MT
+totals-title = Totais
+# MT
+totals-loading = Carregando totais…
+# MT
+totals-card-bytes = Total de bytes copiados
+# MT
+totals-card-files = Arquivos
+# MT
+totals-card-jobs = Tarefas
+# MT
+totals-card-avg-rate = Taxa média
+# MT
+totals-errors = erros
+# MT
+totals-spark-title = Últimos 30 dias
+# MT
+totals-kinds-title = Por tipo
+# MT
+totals-saved-title = Tempo economizado (estimado)
+# MT
+totals-saved-note = Estimado em comparação com uma cópia de referência da mesma carga em um gerenciador de arquivos padrão.
+# MT
+totals-reset = Redefinir estatísticas
+# MT
+totals-reset-confirm = Isso exclui todas as tarefas e itens armazenados. Continuar?
+# MT
+totals-reset-confirm-yes = Sim, redefinir
+# MT
+toast-totals-reset = Estatísticas redefinidas
+
+# MT — Phase 11a additions
+header-language-label = Idioma
+# MT
+header-language-title = Alterar idioma
+
+# MT
+kind-copy = Copiar
+# MT
+kind-move = Mover
+# MT
+kind-delete = Excluir
+# MT
+kind-secure-delete = Exclusão segura
+
+# MT
+status-running = Em execução
+# MT
+status-succeeded = Concluído
+# MT
+status-failed = Falhou
+# MT
+status-cancelled = Cancelado
+# MT
+status-ok = OK
+# MT
+status-skipped = Ignorado
+
+# MT
+history-search-placeholder = /caminho
+# MT
+toast-history-purged = { $count } tarefas com mais de 30 dias removidas
+
+# MT
+err-source-required = É necessário pelo menos um caminho de origem.
+# MT
+err-destination-empty = O caminho de destino está vazio.
+# MT
+err-source-empty = O caminho de origem está vazio.
+
+# MT
+duration-lt-1s = < 1 s
+# MT
+duration-ms = { $ms } ms
+# MT
+duration-seconds = { $s } s
+# MT
+duration-minutes-seconds = { $m } min { $s } s
+# MT
+duration-hours-minutes = { $h } h { $m } min
+# MT
+duration-zero = 0 s
+
+# MT
+rate-unit-per-second = { $size }/s

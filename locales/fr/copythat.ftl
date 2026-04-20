@@ -126,104 +126,233 @@ toast-job-done = Transfert terminé
 toast-copy-queued = Copie mise en file d'attente
 # MT
 toast-move-queued = Déplacement mis en file d'attente
-# Phase 8 additions — MT placeholders; review before 1.0.
-
-# MT — Toast messages
-toast-error-resolved = Error resolved
-toast-collision-resolved = Collision resolved
-toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
-toast-error-log-exported = Error log exported
+# MT — Phase 8 toast messages
+toast-error-resolved = Erreur résolue
+# MT
+toast-collision-resolved = Conflit résolu
+# MT
+toast-elevated-unavailable = La nouvelle tentative avec droits élevés arrive en phase 17 — pas encore disponible
+# MT
+toast-error-log-exported = Journal des erreurs exporté
 
 # MT — Error modal
-error-modal-title = A transfer failed
-error-modal-retry = Retry
-error-modal-retry-elevated = Retry with elevated permissions
-error-modal-skip = Skip
-error-modal-skip-all-kind = Skip all errors of this kind
-error-modal-abort = Abort all
-error-modal-path-label = Path
+error-modal-title = Un transfert a échoué
+# MT
+error-modal-retry = Réessayer
+# MT
+error-modal-retry-elevated = Réessayer avec des droits élevés
+# MT
+error-modal-skip = Ignorer
+# MT
+error-modal-skip-all-kind = Ignorer toutes les erreurs de ce type
+# MT
+error-modal-abort = Tout annuler
+# MT
+error-modal-path-label = Chemin
+# MT
 error-modal-code-label = Code
 
 # MT — Error-kind labels
-err-not-found = File not found
-err-permission-denied = Permission denied
-err-disk-full = Destination disk is full
-err-interrupted = Operation interrupted
-err-verify-failed = Post-copy verification failed
-err-io-other = Unknown I/O error
+err-not-found = Fichier introuvable
+# MT
+err-permission-denied = Autorisation refusée
+# MT
+err-disk-full = Le disque de destination est plein
+# MT
+err-interrupted = Opération interrompue
+# MT
+err-verify-failed = Vérification après copie échouée
+# MT
+err-io-other = Erreur d'E/S inconnue
 
 # MT — Collision modal
-collision-modal-title = File already exists
-collision-modal-overwrite = Overwrite
-collision-modal-overwrite-if-newer = Overwrite if newer
-collision-modal-skip = Skip
-collision-modal-keep-both = Keep both
-collision-modal-rename = Rename…
-collision-modal-apply-to-all = Apply to all
+collision-modal-title = Le fichier existe déjà
+# MT
+collision-modal-overwrite = Écraser
+# MT
+collision-modal-overwrite-if-newer = Écraser si plus récent
+# MT
+collision-modal-skip = Ignorer
+# MT
+collision-modal-keep-both = Conserver les deux
+# MT
+collision-modal-rename = Renommer…
+# MT
+collision-modal-apply-to-all = Appliquer à tous
+# MT
 collision-modal-source = Source
+# MT
 collision-modal-destination = Destination
-collision-modal-size = Size
-collision-modal-modified = Modified
-collision-modal-hash-check = Quick hash (SHA-256)
-collision-modal-rename-placeholder = New filename
-collision-modal-confirm-rename = Rename
+# MT
+collision-modal-size = Taille
+# MT
+collision-modal-modified = Modifié
+# MT
+collision-modal-hash-check = Empreinte rapide (SHA-256)
+# MT
+collision-modal-rename-placeholder = Nouveau nom de fichier
+# MT
+collision-modal-confirm-rename = Renommer
 
 # MT — Error log drawer
-error-log-title = Error log
-error-log-empty = No errors logged
-error-log-export-csv = Export CSV
-error-log-export-txt = Export text
-error-log-clear = Clear log
-error-log-col-time = Time
-error-log-col-job = Job
-error-log-col-path = Path
+error-log-title = Journal des erreurs
+# MT
+error-log-empty = Aucune erreur consignée
+# MT
+error-log-export-csv = Exporter CSV
+# MT
+error-log-export-txt = Exporter en texte
+# MT
+error-log-clear = Vider le journal
+# MT
+error-log-col-time = Heure
+# MT
+error-log-col-job = Tâche
+# MT
+error-log-col-path = Chemin
+# MT
 error-log-col-code = Code
+# MT
 error-log-col-message = Message
-error-log-col-resolution = Resolution
+# MT
+error-log-col-resolution = Résolution
 
 # MT — History drawer (Phase 9)
-history-title = History
-history-empty = No jobs recorded yet
-history-unavailable = Copy history isn't available. The app couldn't open the SQLite store at startup.
-history-filter-any = any
-history-filter-kind = Kind
-history-filter-status = Status
-history-filter-text = Search
-history-refresh = Refresh
-history-export-csv = Export CSV
-history-purge-30 = Purge > 30 days
-history-rerun = Re-run
-history-detail-open = Details
-history-detail-title = Job details
-history-detail-empty = No items recorded
+history-title = Historique
+# MT
+history-empty = Aucune tâche enregistrée pour le moment
+# MT
+history-unavailable = L'historique des copies n'est pas disponible. L'application n'a pas pu ouvrir le magasin SQLite au démarrage.
+# MT
+history-filter-any = tous
+# MT
+history-filter-kind = Type
+# MT
+history-filter-status = État
+# MT
+history-filter-text = Rechercher
+# MT
+history-refresh = Actualiser
+# MT
+history-export-csv = Exporter CSV
+# MT
+history-purge-30 = Purger > 30 jours
+# MT
+history-rerun = Relancer
+# MT
+history-detail-open = Détails
+# MT
+history-detail-title = Détails de la tâche
+# MT
+history-detail-empty = Aucun élément enregistré
+# MT
 history-col-date = Date
-history-col-kind = Kind
+# MT
+history-col-kind = Type
+# MT
 history-col-src = Source
+# MT
 history-col-dst = Destination
-history-col-files = Files
-history-col-size = Size
-history-col-status = Status
-history-col-duration = Duration
-history-col-error = Error
+# MT
+history-col-files = Fichiers
+# MT
+history-col-size = Taille
+# MT
+history-col-status = État
+# MT
+history-col-duration = Durée
+# MT
+history-col-error = Erreur
 
-# MT — Phase 9 toasts
-toast-history-exported = History exported
-toast-history-rerun-queued = Re-run queued
+# MT
+toast-history-exported = Historique exporté
+# MT
+toast-history-rerun-queued = Relance en file d'attente
 
 # MT — Totals drawer (Phase 10)
-footer-totals = Totals
-totals-title = Totals
-totals-loading = Loading totals…
-totals-card-bytes = Total bytes copied
-totals-card-files = Files
-totals-card-jobs = Jobs
-totals-card-avg-rate = Average throughput
-totals-errors = errors
-totals-spark-title = Last 30 days
-totals-kinds-title = By kind
-totals-saved-title = Time saved (estimated)
-totals-saved-note = Estimated vs a baseline file-manager copy of the same workload.
-totals-reset = Reset statistics
-totals-reset-confirm = This deletes every stored job and item. Continue?
-totals-reset-confirm-yes = Yes, reset
-toast-totals-reset = Statistics reset
+footer-totals = Totaux
+# MT
+totals-title = Totaux
+# MT
+totals-loading = Chargement des totaux…
+# MT
+totals-card-bytes = Octets copiés au total
+# MT
+totals-card-files = Fichiers
+# MT
+totals-card-jobs = Tâches
+# MT
+totals-card-avg-rate = Débit moyen
+# MT
+totals-errors = erreurs
+# MT
+totals-spark-title = 30 derniers jours
+# MT
+totals-kinds-title = Par type
+# MT
+totals-saved-title = Temps gagné (estimé)
+# MT
+totals-saved-note = Estimé par rapport à une copie de référence du même contenu avec un gestionnaire de fichiers standard.
+# MT
+totals-reset = Réinitialiser les statistiques
+# MT
+totals-reset-confirm = Ceci supprime toutes les tâches et éléments stockés. Continuer ?
+# MT
+totals-reset-confirm-yes = Oui, réinitialiser
+# MT
+toast-totals-reset = Statistiques réinitialisées
+
+# MT — Phase 11a additions
+header-language-label = Langue
+# MT
+header-language-title = Changer de langue
+
+# MT
+kind-copy = Copier
+# MT
+kind-move = Déplacer
+# MT
+kind-delete = Supprimer
+# MT
+kind-secure-delete = Suppression sécurisée
+
+# MT
+status-running = En cours
+# MT
+status-succeeded = Terminé
+# MT
+status-failed = Échec
+# MT
+status-cancelled = Annulé
+# MT
+status-ok = OK
+# MT
+status-skipped = Ignoré
+
+# MT
+history-search-placeholder = /chemin
+# MT
+toast-history-purged = { $count } tâches de plus de 30 jours supprimées
+
+# MT
+err-source-required = Au moins un chemin source est requis.
+# MT
+err-destination-empty = Le chemin de destination est vide.
+# MT
+err-source-empty = Le chemin source est vide.
+
+# MT
+duration-lt-1s = < 1 s
+# MT
+duration-ms = { $ms } ms
+# MT
+duration-seconds = { $s } s
+# MT
+duration-minutes-seconds = { $m } min { $s } s
+# MT
+duration-hours-minutes = { $h } h { $m } min
+# MT
+duration-zero = 0 s
+
+# MT
+rate-unit-per-second = { $size }/s

@@ -118,10 +118,7 @@
   async function purge30() {
     try {
       const n = await historyPurge(30);
-      pushToast(
-        "info",
-        `Purged ${n} jobs older than 30 days`,
-      );
+      pushToast("info", t("toast-history-purged", { count: n }));
       await refresh();
     } catch (e) {
       pushToast("error", e instanceof Error ? e.message : String(e));
@@ -140,12 +137,26 @@
   function fmtDuration(start: number, end: number | null): string {
     if (end === null) return "—";
     const ms = Math.max(0, end - start);
-    if (ms < 1000) return `${ms} ms`;
+    if (ms < 1000) return t("duration-ms", { ms });
     const s = Math.floor(ms / 1000);
-    if (s < 60) return `${s}s`;
+    if (s < 60) return t("duration-seconds", { s });
     const m = Math.floor(s / 60);
     const r = s % 60;
-    return `${m}m ${r}s`;
+    return t("duration-minutes-seconds", { m, s: r });
+  }
+
+  // Map history wire-format `kind` / `status` strings to localized
+  // labels. Unknown values fall back to the raw string so operator-
+  // introduced kinds (e.g. a future "verify") still render.
+  function localizedKind(kind: string): string {
+    const key = `kind-${kind}`;
+    const out = t(key);
+    return out.startsWith("{") ? kind : out;
+  }
+  function localizedStatus(status: string): string {
+    const key = `status-${status}`;
+    const out = t(key);
+    return out.startsWith("{") ? status : out;
   }
 </script>
 
@@ -168,18 +179,18 @@
         {t("history-filter-kind")}
         <select bind:value={kindFilter}>
           <option value="">{t("history-filter-any")}</option>
-          <option value="copy">copy</option>
-          <option value="move">move</option>
+          <option value="copy">{t("kind-copy")}</option>
+          <option value="move">{t("kind-move")}</option>
         </select>
       </label>
       <label>
         {t("history-filter-status")}
         <select bind:value={statusFilter}>
           <option value="">{t("history-filter-any")}</option>
-          <option value="running">running</option>
-          <option value="succeeded">succeeded</option>
-          <option value="failed">failed</option>
-          <option value="cancelled">cancelled</option>
+          <option value="running">{t("status-running")}</option>
+          <option value="succeeded">{t("status-succeeded")}</option>
+          <option value="failed">{t("status-failed")}</option>
+          <option value="cancelled">{t("status-cancelled")}</option>
         </select>
       </label>
       <label class="text">
@@ -187,7 +198,7 @@
         <input
           type="text"
           bind:value={textFilter}
-          placeholder="/path"
+          placeholder={t("history-search-placeholder")}
           onkeydown={(e) => {
             if (e.key === "Enter") void refresh();
           }}
@@ -232,7 +243,7 @@
           {#each rows as row (row.rowId)}
             <tr>
               <td>{fmtDate(row.startedAtMs)}</td>
-              <td>{row.kind}</td>
+              <td>{localizedKind(row.kind)}</td>
               <td class="path" title={row.srcRoot}>{row.srcRoot}</td>
               <td class="path" title={row.dstRoot}>{row.dstRoot}</td>
               <td>
@@ -243,7 +254,9 @@
               </td>
               <td>{formatBytes(row.totalBytes)}</td>
               <td>
-                <span class="status" data-status={row.status}>{row.status}</span>
+                <span class="status" data-status={row.status}>
+                  {localizedStatus(row.status)}
+                </span>
               </td>
               <td>{fmtDuration(row.startedAtMs, row.finishedAtMs)}</td>
               <td class="actions">
@@ -303,7 +316,9 @@
                 <td class="path" title={it.src}>{it.src}</td>
                 <td>{formatBytes(it.size)}</td>
                 <td>
-                  <span class="status" data-status={it.status}>{it.status}</span>
+                  <span class="status" data-status={it.status}>
+                    {localizedStatus(it.status)}
+                  </span>
                 </td>
                 <td class="err">{it.errorMsg ?? "—"}</td>
               </tr>

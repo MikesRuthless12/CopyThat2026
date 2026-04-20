@@ -126,104 +126,233 @@ toast-job-done = Overdracht voltooid
 toast-copy-queued = Kopie in wachtrij
 # MT
 toast-move-queued = Verplaatsing in wachtrij
-# Phase 8 additions — MT placeholders; review before 1.0.
-
-# MT — Toast messages
-toast-error-resolved = Error resolved
-toast-collision-resolved = Collision resolved
-toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
-toast-error-log-exported = Error log exported
+# MT — Phase 8 toast messages
+toast-error-resolved = Fout opgelost
+# MT
+toast-collision-resolved = Conflict opgelost
+# MT
+toast-elevated-unavailable = Opnieuw proberen met verhoogde rechten komt in fase 17 — nog niet beschikbaar
+# MT
+toast-error-log-exported = Foutenlogboek geëxporteerd
 
 # MT — Error modal
-error-modal-title = A transfer failed
-error-modal-retry = Retry
-error-modal-retry-elevated = Retry with elevated permissions
-error-modal-skip = Skip
-error-modal-skip-all-kind = Skip all errors of this kind
-error-modal-abort = Abort all
-error-modal-path-label = Path
+error-modal-title = Een overdracht is mislukt
+# MT
+error-modal-retry = Opnieuw proberen
+# MT
+error-modal-retry-elevated = Opnieuw proberen met verhoogde rechten
+# MT
+error-modal-skip = Overslaan
+# MT
+error-modal-skip-all-kind = Alle fouten van deze soort overslaan
+# MT
+error-modal-abort = Alles afbreken
+# MT
+error-modal-path-label = Pad
+# MT
 error-modal-code-label = Code
 
 # MT — Error-kind labels
-err-not-found = File not found
-err-permission-denied = Permission denied
-err-disk-full = Destination disk is full
-err-interrupted = Operation interrupted
-err-verify-failed = Post-copy verification failed
-err-io-other = Unknown I/O error
+err-not-found = Bestand niet gevonden
+# MT
+err-permission-denied = Toestemming geweigerd
+# MT
+err-disk-full = Doelschijf is vol
+# MT
+err-interrupted = Bewerking onderbroken
+# MT
+err-verify-failed = Controle na kopiëren mislukt
+# MT
+err-io-other = Onbekende I/O-fout
 
 # MT — Collision modal
-collision-modal-title = File already exists
-collision-modal-overwrite = Overwrite
-collision-modal-overwrite-if-newer = Overwrite if newer
-collision-modal-skip = Skip
-collision-modal-keep-both = Keep both
-collision-modal-rename = Rename…
-collision-modal-apply-to-all = Apply to all
-collision-modal-source = Source
-collision-modal-destination = Destination
-collision-modal-size = Size
-collision-modal-modified = Modified
-collision-modal-hash-check = Quick hash (SHA-256)
-collision-modal-rename-placeholder = New filename
-collision-modal-confirm-rename = Rename
+collision-modal-title = Bestand bestaat al
+# MT
+collision-modal-overwrite = Overschrijven
+# MT
+collision-modal-overwrite-if-newer = Overschrijven als nieuwer
+# MT
+collision-modal-skip = Overslaan
+# MT
+collision-modal-keep-both = Beide behouden
+# MT
+collision-modal-rename = Hernoemen…
+# MT
+collision-modal-apply-to-all = Op alles toepassen
+# MT
+collision-modal-source = Bron
+# MT
+collision-modal-destination = Bestemming
+# MT
+collision-modal-size = Grootte
+# MT
+collision-modal-modified = Gewijzigd
+# MT
+collision-modal-hash-check = Snelle hash (SHA-256)
+# MT
+collision-modal-rename-placeholder = Nieuwe bestandsnaam
+# MT
+collision-modal-confirm-rename = Hernoemen
 
 # MT — Error log drawer
-error-log-title = Error log
-error-log-empty = No errors logged
-error-log-export-csv = Export CSV
-error-log-export-txt = Export text
-error-log-clear = Clear log
-error-log-col-time = Time
-error-log-col-job = Job
-error-log-col-path = Path
+error-log-title = Foutenlogboek
+# MT
+error-log-empty = Geen fouten geregistreerd
+# MT
+error-log-export-csv = CSV exporteren
+# MT
+error-log-export-txt = Tekst exporteren
+# MT
+error-log-clear = Logboek wissen
+# MT
+error-log-col-time = Tijd
+# MT
+error-log-col-job = Taak
+# MT
+error-log-col-path = Pad
+# MT
 error-log-col-code = Code
-error-log-col-message = Message
-error-log-col-resolution = Resolution
+# MT
+error-log-col-message = Bericht
+# MT
+error-log-col-resolution = Oplossing
 
 # MT — History drawer (Phase 9)
-history-title = History
-history-empty = No jobs recorded yet
-history-unavailable = Copy history isn't available. The app couldn't open the SQLite store at startup.
-history-filter-any = any
-history-filter-kind = Kind
+history-title = Geschiedenis
+# MT
+history-empty = Nog geen taken geregistreerd
+# MT
+history-unavailable = Kopieergeschiedenis is niet beschikbaar. De app kon de SQLite-opslag bij het opstarten niet openen.
+# MT
+history-filter-any = alle
+# MT
+history-filter-kind = Soort
+# MT
 history-filter-status = Status
-history-filter-text = Search
-history-refresh = Refresh
-history-export-csv = Export CSV
-history-purge-30 = Purge > 30 days
-history-rerun = Re-run
+# MT
+history-filter-text = Zoeken
+# MT
+history-refresh = Vernieuwen
+# MT
+history-export-csv = CSV exporteren
+# MT
+history-purge-30 = Ouder dan 30 dagen wissen
+# MT
+history-rerun = Opnieuw uitvoeren
+# MT
 history-detail-open = Details
-history-detail-title = Job details
-history-detail-empty = No items recorded
-history-col-date = Date
-history-col-kind = Kind
-history-col-src = Source
-history-col-dst = Destination
-history-col-files = Files
-history-col-size = Size
+# MT
+history-detail-title = Taakdetails
+# MT
+history-detail-empty = Geen items geregistreerd
+# MT
+history-col-date = Datum
+# MT
+history-col-kind = Soort
+# MT
+history-col-src = Bron
+# MT
+history-col-dst = Bestemming
+# MT
+history-col-files = Bestanden
+# MT
+history-col-size = Grootte
+# MT
 history-col-status = Status
-history-col-duration = Duration
-history-col-error = Error
+# MT
+history-col-duration = Duur
+# MT
+history-col-error = Fout
 
-# MT — Phase 9 toasts
-toast-history-exported = History exported
-toast-history-rerun-queued = Re-run queued
+# MT
+toast-history-exported = Geschiedenis geëxporteerd
+# MT
+toast-history-rerun-queued = Opnieuw uitvoeren in wachtrij
 
 # MT — Totals drawer (Phase 10)
-footer-totals = Totals
-totals-title = Totals
-totals-loading = Loading totals…
-totals-card-bytes = Total bytes copied
-totals-card-files = Files
-totals-card-jobs = Jobs
-totals-card-avg-rate = Average throughput
-totals-errors = errors
-totals-spark-title = Last 30 days
-totals-kinds-title = By kind
-totals-saved-title = Time saved (estimated)
-totals-saved-note = Estimated vs a baseline file-manager copy of the same workload.
-totals-reset = Reset statistics
-totals-reset-confirm = This deletes every stored job and item. Continue?
-totals-reset-confirm-yes = Yes, reset
-toast-totals-reset = Statistics reset
+footer-totals = Totalen
+# MT
+totals-title = Totalen
+# MT
+totals-loading = Totalen laden…
+# MT
+totals-card-bytes = Totaal gekopieerde bytes
+# MT
+totals-card-files = Bestanden
+# MT
+totals-card-jobs = Taken
+# MT
+totals-card-avg-rate = Gemiddelde doorvoer
+# MT
+totals-errors = fouten
+# MT
+totals-spark-title = Laatste 30 dagen
+# MT
+totals-kinds-title = Per soort
+# MT
+totals-saved-title = Bespaarde tijd (geschat)
+# MT
+totals-saved-note = Geschat ten opzichte van een referentiekopie van dezelfde werklast met een standaard bestandsbeheerder.
+# MT
+totals-reset = Statistieken resetten
+# MT
+totals-reset-confirm = Dit verwijdert alle opgeslagen taken en items. Doorgaan?
+# MT
+totals-reset-confirm-yes = Ja, resetten
+# MT
+toast-totals-reset = Statistieken gereset
+
+# MT — Phase 11a additions
+header-language-label = Taal
+# MT
+header-language-title = Taal wijzigen
+
+# MT
+kind-copy = Kopiëren
+# MT
+kind-move = Verplaatsen
+# MT
+kind-delete = Verwijderen
+# MT
+kind-secure-delete = Veilig verwijderen
+
+# MT
+status-running = Wordt uitgevoerd
+# MT
+status-succeeded = Geslaagd
+# MT
+status-failed = Mislukt
+# MT
+status-cancelled = Geannuleerd
+# MT
+status-ok = OK
+# MT
+status-skipped = Overgeslagen
+
+# MT
+history-search-placeholder = /pad
+# MT
+toast-history-purged = { $count } taken ouder dan 30 dagen verwijderd
+
+# MT
+err-source-required = Minstens één bronpad is vereist.
+# MT
+err-destination-empty = Het doelpad is leeg.
+# MT
+err-source-empty = Het bronpad is leeg.
+
+# MT
+duration-lt-1s = < 1 s
+# MT
+duration-ms = { $ms } ms
+# MT
+duration-seconds = { $s } s
+# MT
+duration-minutes-seconds = { $m } min { $s } s
+# MT
+duration-hours-minutes = { $h } u { $m } min
+# MT
+duration-zero = 0 s
+
+# MT
+rate-unit-per-second = { $size }/s

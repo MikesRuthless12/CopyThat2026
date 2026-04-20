@@ -177,19 +177,27 @@
   });
 
   function fmtMs(ms: number): string {
-    if (ms <= 0) return "0s";
+    if (ms <= 0) return t("duration-zero");
     const s = Math.floor(ms / 1000);
-    if (s < 60) return `${s}s`;
+    if (s < 60) return t("duration-seconds", { s });
     const m = Math.floor(s / 60);
     const rs = s % 60;
-    if (m < 60) return `${m}m ${rs}s`;
+    if (m < 60) return t("duration-minutes-seconds", { m, s: rs });
     const h = Math.floor(m / 60);
     const rm = m % 60;
-    return `${h}h ${rm}m`;
+    return t("duration-hours-minutes", { h, m: rm });
   }
 
   function fmtRate(bps: number): string {
-    return bps === 0 ? "—" : `${formatBytes(bps)}/s`;
+    return bps === 0 ? "—" : t("rate-unit-per-second", { size: formatBytes(bps) });
+  }
+
+  // Localize a wire-format kind name; fall back to the raw kind for
+  // anything the bundle doesn't know about so the drawer still
+  // renders when new engines land.
+  function localizedKind(kind: string): string {
+    const out = t(`kind-${kind}`);
+    return out.startsWith("{") ? kind : out;
   }
 </script>
 
@@ -271,7 +279,7 @@
                 class="segment"
                 data-kind={b.kind}
                 style="width:{b.widthPct}%"
-                title={`${b.kind}: ${formatBytes(b.bytes)}`}
+                title={`${localizedKind(b.kind)}: ${formatBytes(b.bytes)}`}
               ></span>
             {/each}
           </div>
@@ -279,7 +287,7 @@
             {#each byKindBars as b}
               <li>
                 <span class="swatch" data-kind={b.kind}></span>
-                {b.kind} — {formatBytes(b.bytes)}
+                {localizedKind(b.kind)} — {formatBytes(b.bytes)}
               </li>
             {/each}
           </ul>

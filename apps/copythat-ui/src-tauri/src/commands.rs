@@ -73,11 +73,11 @@ async fn enqueue(
     state: State<'_, AppState>,
 ) -> Result<Vec<u64>, String> {
     if sources.is_empty() {
-        return Err("at least one source path is required".to_string());
+        return Err("err-source-required".to_string());
     }
     let dst_root = PathBuf::from(destination.trim());
     if dst_root.as_os_str().is_empty() {
-        return Err("destination path is empty".to_string());
+        return Err("err-destination-empty".to_string());
     }
 
     let copy_opts = apply_options(&options)?;
@@ -91,7 +91,7 @@ async fn enqueue(
         .filter(|p| !p.as_os_str().is_empty())
         .collect();
     if srcs.is_empty() {
-        return Err("source path is empty".to_string());
+        return Err("err-source-empty".to_string());
     }
     Ok(enqueue_jobs(
         &app,
@@ -541,7 +541,7 @@ pub async fn history_rerun(
     let sources = vec![summary.src_root];
     let dst_root = summary.dst_root;
     if dst_root.as_os_str().is_empty() {
-        return Err("history rerun: destination path is empty".to_string());
+        return Err("err-destination-empty".to_string());
     }
     // Re-run uses the engine defaults; the original row's opaque
     // `options_json` is ignored until Phase 12 can round-trip it.
