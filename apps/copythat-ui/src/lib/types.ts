@@ -255,3 +255,29 @@ export interface HistoryFilterDto {
   text?: string;
   limit?: number;
 }
+
+// Phase 10 — lifetime aggregates (mirror the Rust `TotalsDto`,
+// `KindBreakdownDto`, `DayTotalDto`).
+
+export interface KindBreakdownDto {
+  kind: string;
+  bytes: number;
+  files: number;
+  jobs: number;
+}
+
+export interface TotalsDto {
+  bytes: number;
+  files: number;
+  jobs: number;
+  errors: number;
+  durationMs: number;
+  byKind: KindBreakdownDto[];
+}
+
+export interface DayTotalDto {
+  dateMs: number;
+  bytes: number;
+  files: number;
+  jobs: number;
+}
