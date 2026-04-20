@@ -51,3 +51,15 @@ coverage/
 
 # --- Generated tauri assets we don't want in git ---
 apps/copythat-ui/src-tauri/Cargo.lock
+
+# --- Strategic docs kept local-only per IP policy ---
+# These files stay on disk for in-session reference but are never
+# tracked by git. README.md and docs/SECURITY.md are deliberately
+# NOT listed here (README.md is rendered by GitHub; SECURITY.md is
+# the repo's security-disclosure policy).
+/CopyThat2026-Build-Prompts-Guide.md
+/docs/ARCHITECTURE.md
+/docs/CHANGELOG.md
+/docs/I18N_TODO.md
+/docs/ROADMAP.md
+/packaging/linux/README.md

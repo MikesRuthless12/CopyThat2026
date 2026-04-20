@@ -6,6 +6,7 @@ members = [
     "crates/copythat-secure-delete",
     "crates/copythat-history",
     "crates/copythat-platform",
+    "crates/copythat-shellext",
     "crates/copythat-i18n",
     "xtask",
     "apps/copythat-ui/src-tauri",

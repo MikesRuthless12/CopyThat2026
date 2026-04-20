@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Thunar Custom Actions (UCA) fragment for Copy That 2026.
+
+  Installation: merged into ~/.config/Thunar/uca.xml on first run by
+  the packaging install-shell-integration helper. Thunar does not
+  support dropping a separate file into a conf.d directory, so the
+  helper reads this fragment, strips the outer <actions> wrapper,
+  and appends the <action> elements to the user's existing uca.xml
+  (creating it if absent). The <unique-id> values are stable across
+  runs so re-runs upsert rather than duplicate.
+
+  Docs: https://docs.xfce.org/xfce/thunar/custom-actions
+-->
+<actions>
+  <action>
+    <icon>copythat</icon>
+    <name>Copy with Copy That</name>
+    <name xml:lang="es">Copiar con Copy That</name>
+    <name xml:lang="zh-CN">用 Copy That 复制</name>
+    <name xml:lang="hi">Copy That के साथ कॉपी करें</name>
+    <name xml:lang="ar">انسخ باستخدام Copy That</name>
+    <name xml:lang="pt-BR">Copiar com Copy That</name>
+    <name xml:lang="ru">Копировать через Copy That</name>
+    <name xml:lang="ja">Copy That でコピー</name>
+    <name xml:lang="de">Mit Copy That kopieren</name>
+    <name xml:lang="fr">Copier avec Copy That</name>
+    <name xml:lang="ko">Copy That로 복사</name>
+    <name xml:lang="it">Copia con Copy That</name>
+    <name xml:lang="tr">Copy That ile kopyala</name>
+    <name xml:lang="vi">Sao chép bằng Copy That</name>
+    <name xml:lang="pl">Kopiuj za pomocą Copy That</name>
+    <name xml:lang="nl">Kopiëren met Copy That</name>
+    <name xml:lang="id">Salin dengan Copy That</name>
+    <name xml:lang="uk">Копіювати через Copy That</name>
+    <unique-id>copythat-2026-copy</unique-id>
+    <command>copythat --enqueue copy %F</command>
+    <description>Queue a copy job with Copy That 2026</description>
+    <range></range>
+    <patterns>*</patterns>
+    <startup-notify/>
+    <directories/>
+    <audio-files/>
+    <image-files/>
+    <other-files/>
+    <text-files/>
+    <video-files/>
+  </action>
+  <action>
+    <icon>copythat</icon>
+    <name>Move with Copy That</name>
+    <name xml:lang="es">Mover con Copy That</name>
+    <name xml:lang="zh-CN">用 Copy That 移动</name>
+    <name xml:lang="hi">Copy That के साथ मूव करें</name>
+    <name xml:lang="ar">انقل باستخدام Copy That</name>
+    <name xml:lang="pt-BR">Mover com Copy That</name>
+    <name xml:lang="ru">Переместить через Copy That</name>
+    <name xml:lang="ja">Copy That で移動</name>
+    <name xml:lang="de">Mit Copy That verschieben</name>
+    <name xml:lang="fr">Déplacer avec Copy That</name>
+    <name xml:lang="ko">Copy That로 이동</name>
+    <name xml:lang="it">Sposta con Copy That</name>
+    <name xml:lang="tr">Copy That ile taşı</name>
+    <name xml:lang="vi">Di chuyển bằng Copy That</name>
+    <name xml:lang="pl">Przenieś za pomocą Copy That</name>
+    <name xml:lang="nl">Verplaatsen met Copy That</name>
+    <name xml:lang="id">Pindahkan dengan Copy That</name>
+    <name xml:lang="uk">Перемістити через Copy That</name>
+    <unique-id>copythat-2026-move</unique-id>
+    <command>copythat --enqueue move %F</command>
+    <description>Queue a move job with Copy That 2026</description>
+    <range></range>
+    <patterns>*</patterns>
+    <startup-notify/>
+    <directories/>
+    <audio-files/>
+    <image-files/>
+    <other-files/>
+    <text-files/>
+    <video-files/>
+  </action>
+</actions>

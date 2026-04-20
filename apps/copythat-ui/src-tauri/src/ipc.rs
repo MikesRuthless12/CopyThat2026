@@ -29,6 +29,12 @@ pub const EVENT_JOB_FAILED: &str = "job-failed";
 pub const EVENT_JOB_REMOVED: &str = "job-removed";
 pub const EVENT_GLOBALS_TICK: &str = "globals-tick";
 pub const EVENT_DROP_RECEIVED: &str = "drop-received";
+/// Phase 7a — shell-extension hosts (Windows IExplorerCommand, macOS
+/// Finder Sync, Linux Nautilus / Dolphin / Thunar) deliver paths to
+/// the app via the single-instance plugin's argv hand-off. The
+/// frontend listens for this event and routes the payload into its
+/// existing drop-staging dialog with the verb pre-selected.
+pub const EVENT_SHELL_ENQUEUE: &str = "shell-enqueue";
 
 /// UI-facing snapshot of a single queue job.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -131,6 +137,18 @@ pub struct GlobalsDto {
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DropReceivedDto {
+    pub paths: Vec<String>,
+}
+
+/// Paths handed to the app by a shell-extension host via
+/// `copythat --enqueue <verb> <paths…>`. Shares shape with
+/// [`DropReceivedDto`] so the frontend can reuse its drop-staging
+/// flow; adds `verb` so "Move with CopyThat" skips the radio.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShellEnqueueDto {
+    /// `"copy"` or `"move"`.
+    pub verb: &'static str,
     pub paths: Vec<String>,
 }
 
