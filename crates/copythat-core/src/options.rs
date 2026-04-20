@@ -205,6 +205,57 @@ impl Default for MoveOptions {
 /// detection.
 pub const DEFAULT_TREE_CONCURRENCY: usize = 4;
 
+/// What the tree engine should do when a per-file copy fails.
+///
+/// Separate from `CollisionPolicy` — that resolves "destination already
+/// exists" *before* the copy starts; this governs "the copy started
+/// and the filesystem said no" (permission denied, disk full,
+/// interrupted, …).
+///
+/// Added in Phase 8 so the UI can surface a retry / skip dialog. The
+/// default is `Abort` to preserve the pre-Phase-8 tree semantics
+/// (one failure aborts the whole tree); the Tauri runner opts into
+/// `Ask` when the user has not overridden the Settings policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ErrorPolicy {
+    /// Emit `CopyEvent::ErrorPrompt` and block the failing file's
+    /// task until the consumer replies via a one-shot. The consumer
+    /// picks `ErrorAction::Retry` / `Skip` / `Abort`.
+    Ask,
+    /// Record the error as a `CopyEvent::FileError` event + `errored`
+    /// counter increment, then continue the tree.
+    Skip,
+    /// Retry the failing copy up to `max_attempts` times with a
+    /// fixed backoff, then fall through to `Skip` on exhaustion.
+    RetryN {
+        /// Maximum re-tries (does NOT count the initial attempt).
+        /// Clamped to `[0, 10]` by the engine.
+        max_attempts: u8,
+        /// Sleep between retries, in milliseconds.
+        /// Clamped to `[0, 10_000]` by the engine.
+        backoff_ms: u64,
+    },
+    /// Cancel the whole tree on first per-file failure. Pre-Phase-8
+    /// behaviour; kept as the default so existing callers see no
+    /// behaviour change until they opt in.
+    #[default]
+    Abort,
+}
+
+/// Consumer response to a `CopyEvent::ErrorPrompt`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorAction {
+    /// Re-run `copy_file` for the failing entry. If the retry also
+    /// fails, the engine emits another `ErrorPrompt` (so a loop of
+    /// "keep retrying" is up to the consumer).
+    Retry,
+    /// Record the error as a `FileError` event + `errored` counter;
+    /// continue the rest of the tree.
+    Skip,
+    /// Cancel the tree. Same outcome as `ErrorPolicy::Abort`.
+    Abort,
+}
+
 /// Behaviour knobs for `copy_tree` / `move_tree`.
 #[derive(Debug, Clone)]
 pub struct TreeOptions {
@@ -213,6 +264,9 @@ pub struct TreeOptions {
     pub file: CopyOptions,
     /// How to resolve an existing destination. Default: `Skip`.
     pub collision: crate::collision::CollisionPolicy,
+    /// What to do when a per-file copy *fails* (as opposed to "dst
+    /// already exists"). Default: `Abort` — pre-Phase-8 behaviour.
+    pub on_error: ErrorPolicy,
     /// Maximum concurrent file copies. Clamped to `[1, 64]`.
     pub concurrency: usize,
     /// If true, follow symlinks found *inside* the source tree and
@@ -230,6 +284,7 @@ impl Default for TreeOptions {
         Self {
             file: CopyOptions::default(),
             collision: crate::collision::CollisionPolicy::Skip,
+            on_error: ErrorPolicy::default(),
             concurrency: DEFAULT_TREE_CONCURRENCY,
             follow_symlinks_in_tree: false,
             preserve_directory_times: true,
@@ -240,5 +295,21 @@ impl Default for TreeOptions {
 impl TreeOptions {
     pub(crate) fn clamped_concurrency(&self) -> usize {
         self.concurrency.clamp(1, 64)
+    }
+
+    /// Clamp the RetryN knobs so a pathological config (e.g.
+    /// `max_attempts: 255, backoff_ms: u64::MAX`) can't freeze the
+    /// tree. Non-`RetryN` policies pass through unchanged.
+    pub(crate) fn clamped_on_error(&self) -> ErrorPolicy {
+        match self.on_error {
+            ErrorPolicy::RetryN {
+                max_attempts,
+                backoff_ms,
+            } => ErrorPolicy::RetryN {
+                max_attempts: max_attempts.min(10),
+                backoff_ms: backoff_ms.min(10_000),
+            },
+            other => other,
+        }
     }
 }

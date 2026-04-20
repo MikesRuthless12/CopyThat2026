@@ -12,9 +12,11 @@ use tokio::sync::{mpsc, oneshot};
 use crate::event::{Collision, CollisionResolution, CopyEvent};
 
 /// What to do when `dst` already exists.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum CollisionPolicy {
-    /// Leave `dst` alone; do not copy this file.
+    /// Leave `dst` alone; do not copy this file. The pre-Phase-8
+    /// default and the one `Default` resolves to.
+    #[default]
     Skip,
     /// Truncate `dst` and overwrite.
     Overwrite,

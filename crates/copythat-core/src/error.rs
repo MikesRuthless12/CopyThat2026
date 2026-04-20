@@ -37,6 +37,23 @@ impl CopyErrorKind {
             }
         }
     }
+
+    /// Stable i18n key that every UI renders through its locale table.
+    ///
+    /// The key is constant per variant so Phase 11's full i18n audit
+    /// doesn't need to touch the engine again — translations evolve
+    /// by editing the locale `.ftl` files. The `err-` prefix scopes
+    /// these inside the existing key namespace.
+    pub const fn localized_key(self) -> &'static str {
+        match self {
+            Self::NotFound => "err-not-found",
+            Self::PermissionDenied => "err-permission-denied",
+            Self::DiskFull => "err-disk-full",
+            Self::Interrupted => "err-interrupted",
+            Self::VerifyFailed => "err-verify-failed",
+            Self::IoOther => "err-io-other",
+        }
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -130,5 +147,11 @@ impl CopyError {
 
     pub fn is_verify_failed(&self) -> bool {
         self.kind == CopyErrorKind::VerifyFailed
+    }
+
+    /// Convenience delegator; spares call sites a two-hop through
+    /// `self.kind.localized_key()`.
+    pub const fn localized_key(&self) -> &'static str {
+        self.kind.localized_key()
     }
 }
