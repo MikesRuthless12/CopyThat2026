@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Info.plist for the Copy That 2026 Finder Sync Extension.
+
+  This file defines the .appex bundle that macOS Finder loads when
+  the main app is installed. The principal class is resolved by
+  name via the NSExtensionPrincipalClass key; @objc(CopyThatFinderSync)
+  in the Swift source exposes the matching Objective-C runtime
+  name.
+
+  Bundle layout on disk (produced by packaging/macos/scripts/bundle-appex.sh):
+
+    CopyThatFinderSync.appex/
+      Contents/
+        Info.plist                    (this file)
+        MacOS/
+          CopyThatFinderSync          (Mach-O bundle exec)
+
+  The .appex sits inside the main app bundle:
+
+    Copy That 2026.app/
+      Contents/
+        PlugIns/
+          CopyThatFinderSync.appex/
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>Copy That Finder Sync</string>
+
+    <key>CFBundleExecutable</key>
+    <string>CopyThatFinderSync</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>com.copythat.desktop.FinderSync</string>
+
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+
+    <key>CFBundleName</key>
+    <string>CopyThatFinderSync</string>
+
+    <key>CFBundlePackageType</key>
+    <string>XPC!</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright (c) 2026 Mike Weaver. All rights reserved.</string>
+
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionPointIdentifier</key>
+        <string>com.apple.FinderSync</string>
+        <key>NSExtensionPrincipalClass</key>
+        <string>CopyThatFinderSync</string>
+    </dict>
+</dict>
+</plist>
