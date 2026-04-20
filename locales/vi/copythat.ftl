@@ -356,3 +356,14 @@ duration-zero = 0 giây
 
 # MT
 rate-unit-per-second = { $size }/giây
+
+# MT — Phase 11b Settings modal
+settings-title = Cài đặt
+# MT
+settings-tab-general = Chung
+# MT
+settings-tab-appearance = Giao diện
+# MT
+settings-section-language = Ngôn ngữ
+# MT
+settings-phase-12-hint = Các cài đặt khác (chủ đề, mặc định truyền, thuật toán xác minh, hồ sơ) sẽ đến ở Giai đoạn 12.

@@ -9,6 +9,7 @@
     globals,
     openErrorLogDrawer,
     openHistoryDrawer,
+    openSettings,
     openTotalsDrawer,
   } from "../stores";
   import { formatBytes } from "../format";
@@ -58,6 +59,21 @@
   >
     <Icon name="external-link" size={14} />
     {t("footer-history")}
+  </button>
+  <!--
+    Phase 11b — Settings entry point. Icon-only button; the Footer
+    is tight on horizontal room so the gear sits without a text
+    label. Phase 12 can promote it to a labelled button if user
+    research shows people miss it.
+  -->
+  <button
+    class="history icon-only"
+    type="button"
+    onclick={openSettings}
+    aria-label={t("settings-title")}
+    title={t("settings-title")}
+  >
+    <Icon name="settings" size={14} />
   </button>
 </footer>
 
@@ -126,5 +142,15 @@
   .history:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+  }
+
+  .history.icon-only {
+    padding: 4px 6px;
+    color: var(--fg-dim, #5f5f5f);
+  }
+
+  .history.icon-only:hover {
+    background: var(--hover, rgba(128, 128, 128, 0.14));
+    color: var(--fg-strong, #1f1f1f);
   }
 </style>

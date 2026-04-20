@@ -356,3 +356,14 @@ duration-zero = 0 से
 
 # MT
 rate-unit-per-second = { $size }/से
+
+# MT — Phase 11b Settings modal
+settings-title = सेटिंग्स
+# MT
+settings-tab-general = सामान्य
+# MT
+settings-tab-appearance = रूप
+# MT
+settings-section-language = भाषा
+# MT
+settings-phase-12-hint = और सेटिंग्स (थीम, स्थानांतरण डिफ़ॉल्ट, सत्यापन एल्गोरिथम, प्रोफ़ाइल) चरण 12 में आएँगी।

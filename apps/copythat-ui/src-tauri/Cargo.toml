@@ -75,3 +75,10 @@ path = "../../../tests/smoke/phase_08_errors.rs"
 [[test]]
 name = "phase_11a_i18n"
 path = "../../../tests/smoke/phase_11a_i18n.rs"
+
+# Phase 11c smoke test — runtime substitute-pipeline check for
+# every locale + required direction flag. Pure-filesystem; mirrors
+# the TS `substitute()` so we don't need to boot a webview.
+[[test]]
+name = "phase_11c_substitute"
+path = "../../../tests/smoke/phase_11c_substitute.rs"

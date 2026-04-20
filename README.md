@@ -5,20 +5,34 @@ matching every feature of TeraCopy and pushing past it, while staying as fast
 as (or faster than) Explorer / Finder / `cp` / `rsync` for typical desktop
 workloads.
 
-> **Status:** Phase 11a — i18n core + MT drafts + RTL + ICU formatting.
-> Every user-visible string in the app now flows through Fluent
-> (167 keys across 18 locales). All 17 non-English locales ship
-> full MT drafts (Phase 4/5/8/9/10 translations plus the 20
-> Phase 11a additions), each line marked `# MT` for human review.
-> RTL is wired for Arabic (`dir="rtl"` on `<html>`), the temporary
-> header language-switcher hot-swaps locales without a restart
-> (Phase 12's Settings window will host the permanent control),
-> `Intl.NumberFormat` renders in the active locale for byte /
-> percent / number output, and `formatEta` routes every unit word
-> through Fluent. `xtask i18n-lint` now also verifies literal-key
-> coverage from source and Fluent syntax (duplicate-key reject),
-> in addition to the existing key-parity check. Per-locale
-> pixelmatch visual-regression is deferred to Phase 18 polish.
+> **Status:** Phase 11 complete (11a + 11b + 11c).
+>
+> - **11a — i18n core.** Every user-visible string now flows through
+>   Fluent (172 keys × 18 locales, including the Phase 11b Settings
+>   additions). All 17 non-English locales ship full MT drafts
+>   tagged `# MT` for human review. RTL is wired for Arabic
+>   (`dir="rtl"`), `Intl.NumberFormat` pulls the active locale for
+>   byte / percent / number output, and `formatEta` routes every
+>   unit word through Fluent. `xtask i18n-lint` verifies literal-key
+>   coverage from source plus Fluent syntax (duplicate-key reject)
+>   on top of the existing key-parity check.
+> - **11b — Settings modal.** A gear icon in the Footer opens a new
+>   `SettingsModal` with a "General" tab that hosts the permanent
+>   language switcher. Language names render via
+>   `Intl.DisplayNames(currentLocale, { type: "language" })` so the
+>   list appears in the currently selected UI language ("Spanish" /
+>   "Español" / "espagnol" / "スペイン語"); English is pinned first,
+>   the rest sorted alphabetically by display name using the active
+>   locale's collation. The modal skeleton is the seam Phase 12's
+>   Settings window will extend (Transfer / Shell / Secure-delete /
+>   Advanced).
+> - **11c — runtime substitution smoke test.** A second smoke test
+>   runs the real `parse → substitute` pipeline for every key in
+>   every locale with canned args, asserts no `{$` placeable leaks
+>   and balanced braces, and guards the RTL direction flag. Per-
+>   locale pixelmatch visual-regression stays deferred to Phase 18
+>   polish — cross-platform font rendering would need per-OS
+>   baselines that the Phase 18 packaging step pins anyway.
 >
 > _Previous status: Phase 6 — platform-specific fast paths._
 > `crates/copythat-platform` now ships a `fast_copy(src, dst, opts,

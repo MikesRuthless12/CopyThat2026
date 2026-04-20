@@ -356,3 +356,14 @@ duration-zero = 0초
 
 # MT
 rate-unit-per-second = { $size }/초
+
+# MT — Phase 11b Settings modal
+settings-title = 설정
+# MT
+settings-tab-general = 일반
+# MT
+settings-tab-appearance = 모양
+# MT
+settings-section-language = 언어
+# MT
+settings-phase-12-hint = 더 많은 설정(테마, 전송 기본값, 확인 알고리즘, 프로필)은 12단계에서 추가됩니다.

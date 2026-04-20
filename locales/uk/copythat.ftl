@@ -356,3 +356,14 @@ duration-zero = 0 с
 
 # MT
 rate-unit-per-second = { $size }/с
+
+# MT — Phase 11b Settings modal
+settings-title = Налаштування
+# MT
+settings-tab-general = Загальні
+# MT
+settings-tab-appearance = Вигляд
+# MT
+settings-section-language = Мова
+# MT
+settings-phase-12-hint = Інші налаштування (тема, типові параметри передачі, алгоритм перевірки, профілі) з'являться на етапі 12.

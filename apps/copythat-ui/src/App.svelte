@@ -22,6 +22,7 @@
   import ErrorLogDrawer from "./lib/components/ErrorLogDrawer.svelte";
   import HistoryDrawer from "./lib/components/HistoryDrawer.svelte";
   import TotalsDrawer from "./lib/components/TotalsDrawer.svelte";
+  import SettingsModal from "./lib/components/SettingsModal.svelte";
   import Toast from "./lib/components/Toast.svelte";
 
   import { initI18n, t } from "./lib/i18n";
@@ -172,6 +173,9 @@
 
   <!-- Phase 10: lifetime totals drawer -->
   <TotalsDrawer />
+
+  <!-- Phase 11b: Settings modal (Phase 12 extends with more tabs) -->
+  <SettingsModal />
 
   <Toast />
 </main>

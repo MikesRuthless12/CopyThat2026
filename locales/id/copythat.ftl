@@ -356,3 +356,14 @@ duration-zero = 0 d
 
 # MT
 rate-unit-per-second = { $size }/d
+
+# MT — Phase 11b Settings modal
+settings-title = Pengaturan
+# MT
+settings-tab-general = Umum
+# MT
+settings-tab-appearance = Tampilan
+# MT
+settings-section-language = Bahasa
+# MT
+settings-phase-12-hint = Pengaturan lain (tema, default transfer, algoritma verifikasi, profil) akan hadir di Fase 12.

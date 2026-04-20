@@ -229,3 +229,12 @@ duration-zero = 0s
 # render this with a leading space ("Ko/s"); keep it translatable
 # even though the SI-derived "/s" is near-universal.
 rate-unit-per-second = { $size }/s
+
+# Phase 11b — Settings modal. Minimal today (General tab with
+# Language only); Phase 12 extends with Transfer / Shell /
+# Secure-delete / Advanced tabs.
+settings-title = Settings
+settings-tab-general = General
+settings-tab-appearance = Appearance
+settings-section-language = Language
+settings-phase-12-hint = More settings (theme, transfer defaults, verify algorithm, profiles) arrive in Phase 12.

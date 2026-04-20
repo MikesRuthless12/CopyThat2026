@@ -356,3 +356,14 @@ duration-zero = 0 s
 
 # MT
 rate-unit-per-second = { $size }/s
+
+# MT — Phase 11b Settings modal
+settings-title = Configuración
+# MT
+settings-tab-general = General
+# MT
+settings-tab-appearance = Apariencia
+# MT
+settings-section-language = Idioma
+# MT
+settings-phase-12-hint = Más opciones (tema, predeterminados de transferencia, algoritmo de verificación, perfiles) llegan en la fase 12.
