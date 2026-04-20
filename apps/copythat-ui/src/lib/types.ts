@@ -216,3 +216,42 @@ export interface ContextMenuItem {
   disabled?: boolean;
   onClick: () => void;
 }
+
+// Phase 9 — History DTOs (mirror the Rust `HistoryJobDto`,
+// `HistoryItemDto`, `HistoryFilterDto` in `src-tauri/src/ipc.rs`).
+
+export interface HistoryJobDto {
+  rowId: number;
+  kind: string;
+  status: "running" | "succeeded" | "failed" | "cancelled" | string;
+  startedAtMs: number;
+  finishedAtMs: number | null;
+  srcRoot: string;
+  dstRoot: string;
+  totalBytes: number;
+  filesOk: number;
+  filesFailed: number;
+  verifyAlgo: string | null;
+  optionsJson: string | null;
+}
+
+export interface HistoryItemDto {
+  jobRowId: number;
+  src: string;
+  dst: string;
+  size: number;
+  status: "ok" | "failed" | "skipped" | "cancelled" | string;
+  hashHex: string | null;
+  errorCode: string | null;
+  errorMsg: string | null;
+  timestampMs: number;
+}
+
+export interface HistoryFilterDto {
+  startedSinceMs?: number;
+  startedUntilMs?: number;
+  kind?: string;
+  status?: string;
+  text?: string;
+  limit?: number;
+}

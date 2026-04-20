@@ -253,6 +253,56 @@ pub struct LoggedErrorDto {
     pub resolution: Option<&'static str>,
 }
 
+/// Phase 9 — one row as seen by the History drawer. Mirrors
+/// [`copythat_history::JobSummary`] with camelCase field names and
+/// string-serialised paths.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryJobDto {
+    pub row_id: i64,
+    pub kind: String,
+    pub status: String,
+    pub started_at_ms: i64,
+    pub finished_at_ms: Option<i64>,
+    pub src_root: String,
+    pub dst_root: String,
+    pub total_bytes: u64,
+    pub files_ok: u64,
+    pub files_failed: u64,
+    pub verify_algo: Option<String>,
+    pub options_json: Option<String>,
+}
+
+/// Phase 9 — one row from the History detail view. Mirrors
+/// [`copythat_history::ItemRow`] for the IPC side.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryItemDto {
+    pub job_row_id: i64,
+    pub src: String,
+    pub dst: String,
+    pub size: u64,
+    pub status: String,
+    pub hash_hex: Option<String>,
+    pub error_code: Option<String>,
+    pub error_msg: Option<String>,
+    pub timestamp_ms: i64,
+}
+
+/// Phase 9 — filter accepted by the `history_search` command.
+/// Every field optional; the Tauri layer forwards them into
+/// [`copythat_history::HistoryFilter`] verbatim.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryFilterDto {
+    pub started_since_ms: Option<i64>,
+    pub started_until_ms: Option<i64>,
+    pub kind: Option<String>,
+    pub status: Option<String>,
+    pub text: Option<String>,
+    pub limit: Option<u32>,
+}
+
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CopyOptionsDto {

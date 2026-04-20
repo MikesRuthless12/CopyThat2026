@@ -132,3 +132,36 @@ export async function errorLogExport(
 export async function retryElevated(id: number): Promise<void> {
   await invoke("retry_elevated", { id });
 }
+
+// ---------- Phase 9 history ----------
+
+import type {
+  HistoryFilterDto,
+  HistoryItemDto,
+  HistoryJobDto,
+} from "./types";
+
+export async function historySearch(
+  filter?: HistoryFilterDto,
+): Promise<HistoryJobDto[]> {
+  return invoke<HistoryJobDto[]>("history_search", { filter });
+}
+
+export async function historyItems(rowId: number): Promise<HistoryItemDto[]> {
+  return invoke<HistoryItemDto[]>("history_items", { rowId });
+}
+
+export async function historyPurge(days: number): Promise<number> {
+  return invoke<number>("history_purge", { days });
+}
+
+export async function historyExportCsv(
+  path: string,
+  filter?: HistoryFilterDto,
+): Promise<number> {
+  return invoke<number>("history_export_csv", { path, filter });
+}
+
+export async function historyRerun(rowId: number): Promise<number[]> {
+  return invoke<number[]>("history_rerun", { rowId });
+}

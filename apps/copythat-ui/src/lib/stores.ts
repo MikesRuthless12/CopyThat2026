@@ -46,6 +46,11 @@ const toastStore = writable<ToastMessage[]>([]);
 const errorQueueStore = writable<ErrorPromptDto[]>([]);
 const collisionQueueStore = writable<CollisionPromptDto[]>([]);
 const errorLogDrawerOpenStore = writable<boolean>(false);
+// Phase 9: History drawer open/closed flag + selected detail row.
+// The drawer fetches on open; no in-store cache of rows (Rust is
+// source of truth).
+const historyDrawerOpenStore = writable<boolean>(false);
+const historyDetailRowStore = writable<number | null>(null);
 
 export const jobs: Readable<JobDto[]> = { subscribe: jobsStore.subscribe };
 export const globals: Readable<GlobalsDto> = {
@@ -71,6 +76,27 @@ export function openErrorLogDrawer(): void {
 }
 export function closeErrorLogDrawer(): void {
   errorLogDrawerOpenStore.set(false);
+}
+
+// Phase 9 history drawer readables + mutators.
+export const historyDrawerOpen: Readable<boolean> = {
+  subscribe: historyDrawerOpenStore.subscribe,
+};
+export const historyDetailRow: Readable<number | null> = {
+  subscribe: historyDetailRowStore.subscribe,
+};
+export function openHistoryDrawer(): void {
+  historyDrawerOpenStore.set(true);
+}
+export function closeHistoryDrawer(): void {
+  historyDrawerOpenStore.set(false);
+  historyDetailRowStore.set(null);
+}
+export function openHistoryDetail(rowId: number): void {
+  historyDetailRowStore.set(rowId);
+}
+export function closeHistoryDetail(): void {
+  historyDetailRowStore.set(null);
 }
 
 /// The sum of live per-job rates. `GlobalsDto.rateBps` from Rust is

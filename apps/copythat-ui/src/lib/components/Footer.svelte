@@ -1,11 +1,15 @@
 <!--
-  Fixed 32 px strip along the bottom. Three counters + a History link
-  stub (the History tab lands in Phase 9).
+  Fixed 32 px strip along the bottom. Three counters + a History
+  button wired to the Phase 9 drawer.
 -->
 <script lang="ts">
   import Icon from "../icons/Icon.svelte";
   import { t } from "../i18n";
-  import { globals, openErrorLogDrawer } from "../stores";
+  import {
+    globals,
+    openErrorLogDrawer,
+    openHistoryDrawer,
+  } from "../stores";
   import { formatBytes } from "../format";
 
   let g = $derived($globals);
@@ -36,7 +40,12 @@
     {t("footer-errors")}
   </button>
   <span class="spacer"></span>
-  <button class="history" type="button" disabled aria-disabled="true">
+  <button
+    class="history"
+    type="button"
+    onclick={openHistoryDrawer}
+    aria-label={t("footer-history")}
+  >
     <Icon name="external-link" size={14} />
     {t("footer-history")}
   </button>
