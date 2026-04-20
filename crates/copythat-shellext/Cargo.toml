@@ -1,0 +1,60 @@
+[package]
+name = "copythat-shellext"
+description = "Windows COM in-proc shell extension (IExplorerCommand + IExplorerCommandState) for Copy That 2026."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# cdylib produces the `.dll` that Windows Explorer loads via regsvr32
+# / COM activation; rlib keeps the pure-Rust helpers (registry path
+# composition, argv building) testable from integration tests. An
+# empty cdylib on non-Windows is harmless.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[lints.rust]
+# This crate's whole purpose is raw COM FFI — every `extern "system"`
+# export and `windows::core::implement` block wraps an unsafe surface.
+# Matches `copythat-platform`'s relaxation for the same reason.
+unsafe_code = "allow"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[dependencies]
+
+# Only pull the Windows COM / Shell surfaces on Windows targets.
+# On other platforms the crate compiles as an empty lib — this lets
+# `cargo build --all` succeed on CI macOS / Linux runners without
+# swapping the workspace membership in and out.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+] }
+# `#[implement]` is not a feature of `windows` 0.61 — it lives in the
+# sibling proc-macro crate. Without it we cannot synthesise COM
+# vtables for our IExplorerCommand / IClassFactory impls.
+windows-implement = "0.60"
+windows-core = "0.61"
+
+[dev-dependencies]
+tempfile = "3"
+
+# Phase 7b smoke test lives at the workspace root (mirrors the
+# convention set by Phase 6's `copythat-platform` crate and Phase
+# 7a's `copythat-ui`).
+[[test]]
+name = "phase_07b_shellext"
+path = "../../tests/smoke/phase_07b_shellext.rs"
