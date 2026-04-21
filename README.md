@@ -5,86 +5,69 @@ matching every feature of TeraCopy and pushing past it, while staying as fast
 as (or faster than) Explorer / Finder / `cp` / `rsync` for typical desktop
 workloads.
 
-> **Status:** Phase 12 complete — Settings, Preferences, Profiles.
->
-> New `copythat-settings` crate (TOML-backed Settings + JSON
-> profile store) plus a six-tab Settings modal: General (language,
-> theme, startup flags), Transfer (buffer size, verify algorithm,
-> concurrency, reflink, fsync, preserve metadata), Shell (context
-> menu, Windows copy-handler intercept, completion notifications),
-> Secure delete (method, double-confirm), Advanced (log level,
-> error policy, history retention, database path — telemetry is
-> hardcoded OFF), and Profiles (save / load / delete / export /
-> import JSON). Settings hot-reload into the engine — change
-> buffer size to 4 MiB in Settings and the next enqueue's
-> `CopyOptions` picks it up without a restart. Branded Windows
-> icon replaces the Phase 0 placeholder; macOS `.icns` and Linux
-> PNGs stay on the Phase 0 scaffold until Phase 16 regenerates
-> them from a shared SVG source. 239 Fluent keys × 18 locales
-> (up from 172). Deferred behind flags-only: `start-with-os`,
-> `minimize-to-tray`, `intercept-default-copy` — Phase 14 / 16
-> wire the OS registration.
->
-> _Previous status: Phase 11 complete (11a + 11b + 11c)._
->
-> - **11a — i18n core.** Every user-visible string now flows through
->   Fluent (172 keys × 18 locales, including the Phase 11b Settings
->   additions). All 17 non-English locales ship full MT drafts
->   tagged `# MT` for human review. RTL is wired for Arabic
->   (`dir="rtl"`), `Intl.NumberFormat` pulls the active locale for
->   byte / percent / number output, and `formatEta` routes every
->   unit word through Fluent. `xtask i18n-lint` verifies literal-key
->   coverage from source plus Fluent syntax (duplicate-key reject)
->   on top of the existing key-parity check.
-> - **11b — Settings modal.** A gear icon in the Footer opens a new
->   `SettingsModal` with a "General" tab that hosts the permanent
->   language switcher. Language names render via
->   `Intl.DisplayNames(currentLocale, { type: "language" })` so the
->   list appears in the currently selected UI language ("Spanish" /
->   "Español" / "espagnol" / "スペイン語"); English is pinned first,
->   the rest sorted alphabetically by display name using the active
->   locale's collation. The modal skeleton is the seam Phase 12's
->   Settings window will extend (Transfer / Shell / Secure-delete /
->   Advanced).
-> - **11c — runtime substitution smoke test.** A second smoke test
->   runs the real `parse → substitute` pipeline for every key in
->   every locale with canned args, asserts no `{$` placeable leaks
->   and balanced braces, and guards the RTL direction flag. Per-
->   locale pixelmatch visual-regression stays deferred to Phase 18
->   polish — cross-platform font rendering would need per-OS
->   baselines that the Phase 18 packaging step pins anyway.
->
-> _Previous status: Phase 6 — platform-specific fast paths._
-> `crates/copythat-platform` now ships a `fast_copy(src, dst, opts,
-> ctrl, events)` dispatcher that attempts, in order: reflink (Linux
-> Btrfs / XFS-with-reflink / ZFS / bcachefs, macOS APFS, Windows
-> ReFS / Dev Drive via the `reflink-copy` crate); the OS-native
-> accelerated path (`CopyFileExW` with `COPY_FILE_NO_BUFFERING` for
-> files ≥256 MiB on Windows, `copyfile(3)` with `COPYFILE_ALL` on
-> macOS, `copy_file_range(2)` with a `sendfile(2)` fallback for files
-> <2 GiB on Linux); and finally the Phase 1
-> [`copythat_core::copy_file`] async loop. The dispatcher honours
-> `CopyOptions::strategy` (`Auto` / `AlwaysAsync` / `AlwaysFast` /
-> `NoReflink`) and reports back which strategy actually moved the
-> bytes via `FastCopyOutcome::strategy`. New helpers — `is_ssd(path)`,
-> `filesystem_name(path)`, `supports_reflink(path)`, and
-> `recommend_concurrency(src, dst, requested)` (clamps to 1 when
-> either side is on rotational media to avoid HDD seek thrash). The
-> seam into `copythat-core` is a `FastCopyHook` trait carried on
-> `CopyOptions`; drop a `PlatformFastCopyHook` in and every per-file
-> `copy_file` (and therefore every leaf of `copy_tree`) routes through
-> the OS acceleration path. The hook is bypassed when `verify` is
-> set, since the verify pipeline relies on hashing the source bytes
-> during the write loop. Smoke test: Windows runner copies a 64 MiB
-> sparse file via `CopyFileExW` at ~2.6 GiB/s. The next phase
-> (Phase 7) wires the engine into the OS shell context menus and
-> drag-and-drop.
+![Stack](https://img.shields.io/badge/stack-Rust%20%2B%20Tauri%202.x%20%2B%20Svelte%205-blue)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-success)
+![Languages](https://img.shields.io/badge/languages-18-brightgreen)
+![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-red)
+
+## Features
+
+### Copy engine
+
+- **Byte-exact async copy** with selectable verification (CRC32, MD5, SHA-1, SHA-256, SHA-512, xxHash3-64, xxHash3-128, BLAKE3).
+- **OS-native fast paths** dispatched per platform: `CopyFileExW` (Windows, with `COPY_FILE_NO_BUFFERING` for files ≥ 256 MiB), `copyfile(3)` with `COPYFILE_ALL` (macOS), `copy_file_range(2)` + `sendfile(2)` fallback (Linux).
+- **Reflink clones** on supported filesystems (Btrfs, XFS with reflink, ZFS, bcachefs, APFS, ReFS / Dev Drive) via `reflink-copy`, with a same-volume guard that skips the syscall on cross-volume copies.
+- **Parallel multi-chunk** copy for large files (default 4 chunks at matched memory budget). Opt-in via `COPYTHAT_PARALLEL_CHUNKS`; see [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
+- **Dynamic buffer sizing** — 64 KiB → 4 MiB picked per file by `CopyOptions::buffer_size_for_file` from the Phase 13b sweep, which confirmed 1 MiB as the mid-band optimum.
+- **Streaming tree enumeration** — walker feeds 100 k-entry `Plan` chunks through a bounded channel while copies run in parallel. **Tree size is bounded only by the destination volume, not by RAM** — drives with tens of millions of files work the same as ten-file folders.
+- **Concurrency control** tuned per-destination with an HDD heuristic that clamps to a single worker on rotational media.
+
+### Resilience
+
+- **Locked-file copy on Windows** — opens the source with `FILE_SHARE_READ | WRITE | DELETE` plus an exponential-backoff retry on `ERROR_SHARING_VIOLATION`, so in-use log files, loaded DLLs, and Office documents copy without admin.
+- **Symlink preserve + graceful degrade** — clones symlinks when the process has privilege (or Windows Developer Mode is on); falls back to copying the target contents as a regular file so nothing is lost.
+- **Access-denied tolerance** — `$RECYCLE.BIN\S-1-5-*`, `System Volume Information`, `Config.Msi`, etc. are skipped and counted, not fatal.
+- **Collision policy** picked up-front in the drop dialog: *Keep both* (`foo.txt` → `foo_2.txt`, `foo_3.txt`, …), *Skip*, *Overwrite*, *Overwrite only if newer*, *Ask each time*.
+- **Error policy** per-job: *Ask*, *Skip*, *Abort*, or *Retry N times*.
+- **Pause / resume / cancel** on every job, plus pause-all / resume-all / cancel-all.
+- **Reserve free space on destination** — optional minimum, preflight-warned before the first byte moves.
+
+### Interface
+
+- **Tauri 2.x + Svelte 5** single-window shell; dense default theme, light / dark / system.
+- **Activity panel** with one row per file the engine touches: live circular ring, `src → dst` truncated, `bytes_done / total`, and icons for pending / in-flight / done / error / folder. Caps at 250 000 rows for stable performance on 4 GB systems.
+- **Sort + reorder** the pre-copy source list by name or size, asc or desc, with `Home` / `End` / `Ctrl+↑↓` / `Shift+↑↓` keyboard shortcuts.
+- **Files-first grouping** — sorts always put files ahead of folders, enforced even through manual drag-reorders.
+- **Preflight free-space check** with a subset-picker modal when the full set won't fit.
+- **History** (SQLite): every job logs kind, source, destination, verify algorithm, size, status, duration; filter by kind / status / text; export CSV; clear-all with two-step confirm; **Rerun** any past job with one click.
+- **Lifetime Totals drawer** — bytes, files, jobs, errors, by-kind breakdown, 30-day sparkline.
+- **Per-file live counter**, verbose compact ETA (`3h 10m 38s`), average MiB/s — header never says "calculating…" when idle.
+- **When-done action** — keep app open, close app, log off, shut down, sleep.
+- **System tray** with minimize-to-tray-on-close option.
+- **Drag-and-drop and picker** entry points: drag onto the window, or use *Add files* / *Add folders* in the header.
+- **Shell integration** — Windows IExplorerCommand, macOS Finder Sync, Linux `.desktop` / KDE ServiceMenu / Thunar UCA all route into the same queue via `copythat --enqueue <verb> <paths…> [--destination <dst>]`.
+- **Secure delete** — single-pass zero / random, DoD 3-pass, DoD 7-pass, Gutmann 35-pass, NIST 800-88. SSD-aware (skips multi-pass overwrites on SSDs by default — use TRIM instead).
+
+### Internationalisation
+
+- **18 languages** shipped in full: Arabic, Chinese (Simplified), Dutch, English, French, German, Hindi, Indonesian, Italian, Japanese, Korean, Polish, Portuguese (Brazil), Russian, Spanish, Turkish, Ukrainian, Vietnamese.
+- **Fluent**-based (`.ftl`) key system with `xtask i18n-lint` enforcing key parity + syntax.
+- **RTL support** (Arabic) with `dir="rtl"` on the root and icon mirroring.
+- **Locale-driven formatting**: `Intl.NumberFormat` for bytes / percent / counts, `Intl.DisplayNames` for language pickers (each language renders in its own endonym + in the active UI locale).
+- **Reactive translation switching** — changes apply instantly across every modal, drawer, and badge without reload.
+
+### Performance
+
+- **1 MiB** is the measured optimum buffer size; all other sizes regressed in the Phase 13b sweep — see [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
+- **Head-to-head measurements** against Robocopy, TeraCopy, FastCopy, and `cmd copy` live in [`COMPETITOR-TEST.md`](COMPETITOR-TEST.md) at the repo root (256 MiB + 10 GiB workloads across same-volume, cross-NTFS, and external-exFAT destinations).
+- **Cross-volume reflink guard** avoids a pointless syscall on copies that can't possibly reflink (different volume IDs).
+- **Criterion benches** live at `crates/copythat-core/benches/copy_bench.rs`: `single_huge_file`, `buffer_size_sweep`, `many_small_files` (10 KiB / 100 KiB / 1 MiB / 10 MiB mix), `mixed_tree` (10 KiB → 250 MiB).
 
 ## Targets
 
 - Windows 10+
 - macOS 12+ (Monterey and later)
-- Linux (Ubuntu 22.04+, Fedora 38+, Arch, ...)
+- Linux (Ubuntu 22.04+, Fedora 38+, Arch, …)
 
 ## Stack
 
@@ -109,17 +92,18 @@ Unicode-DFS-2016 / Zlib / MPL-2.0).
 ```
 CopyThat2026/
 ├── crates/
-│   ├── copythat-core/           # async copy engine
+│   ├── copythat-core/           # async copy engine + streaming tree walk
 │   ├── copythat-hash/           # verify hashes
 │   ├── copythat-secure-delete/  # multi-pass shredding
 │   ├── copythat-history/        # SQLite history
 │   ├── copythat-platform/       # OS fast paths + shell hooks
+│   ├── copythat-settings/       # TOML settings + JSON profile store
 │   └── copythat-i18n/           # Fluent loader
 ├── apps/copythat-ui/            # Tauri 2.x + Svelte 5 shell
-├── xtask/                       # workspace automation
+├── xtask/                       # workspace automation + benches
 ├── locales/<code>/copythat.ftl  # 18 Fluent locale files
 ├── tests/smoke/                 # per-phase smoke tests
-└── docs/                        # architecture, changelog, roadmap, ...
+└── docs/                        # architecture, changelog, benchmarks, roadmap
 ```
 
 ## Building
@@ -146,59 +130,59 @@ pnpm install
 pnpm tauri build --debug
 ```
 
+Release build (no installer bundle):
+
+```sh
+cd apps/copythat-ui
+pnpm tauri build --no-bundle
+```
+
 Lint Fluent key parity across all 18 locales:
 
 ```sh
 cargo run -p xtask -- i18n-lint
 ```
 
-Phase 0 smoke test (runs both):
+Run Criterion benches:
 
 ```sh
+# Full-size run; several minutes on a normal SSD
+cargo bench -p copythat-core --bench copy_bench
+
+# CI-scaled run, finishes in ~60 s
+cargo run -p xtask --release -- bench-ci
+
+# Head-to-head against any competitor copiers on PATH
+cargo run -p xtask --release -- bench-vs
+```
+
+Per-phase smoke tests (run them individually):
+
+```sh
+# Phase 0 — scaffold
 bash tests/smoke/phase_00_scaffold.sh
-```
 
-Phase 1 smoke test (100 MiB async round-trip through `copy_file`):
-
-```sh
+# Phase 1 — 100 MiB async round-trip through copy_file
 cargo test -p copythat-core --test phase_01_core_copy -- --nocapture
-```
 
-Phase 2 smoke test (500-file tree copy + move):
-
-```sh
+# Phase 2 — 500-file tree copy + move
 cargo test -p copythat-core --test phase_02_tree_queue -- --nocapture
-```
 
-Phase 3 smoke test (500 MiB copy+verify across all 8 hash algorithms):
-
-```sh
+# Phase 3 — 500 MiB copy+verify across all 8 hash algorithms
 cargo test -p copythat-hash --test phase_03_verify --release -- --nocapture
-```
 
-Phase 4 smoke test (10 MiB shred across every `ShredMethod`):
-
-```sh
+# Phase 4 — 10 MiB shred across every ShredMethod
 cargo test -p copythat-secure-delete --test phase_04_shred -- --nocapture
-```
 
-Phase 5 smoke test (Tauri shell end-to-end: pnpm check + vite build +
-`copythat-ui` unit & integration tests + i18n-lint):
+# Phase 5 — Tauri shell end-to-end
+pwsh tests/smoke/phase_05_ui.ps1     # Windows
+bash tests/smoke/phase_05_ui.sh      # macOS / Linux
 
-```sh
-# Windows
-pwsh tests/smoke/phase_05_ui.ps1
-# macOS / Linux
-bash tests/smoke/phase_05_ui.sh
-```
-
-Phase 6 smoke test (sparse-file round-trip through the platform fast
-paths; logs the chosen strategy — `reflink` / `CopyFileExW` /
-`copyfile` / `copy_file_range` / `sendfile` / `async-fallback`):
-
-```sh
-# Default 64 MiB; set COPYTHAT_PHASE_06_FULL=1 for the 2 GiB run.
+# Phase 6 — sparse-file round-trip through the platform fast paths
 cargo test -p copythat-platform --test phase_06_fast_paths -- --nocapture
+
+# Phase 13 — throughput floor (20 MiB/s on a 100 MiB single-file copy)
+cargo test -p copythat-ui --test phase_13_bench -- --nocapture
 ```
 
 ## License

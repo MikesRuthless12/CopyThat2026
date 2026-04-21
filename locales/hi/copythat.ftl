@@ -509,3 +509,71 @@ toast-profile-loaded = प्रोफ़ाइल लोड की गई
 toast-profile-exported = प्रोफ़ाइल निर्यात की गई
 # MT
 toast-profile-imported = प्रोफ़ाइल आयात की गई
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = फ़ाइलें जोड़ें
+action-add-folders = फ़ोल्डर जोड़ें
+activity-title = गतिविधि
+activity-clear = गतिविधि सूची साफ़ करें
+activity-empty = अभी तक कोई गतिविधि नहीं.
+activity-after-done = पूरा होने पर:
+activity-keep-open = ऐप खुला रखें
+activity-close-app = ऐप बंद करें
+activity-shutdown = पीसी बंद करें
+activity-logoff = लॉग ऑफ़
+activity-sleep = निद्रा
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = गंतव्य पर पर्याप्त स्थान नहीं है
+preflight-warn-title = गंतव्य पर कम स्थान है
+preflight-unknown-title = खाली स्थान निर्धारित नहीं हो सका
+preflight-unknown-body = स्रोत को शीघ्रता से मापने के लिए बहुत बड़ा है या गंतव्य वॉल्यूम ने उत्तर नहीं दिया। आप जारी रख सकते हैं; स्थान समाप्त होने पर इंजन कॉपी को साफ़ तरीके से रोक देगा।
+preflight-required = आवश्यक
+preflight-free = खाली
+preflight-reserve = आरक्षित
+preflight-shortfall = कमी
+preflight-continue = फिर भी जारी रखें
+collision-modal-overwrite-older = केवल पुराने अधिलेखित करें
+
+# Phase 14e — subset picker
+preflight-pick-subset = चुनें कि क्या कॉपी करना है…
+subset-title = कॉपी करने के लिए स्रोत चुनें
+subset-subtitle = पूरी सूची गंतव्य पर फिट नहीं होगी। जो चाहते हैं वह चुनें; बाकी छोड़ दिया जाएगा।
+subset-loading = आकार मापा जा रहा है…
+subset-too-large = गिनने के लिए बहुत बड़ा
+subset-budget = उपलब्ध
+subset-remaining = शेष
+subset-confirm = चयन कॉपी करें
+history-rerun-hint = इस कॉपी को फिर से चलाएँ — स्रोत ट्री में हर फ़ाइल को फिर से स्कैन करता है
+history-clear-all = सब हटाएँ
+history-clear-all-confirm = पुष्टि के लिए फिर क्लिक करें
+history-clear-all-hint = हर इतिहास पंक्ति हटाएँ। पुष्टि के लिए दूसरा क्लिक आवश्यक है।
+toast-history-cleared = इतिहास साफ़ किया गया ({ $count } पंक्तियाँ हटाई गईं)
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = क्रम:
+sort-custom = कस्टम
+sort-name-asc = नाम A → Z (पहले फ़ाइलें)
+sort-name-desc = नाम Z → A (पहले फ़ाइलें)
+sort-size-asc = आकार छोटा से बड़ा (पहले फ़ाइलें)
+sort-size-desc = आकार बड़ा से छोटा (पहले फ़ाइलें)
+sort-reorder = पुनः व्यवस्थित करें
+sort-move-top = सबसे ऊपर ले जाएँ
+sort-move-up = ऊपर ले जाएँ
+sort-move-down = नीचे ले जाएँ
+sort-move-bottom = सबसे नीचे ले जाएँ
+sort-name-asc-simple = नाम A → Z
+sort-name-desc-simple = नाम Z → A
+sort-size-asc-simple = सबसे छोटा पहले
+sort-size-desc-simple = सबसे बड़ा पहले
+activity-sort-locked = कॉपी चल रही हो तो क्रम अक्षम होता है। रोकें या समाप्त होने का इंतज़ार करें, फिर क्रम बदलें।
+drop-dialog-collision-label = अगर फ़ाइल पहले से मौजूद है:
+collision-policy-keep-both = दोनों रखें (नई प्रति का नाम बदलकर _2, _3, … करें)
+collision-policy-skip = नई प्रति छोड़ दें
+collision-policy-overwrite = मौजूदा फ़ाइल पर लिखें
+collision-policy-overwrite-if-newer = केवल नई होने पर अधिलेखित करें
+collision-policy-prompt = हर बार पूछें
+drop-dialog-busy-checking = खाली स्थान की जाँच…
+drop-dialog-busy-enumerating = फ़ाइलें गिनी जा रही हैं…
+drop-dialog-busy-starting = कॉपी आरंभ हो रही है…
+toast-enumeration-deferred = स्रोत ट्री बड़ा है — अग्रिम सूची छोड़ दी गई; जैसे-जैसे इंजन काम करेगा पंक्तियाँ दिखेंगी।

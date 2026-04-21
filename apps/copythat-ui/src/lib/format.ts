@@ -80,6 +80,68 @@ export function formatPercent(
   return `${formatNumber(pct, loc ?? currentLocale(), fractionDigits)}%`;
 }
 
+/// Two-decimal percentage for the main progress readout. Always
+/// renders with exactly two decimals ("38.95%", "0.00%", "100.00%")
+/// so the text doesn't visually jitter as digits roll over.
+export function formatPercent2(
+  done: number,
+  total: number,
+  loc?: string,
+): string {
+  if (total <= 0) return "—";
+  const ratio = Math.min(1, Math.max(0, done / total));
+  return `${formatNumber(ratio * 100, loc ?? currentLocale(), 2)}%`;
+}
+
+/// Compact ETA in `3h 10m 38s` shape. Deliberately does NOT route
+/// through Fluent — the requirement is a fixed visual form for every
+/// locale. Leading zero components are dropped: `0h 4m 12s` renders
+/// as `4m 12s`; sub-second renders as `<1s`.
+export function formatEtaVerbose(
+  seconds: number | null | undefined,
+): string {
+  if (seconds === null || seconds === undefined) return "calculating…";
+  if (!Number.isFinite(seconds)) return "—";
+  if (seconds < 0) return "—";
+  if (seconds < 1) return "<1s";
+  const total = Math.round(seconds);
+  const hours = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  const parts: string[] = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (mins > 0 || hours > 0) parts.push(`${mins}m`);
+  parts.push(`${secs}s`);
+  return parts.join(" ");
+}
+
+/// Running average bytes/second since the job started. Complements
+/// `rateBps` (the instantaneous sample) — the average is much less
+/// twitchy for user-visible UI and is what most users mentally
+/// mean by "how fast is it going?"
+export function averageRateBps(
+  bytesDone: number,
+  startedAtMs: number | null | undefined,
+  nowMs: number = Date.now(),
+): number {
+  if (!startedAtMs || bytesDone <= 0) return 0;
+  const elapsedSec = (nowMs - startedAtMs) / 1000;
+  if (elapsedSec <= 0) return 0;
+  return bytesDone / elapsedSec;
+}
+
+/// Middle-ellipsis truncation for path displays. Keeps the drive /
+/// prefix and the basename visible — `C:\Users\mike\...\file.bin` —
+/// so the user can still tell *what* is being copied even when the
+/// row doesn't have room for the whole path.
+export function truncatePath(path: string, maxLen: number = 40): string {
+  if (!path) return "";
+  if (path.length <= maxLen) return path;
+  const keepFront = Math.max(3, Math.floor((maxLen - 1) / 2));
+  const keepBack = Math.max(3, maxLen - 1 - keepFront);
+  return `${path.slice(0, keepFront)}…${path.slice(path.length - keepBack)}`;
+}
+
 /// Translator-facing ETA renderer.
 ///
 /// Routes seconds → minutes → hours buckets through the `duration-*`

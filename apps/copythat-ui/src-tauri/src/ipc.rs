@@ -51,6 +51,34 @@ pub const EVENT_ERROR_RESOLVED: &str = "error-resolved";
 /// Phase 8 — mirror of [`EVENT_ERROR_RESOLVED`] for collisions.
 pub const EVENT_COLLISION_RESOLVED: &str = "collision-resolved";
 
+/// Per-file activity — lets the UI render a TeraCopy-style live list
+/// of files inside a tree job. Emitted alongside the aggregate
+/// `job-progress` events, rate-limited on the runner side so large
+/// trees don't overwhelm the event bus.
+pub const EVENT_FILE_ACTIVITY: &str = "file-activity";
+
+/// Single entry in the live activity list.
+///
+/// `phase`:
+/// - `"start"`: engine opened the file / folder; no bytes yet.
+/// - `"progress"`: mid-copy tick; `bytesDone`/`bytesTotal` populated.
+/// - `"done"`: file finished successfully.
+/// - `"error"`: file failed (engine logged it, tree continues).
+/// - `"dir"`: a directory was created at the destination.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileActivityDto {
+    pub job_id: u64,
+    pub seq: u64,
+    pub phase: &'static str,
+    pub src: String,
+    pub dst: String,
+    pub bytes_done: u64,
+    pub bytes_total: u64,
+    pub is_dir: bool,
+    pub message: Option<String>,
+}
+
 /// UI-facing snapshot of a single queue job.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

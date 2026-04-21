@@ -509,3 +509,71 @@ toast-profile-loaded = Đã tải hồ sơ
 toast-profile-exported = Đã xuất hồ sơ
 # MT
 toast-profile-imported = Đã nhập hồ sơ
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = Thêm tệp
+action-add-folders = Thêm thư mục
+activity-title = Hoạt động
+activity-clear = Xoá danh sách hoạt động
+activity-empty = Chưa có hoạt động tệp.
+activity-after-done = Khi hoàn tất:
+activity-keep-open = Giữ ứng dụng mở
+activity-close-app = Đóng ứng dụng
+activity-shutdown = Tắt máy
+activity-logoff = Đăng xuất
+activity-sleep = Ngủ
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = Không đủ dung lượng tại đích
+preflight-warn-title = Ít dung lượng tại đích
+preflight-unknown-title = Không thể xác định dung lượng trống
+preflight-unknown-body = Nguồn quá lớn để đo nhanh hoặc đích không phản hồi. Bạn có thể tiếp tục; hệ thống sẽ dừng sao chép an toàn nếu hết dung lượng.
+preflight-required = Cần
+preflight-free = Trống
+preflight-reserve = Dự trữ
+preflight-shortfall = Thiếu
+preflight-continue = Vẫn tiếp tục
+collision-modal-overwrite-older = Chỉ ghi đè tệp cũ hơn
+
+# Phase 14e — subset picker
+preflight-pick-subset = Chọn mục cần sao chép…
+subset-title = Chọn nguồn để sao chép
+subset-subtitle = Toàn bộ lựa chọn không vừa tại đích. Đánh dấu những mục cần sao chép; phần còn lại sẽ bị bỏ qua.
+subset-loading = Đang đo dung lượng…
+subset-too-large = quá lớn để đếm
+subset-budget = Khả dụng
+subset-remaining = Còn lại
+subset-confirm = Sao chép mục đã chọn
+history-rerun-hint = Chạy lại bản sao này — quét lại mọi tệp trong cây nguồn
+history-clear-all = Xoá tất cả
+history-clear-all-confirm = Nhấp lần nữa để xác nhận
+history-clear-all-hint = Xoá mọi dòng lịch sử. Cần nhấp lần hai để xác nhận.
+toast-history-cleared = Đã xoá lịch sử (đã xoá { $count } dòng)
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = Thứ tự:
+sort-custom = Tùy chỉnh
+sort-name-asc = Tên A → Z (tệp trước)
+sort-name-desc = Tên Z → A (tệp trước)
+sort-size-asc = Kích thước nhỏ đến lớn (tệp trước)
+sort-size-desc = Kích thước lớn đến nhỏ (tệp trước)
+sort-reorder = Sắp xếp lại
+sort-move-top = Chuyển lên đầu
+sort-move-up = Lên
+sort-move-down = Xuống
+sort-move-bottom = Chuyển xuống cuối
+sort-name-asc-simple = Tên A → Z
+sort-name-desc-simple = Tên Z → A
+sort-size-asc-simple = Nhỏ nhất trước
+sort-size-desc-simple = Lớn nhất trước
+activity-sort-locked = Không thể sắp xếp khi đang sao chép. Tạm dừng hoặc đợi hoàn tất rồi thay đổi thứ tự.
+drop-dialog-collision-label = Nếu tệp đã tồn tại:
+collision-policy-keep-both = Giữ cả hai (đổi tên bản sao mới thành _2, _3, …)
+collision-policy-skip = Bỏ qua bản sao mới
+collision-policy-overwrite = Ghi đè tệp hiện có
+collision-policy-overwrite-if-newer = Chỉ ghi đè nếu mới hơn
+collision-policy-prompt = Hỏi mỗi lần
+drop-dialog-busy-checking = Đang kiểm tra dung lượng trống…
+drop-dialog-busy-enumerating = Đang đếm tệp…
+drop-dialog-busy-starting = Đang bắt đầu sao chép…
+toast-enumeration-deferred = Cây nguồn lớn — bỏ qua danh sách trước; các dòng sẽ xuất hiện khi bộ máy xử lý.

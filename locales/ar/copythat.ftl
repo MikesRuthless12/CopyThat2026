@@ -509,3 +509,71 @@ toast-profile-loaded = تم تحميل الملف الشخصي
 toast-profile-exported = تم تصدير الملف الشخصي
 # MT
 toast-profile-imported = تم استيراد الملف الشخصي
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = إضافة ملفات
+action-add-folders = إضافة مجلدات
+activity-title = النشاط
+activity-clear = مسح قائمة النشاط
+activity-empty = لا يوجد نشاط للملفات بعد.
+activity-after-done = عند الانتهاء:
+activity-keep-open = إبقاء التطبيق مفتوحًا
+activity-close-app = إغلاق التطبيق
+activity-shutdown = إيقاف تشغيل الحاسوب
+activity-logoff = تسجيل الخروج
+activity-sleep = سكون
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = لا توجد مساحة كافية في الوجهة
+preflight-warn-title = مساحة قليلة في الوجهة
+preflight-unknown-title = تعذر تحديد المساحة الفارغة
+preflight-unknown-body = المصدر كبير جدًا بحيث لا يمكن قياسه بسرعة أو أن محرك الوجهة لم يستجب. يمكنك المتابعة؛ سيوقف المحرك النسخ بأمان عند نفاد المساحة.
+preflight-required = مطلوب
+preflight-free = فارغ
+preflight-reserve = محجوز
+preflight-shortfall = عجز
+preflight-continue = متابعة على أي حال
+collision-modal-overwrite-older = استبدال الأقدم فقط
+
+# Phase 14e — subset picker
+preflight-pick-subset = اختر ما تنسخه…
+subset-title = اختر المصادر المراد نسخها
+subset-subtitle = لا تتسع المجموعة الكاملة في الوجهة. ضع علامة على ما تريد نسخه؛ يبقى الباقي.
+subset-loading = جاري قياس الأحجام…
+subset-too-large = أكبر من أن يُحصى
+subset-budget = متاح
+subset-remaining = متبقي
+subset-confirm = نسخ المحدد
+history-rerun-hint = أعد تشغيل هذا النسخ — يعيد فحص كل ملف في شجرة المصدر
+history-clear-all = مسح الكل
+history-clear-all-confirm = انقر مرة أخرى للتأكيد
+history-clear-all-hint = حذف جميع صفوف السجل. يتطلب نقرة ثانية للتأكيد.
+toast-history-cleared = تم مسح السجل ({ $count } صفوف أُزيلت)
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = الترتيب:
+sort-custom = مخصص
+sort-name-asc = الاسم أ ← ي (الملفات أولًا)
+sort-name-desc = الاسم ي ← أ (الملفات أولًا)
+sort-size-asc = الحجم الأصغر أولًا (الملفات أولًا)
+sort-size-desc = الحجم الأكبر أولًا (الملفات أولًا)
+sort-reorder = إعادة ترتيب
+sort-move-top = نقل إلى الأعلى
+sort-move-up = تحريك للأعلى
+sort-move-down = تحريك للأسفل
+sort-move-bottom = نقل إلى الأسفل
+sort-name-asc-simple = الاسم أ ← ي
+sort-name-desc-simple = الاسم ي ← أ
+sort-size-asc-simple = الأصغر حجمًا أولًا
+sort-size-desc-simple = الأكبر حجمًا أولًا
+activity-sort-locked = الترتيب معطل أثناء تشغيل النسخ. أوقف مؤقتًا أو انتظر حتى ينتهي ثم غيّر الترتيب.
+drop-dialog-collision-label = إذا كان الملف موجودًا:
+collision-policy-keep-both = الإبقاء على كليهما (إعادة تسمية النسخة الجديدة إلى _2 و_3 و…)
+collision-policy-skip = تخطي النسخة الجديدة
+collision-policy-overwrite = استبدال الملف الموجود
+collision-policy-overwrite-if-newer = الاستبدال فقط إذا كان أحدث
+collision-policy-prompt = السؤال في كل مرة
+drop-dialog-busy-checking = جارٍ فحص المساحة الفارغة…
+drop-dialog-busy-enumerating = جارٍ إحصاء الملفات…
+drop-dialog-busy-starting = جارٍ بدء النسخ…
+toast-enumeration-deferred = شجرة المصدر كبيرة — تخطّي قائمة الملفات المسبقة؛ ستظهر الصفوف أثناء معالجة المحرك.

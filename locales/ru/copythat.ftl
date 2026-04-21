@@ -509,3 +509,71 @@ toast-profile-loaded = Профиль загружен
 toast-profile-exported = Профиль экспортирован
 # MT
 toast-profile-imported = Профиль импортирован
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = Добавить файлы
+action-add-folders = Добавить папки
+activity-title = Активность
+activity-clear = Очистить список активности
+activity-empty = Файловой активности пока нет.
+activity-after-done = По завершении:
+activity-keep-open = Оставить приложение открытым
+activity-close-app = Закрыть приложение
+activity-shutdown = Выключить ПК
+activity-logoff = Выйти из системы
+activity-sleep = Спящий режим
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = На целевом томе недостаточно места
+preflight-warn-title = Мало места на целевом томе
+preflight-unknown-title = Не удалось определить свободное место
+preflight-unknown-body = Источник слишком велик для быстрого измерения, или целевой том не ответил. Вы можете продолжить; защита движка корректно остановит копирование, если место закончится.
+preflight-required = Требуется
+preflight-free = Свободно
+preflight-reserve = Резерв
+preflight-shortfall = Недостача
+preflight-continue = Всё равно продолжить
+collision-modal-overwrite-older = Перезаписать только более старые
+
+# Phase 14e — subset picker
+preflight-pick-subset = Выбрать, что копировать…
+subset-title = Выберите источники для копирования
+subset-subtitle = Полный набор не помещается в пункте назначения. Отметьте то, что хотите скопировать; остальное останется.
+subset-loading = Измерение размеров…
+subset-too-large = слишком велико для подсчёта
+subset-budget = Доступно
+subset-remaining = Осталось
+subset-confirm = Копировать выбор
+history-rerun-hint = Повторить эту копию — заново сканирует все файлы в дереве источника
+history-clear-all = Очистить всё
+history-clear-all-confirm = Нажмите ещё раз для подтверждения
+history-clear-all-hint = Удаляет все строки истории. Требуется второе нажатие для подтверждения.
+toast-history-cleared = История очищена ({ $count } строк удалено)
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = Порядок:
+sort-custom = Свой
+sort-name-asc = Имя А → Я (файлы сначала)
+sort-name-desc = Имя Я → А (файлы сначала)
+sort-size-asc = Размер от меньшего (файлы сначала)
+sort-size-desc = Размер от большего (файлы сначала)
+sort-reorder = Переупорядочить
+sort-move-top = В начало
+sort-move-up = Вверх
+sort-move-down = Вниз
+sort-move-bottom = В конец
+sort-name-asc-simple = Имя А → Я
+sort-name-desc-simple = Имя Я → А
+sort-size-asc-simple = Меньшие первыми
+sort-size-desc-simple = Большие первыми
+activity-sort-locked = Сортировка отключена во время копирования. Приостановите или дождитесь окончания, затем измените порядок.
+drop-dialog-collision-label = Если файл уже существует:
+collision-policy-keep-both = Сохранить оба (переименовать новую копию в _2, _3 …)
+collision-policy-skip = Пропустить новую копию
+collision-policy-overwrite = Перезаписать существующий файл
+collision-policy-overwrite-if-newer = Перезаписывать только если новее
+collision-policy-prompt = Спрашивать каждый раз
+drop-dialog-busy-checking = Проверка свободного места…
+drop-dialog-busy-enumerating = Подсчёт файлов…
+drop-dialog-busy-starting = Запуск копирования…
+toast-enumeration-deferred = Исходное дерево большое — предварительный список пропущен; строки появятся по мере работы движка.

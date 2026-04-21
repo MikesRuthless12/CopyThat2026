@@ -5,7 +5,7 @@
   `state-<name>`.
 -->
 <script lang="ts">
-  import { t } from "../i18n";
+  import { i18nVersion, t } from "../i18n";
 
   interface Props {
     state: string;
@@ -18,7 +18,7 @@
 </script>
 
 <span class="badge" data-state={state} data-size={size}>
-  {t(labelKey)}
+  {#key $i18nVersion}{t(labelKey)}{/key}
 </span>
 
 <style>
