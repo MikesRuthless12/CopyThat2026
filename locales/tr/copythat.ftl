@@ -509,3 +509,71 @@ toast-profile-loaded = Profil yüklendi
 toast-profile-exported = Profil dışa aktarıldı
 # MT
 toast-profile-imported = Profil içe aktarıldı
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = Dosya ekle
+action-add-folders = Klasör ekle
+activity-title = Etkinlik
+activity-clear = Etkinlik listesini temizle
+activity-empty = Henüz dosya etkinliği yok.
+activity-after-done = Bittiğinde:
+activity-keep-open = Uygulamayı açık tut
+activity-close-app = Uygulamayı kapat
+activity-shutdown = Bilgisayarı kapat
+activity-logoff = Oturumu kapat
+activity-sleep = Uyku moduna al
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = Hedefte yeterli alan yok
+preflight-warn-title = Hedefte az alan var
+preflight-unknown-title = Boş alan belirlenemedi
+preflight-unknown-body = Kaynak hızlı ölçülemeyecek kadar büyük veya hedef disk yanıt vermedi. Devam edebilirsiniz; alan biterse motor kopyalamayı temiz bir şekilde durdurur.
+preflight-required = Gerekli
+preflight-free = Boş
+preflight-reserve = Rezerv
+preflight-shortfall = Eksik
+preflight-continue = Yine de devam et
+collision-modal-overwrite-older = Yalnızca eskileri üzerine yaz
+
+# Phase 14e — subset picker
+preflight-pick-subset = Hangisinin kopyalanacağını seç…
+subset-title = Kopyalanacak kaynakları seçin
+subset-subtitle = Seçimin tamamı hedefe sığmıyor. Kopyalamak istediklerinizi işaretleyin; geri kalanlar atlanır.
+subset-loading = Boyutlar ölçülüyor…
+subset-too-large = sayılamayacak kadar büyük
+subset-budget = Kullanılabilir
+subset-remaining = Kalan
+subset-confirm = Seçileni kopyala
+history-rerun-hint = Bu kopyayı yeniden çalıştır — kaynak ağacındaki her dosyayı yeniden tarar
+history-clear-all = Tümünü temizle
+history-clear-all-confirm = Onaylamak için tekrar tıkla
+history-clear-all-hint = Tüm geçmiş satırlarını siler. Onaylamak için ikinci bir tıklama gerekir.
+toast-history-cleared = Geçmiş temizlendi ({ $count } satır kaldırıldı)
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = Sıralama:
+sort-custom = Özel
+sort-name-asc = Ad A → Z (önce dosyalar)
+sort-name-desc = Ad Z → A (önce dosyalar)
+sort-size-asc = Boyut küçükten büyüğe (önce dosyalar)
+sort-size-desc = Boyut büyükten küçüğe (önce dosyalar)
+sort-reorder = Yeniden sırala
+sort-move-top = En üste taşı
+sort-move-up = Yukarı
+sort-move-down = Aşağı
+sort-move-bottom = En alta taşı
+sort-name-asc-simple = Ad A → Z
+sort-name-desc-simple = Ad Z → A
+sort-size-asc-simple = Küçükten büyüğe
+sort-size-desc-simple = Büyükten küçüğe
+activity-sort-locked = Kopyalama sırasında sıralama devre dışıdır. Duraklatın veya bitmesini bekleyin, sonra sırayı değiştirin.
+drop-dialog-collision-label = Dosya zaten varsa:
+collision-policy-keep-both = İkisini de tut (yeni kopyayı _2, _3 … olarak yeniden adlandır)
+collision-policy-skip = Yeni kopyayı atla
+collision-policy-overwrite = Mevcut dosyanın üzerine yaz
+collision-policy-overwrite-if-newer = Yalnızca daha yeniyse üzerine yaz
+collision-policy-prompt = Her seferinde sor
+drop-dialog-busy-checking = Boş alan kontrol ediliyor…
+drop-dialog-busy-enumerating = Dosyalar sayılıyor…
+drop-dialog-busy-starting = Kopyalama başlatılıyor…
+toast-enumeration-deferred = Kaynak ağaç büyük — ön liste atlanıyor; satırlar motor işlediğinde görünecek.

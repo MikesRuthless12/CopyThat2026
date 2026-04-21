@@ -11,9 +11,10 @@
   import { save } from "@tauri-apps/plugin-dialog";
 
   import Icon from "../icons/Icon.svelte";
-  import { t } from "../i18n";
+  import { i18nVersion, t } from "../i18n";
   import { formatBytes } from "../format";
   import {
+    historyClearAll,
     historyExportCsv,
     historyItems,
     historyPurge,
@@ -38,6 +39,10 @@
   let items = $state<HistoryItemDto[]>([]);
   let busy = $state(false);
   let loadError = $state<string | null>(null);
+  // Two-step confirm for "Clear all history" so a misclick can't
+  // wipe months of records. First press flips this flag; a second
+  // press within the same drawer session actually calls the IPC.
+  let confirmingClearAll = $state(false);
 
   // Filter state — the refresh function re-queries when any changes.
   let kindFilter = $state<string>("");
@@ -125,6 +130,26 @@
     }
   }
 
+  async function clearAll() {
+    if (!confirmingClearAll) {
+      confirmingClearAll = true;
+      // Auto-revert after 4 s so the "Confirm clear" button doesn't
+      // sit armed forever.
+      setTimeout(() => {
+        confirmingClearAll = false;
+      }, 4_000);
+      return;
+    }
+    confirmingClearAll = false;
+    try {
+      const n = await historyClearAll();
+      pushToast("info", t("toast-history-cleared", { count: n }));
+      await refresh();
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
   function fmtDate(ms: number | null): string {
     if (ms === null) return "—";
     try {
@@ -162,6 +187,7 @@
 
 {#if $historyDrawerOpen}
   <aside class="drawer" aria-label={t("history-title")}>
+    {#key $i18nVersion}
     <header>
       <h2>{t("history-title")}</h2>
       <button
@@ -218,6 +244,17 @@
       <button class="secondary" type="button" onclick={purge30} disabled={busy}>
         {t("history-purge-30")}
       </button>
+      <button
+        class="secondary danger"
+        type="button"
+        onclick={clearAll}
+        disabled={busy || rows.length === 0}
+        title={t("history-clear-all-hint")}
+      >
+        {confirmingClearAll
+          ? t("history-clear-all-confirm")
+          : t("history-clear-all")}
+      </button>
     </div>
 
     {#if loadError === "history-unavailable"}
@@ -270,12 +307,14 @@
                 </button>
                 <button
                   type="button"
-                  class="tiny"
+                  class="tiny rerun-btn"
                   onclick={() => rerun(row)}
                   aria-label={t("history-rerun")}
+                  title={t("history-rerun-hint")}
                   disabled={row.kind !== "copy" && row.kind !== "move"}
                 >
                   <Icon name="refresh" size={13} />
+                  <span>{t("history-rerun")}</span>
                 </button>
               </td>
             </tr>
@@ -283,10 +322,12 @@
         </tbody>
       </table>
     {/if}
+    {/key}
   </aside>
 
   {#if $historyDetailRow !== null}
     <aside class="detail" aria-label={t("history-detail-title")}>
+      {#key $i18nVersion}
       <header>
         <h3>{t("history-detail-title")}</h3>
         <button
@@ -326,6 +367,7 @@
           </tbody>
         </table>
       {/if}
+      {/key}
     </aside>
   {/if}
 {/if}
@@ -333,14 +375,9 @@
 <style>
   .drawer {
     position: fixed;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: min(820px, 96vw);
+    inset: 0;
     background: var(--surface, #ffffff);
     color: var(--fg, #1f1f1f);
-    border-left: 1px solid var(--border, rgba(128, 128, 128, 0.3));
-    box-shadow: -10px 0 24px rgba(0, 0, 0, 0.22);
     display: flex;
     flex-direction: column;
     z-index: 86;
@@ -348,14 +385,9 @@
 
   .detail {
     position: fixed;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: min(620px, 88vw);
+    inset: 0;
     background: var(--surface, #ffffff);
     color: var(--fg, #1f1f1f);
-    border-left: 1px solid var(--border, rgba(128, 128, 128, 0.3));
-    box-shadow: -10px 0 24px rgba(0, 0, 0, 0.2);
     display: flex;
     flex-direction: column;
     z-index: 87;
@@ -432,6 +464,16 @@
     cursor: not-allowed;
   }
 
+  button.secondary.danger {
+    color: var(--error, #c24141);
+    border-color: color-mix(in srgb, var(--error, #c24141) 40%, transparent);
+  }
+
+  button.secondary.danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--error, #c24141) 10%, transparent);
+    border-color: var(--error, #c24141);
+  }
+
   button.tiny {
     padding: 3px 4px;
     background: transparent;
@@ -440,6 +482,22 @@
 
   button.tiny:hover:not(:disabled) {
     background: var(--surface-alt, rgba(0, 0, 0, 0.04));
+  }
+
+  button.rerun-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border: 1px solid var(--border, rgba(128, 128, 128, 0.3));
+    border-radius: 4px;
+    font-size: 11.5px;
+    color: inherit;
+  }
+
+  button.rerun-btn:hover:not(:disabled) {
+    background: var(--row-selected, rgba(79, 140, 255, 0.12));
+    border-color: var(--accent, #4f8cff);
   }
 
   .notice,

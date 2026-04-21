@@ -25,6 +25,82 @@ action-resume-all = Resume all jobs
 action-cancel-all = Cancel all jobs
 action-close = Close
 action-reveal = Show in folder
+action-add-files = Add files
+action-add-folders = Add folders
+
+# Phase 13d — activity feed
+activity-title = Activity
+activity-clear = Clear activity list
+activity-empty = No file activity yet.
+activity-after-done = When done:
+activity-keep-open = Keep app open
+activity-close-app = Close app
+activity-shutdown = Shut down PC
+activity-logoff = Log off
+activity-sleep = Sleep
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = Not enough space on the destination
+preflight-warn-title = Low space on the destination
+preflight-unknown-title = Couldn't determine free space
+preflight-unknown-body = The source is too large to size up quickly or the destination volume didn't respond. You can continue; the engine's space guard will stop the copy cleanly if it runs out of room.
+preflight-required = Required
+preflight-free = Free
+preflight-reserve = Reserve
+preflight-shortfall = Shortfall
+preflight-continue = Continue anyway
+preflight-pick-subset = Pick which to copy…
+collision-modal-overwrite-older = Overwrite older only
+
+# Phase 14e — subset picker
+subset-title = Pick which sources to copy
+subset-subtitle = The full selection doesn't fit on the destination. Tick the items you want to copy; the rest stay behind.
+subset-loading = Measuring sizes…
+subset-too-large = too large to count
+subset-budget = Available
+subset-remaining = Remaining
+subset-confirm = Copy selection
+history-rerun-hint = Rerun this copy — re-scans every file in the source tree
+history-clear-all = Clear all
+history-clear-all-confirm = Click again to confirm
+history-clear-all-hint = Delete every history row. Requires a second click to confirm.
+toast-history-cleared = History cleared ({ $count } rows removed)
+
+# Phase 15 — source-list ordering in the drop staging dialog
+drop-dialog-sort-label = Order:
+sort-custom = Custom
+sort-name-asc = Name A → Z (files first)
+sort-name-desc = Name Z → A (files first)
+sort-size-asc = Size smallest first (files first)
+sort-size-desc = Size largest first (files first)
+sort-reorder = Reorder
+sort-move-top = Move to top
+sort-move-up = Move up
+sort-move-down = Move down
+sort-move-bottom = Move to bottom
+
+# Phase 16 — sort preset names for the Activity list (shorter
+# wording than the DropStagingDialog variants; the Activity list
+# is files-only so the "(files first)" suffix isn't relevant).
+sort-name-asc-simple = Name A → Z
+sort-name-desc-simple = Name Z → A
+sort-size-asc-simple = Size smallest first
+sort-size-desc-simple = Size largest first
+activity-sort-locked = Sorting is disabled while a copy is running. Pause or wait for it to finish, then change the order.
+
+# Phase 17 — collision-policy picker in the DropStagingDialog
+drop-dialog-collision-label = If a file already exists:
+collision-policy-keep-both = Keep both (rename new copy to _2, _3, …)
+collision-policy-skip = Skip the new copy
+collision-policy-overwrite = Overwrite the existing file
+collision-policy-overwrite-if-newer = Overwrite only if newer
+collision-policy-prompt = Ask every time
+
+# Phase 18 — progress labels on the DropStagingDialog Start button
+drop-dialog-busy-checking = Checking free space…
+drop-dialog-busy-enumerating = Counting files…
+drop-dialog-busy-starting = Starting copy…
+toast-enumeration-deferred = Source tree is large — skipping up-front file list; rows will appear as the engine works through them.
 
 # Context menu (per-row right-click)
 menu-pause = Pause

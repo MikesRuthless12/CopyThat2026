@@ -509,3 +509,71 @@ toast-profile-loaded = Profil chargé
 toast-profile-exported = Profil exporté
 # MT
 toast-profile-imported = Profil importé
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = Ajouter des fichiers
+action-add-folders = Ajouter des dossiers
+activity-title = Activité
+activity-clear = Vider la liste d'activité
+activity-empty = Aucune activité pour le moment.
+activity-after-done = Une fois terminé :
+activity-keep-open = Garder l'application ouverte
+activity-close-app = Quitter l'application
+activity-shutdown = Éteindre le PC
+activity-logoff = Se déconnecter
+activity-sleep = Mettre en veille
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = Espace insuffisant sur la destination
+preflight-warn-title = Espace faible sur la destination
+preflight-unknown-title = Espace libre indéterminé
+preflight-unknown-body = La source est trop volumineuse pour être mesurée rapidement ou le volume de destination n'a pas répondu. Vous pouvez continuer ; le garde-fou du moteur arrêtera proprement la copie si l'espace vient à manquer.
+preflight-required = Requis
+preflight-free = Libre
+preflight-reserve = Réserve
+preflight-shortfall = Déficit
+preflight-continue = Continuer quand même
+collision-modal-overwrite-older = Écraser uniquement les plus anciens
+
+# Phase 14e — subset picker
+preflight-pick-subset = Choisir ce qui sera copié…
+subset-title = Sélectionnez les sources à copier
+subset-subtitle = La sélection complète ne rentre pas sur la destination. Cochez ce que vous voulez copier ; le reste est ignoré.
+subset-loading = Mesure des tailles…
+subset-too-large = trop volumineux à compter
+subset-budget = Disponible
+subset-remaining = Restant
+subset-confirm = Copier la sélection
+history-rerun-hint = Relancer cette copie — analyse à nouveau tous les fichiers de la source
+history-clear-all = Tout effacer
+history-clear-all-confirm = Cliquez à nouveau pour confirmer
+history-clear-all-hint = Supprime toutes les lignes de l'historique. Un deuxième clic confirme.
+toast-history-cleared = Historique effacé ({ $count } lignes supprimées)
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = Ordre :
+sort-custom = Personnalisé
+sort-name-asc = Nom A → Z (fichiers d'abord)
+sort-name-desc = Nom Z → A (fichiers d'abord)
+sort-size-asc = Taille croissante (fichiers d'abord)
+sort-size-desc = Taille décroissante (fichiers d'abord)
+sort-reorder = Réorganiser
+sort-move-top = Mettre tout en haut
+sort-move-up = Monter
+sort-move-down = Descendre
+sort-move-bottom = Mettre tout en bas
+sort-name-asc-simple = Nom A → Z
+sort-name-desc-simple = Nom Z → A
+sort-size-asc-simple = Plus petits d'abord
+sort-size-desc-simple = Plus grands d'abord
+activity-sort-locked = Le tri est désactivé pendant qu'une copie est en cours. Mets en pause ou attends la fin, puis change l'ordre.
+drop-dialog-collision-label = Si un fichier existe déjà :
+collision-policy-keep-both = Conserver les deux (renommer la nouvelle copie en _2, _3 …)
+collision-policy-skip = Ignorer la nouvelle copie
+collision-policy-overwrite = Écraser le fichier existant
+collision-policy-overwrite-if-newer = Écraser uniquement si plus récent
+collision-policy-prompt = Demander à chaque fois
+drop-dialog-busy-checking = Vérification de l'espace libre…
+drop-dialog-busy-enumerating = Comptage des fichiers…
+drop-dialog-busy-starting = Démarrage de la copie…
+toast-enumeration-deferred = L'arborescence source est volumineuse — liste préalable ignorée ; les lignes apparaîtront au fur et à mesure du traitement.

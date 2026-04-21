@@ -22,7 +22,7 @@
 -->
 <script lang="ts">
   import Icon from "../icons/Icon.svelte";
-  import { t } from "../i18n";
+  import { i18nVersion, t } from "../i18n";
   import { formatBytes } from "../format";
   import {
     historyClearAll,
@@ -203,6 +203,7 @@
 
 {#if $totalsDrawerOpen}
   <aside class="drawer" aria-label={t("totals-title")}>
+    {#key $i18nVersion}
     <header>
       <h2>{t("totals-title")}</h2>
       <button
@@ -334,20 +335,16 @@
         {/if}
       </section>
     {/if}
+    {/key}
   </aside>
 {/if}
 
 <style>
   .drawer {
     position: fixed;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: min(560px, 94vw);
+    inset: 0;
     background: var(--surface, #ffffff);
     color: var(--fg, #1f1f1f);
-    border-left: 1px solid var(--border, rgba(128, 128, 128, 0.3));
-    box-shadow: -10px 0 24px rgba(0, 0, 0, 0.22);
     display: flex;
     flex-direction: column;
     overflow-y: auto;

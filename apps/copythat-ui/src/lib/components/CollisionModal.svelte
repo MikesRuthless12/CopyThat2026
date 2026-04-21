@@ -9,7 +9,7 @@
 -->
 <script lang="ts">
   import Icon from "../icons/Icon.svelte";
-  import { t } from "../i18n";
+  import { i18nVersion, t } from "../i18n";
   import { formatBytes } from "../format";
   import { resolveCollision } from "../ipc";
   import { collisionQueue, pushToast } from "../stores";
@@ -41,6 +41,27 @@
     if (!head || busy) return;
     busy = true;
     try {
+      await resolveCollision(head.id, resolution, null, applyToAll);
+      applyToAll = false;
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    } finally {
+      busy = false;
+    }
+  }
+
+  /// "Overwrite older only" — compare mtimes. If the destination is
+  /// the same age or newer, skip; otherwise overwrite. Only meaningful
+  /// for the current prompt (engine-side per-policy cache is already
+  /// exposed via `overwrite-if-newer` as a default collision policy,
+  /// which lives in Settings).
+  async function overwriteOlder() {
+    if (!head || busy) return;
+    busy = true;
+    try {
+      const srcMs = head.srcModifiedMs ?? 0;
+      const dstMs = head.dstModifiedMs ?? 0;
+      const resolution = srcMs > dstMs ? "overwrite" : "skip";
       await resolveCollision(head.id, resolution, null, applyToAll);
       applyToAll = false;
     } catch (e) {
@@ -85,10 +106,14 @@
   }
 
   function withSuffix(name: string): string {
+    // Keep-both shape mirrors the engine's `keep_both_path`:
+    // start at `_2` because the original file is the implicit "1".
+    // `foo.txt` → `foo_2.txt`; `Photos` (no extension) → `Photos_2`.
     const dot = name.lastIndexOf(".");
-    const base = dot > 0 ? name.slice(0, dot) : name;
-    const ext = dot > 0 ? name.slice(dot) : "";
-    return `${base} (1)${ext}`;
+    const hasExt = dot > 0 && dot < name.length - 1;
+    const base = hasExt ? name.slice(0, dot) : name;
+    const ext = hasExt ? name.slice(dot) : "";
+    return `${base}_2${ext}`;
   }
 
   function toggleRename() {
@@ -107,6 +132,7 @@
       if (e.key === "Escape") run("skip");
     }}
   >
+    {#key $i18nVersion}
     <div
       class="modal"
       role="alertdialog"
@@ -201,19 +227,31 @@
           type="button"
           onclick={() => run("skip")}
           disabled={busy}
+          title="Skip this file (overwrite none)"
         >
           {t("collision-modal-skip")}
+        </button>
+        <button
+          class="secondary"
+          type="button"
+          onclick={overwriteOlder}
+          disabled={busy}
+          title={t("collision-modal-overwrite-older")}
+        >
+          {t("collision-modal-overwrite-older")}
         </button>
         <button
           class="primary"
           type="button"
           onclick={() => run("overwrite")}
           disabled={busy}
+          title="Overwrite this file (tick Apply to all for 'overwrite all')"
         >
           {t("collision-modal-overwrite")}
         </button>
       </div>
     </div>
+    {/key}
   </div>
 {/if}
 

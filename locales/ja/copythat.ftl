@@ -509,3 +509,71 @@ toast-profile-loaded = プロファイルを読み込みました
 toast-profile-exported = プロファイルをエクスポートしました
 # MT
 toast-profile-imported = プロファイルをインポートしました
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = ファイルを追加
+action-add-folders = フォルダを追加
+activity-title = アクティビティ
+activity-clear = アクティビティを消去
+activity-empty = まだファイルアクティビティはありません。
+activity-after-done = 完了時:
+activity-keep-open = アプリを開いたままにする
+activity-close-app = アプリを閉じる
+activity-shutdown = PC をシャットダウン
+activity-logoff = ログオフ
+activity-sleep = スリープ
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = コピー先に十分な空き容量がありません
+preflight-warn-title = コピー先の空き容量が少なくなっています
+preflight-unknown-title = 空き容量を判別できません
+preflight-unknown-body = コピー元のサイズが大きすぎて短時間で測定できないか、コピー先ボリュームが応答しませんでした。続行できます。空き容量がなくなった場合は、エンジンがコピーを安全に停止します。
+preflight-required = 必要
+preflight-free = 空き
+preflight-reserve = 予約
+preflight-shortfall = 不足
+preflight-continue = それでも続行
+collision-modal-overwrite-older = 古いファイルのみ上書き
+
+# Phase 14e — subset picker
+preflight-pick-subset = コピー対象を選択…
+subset-title = コピーするソースを選択
+subset-subtitle = すべての選択はコピー先に収まりません。コピーするものにチェックを入れてください。残りはスキップされます。
+subset-loading = サイズを測定中…
+subset-too-large = 大きすぎて計測できない
+subset-budget = 利用可能
+subset-remaining = 残り
+subset-confirm = 選択をコピー
+history-rerun-hint = このコピーを再実行 — ソースツリー内のすべてのファイルを再スキャン
+history-clear-all = すべて消去
+history-clear-all-confirm = もう一度クリックして確認
+history-clear-all-hint = すべての履歴行を削除します。確認のためもう一度クリックが必要です。
+toast-history-cleared = 履歴を消去しました ({ $count } 行削除)
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = 並び順:
+sort-custom = カスタム
+sort-name-asc = 名前 A → Z（ファイルを先に）
+sort-name-desc = 名前 Z → A（ファイルを先に）
+sort-size-asc = サイズ 小 → 大（ファイルを先に）
+sort-size-desc = サイズ 大 → 小（ファイルを先に）
+sort-reorder = 並べ替え
+sort-move-top = 最上部へ移動
+sort-move-up = 上へ移動
+sort-move-down = 下へ移動
+sort-move-bottom = 最下部へ移動
+sort-name-asc-simple = 名前 A → Z
+sort-name-desc-simple = 名前 Z → A
+sort-size-asc-simple = 小さい順
+sort-size-desc-simple = 大きい順
+activity-sort-locked = コピー中は並び替えを無効にしています。一時停止するか終了を待ってから順序を変更してください。
+drop-dialog-collision-label = ファイルが既に存在する場合:
+collision-policy-keep-both = 両方を保持 (新しいコピーを _2、_3 … にリネーム)
+collision-policy-skip = 新しいコピーをスキップ
+collision-policy-overwrite = 既存のファイルを上書き
+collision-policy-overwrite-if-newer = 新しいときのみ上書き
+collision-policy-prompt = 毎回確認
+drop-dialog-busy-checking = 空き容量を確認中…
+drop-dialog-busy-enumerating = ファイルを数えています…
+drop-dialog-busy-starting = コピーを開始しています…
+toast-enumeration-deferred = ソースツリーが大きいため事前リストを省略しました。エンジンが処理するごとに行が表示されます。

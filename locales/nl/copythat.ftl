@@ -509,3 +509,71 @@ toast-profile-loaded = Profiel geladen
 toast-profile-exported = Profiel geëxporteerd
 # MT
 toast-profile-imported = Profiel geïmporteerd
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = Bestanden toevoegen
+action-add-folders = Mappen toevoegen
+activity-title = Activiteit
+activity-clear = Activiteitenlijst wissen
+activity-empty = Nog geen bestandsactiviteit.
+activity-after-done = Bij voltooiing:
+activity-keep-open = App open laten
+activity-close-app = App sluiten
+activity-shutdown = PC afsluiten
+activity-logoff = Afmelden
+activity-sleep = Slaapstand
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = Onvoldoende ruimte op de bestemming
+preflight-warn-title = Weinig ruimte op de bestemming
+preflight-unknown-title = Vrije ruimte niet te bepalen
+preflight-unknown-body = De bron is te groot om snel te meten of het doelvolume reageerde niet. Je kunt doorgaan; de beveiliging van de engine stopt het kopiëren netjes als de ruimte opraakt.
+preflight-required = Vereist
+preflight-free = Vrij
+preflight-reserve = Reserve
+preflight-shortfall = Tekort
+preflight-continue = Toch doorgaan
+collision-modal-overwrite-older = Alleen oudere overschrijven
+
+# Phase 14e — subset picker
+preflight-pick-subset = Kies wat gekopieerd wordt…
+subset-title = Kies de bronnen om te kopiëren
+subset-subtitle = De volledige selectie past niet op de bestemming. Vink aan wat je wilt kopiëren; de rest blijft achter.
+subset-loading = Groottes meten…
+subset-too-large = te groot om te tellen
+subset-budget = Beschikbaar
+subset-remaining = Resterend
+subset-confirm = Selectie kopiëren
+history-rerun-hint = Deze kopie opnieuw uitvoeren — scant alle bestanden in de bronboom opnieuw
+history-clear-all = Alles wissen
+history-clear-all-confirm = Klik opnieuw om te bevestigen
+history-clear-all-hint = Verwijdert elke geschiedenisrij. Een tweede klik bevestigt.
+toast-history-cleared = Geschiedenis gewist ({ $count } rijen verwijderd)
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = Volgorde:
+sort-custom = Aangepast
+sort-name-asc = Naam A → Z (bestanden eerst)
+sort-name-desc = Naam Z → A (bestanden eerst)
+sort-size-asc = Grootte klein naar groot (bestanden eerst)
+sort-size-desc = Grootte groot naar klein (bestanden eerst)
+sort-reorder = Herschikken
+sort-move-top = Naar boven
+sort-move-up = Omhoog
+sort-move-down = Omlaag
+sort-move-bottom = Naar beneden
+sort-name-asc-simple = Naam A → Z
+sort-name-desc-simple = Naam Z → A
+sort-size-asc-simple = Kleinste eerst
+sort-size-desc-simple = Grootste eerst
+activity-sort-locked = Sorteren is uitgeschakeld terwijl een kopie loopt. Pauzeer of wacht tot het klaar is en wijzig dan de volgorde.
+drop-dialog-collision-label = Als een bestand al bestaat:
+collision-policy-keep-both = Beide behouden (nieuwe kopie hernoemen naar _2, _3, …)
+collision-policy-skip = Nieuwe kopie overslaan
+collision-policy-overwrite = Bestaand bestand overschrijven
+collision-policy-overwrite-if-newer = Alleen overschrijven als nieuwer
+collision-policy-prompt = Elke keer vragen
+drop-dialog-busy-checking = Vrije ruimte controleren…
+drop-dialog-busy-enumerating = Bestanden tellen…
+drop-dialog-busy-starting = Kopie starten…
+toast-enumeration-deferred = Bronstructuur is groot — voorbereide lijst overgeslagen; regels verschijnen terwijl de engine ze verwerkt.

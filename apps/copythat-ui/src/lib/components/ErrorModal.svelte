@@ -10,7 +10,7 @@
 -->
 <script lang="ts">
   import Icon from "../icons/Icon.svelte";
-  import { t } from "../i18n";
+  import { i18nVersion, t } from "../i18n";
   import { resolveError, retryElevated } from "../ipc";
   import { errorQueue, pushToast } from "../stores";
 
@@ -50,6 +50,7 @@
       if (e.key === "Escape") run("skip");
     }}
   >
+    {#key $i18nVersion}
     <div
       class="modal"
       role="alertdialog"
@@ -119,6 +120,7 @@
         </button>
       </div>
     </div>
+    {/key}
   </div>
 {/if}
 

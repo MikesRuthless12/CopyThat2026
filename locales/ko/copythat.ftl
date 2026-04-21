@@ -509,3 +509,71 @@ toast-profile-loaded = 프로필을 불러왔습니다
 toast-profile-exported = 프로필을 내보냈습니다
 # MT
 toast-profile-imported = 프로필을 가져왔습니다
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = 파일 추가
+action-add-folders = 폴더 추가
+activity-title = 활동
+activity-clear = 활동 목록 지우기
+activity-empty = 아직 파일 활동이 없습니다.
+activity-after-done = 완료 시:
+activity-keep-open = 앱 열어두기
+activity-close-app = 앱 닫기
+activity-shutdown = PC 종료
+activity-logoff = 로그오프
+activity-sleep = 절전 모드
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = 대상에 공간이 부족합니다
+preflight-warn-title = 대상의 공간이 부족합니다
+preflight-unknown-title = 여유 공간을 확인할 수 없습니다
+preflight-unknown-body = 원본이 너무 커서 빠르게 측정할 수 없거나 대상 볼륨이 응답하지 않았습니다. 계속할 수 있으며, 공간이 부족해지면 엔진이 복사를 깔끔하게 중단합니다.
+preflight-required = 필요
+preflight-free = 남음
+preflight-reserve = 예약
+preflight-shortfall = 부족
+preflight-continue = 그래도 계속
+collision-modal-overwrite-older = 오래된 파일만 덮어쓰기
+
+# Phase 14e — subset picker
+preflight-pick-subset = 복사할 항목 선택…
+subset-title = 복사할 원본 선택
+subset-subtitle = 전체 선택이 대상에 맞지 않습니다. 복사할 항목을 선택하면 나머지는 복사되지 않습니다.
+subset-loading = 크기 측정 중…
+subset-too-large = 너무 커서 셀 수 없음
+subset-budget = 사용 가능
+subset-remaining = 남음
+subset-confirm = 선택 복사
+history-rerun-hint = 이 복사 재실행 — 원본 트리의 모든 파일을 다시 스캔
+history-clear-all = 전체 지우기
+history-clear-all-confirm = 확인하려면 다시 클릭
+history-clear-all-hint = 모든 기록 행을 삭제합니다. 두 번째 클릭으로 확인합니다.
+toast-history-cleared = 기록이 지워졌습니다 ({ $count } 행 제거됨)
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = 정렬:
+sort-custom = 사용자 지정
+sort-name-asc = 이름 A → Z (파일 먼저)
+sort-name-desc = 이름 Z → A (파일 먼저)
+sort-size-asc = 크기 작은 순 (파일 먼저)
+sort-size-desc = 크기 큰 순 (파일 먼저)
+sort-reorder = 재정렬
+sort-move-top = 맨 위로 이동
+sort-move-up = 위로
+sort-move-down = 아래로
+sort-move-bottom = 맨 아래로 이동
+sort-name-asc-simple = 이름 A → Z
+sort-name-desc-simple = 이름 Z → A
+sort-size-asc-simple = 작은 순
+sort-size-desc-simple = 큰 순
+activity-sort-locked = 복사가 실행 중일 때는 정렬이 비활성화됩니다. 일시중지하거나 완료를 기다린 후 순서를 변경하세요.
+drop-dialog-collision-label = 파일이 이미 존재하는 경우:
+collision-policy-keep-both = 둘 다 유지 (새 복사본의 이름을 _2, _3 … 로 변경)
+collision-policy-skip = 새 복사본 건너뛰기
+collision-policy-overwrite = 기존 파일 덮어쓰기
+collision-policy-overwrite-if-newer = 새로운 경우에만 덮어쓰기
+collision-policy-prompt = 매번 묻기
+drop-dialog-busy-checking = 여유 공간 확인 중…
+drop-dialog-busy-enumerating = 파일 수 계산 중…
+drop-dialog-busy-starting = 복사 시작 중…
+toast-enumeration-deferred = 원본 트리가 큽니다 — 사전 목록을 생략합니다. 엔진이 처리하는 대로 행이 나타납니다.
