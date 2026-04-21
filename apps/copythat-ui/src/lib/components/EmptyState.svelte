@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
   import Icon from "../icons/Icon.svelte";
-  import { t } from "../i18n";
+  import { i18nVersion, t } from "../i18n";
 
   interface Props {
     title?: string;
@@ -16,11 +16,13 @@
 </script>
 
 <div class="empty" role="region" aria-label={t("empty-region-label")}>
-  <div class="glyph" aria-hidden="true">
-    <Icon name="upload" size={32} />
-  </div>
-  <p class="title">{title ?? t("empty-title")}</p>
-  <p class="hint">{hint ?? t("empty-hint")}</p>
+  {#key $i18nVersion}
+    <div class="glyph" aria-hidden="true">
+      <Icon name="upload" size={32} />
+    </div>
+    <p class="title">{title ?? t("empty-title")}</p>
+    <p class="hint">{hint ?? t("empty-hint")}</p>
+  {/key}
 </div>
 
 <style>

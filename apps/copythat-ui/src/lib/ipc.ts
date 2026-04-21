@@ -3,6 +3,25 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+
+/// Open the native file picker (multi-select). Returns [] if the
+/// user cancels. The Header "Add files" button pipes the result
+/// into the staging queue, where the DropStagingDialog handles
+/// destination + copy / move.
+export async function pickFiles(): Promise<string[]> {
+  const picked = await openDialog({ multiple: true, directory: false });
+  if (picked === null || picked === undefined) return [];
+  return Array.isArray(picked) ? picked : [picked];
+}
+
+/// Open the native folder picker (multi-select). Same flow as
+/// `pickFiles` but `directory: true`.
+export async function pickFolders(): Promise<string[]> {
+  const picked = await openDialog({ multiple: true, directory: true });
+  if (picked === null || picked === undefined) return [];
+  return Array.isArray(picked) ? picked : [picked];
+}
 
 import type {
   CollisionAction,
@@ -232,4 +251,55 @@ export async function importProfile(
   src: string,
 ): Promise<ProfileInfoDto> {
   return invoke<ProfileInfoDto>("import_profile", { name, src });
+}
+
+export type PostCompletionAction =
+  | "keep-open"
+  | "exit"
+  | "shutdown"
+  | "logoff"
+  | "sleep";
+
+export async function postCompletionAction(
+  action: PostCompletionAction,
+): Promise<void> {
+  await invoke("post_completion_action", { action });
+}
+
+// Phase 14 — preflight space checks.
+export async function destinationFreeBytes(path: string): Promise<number> {
+  return invoke<number>("destination_free_bytes", { path });
+}
+
+export async function pathTotalBytes(paths: string[]): Promise<number> {
+  return invoke<number>("path_total_bytes", { paths });
+}
+
+export async function pathSizesIndividual(paths: string[]): Promise<number[]> {
+  return invoke<number[]>("path_sizes_individual", { paths });
+}
+
+export interface PathMetaDto {
+  isDir: boolean;
+  size: number;
+}
+
+export async function pathMetadata(paths: string[]): Promise<PathMetaDto[]> {
+  return invoke<PathMetaDto[]>("path_metadata", { paths });
+}
+
+export interface TreeFileDto {
+  path: string;
+  size: number;
+}
+
+export interface TreeEnumerationDto {
+  files: TreeFileDto[];
+  overflow: boolean;
+}
+
+export async function enumerateTreeFiles(
+  paths: string[],
+): Promise<TreeEnumerationDto> {
+  return invoke<TreeEnumerationDto>("enumerate_tree_files", { paths });
 }

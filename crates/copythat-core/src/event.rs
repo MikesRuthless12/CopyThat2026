@@ -69,6 +69,16 @@ pub enum CopyEvent {
         dst_hex: String,
     },
     // ---------- tree-level aggregates (Phase 2) ----------
+    //
+    // Phase 16: emit once the tree walk has started but *before*
+    // the walker has returned. Fires periodically with running
+    // totals so a whole-drive enumeration shows live progress
+    // instead of a silent several-minute wait. `TreeStarted` still
+    // fires afterwards with the final counts.
+    TreeEnumerating {
+        files_so_far: u64,
+        bytes_so_far: u64,
+    },
     TreeStarted {
         root_src: PathBuf,
         root_dst: PathBuf,
@@ -174,6 +184,13 @@ impl Clone for CopyEvent {
                 algorithm,
                 src_hex: src_hex.clone(),
                 dst_hex: dst_hex.clone(),
+            },
+            CopyEvent::TreeEnumerating {
+                files_so_far,
+                bytes_so_far,
+            } => CopyEvent::TreeEnumerating {
+                files_so_far: *files_so_far,
+                bytes_so_far: *bytes_so_far,
             },
             CopyEvent::TreeStarted {
                 root_src,

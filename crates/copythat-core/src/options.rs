@@ -166,6 +166,53 @@ impl CopyOptions {
     pub fn clamped_buffer_size(&self) -> usize {
         self.buffer_size.clamp(MIN_BUFFER_SIZE, MAX_BUFFER_SIZE)
     }
+
+    /// Phase 13c — dynamic buffer sizing.
+    ///
+    /// Pick the buffer size the async-fallback loop should actually
+    /// use for a file of `file_size` bytes. Rules:
+    ///
+    /// - **File smaller than the configured buffer**: shrink to the
+    ///   next sector-aligned size above the file size (clamped to
+    ///   [`MIN_BUFFER_SIZE`]). A 50 KiB file doesn't need a 1 MiB
+    ///   allocation; shrinking cuts the per-file memory cost for
+    ///   many-small-file trees without hurting throughput.
+    /// - **File between 1 MiB and 4 GiB**: use the configured
+    ///   buffer verbatim. The Phase 13b buffer-sweep bench confirmed
+    ///   1 MiB is the optimum for this band on typical desktop
+    ///   hardware (the bench ran on Windows 11 / NTFS).
+    /// - **File larger than 4 GiB**: step up toward [`MAX_BUFFER_SIZE`]
+    ///   to give the memory subsystem bigger contiguous chunks to
+    ///   pipeline. The jump is capped at 4 MiB to stay well clear
+    ///   of `BufReader` / `BufWriter`'s internal allocation pain
+    ///   point.
+    ///
+    /// The returned value is always within `[MIN_BUFFER_SIZE,
+    /// MAX_BUFFER_SIZE]` and never larger than the caller-configured
+    /// `buffer_size` unless the file is > 4 GiB (where the caller's
+    /// configured value is treated as a floor rather than a cap).
+    pub fn buffer_size_for_file(&self, file_size: u64) -> usize {
+        let configured = self.clamped_buffer_size();
+        if file_size == 0 {
+            return MIN_BUFFER_SIZE;
+        }
+        // Step 1: cap to the file size (no point allocating more
+        // than the file can fill). Align up to the minimum buffer
+        // size so we never under-shoot the sector-alignment floor
+        // the engine assumes downstream.
+        let file_cap = ((file_size as usize).saturating_add(MIN_BUFFER_SIZE - 1))
+            .min(configured.max(MIN_BUFFER_SIZE));
+        let base = file_cap.max(MIN_BUFFER_SIZE);
+        // Step 2: for truly huge files, step up above the
+        // configured value — amortizes the per-syscall cost over
+        // more bytes at the expense of a larger steady-state RSS.
+        const HUGE_FILE_THRESHOLD: u64 = 4 * 1024 * 1024 * 1024; // 4 GiB
+        const HUGE_FILE_BUFFER: usize = 4 * 1024 * 1024; // 4 MiB
+        if file_size >= HUGE_FILE_THRESHOLD && base < HUGE_FILE_BUFFER {
+            return HUGE_FILE_BUFFER.clamp(MIN_BUFFER_SIZE, MAX_BUFFER_SIZE);
+        }
+        base.clamp(MIN_BUFFER_SIZE, MAX_BUFFER_SIZE)
+    }
 }
 
 /// Behaviour knobs for `move_file` / `move_tree`.
@@ -277,6 +324,19 @@ pub struct TreeOptions {
     /// If true, preserve mtime / atime on every *directory* in
     /// addition to every file. Defaults to true.
     pub preserve_directory_times: bool,
+    /// Phase 14 — destination free-space reserve, in bytes.
+    ///
+    /// When `> 0`, the tree engine re-probes the destination volume's
+    /// free bytes before each file and halts cleanly (emitting a
+    /// `TreeStopped` event + terminal state "succeeded_partial") if
+    /// writing the next file would push free space below this reserve.
+    /// `0` disables the guard; the Phase 1-13 behaviour (copy until
+    /// the volume is physically full) is preserved for opt-out
+    /// callers. The UI preflight check surfaces overflow before the
+    /// engine is even entered; this field is the safety net that
+    /// catches files that grow during the copy or partial-fit
+    /// selections that still happen to overflow.
+    pub reserve_dst_bytes: u64,
 }
 
 impl Default for TreeOptions {
@@ -288,6 +348,7 @@ impl Default for TreeOptions {
             concurrency: DEFAULT_TREE_CONCURRENCY,
             follow_symlinks_in_tree: false,
             preserve_directory_times: true,
+            reserve_dst_bytes: 0,
         }
     }
 }
@@ -311,5 +372,75 @@ impl TreeOptions {
             },
             other => other,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn buffer_size_for_file_tiny_file_shrinks_below_configured() {
+        let opts = CopyOptions::default();
+        // 50 KiB file, 1 MiB configured → shrink but stay at/above MIN.
+        let buf = opts.buffer_size_for_file(50 * 1024);
+        assert!(buf >= MIN_BUFFER_SIZE);
+        assert!(buf < DEFAULT_BUFFER_SIZE, "tiny files should not allocate the full 1 MiB default");
+    }
+
+    #[test]
+    fn buffer_size_for_file_zero_file_returns_min() {
+        let opts = CopyOptions::default();
+        assert_eq!(opts.buffer_size_for_file(0), MIN_BUFFER_SIZE);
+    }
+
+    #[test]
+    fn buffer_size_for_file_medium_file_uses_configured() {
+        // 100 MiB file with default (1 MiB) buffer → use 1 MiB verbatim.
+        let opts = CopyOptions::default();
+        let buf = opts.buffer_size_for_file(100 * 1024 * 1024);
+        assert_eq!(buf, DEFAULT_BUFFER_SIZE);
+    }
+
+    #[test]
+    fn buffer_size_for_file_huge_file_bumps_up() {
+        // 10 GiB file should step up from 1 MiB default to 4 MiB.
+        let opts = CopyOptions::default();
+        let buf = opts.buffer_size_for_file(10 * 1024 * 1024 * 1024);
+        assert_eq!(buf, 4 * 1024 * 1024);
+    }
+
+    #[test]
+    fn buffer_size_for_file_respects_max_ceiling() {
+        // Even a 1 TiB file must not exceed MAX_BUFFER_SIZE.
+        let opts = CopyOptions {
+            buffer_size: MAX_BUFFER_SIZE * 2,
+            ..Default::default()
+        };
+        let buf = opts.buffer_size_for_file(1024u64.pow(4));
+        assert!(buf <= MAX_BUFFER_SIZE);
+    }
+
+    #[test]
+    fn buffer_size_for_file_small_file_caps_at_configured() {
+        // 10 KiB file, 64 KiB configured → return MIN (64 KiB), not 10 KiB.
+        let opts = CopyOptions {
+            buffer_size: MIN_BUFFER_SIZE,
+            ..Default::default()
+        };
+        let buf = opts.buffer_size_for_file(10 * 1024);
+        assert_eq!(buf, MIN_BUFFER_SIZE);
+    }
+
+    #[test]
+    fn buffer_size_for_file_does_not_exceed_configured_on_medium() {
+        // 2 GiB with a user-configured 2 MiB should stay at 2 MiB
+        // (not bump up to 4 MiB — HUGE_FILE_THRESHOLD guards that).
+        let opts = CopyOptions {
+            buffer_size: 2 * 1024 * 1024,
+            ..Default::default()
+        };
+        let buf = opts.buffer_size_for_file(2 * 1024 * 1024 * 1024);
+        assert_eq!(buf, 2 * 1024 * 1024);
     }
 }

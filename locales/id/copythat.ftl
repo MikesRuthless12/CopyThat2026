@@ -509,3 +509,71 @@ toast-profile-loaded = Profil dimuat
 toast-profile-exported = Profil diekspor
 # MT
 toast-profile-imported = Profil diimpor
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = Tambah file
+action-add-folders = Tambah folder
+activity-title = Aktivitas
+activity-clear = Bersihkan daftar aktivitas
+activity-empty = Belum ada aktivitas file.
+activity-after-done = Saat selesai:
+activity-keep-open = Biarkan aplikasi terbuka
+activity-close-app = Tutup aplikasi
+activity-shutdown = Matikan PC
+activity-logoff = Keluar
+activity-sleep = Tidur
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = Ruang tidak cukup di tujuan
+preflight-warn-title = Ruang sedikit di tujuan
+preflight-unknown-title = Tidak dapat menentukan ruang kosong
+preflight-unknown-body = Sumber terlalu besar untuk diukur cepat atau volume tujuan tidak merespons. Anda dapat melanjutkan; mesin akan menghentikan penyalinan dengan rapi jika ruang habis.
+preflight-required = Dibutuhkan
+preflight-free = Kosong
+preflight-reserve = Cadangan
+preflight-shortfall = Kekurangan
+preflight-continue = Lanjutkan saja
+collision-modal-overwrite-older = Timpa hanya yang lebih lama
+
+# Phase 14e — subset picker
+preflight-pick-subset = Pilih yang akan disalin…
+subset-title = Pilih sumber untuk disalin
+subset-subtitle = Pilihan lengkap tidak muat di tujuan. Centang yang ingin disalin; sisanya tidak disalin.
+subset-loading = Mengukur ukuran…
+subset-too-large = terlalu besar untuk dihitung
+subset-budget = Tersedia
+subset-remaining = Tersisa
+subset-confirm = Salin pilihan
+history-rerun-hint = Jalankan ulang salinan ini — memindai ulang setiap file di pohon sumber
+history-clear-all = Hapus semua
+history-clear-all-confirm = Klik lagi untuk konfirmasi
+history-clear-all-hint = Menghapus setiap baris riwayat. Butuh klik kedua untuk konfirmasi.
+toast-history-cleared = Riwayat dibersihkan ({ $count } baris dihapus)
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = Urutan:
+sort-custom = Khusus
+sort-name-asc = Nama A → Z (file dulu)
+sort-name-desc = Nama Z → A (file dulu)
+sort-size-asc = Ukuran terkecil dulu (file dulu)
+sort-size-desc = Ukuran terbesar dulu (file dulu)
+sort-reorder = Susun ulang
+sort-move-top = Pindah ke atas
+sort-move-up = Naik
+sort-move-down = Turun
+sort-move-bottom = Pindah ke bawah
+sort-name-asc-simple = Nama A → Z
+sort-name-desc-simple = Nama Z → A
+sort-size-asc-simple = Terkecil dulu
+sort-size-desc-simple = Terbesar dulu
+activity-sort-locked = Pengurutan dinonaktifkan saat penyalinan berjalan. Jeda atau tunggu hingga selesai, lalu ubah urutan.
+drop-dialog-collision-label = Jika file sudah ada:
+collision-policy-keep-both = Simpan keduanya (ganti nama salinan baru menjadi _2, _3, …)
+collision-policy-skip = Lewati salinan baru
+collision-policy-overwrite = Timpa file yang ada
+collision-policy-overwrite-if-newer = Timpa hanya jika lebih baru
+collision-policy-prompt = Tanyakan setiap kali
+drop-dialog-busy-checking = Memeriksa ruang kosong…
+drop-dialog-busy-enumerating = Menghitung file…
+drop-dialog-busy-starting = Memulai penyalinan…
+toast-enumeration-deferred = Pohon sumber besar — melewati daftar awal; baris akan muncul seiring mesin memprosesnya.

@@ -509,3 +509,71 @@ toast-profile-loaded = Profilo caricato
 toast-profile-exported = Profilo esportato
 # MT
 toast-profile-imported = Profilo importato
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = Aggiungi file
+action-add-folders = Aggiungi cartelle
+activity-title = Attività
+activity-clear = Svuota elenco attività
+activity-empty = Nessuna attività file.
+activity-after-done = Al termine:
+activity-keep-open = Mantieni l'app aperta
+activity-close-app = Chiudi app
+activity-shutdown = Spegni PC
+activity-logoff = Disconnetti
+activity-sleep = Sospendi
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = Spazio insufficiente nella destinazione
+preflight-warn-title = Spazio ridotto nella destinazione
+preflight-unknown-title = Impossibile determinare lo spazio libero
+preflight-unknown-body = La sorgente è troppo grande per essere misurata rapidamente o il volume di destinazione non ha risposto. Puoi continuare; il motore fermerà la copia in modo pulito se lo spazio si esaurisce.
+preflight-required = Richiesto
+preflight-free = Libero
+preflight-reserve = Riserva
+preflight-shortfall = Deficit
+preflight-continue = Continua comunque
+collision-modal-overwrite-older = Sovrascrivi solo i più vecchi
+
+# Phase 14e — subset picker
+preflight-pick-subset = Scegli cosa copiare…
+subset-title = Scegli le sorgenti da copiare
+subset-subtitle = La selezione completa non entra nella destinazione. Spunta gli elementi da copiare; il resto resta.
+subset-loading = Misura delle dimensioni…
+subset-too-large = troppo grande da contare
+subset-budget = Disponibile
+subset-remaining = Rimanente
+subset-confirm = Copia selezione
+history-rerun-hint = Riesegui questa copia — ripete la scansione di ogni file nell'origine
+history-clear-all = Cancella tutto
+history-clear-all-confirm = Fai di nuovo clic per confermare
+history-clear-all-hint = Elimina ogni riga della cronologia. Richiede un secondo clic per confermare.
+toast-history-cleared = Cronologia cancellata ({ $count } righe rimosse)
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = Ordinamento:
+sort-custom = Personalizzato
+sort-name-asc = Nome A → Z (prima i file)
+sort-name-desc = Nome Z → A (prima i file)
+sort-size-asc = Dimensione crescente (prima i file)
+sort-size-desc = Dimensione decrescente (prima i file)
+sort-reorder = Riordina
+sort-move-top = Sposta in alto
+sort-move-up = Su
+sort-move-down = Giù
+sort-move-bottom = Sposta in basso
+sort-name-asc-simple = Nome A → Z
+sort-name-desc-simple = Nome Z → A
+sort-size-asc-simple = Più piccoli prima
+sort-size-desc-simple = Più grandi prima
+activity-sort-locked = L'ordinamento è disabilitato durante una copia. Metti in pausa o attendi la fine, poi cambia l'ordine.
+drop-dialog-collision-label = Se un file esiste già:
+collision-policy-keep-both = Mantieni entrambi (rinomina la nuova copia in _2, _3, …)
+collision-policy-skip = Salta la nuova copia
+collision-policy-overwrite = Sovrascrivi il file esistente
+collision-policy-overwrite-if-newer = Sovrascrivi solo se più nuovo
+collision-policy-prompt = Chiedi ogni volta
+drop-dialog-busy-checking = Verifica spazio libero…
+drop-dialog-busy-enumerating = Conteggio file…
+drop-dialog-busy-starting = Avvio della copia…
+toast-enumeration-deferred = L'albero di origine è grande — lista preliminare saltata; le righe appariranno mentre il motore le elabora.

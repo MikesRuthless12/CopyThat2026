@@ -4,11 +4,24 @@
 //! - `i18n-lint`: verify Fluent key parity across every `locales/<code>/copythat.ftl`,
 //!   plus Phase 11a checks: literal string keys referenced in source exist in `en`,
 //!   and every `.ftl` file parses with no duplicate keys.
+//! - `bench`: run the Criterion bench suite with the default
+//!   (full-size) workloads. Prints Criterion's normal output.
+//! - `bench-ci`: run the Criterion bench suite with `COPYTHAT_BENCH_CI=1`
+//!   set so workloads scale down to CI-friendly sizes. The smoke
+//!   path (Phase 13). Still prints Criterion's normal output.
+//! - `bench-vs`: detect competitor copy tools on PATH (Robocopy,
+//!   TeraCopy, FastCopy on Windows; `cp`, `rsync`, `ditto` on Unix)
+//!   and run a scripted copy against each. Missing tools are
+//!   reported but not fatal — CI stays green on a machine that
+//!   doesn't have every competitor installed. Results are printed
+//!   as a markdown table.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+
+mod bench;
 
 const LOCALES: &[&str] = &[
     "en", "es", "zh-CN", "hi", "ar", "pt-BR", "ru", "ja", "de", "fr", "ko", "it", "tr", "vi", "pl",
@@ -44,6 +57,36 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("bench") => match bench::run(false) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("xtask bench: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("bench-ci") => match bench::run(true) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("xtask bench-ci: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("bench-vs") => {
+            // Optional trailing flag: `--secure-cleanup` → after the
+            // bench finishes, shred the copied dst files with our
+            // own secure-delete crate (DoD 3-pass). Exercises the
+            // shredder on the same bytes we just wrote out, and
+            // leaves the test volumes cryptographically clean for
+            // the next run.
+            let secure = args.any(|a| a == "--secure-cleanup");
+            match bench::run_vs_with(secure) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("xtask bench-vs: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("--help" | "-h") | None => {
             print_help();
             ExitCode::SUCCESS
@@ -58,7 +101,7 @@ fn main() -> ExitCode {
 
 fn print_help() {
     println!(
-        "Usage: xtask <command>\n\nCommands:\n  i18n-lint   Verify key parity, literal-key coverage, and Fluent syntax\n              across locales/<code>/copythat.ftl\n"
+        "Usage: xtask <command>\n\nCommands:\n  i18n-lint   Verify key parity, literal-key coverage, and Fluent syntax\n              across locales/<code>/copythat.ftl\n  bench       Run the Criterion bench suite at full size\n  bench-ci    Run the Criterion bench suite at CI-scaled sizes\n  bench-vs    Time our engine against OS copy tools on PATH\n"
     );
 }
 
@@ -354,7 +397,7 @@ fn is_fluent_identifier(s: &str) -> bool {
     chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
-fn repo_root() -> Option<PathBuf> {
+pub(crate) fn repo_root() -> Option<PathBuf> {
     let start = std::env::current_dir().ok()?;
     let mut cur = start.as_path();
     loop {

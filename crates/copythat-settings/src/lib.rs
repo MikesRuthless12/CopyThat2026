@@ -197,6 +197,15 @@ pub struct TransferSettings {
     /// stores the flag; the `copy_file` engine does not yet consume
     /// it — landing alongside the Phase 14 "advanced features" work.
     pub preserve_acls: bool,
+    /// Phase 14 — minimum free space to leave on the destination
+    /// volume, in bytes. `0` disables the guard (engine never stops
+    /// mid-tree on size grounds). When `> 0`, the engine re-checks
+    /// the destination's free bytes before starting each file and
+    /// halts cleanly (emitting a `TreeStopped` event with the count
+    /// of files actually written) if completing the next file would
+    /// push the volume below this reserve. A preflight check in the
+    /// UI surfaces the shortfall before the engine even starts.
+    pub reserve_free_space_bytes: u64,
 }
 
 impl Default for TransferSettings {
@@ -210,6 +219,7 @@ impl Default for TransferSettings {
             preserve_timestamps: true,
             preserve_permissions: true,
             preserve_acls: false,
+            reserve_free_space_bytes: 0,
         }
     }
 }

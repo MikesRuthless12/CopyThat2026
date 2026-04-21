@@ -11,7 +11,7 @@
   import { save } from "@tauri-apps/plugin-dialog";
 
   import Icon from "../icons/Icon.svelte";
-  import { t } from "../i18n";
+  import { i18nVersion, t } from "../i18n";
   import { clearErrorLog, errorLog, errorLogExport } from "../ipc";
   import {
     closeErrorLogDrawer,
@@ -85,6 +85,7 @@
 
 {#if $errorLogDrawerOpen}
   <aside class="drawer" aria-label={t("error-log-title")}>
+    {#key $i18nVersion}
     <header>
       <h2>{t("error-log-title")}</h2>
       <button
@@ -152,20 +153,16 @@
         </tbody>
       </table>
     {/if}
+    {/key}
   </aside>
 {/if}
 
 <style>
   .drawer {
     position: fixed;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: min(720px, 94vw);
+    inset: 0;
     background: var(--surface, #ffffff);
     color: var(--fg, #1f1f1f);
-    border-left: 1px solid var(--border, rgba(128, 128, 128, 0.3));
-    box-shadow: -10px 0 24px rgba(0, 0, 0, 0.22);
     display: flex;
     flex-direction: column;
     z-index: 88;

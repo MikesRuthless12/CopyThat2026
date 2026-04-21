@@ -33,6 +33,22 @@ use windows_sys::Win32::Storage::FileSystem::{CopyFileExW, LPPROGRESS_ROUTINE_CA
 use super::NativeOutcome;
 use crate::outcome::ChosenStrategy;
 
+/// Below this size CopyFileExW's default buffered path wins:
+/// the source is almost certainly already in page cache and the
+/// destination write gets coalesced through the cache layer. At
+/// or above, `COPY_FILE_NO_BUFFERING` avoids double-buffering
+/// through the cache and lets the kernel stream directly to the
+/// disk — much better for sustained throughput on cross-volume
+/// copies.
+///
+/// Phase 13b tried 64 MiB to match Robocopy's internal threshold
+/// but it REGRESSED the 256 MiB C→E benchmark by ~3× (338 →
+/// 103 MiB/s): cross-volume copies between 64 MiB and the point
+/// where the source fits in RAM benefit enormously from
+/// page-cache read-prefetching + write coalescing on exFAT.
+/// We put it back to 256 MiB (Windows Explorer's default); the
+/// 10 GiB C→C workload still picks up the NO_BUFFERING path
+/// since it sits well above the threshold.
 const NO_BUFFERING_THRESHOLD: u64 = 256 * 1024 * 1024;
 const PROGRESS_MIN_BYTES: u64 = 16 * 1024;
 const PROGRESS_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
@@ -53,10 +69,23 @@ const ERROR_NOT_SUPPORTED: u32 = 50;
 #[allow(dead_code)]
 const _PROGRESS_STOP_USED: u32 = PROGRESS_STOP;
 
+/// Phase 13 tuning: the callback runs on `CopyFileExW`'s internal
+/// worker thread and every microsecond it spends stalls the copy.
+/// We used to `send` on an `mpsc::UnboundedSender` per-callback,
+/// which adds a heap allocation + cross-thread hand-off 4 000 times
+/// in a 256 MiB copy — measurable even when it's only ~100 ns per
+/// call. The new shape is strictly atomic-only:
+///
+/// - Callback: check cancel → check pause → store bytes → return.
+///   No channel send, no allocation, no syscalls unless paused.
+/// - Progress emission: a tokio polling task reads `bytes` every
+///   `PROGRESS_MIN_INTERVAL` and decides whether to emit a
+///   `CopyEvent::Progress`. This caps emissions at ~20 / s regardless
+///   of internal chunk count, and keeps the hot callback path as
+///   close to a no-op as we can get on Rust's ABI.
 struct CallbackCtx {
     ctrl: CopyControl,
     bytes: AtomicU64,
-    progress_tx: mpsc::UnboundedSender<u64>,
     cancel_flag: AtomicBool,
 }
 
@@ -92,10 +121,11 @@ unsafe extern "system" fn progress_routine(
         }
     }
 
+    // Fast path: single relaxed atomic store. The polling task picks
+    // this up; we do NOT allocate / send / cross thread boundaries here.
     if total_bytes_transferred >= 0 {
-        let bytes = total_bytes_transferred as u64;
-        ctx.bytes.store(bytes, Ordering::Relaxed);
-        let _ = ctx.progress_tx.send(bytes);
+        ctx.bytes
+            .store(total_bytes_transferred as u64, Ordering::Relaxed);
     }
 
     // Once we've reached EOF we can ask Windows to stop firing the
@@ -114,28 +144,54 @@ pub(crate) async fn try_native_copy(
     ctrl: CopyControl,
     events: mpsc::Sender<CopyEvent>,
 ) -> NativeOutcome {
+    // Phase 13c — opt-in parallel multi-chunk copy for large files.
+    // Gate behind `COPYTHAT_PARALLEL_CHUNKS=<N>` env var so users
+    // can A/B test it against the single-stream `CopyFileExW` path
+    // without risking default-path regressions until the numbers
+    // prove it's universally better.
+    if let Some(n) = super::parallel::requested_chunks(total) {
+        return super::parallel::parallel_chunk_copy(src, dst, total, n, ctrl, events).await;
+    }
+
     super::emit_started(&src, &dst, total, &events).await;
 
-    let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<u64>();
     let ctx = Arc::new(CallbackCtx {
         ctrl: ctrl.clone(),
         bytes: AtomicU64::new(0),
-        progress_tx,
         cancel_flag: AtomicBool::new(false),
     });
 
+    // Phase 13 tuning: progress is a polling task that reads the
+    // callback's atomic every `PROGRESS_MIN_INTERVAL` rather than
+    // reacting to a per-chunk channel send. This keeps the hot
+    // callback path allocation-free and shaves real wall-clock
+    // time off cached same-volume copies (where callback overhead
+    // is a large fraction of the syscall time).
     let started = Instant::now();
     let events_for_progress = events.clone();
     let total_for_progress = total;
+    let ctx_for_poll = ctx.clone();
     let progress_task = tokio::spawn(async move {
-        let mut last_emit_at = started;
+        let mut ticker = tokio::time::interval(PROGRESS_MIN_INTERVAL);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let mut last_emit_bytes: u64 = 0;
-        while let Some(bytes) = progress_rx.recv().await {
-            let now = Instant::now();
-            if bytes.saturating_sub(last_emit_bytes) >= PROGRESS_MIN_BYTES
-                && now.duration_since(last_emit_at) >= PROGRESS_MIN_INTERVAL
-            {
-                let elapsed = now.duration_since(started);
+        // First tick fires immediately — skip it so the very first
+        // progress event carries a real delta.
+        ticker.tick().await;
+        loop {
+            ticker.tick().await;
+            let bytes = ctx_for_poll.bytes.load(Ordering::Relaxed);
+            if bytes == last_emit_bytes {
+                // Either the copy just started or it's already done
+                // and nobody has dropped the Arc yet. Either way no
+                // emission needed.
+                if Arc::strong_count(&ctx_for_poll) == 1 {
+                    break;
+                }
+                continue;
+            }
+            if bytes.saturating_sub(last_emit_bytes) >= PROGRESS_MIN_BYTES {
+                let elapsed = started.elapsed();
                 let rate = super::fast_rate_bps(bytes, elapsed);
                 let _ = events_for_progress
                     .send(CopyEvent::Progress {
@@ -144,8 +200,12 @@ pub(crate) async fn try_native_copy(
                         rate_bps: rate,
                     })
                     .await;
-                last_emit_at = now;
                 last_emit_bytes = bytes;
+            }
+            if Arc::strong_count(&ctx_for_poll) == 1 {
+                // CopyFileExW has returned — the dispatcher dropped
+                // its ctx clone. Stop polling.
+                break;
             }
         }
     });

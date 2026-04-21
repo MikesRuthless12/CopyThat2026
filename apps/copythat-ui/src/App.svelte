@@ -14,6 +14,7 @@
   import Footer from "./lib/components/Footer.svelte";
   import ProgressBar from "./lib/components/ProgressBar.svelte";
   import JobList from "./lib/components/JobList.svelte";
+  import FileActivityList from "./lib/components/FileActivityList.svelte";
   import ContextMenu from "./lib/components/ContextMenu.svelte";
   import DetailsDrawer from "./lib/components/DetailsDrawer.svelte";
   import DropStagingDialog from "./lib/components/DropStagingDialog.svelte";
@@ -128,7 +129,6 @@
 
 <main class="app" aria-label={t("window-title")}>
   <Header />
-  <ProgressBar />
   <JobList
     {selectedId}
     onSelect={(id) => {
@@ -139,6 +139,13 @@
       detailsJob = job;
     }}
   />
+  <!-- Phase 13d: collapsible per-file live feed with icons +
+       per-row progress. Sits between the job list and the
+       aggregate bar so it doesn't cover the global controls. -->
+  <FileActivityList />
+  <!-- Thin aggregate bar across the bottom (TeraCopy-style),
+       sitting directly above the Footer counters. -->
+  <ProgressBar />
   <Footer />
 
   {#if detailsJob}

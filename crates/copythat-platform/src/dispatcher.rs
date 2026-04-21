@@ -57,7 +57,26 @@ pub async fn fast_copy(
     let started = Instant::now();
 
     // ---------- 1. Reflink ----------
-    if matches!(opts.strategy, CopyStrategy::Auto | CopyStrategy::AlwaysFast) {
+    //
+    // Reflink is a same-volume operation — it clones the backing
+    // extents by reference, which is meaningless across volumes. A
+    // cross-volume request to the reflink syscall is always a hard
+    // rejection on every known COW filesystem, but the syscall still
+    // costs a file-open / probe cycle. Skip it when we can cheaply
+    // prove src and dst live on different volumes; fall through to
+    // the OS-native accelerated path directly.
+    let same_volume = match (crate::helpers::volume_id(&src_owned), {
+        // For the destination, probe the parent dir — the file itself
+        // doesn't exist yet so we can't stat it.
+        let dst_probe = dst_owned.parent().unwrap_or(&dst_owned);
+        crate::helpers::volume_id(dst_probe)
+    }) {
+        (Some(a), Some(b)) => a == b,
+        // One or both probes failed — conservatively assume "maybe
+        // same" so we don't mask reflink on unusual filesystems.
+        _ => true,
+    };
+    if same_volume && matches!(opts.strategy, CopyStrategy::Auto | CopyStrategy::AlwaysFast) {
         match reflink_path::try_reflink(src_owned.clone(), dst_owned.clone()).await {
             ReflinkOutcome::Cloned => {
                 let elapsed = started.elapsed();

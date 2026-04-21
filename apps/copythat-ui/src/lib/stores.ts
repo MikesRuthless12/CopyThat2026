@@ -8,7 +8,12 @@
 
 import { derived, writable, type Readable } from "svelte/store";
 
-import { listJobs, globals as fetchGlobals, onEvent } from "./ipc";
+import {
+  enumerateTreeFiles,
+  listJobs,
+  globals as fetchGlobals,
+  onEvent,
+} from "./ipc";
 import {
   EVENTS,
   type CollisionPromptDto,
@@ -16,6 +21,7 @@ import {
   type DropReceivedDto,
   type ErrorPromptDto,
   type ErrorResolvedDto,
+  type FileActivityDto,
   type GlobalsDto,
   type JobDto,
   type JobFailedDto,
@@ -58,6 +64,61 @@ const totalsDrawerOpenStore = writable<boolean>(false);
 // tab with Language only — Phase 12 extends to Transfer, Shell,
 // Secure-delete, Advanced tabs.
 const settingsOpenStore = writable<boolean>(false);
+
+// Phase 13d / 16 — the Activity panel doubles as the full file list
+// for each queued job. When a new job lands, we recursively enumerate
+// its source paths and pre-seed one row per file in a `pending` phase,
+// so the user can see the total count + sort by name / size before
+// the first byte moves. As the engine fires per-file Started /
+// Progress / Completed events, matching rows flip through `start`,
+// `progress`, `done` in place. Errors flip to `error`; rows that
+// were never pre-seeded (e.g. huge trees past the enumerator's
+// overflow cap) still append lazily via the old path.
+//
+// Cap picked to land under ~50 MB of reactive store memory on
+// modest hardware (≈200 B per row × 250 k rows). Enough that most
+// users' typical trees sit entirely inside the list; beyond that,
+// older completed rows age out so the pending / in-flight rows
+// always stay visible at the bottom.
+const ACTIVITY_LIMIT = 250_000;
+export type ActivityPhase =
+  | "pending"
+  | "start"
+  | "progress"
+  | "done"
+  | "error"
+  | "dir";
+interface FileActivityRow {
+  key: string;
+  jobId: number;
+  seq: number;
+  src: string;
+  dst: string;
+  phase: ActivityPhase;
+  bytesDone: number;
+  bytesTotal: number;
+  isDir: boolean;
+  message: string | null;
+  addedAtMs: number;
+}
+const fileActivityStore = writable<FileActivityRow[]>([]);
+const activityOpenStore = writable<boolean>(
+  typeof localStorage !== "undefined"
+    ? localStorage.getItem("copythat-activity-open") !== "false"
+    : true,
+);
+
+export type ActivitySortMode =
+  | "insertion"
+  | "name-asc"
+  | "name-desc"
+  | "size-asc"
+  | "size-desc";
+const activitySortStore = writable<ActivitySortMode>(
+  (typeof localStorage !== "undefined"
+    ? (localStorage.getItem("copythat-activity-sort") as ActivitySortMode | null)
+    : null) ?? "insertion",
+);
 
 export const jobs: Readable<JobDto[]> = { subscribe: jobsStore.subscribe };
 export const globals: Readable<GlobalsDto> = {
@@ -128,6 +189,338 @@ export function closeSettings(): void {
   settingsOpenStore.set(false);
 }
 
+// Phase 13d — file-activity feed exports.
+export const fileActivity: Readable<FileActivityRow[]> = {
+  subscribe: fileActivityStore.subscribe,
+};
+export const activityOpen: Readable<boolean> = {
+  subscribe: activityOpenStore.subscribe,
+};
+export const activitySort: Readable<ActivitySortMode> = {
+  subscribe: activitySortStore.subscribe,
+};
+export function setActivitySort(mode: ActivitySortMode): void {
+  activitySortStore.set(mode);
+  try {
+    localStorage.setItem("copythat-activity-sort", mode);
+  } catch {
+    // Best-effort — non-fatal if storage rejects.
+  }
+}
+// Sorted view of the activity list. Cheap: the store shape is one
+// row per file, capped at ACTIVITY_LIMIT, and the sort runs via
+// derived on each update. Insertion mode is the identity.
+function basenameOf(p: string): string {
+  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  return i >= 0 ? p.slice(i + 1) : p;
+}
+export const sortedFileActivity: Readable<FileActivityRow[]> = derived(
+  [fileActivityStore, activitySortStore],
+  ([$rows, $mode]) => {
+    if ($mode === "insertion") return $rows;
+    const copy = $rows.slice();
+    copy.sort((a, b) => {
+      switch ($mode) {
+        case "name-asc":
+          return basenameOf(a.src).localeCompare(basenameOf(b.src));
+        case "name-desc":
+          return basenameOf(b.src).localeCompare(basenameOf(a.src));
+        case "size-asc":
+          return (a.bytesTotal || 0) - (b.bytesTotal || 0);
+        case "size-desc":
+          return (b.bytesTotal || 0) - (a.bytesTotal || 0);
+        default:
+          return 0;
+      }
+    });
+    return copy;
+  },
+);
+
+export function toggleActivity(): void {
+  activityOpenStore.update((v) => {
+    const next = !v;
+    try {
+      localStorage.setItem("copythat-activity-open", next ? "true" : "false");
+    } catch {
+      // Best-effort — non-fatal if storage rejects.
+    }
+    return next;
+  });
+}
+export function clearActivity(): void {
+  fileActivityStore.set([]);
+}
+
+/// Pre-seed the Activity store with every file inside this job's
+/// source tree. The enumerator is recursive on the Rust side +
+/// capped at 500 000 entries; past that the flag flips to
+/// `overflow: true` and we silently fall back to lazy-append mode
+/// (the `file-activity` event handler takes over as engine fires
+/// per-file Started events).
+async function preseedJobFiles(jobId: number, src: string): Promise<void> {
+  try {
+    const res = await enumerateTreeFiles([src]);
+    if (res.files.length === 0) return;
+    const now = Date.now();
+    fileActivityStore.update(($rows) => {
+      const existingKeys = new Set($rows.map((r) => r.key));
+      const toAdd: FileActivityRow[] = [];
+      for (const f of res.files) {
+        const key = `${jobId}:${f.path}`;
+        if (existingKeys.has(key)) continue;
+        toAdd.push({
+          key,
+          jobId,
+          seq: 0,
+          src: f.path,
+          dst: "",
+          phase: "pending",
+          bytesDone: 0,
+          bytesTotal: f.size,
+          isDir: false,
+          message: null,
+          addedAtMs: now,
+        });
+      }
+      const appended = [...$rows, ...toAdd];
+      if (appended.length > ACTIVITY_LIMIT) {
+        return appended.slice(appended.length - ACTIVITY_LIMIT);
+      }
+      return appended;
+    });
+  } catch {
+    // Non-fatal — lazy-append via the file-activity event stream
+    // will still populate the list as the engine starts files.
+  }
+}
+
+/// Eager pre-seed used by DropStagingDialog *before* calling
+/// `startCopy`. We don't know the job id yet (startCopy returns it
+/// asynchronously), so rows land under a temporary key
+/// `pending-<src>:<path>` and get promoted to the real
+/// `<jobId>:<path>` by `adoptPreseededForJob` when the `job-added`
+/// event fires. That two-step dance guarantees the full file list
+/// is visible the moment the engine starts — no race between
+/// per-file Started events and the enumerator.
+const pendingPreseedPaths = new Set<string>();
+
+export async function preseedBeforeEnqueue(
+  sources: string[],
+  opts: { timeoutMs?: number } = {},
+): Promise<{ completed: boolean; fileCount: number }> {
+  // Hard wall-clock budget — if the walk is still running after
+  // this, skip the pre-seed and let the lazy-append path handle
+  // it. Protects the "whole drive" case where the recursive walk
+  // would block the Start Copy button for minutes.
+  const timeoutMs = opts.timeoutMs ?? 8_000;
+  const enumPromise = enumerateTreeFiles(sources);
+  const timeoutPromise = new Promise<null>((resolve) =>
+    setTimeout(() => resolve(null), timeoutMs),
+  );
+  let res: Awaited<ReturnType<typeof enumerateTreeFiles>> | null = null;
+  try {
+    const outcome = await Promise.race([enumPromise, timeoutPromise]);
+    if (outcome === null) {
+      // Timed out — walk keeps running in the background but the
+      // UI has already bailed. The engine's own pre-walk is the
+      // fallback source of truth for TreeStarted totals.
+      for (const s of sources) pendingPreseedPaths.add(s);
+      return { completed: false, fileCount: 0 };
+    }
+    res = outcome;
+  } catch {
+    return { completed: false, fileCount: 0 };
+  }
+  try {
+    if (res.files.length === 0) return { completed: true, fileCount: 0 };
+    // Defensive cap — if the enumerator hit its HARD_LIMIT the
+    // earlier D:\ attempt showed the webview renderer can't
+    // stomach that many reactive rows in one atomic append
+    // (crashed `Chrome_WidgetWin_0`). Skip pre-seed entirely on
+    // overflow; lazy append via the file-activity event stream
+    // keeps the app alive.
+    if (res.overflow) {
+      for (const s of sources) pendingPreseedPaths.add(s);
+      return { completed: false, fileCount: 0 };
+    }
+    const now = Date.now();
+    const files = res.files;
+    // Chunk the append so a 2 000-row drop doesn't land in a
+    // single store update — that forces Svelte to create and
+    // track 2 000 reactive rows atomically, which on a loaded
+    // webview renderer is the kind of spike that triggers the
+    // OOM we already saw. 256 rows per batch with a rAF yield
+    // between batches keeps the UI thread responsive.
+    const CHUNK = 256;
+    for (let off = 0; off < files.length; off += CHUNK) {
+      const slice = files.slice(off, off + CHUNK);
+      fileActivityStore.update(($rows) => {
+        const existingKeys = new Set($rows.map((r) => r.key));
+        const toAdd: FileActivityRow[] = [];
+        for (const f of slice) {
+          let rootSrc = "";
+          for (const s of sources) {
+            if (f.path === s || f.path.startsWith(s)) {
+              rootSrc = s;
+              break;
+            }
+          }
+          const key = `pending-${rootSrc}:${f.path}`;
+          if (existingKeys.has(key)) continue;
+          toAdd.push({
+            key,
+            jobId: -1,
+            seq: 0,
+            src: f.path,
+            dst: "",
+            phase: "pending",
+            bytesDone: 0,
+            bytesTotal: f.size,
+            isDir: false,
+            message: null,
+            addedAtMs: now,
+          });
+        }
+        return [...$rows, ...toAdd];
+      });
+      // Yield to the renderer between batches so it can paint
+      // the partial list and avoid a blocking mega-update.
+      if (off + CHUNK < files.length) {
+        await new Promise<void>((r) => {
+          if (typeof requestAnimationFrame === "function") {
+            requestAnimationFrame(() => r());
+          } else {
+            setTimeout(r, 0);
+          }
+        });
+      }
+    }
+    for (const s of sources) pendingPreseedPaths.add(s);
+    return { completed: true, fileCount: files.length };
+  } catch {
+    // Silent fallback — lazy append will still work.
+    return { completed: false, fileCount: 0 };
+  }
+}
+
+/// Batched activity-event handler. High-concurrency tree copies
+/// fire hundreds of `file-activity` events per second; doing one
+/// Svelte store update per event would force a full list-diff +
+/// derived-store re-sort on every tick, which is what crashed the
+/// webview on the whole-drive enqueue. We queue events and flush
+/// once per 100 ms — one store update, one diff, one sort per
+/// batch regardless of how many events landed in between.
+let activityQueue: FileActivityDto[] = [];
+let activityFlushScheduled = false;
+const ACTIVITY_FLUSH_MS = 100;
+
+function queueActivityEvent(p: FileActivityDto): void {
+  activityQueue.push(p);
+  if (!activityFlushScheduled) {
+    activityFlushScheduled = true;
+    setTimeout(flushActivityQueue, ACTIVITY_FLUSH_MS);
+  }
+}
+
+function flushActivityQueue(): void {
+  activityFlushScheduled = false;
+  const batch = activityQueue;
+  if (batch.length === 0) return;
+  activityQueue = [];
+  fileActivityStore.update(($rows) => {
+    // Build an index once per flush so each event in the batch
+    // gets an O(1) lookup instead of $rows.findIndex (which is
+    // O(n) per event and quadratic over a batch).
+    const byKey = new Map<string, number>();
+    for (let i = 0; i < $rows.length; i++) byKey.set($rows[i].key, i);
+    let next = $rows;
+    let mutated = false;
+    const cloneIfNeeded = () => {
+      if (!mutated) {
+        next = $rows.slice();
+        mutated = true;
+      }
+    };
+    for (const p of batch) {
+      const key = `${p.jobId}:${p.src}`;
+      const idx = byKey.get(key);
+      if (idx !== undefined) {
+        const existing = next[idx];
+        // Keep the pre-seeded bytesTotal (engine's Progress
+        // events only ship bytesDone) so the size column stays
+        // stable across the row's whole lifetime.
+        const bytesTotal =
+          p.bytesTotal > 0 ? p.bytesTotal : existing.bytesTotal;
+        const dst = p.dst || existing.dst;
+        // Monotonic: a stale Progress arriving after Done/Error
+        // must not re-open the row.
+        if (
+          (existing.phase === "done" || existing.phase === "error") &&
+          p.phase === "progress"
+        ) {
+          continue;
+        }
+        cloneIfNeeded();
+        next[idx] = {
+          ...existing,
+          seq: p.seq,
+          dst,
+          phase: p.phase,
+          bytesDone: p.bytesDone,
+          bytesTotal,
+          isDir: p.isDir || existing.isDir,
+          message: p.message ?? existing.message,
+        };
+      } else {
+        cloneIfNeeded();
+        const row: FileActivityRow = {
+          key,
+          jobId: p.jobId,
+          seq: p.seq,
+          src: p.src,
+          dst: p.dst,
+          phase: p.phase,
+          bytesDone: p.bytesDone,
+          bytesTotal: p.bytesTotal,
+          isDir: p.isDir,
+          message: p.message,
+          addedAtMs: Date.now(),
+        };
+        byKey.set(key, next.length);
+        next.push(row);
+      }
+    }
+    if (!mutated) return $rows;
+    if (next.length > ACTIVITY_LIMIT) {
+      next = next.slice(next.length - ACTIVITY_LIMIT);
+    }
+    return next;
+  });
+  // If more events arrived during the flush, schedule another.
+  if (activityQueue.length > 0 && !activityFlushScheduled) {
+    activityFlushScheduled = true;
+    setTimeout(flushActivityQueue, ACTIVITY_FLUSH_MS);
+  }
+}
+
+function adoptPreseededForJob(jobId: number, src: string): void {
+  const prefix = `pending-${src}:`;
+  fileActivityStore.update(($rows) => {
+    let changed = false;
+    const next = $rows.map((r) => {
+      if (r.key.startsWith(prefix)) {
+        changed = true;
+        const filePath = r.key.slice(prefix.length);
+        return { ...r, jobId, key: `${jobId}:${filePath}` };
+      }
+      return r;
+    });
+    return changed ? next : $rows;
+  });
+  pendingPreseedPaths.delete(src);
+}
+
 /// The sum of live per-job rates. `GlobalsDto.rateBps` from Rust is
 /// intentionally 0 — derivating it in the UI keeps the numbers tied
 /// to the store we already trust.
@@ -135,6 +528,30 @@ export const liveRateBps: Readable<number> = derived(jobsStore, ($jobs) =>
   $jobs
     .filter((j) => j.state === "running")
     .reduce((acc, j) => acc + (j.rateBps || 0), 0),
+);
+
+/// Aggregate bytes across all live (running / paused / pending)
+/// jobs. Derived from the jobsStore rather than `GlobalsDto` so the
+/// bottom ProgressBar can't drift out of sync with each row's ring
+/// — they both read from the same source-of-truth. Completed and
+/// failed jobs are excluded from both numerator and denominator so
+/// the "current batch" bar reflects what's still in flight, not
+/// lifetime history.
+export const liveBytes: Readable<{ done: number; total: number }> = derived(
+  jobsStore,
+  ($jobs) =>
+    $jobs
+      .filter(
+        (j) =>
+          j.state === "running" || j.state === "paused" || j.state === "pending",
+      )
+      .reduce(
+        (acc, j) => ({
+          done: acc.done + (j.bytesDone || 0),
+          total: acc.total + (j.bytesTotal || 0),
+        }),
+        { done: 0, total: 0 },
+      ),
 );
 
 /// Convenience: jobs visible in the list, in stable id order.
@@ -159,6 +576,20 @@ export async function initStores(): Promise<() => void> {
         if ($jobs.some((j) => j.id === job.id)) return $jobs;
         return [...$jobs, job];
       });
+      // Phase 16 — pre-seed the Activity list for jobs that bypassed
+      // the DropStagingDialog flow (shell enqueue, CLI --enqueue,
+      // history re-run). DropStagingDialog enqueues pre-seed its
+      // own rows *before* calling startCopy, so this path is only a
+      // fallback for jobs whose IDs we don't know in advance.
+      const alreadySeeded = pendingPreseedPaths.has(job.src);
+      if (!alreadySeeded) {
+        void preseedJobFiles(job.id, job.src);
+      } else {
+        // Promote the pre-seeded rows from `pending-<src>` to the
+        // real `jobId:<path>` keys so incoming file-activity events
+        // match them in place.
+        adoptPreseededForJob(job.id, job.src);
+      }
     }),
     onEvent<JobIdDto>(EVENTS.jobStarted, (payload) => {
       updateJob(payload.id, (job) => ({ ...job, state: "running" }));
@@ -228,6 +659,13 @@ export async function initStores(): Promise<() => void> {
       collisionQueueStore.update(($q) => $q.filter((c) => c.id !== p.id));
       pushToast("info", "toast-collision-resolved");
     }),
+    // Phase 13d — per-file live activity. `start`/`dir` append a new
+    // row; `progress` patches the existing in-flight row; `done`/
+    // `error` flip the phase + bytes. Rows are keyed by
+    // `jobId + src` so rapid repeated events collapse onto one row.
+    onEvent<FileActivityDto>(EVENTS.fileActivity, (p) => {
+      queueActivityEvent(p);
+    }),
   ]);
 
   return () => {
@@ -249,6 +687,14 @@ function updateJob(id: number, patch: (job: JobDto) => JobDto) {
 
 export function clearDropped(): void {
   droppedStore.set([]);
+}
+
+/// Programmatic push into the staging queue. Used by the Header's
+/// file/folder picker buttons — the DropStagingDialog subscribes to
+/// `dropped`, so seeding it from anywhere in the UI makes the same
+/// "pick destination → start copy" flow kick in.
+export function setDropped(paths: string[]): void {
+  droppedStore.set(paths);
 }
 
 let toastCounter = 0;

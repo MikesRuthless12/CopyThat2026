@@ -46,8 +46,11 @@ pub mod state;
 use std::sync::Mutex;
 
 use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
+use tauri::menu::{Menu, MenuEvent, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 use crate::cli::CliAction;
+use crate::state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -125,14 +128,41 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(app_state)
         .on_window_event(|window, event| {
-            if let WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) = event {
-                let dto = ipc::DropReceivedDto {
-                    paths: paths
-                        .iter()
-                        .map(|p| p.to_string_lossy().into_owned())
-                        .collect(),
-                };
-                let _ = window.app_handle().emit(ipc::EVENT_DROP_RECEIVED, dto);
+            match event {
+                WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
+                    eprintln!(
+                        "[drop-received] paths={}",
+                        paths
+                            .iter()
+                            .map(|p| p.to_string_lossy().into_owned())
+                            .collect::<Vec<_>>()
+                            .join(" | ")
+                    );
+                    let dto = ipc::DropReceivedDto {
+                        paths: paths
+                            .iter()
+                            .map(|p| p.to_string_lossy().into_owned())
+                            .collect(),
+                    };
+                    let _ = window.app_handle().emit(ipc::EVENT_DROP_RECEIVED, dto);
+                }
+                // Phase 16 — "Minimize to tray on close". When the user
+                // toggles the General-tab checkbox ON, pressing the
+                // window's X button hides the window into the tray
+                // instead of tearing down the process. The tray icon
+                // registered below keeps the runtime alive and lets
+                // the user restore / quit from its menu.
+                WindowEvent::CloseRequested { api, .. } => {
+                    let handle = window.app_handle();
+                    if let Some(state) = handle.try_state::<AppState>() {
+                        let minimize = state.settings_snapshot().general.minimize_to_tray;
+                        if minimize {
+                            api.prevent_close();
+                            let _ = window.hide();
+                        }
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -180,8 +210,50 @@ pub fn run() {
             commands::delete_profile,
             commands::export_profile,
             commands::import_profile,
+            commands::post_completion_action,
+            // Phase 14 — preflight free-space + path-size probes.
+            commands::destination_free_bytes,
+            commands::path_total_bytes,
+            commands::path_sizes_individual,
+            commands::path_metadata,
+            commands::enumerate_tree_files,
         ])
         .setup(move |app| {
+            // Phase 16 — tray icon + menu. Visible regardless of the
+            // "minimize to tray" setting; the setting only changes
+            // what the window's close button does. The menu always
+            // lets the user re-show the window and quit cleanly.
+            let show = MenuItem::with_id(app, "tray-show", "Show", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "tray-quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &quit])?;
+            let _tray = TrayIconBuilder::with_id("copythat-main-tray")
+                .tooltip("Copy That 2026")
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event: MenuEvent| match event.id.as_ref() {
+                    "tray-show" => show_main_window(app),
+                    "tray-quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    // Left-click on the tray icon restores the main
+                    // window. Right-click opens the menu (Tauri's
+                    // default behaviour when `show_menu_on_left_click`
+                    // is false).
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        show_main_window(tray.app_handle());
+                    }
+                })
+                .build(app)?;
+
             if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {
                 shell::dispatch_cli_action(&app.handle().clone(), action);
             }
@@ -189,6 +261,17 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Copy That 2026");
+}
+
+/// Phase 16 — restore the main window from the tray. `show` +
+/// `unminimize` + `set_focus` is the idiomatic bring-to-front
+/// combination on every Tauri 2.x target; missing pieces no-op.
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+    }
 }
 
 /// Phase 9 — synchronous helper for opening the SQLite history from

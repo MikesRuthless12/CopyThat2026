@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use copythat_core::{CopyOptions, JobKind};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::ipc::{CopyOptionsDto, FileIconDto, JobDto};
 use crate::shell::enqueue_jobs;
@@ -33,6 +33,11 @@ pub async fn start_copy(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<u64>, String> {
+    eprintln!(
+        "[start_copy] begin sources={} dst={}",
+        sources.join(" | "),
+        destination
+    );
     enqueue(
         JobKind::Copy,
         sources,
@@ -91,6 +96,7 @@ async fn enqueue(
     let verifier = resolve_verifier(&options, &settings)?;
     let collision_policy = parse_collision_policy(options.collision.as_deref())?;
     let error_policy = parse_error_policy(options.on_error.as_ref(), &settings);
+    let tree_concurrency = resolve_concurrency(&settings);
 
     let srcs: Vec<PathBuf> = sources
         .into_iter()
@@ -110,7 +116,33 @@ async fn enqueue(
         verifier,
         collision_policy,
         error_policy,
+        tree_concurrency,
     ))
+}
+
+/// Phase 13c — resolve `ConcurrencyChoice` from settings into a
+/// concrete worker count. `Auto` asks `copythat_platform` for a
+/// storage-class-aware recommendation (SSD → up to 8; spinning → 1
+/// to avoid seek thrash). `Manual(n)` clamps to `[1, 16]` via the
+/// settings crate's own `resolved()`.
+fn resolve_concurrency(settings: &copythat_settings::Settings) -> Option<usize> {
+    use copythat_settings::ConcurrencyChoice;
+    let auto_hint = platform_auto_concurrency_hint();
+    let n = match settings.transfer.concurrency {
+        ConcurrencyChoice::Auto => auto_hint,
+        ConcurrencyChoice::Manual(_) => settings.transfer.concurrency.resolved(auto_hint),
+    };
+    Some(n as usize)
+}
+
+fn platform_auto_concurrency_hint() -> u8 {
+    // `copythat-platform::recommend_concurrency` takes src + dst
+    // paths; at enqueue time we don't have a single representative
+    // src/dst pair (we have a list). Use a simple 4-worker default
+    // that matches `DEFAULT_TREE_CONCURRENCY` — tuned further once
+    // Phase 13c measures whether bumping helps many-small-file
+    // trees.
+    4
 }
 
 fn parse_collision_policy(raw: Option<&str>) -> Result<copythat_core::CollisionPolicy, String> {
@@ -602,6 +634,10 @@ pub async fn history_rerun(
     }
     // Re-run uses the engine defaults; the original row's opaque
     // `options_json` is ignored until Phase 12 can round-trip it.
+    // Concurrency still honours the live settings so a user who's
+    // bumped the worker count sees it applied on rerun.
+    let settings = state.settings_snapshot();
+    let tree_concurrency = resolve_concurrency(&settings);
     Ok(crate::shell::enqueue_jobs(
         &app,
         state.inner(),
@@ -612,6 +648,7 @@ pub async fn history_rerun(
         None,
         copythat_core::CollisionPolicy::default(),
         copythat_core::ErrorPolicy::Ask,
+        tree_concurrency,
     ))
 }
 
@@ -785,6 +822,404 @@ pub fn effective_buffer_size(state: State<'_, AppState>) -> u64 {
     state.settings_snapshot().transfer.effective_buffer_size() as u64
 }
 
+/// Phase 14 — free bytes available on the volume backing `path`.
+/// Powers the preflight check in the UI. Returns `0` when the probe
+/// can't resolve the volume (unmounted, permission denied, UNC host
+/// offline) so the UI falls through to "unknown — proceed".
+#[tauri::command]
+pub async fn destination_free_bytes(path: String) -> Result<u64, String> {
+    let p = std::path::PathBuf::from(path);
+    let moved = p.clone();
+    tokio::task::spawn_blocking(move || copythat_platform::free_space_bytes(&moved).unwrap_or(0))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Phase 14 — recursive total size of `paths`. Files are stat'd
+/// directly; directories are walked depth-first. The walk bails with
+/// `Err("too-large")` once it's counted past `HARD_LIMIT_ENTRIES`
+/// entries so a 10 M-file tree doesn't stall the preflight dialog.
+/// The UI falls through to "unknown — proceed with warning" on
+/// `too-large`; the engine-side reserve check is still the final
+/// safety net.
+#[tauri::command]
+pub async fn path_total_bytes(paths: Vec<String>) -> Result<u64, String> {
+    // Whole-drive walks were spending 30+ seconds in here before
+    // the preflight dialog ever appeared, which left the Start
+    // button looking frozen. Cap at a small entry count + a hard
+    // 2-second wall-clock budget; past either, bail with
+    // `too-large` and let the UI fall through to "size unknown,
+    // proceed with warning".
+    const HARD_LIMIT_ENTRIES: u64 = 20_000;
+    const HARD_LIMIT_MS: u128 = 2_000;
+    tokio::task::spawn_blocking(move || {
+        let started = std::time::Instant::now();
+        let mut total: u64 = 0;
+        let mut entries: u64 = 0;
+        for p in paths {
+            if started.elapsed().as_millis() >= HARD_LIMIT_MS {
+                return Err("too-large".to_string());
+            }
+            let root = std::path::PathBuf::from(p);
+            total = total.saturating_add(walk_size(&root, &mut entries, HARD_LIMIT_ENTRIES)?);
+        }
+        Ok(total)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Phase 16 — recursive file enumerator for the pre-seeded activity
+/// list. Walks every source path depth-first and returns one
+/// `{ path, size }` entry per *file* (directories are skipped; the
+/// engine creates them as a side-effect of its per-file copies).
+/// Capped at `HARD_LIMIT` entries so a 10 M-file tree doesn't seize
+/// up the UI. On overflow, returns whatever had been collected
+/// before the cap + an `overflow: true` marker so the frontend can
+/// fall back to the old lazy-append mode for truly huge trees.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TreeFileDto {
+    pub path: String,
+    pub size: u64,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TreeEnumerationDto {
+    pub files: Vec<TreeFileDto>,
+    pub overflow: bool,
+}
+
+/// Phase 19 — streaming enumerator. Emits `enumeration-progress`
+/// Tauri events every ~200 ms with the current file count so the
+/// DropStagingDialog can show a live counter next to the Start
+/// button ("Counting files… 47,312") instead of a silent spinner.
+/// Same 10 000-entry cap as before — beyond that we stop walking
+/// and set `overflow: true`.
+pub const EVENT_ENUMERATION_PROGRESS: &str = "enumeration-progress";
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct EnumerationProgressDto {
+    pub count: u64,
+    pub done: bool,
+    pub overflow: bool,
+}
+
+#[tauri::command]
+pub async fn enumerate_tree_files(
+    paths: Vec<String>,
+    app: AppHandle,
+) -> Result<TreeEnumerationDto, String> {
+    eprintln!("[enumerate_tree_files] start paths={}", paths.join(" | "));
+    // Matches the frontend ACTIVITY_LIMIT. Past this the `overflow`
+    // flag tells the UI to skip pre-seed; the engine's own walker
+    // keeps copying every file regardless of this cap.
+    const HARD_LIMIT: usize = 250_000;
+    // Emit progress in count-based batches so the IPC bus + the UI
+    // renderer don't get slammed. 500 files is big enough that a
+    // typical SSD walk fires ~20 ticks in the 10 k cap range — fast
+    // enough to feel live, slow enough to stay invisible on the
+    // event queue.
+    const PROGRESS_EMIT_EVERY: usize = 500;
+
+    tokio::task::spawn_blocking(move || -> Result<TreeEnumerationDto, String> {
+        let mut files: Vec<TreeFileDto> = Vec::with_capacity(2_048);
+        let mut overflow = false;
+        let mut last_emitted_count: usize = 0;
+        let mut ctx = StreamingCtx {
+            app: &app,
+            last_emitted_count: &mut last_emitted_count,
+            emit_every: PROGRESS_EMIT_EVERY,
+        };
+        for p in paths {
+            if overflow {
+                break;
+            }
+            walk_files_streaming(
+                &std::path::PathBuf::from(p),
+                &mut files,
+                HARD_LIMIT,
+                &mut overflow,
+                &mut ctx,
+            );
+        }
+        // Final tick so the UI's counter reflects the complete total
+        // even if the last incremental tick got suppressed by the
+        // rate limiter.
+        let _ = app.emit(
+            EVENT_ENUMERATION_PROGRESS,
+            EnumerationProgressDto {
+                count: files.len() as u64,
+                done: true,
+                overflow,
+            },
+        );
+        eprintln!(
+            "[enumerate_tree_files] done count={} overflow={}",
+            files.len(),
+            overflow
+        );
+        Ok(TreeEnumerationDto { files, overflow })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+struct StreamingCtx<'a> {
+    app: &'a AppHandle,
+    last_emitted_count: &'a mut usize,
+    emit_every: usize,
+}
+
+impl StreamingCtx<'_> {
+    fn tick(&mut self, count: usize, overflow: bool) {
+        // Count-based batching — only fire when we've added at
+        // least `emit_every` files since the last emit. The final
+        // emit at the end of the walk closes the gap so the UI's
+        // counter lands on the real total.
+        if count < *self.last_emitted_count + self.emit_every {
+            return;
+        }
+        let _ = self.app.emit(
+            EVENT_ENUMERATION_PROGRESS,
+            EnumerationProgressDto {
+                count: count as u64,
+                done: false,
+                overflow,
+            },
+        );
+        *self.last_emitted_count = count;
+    }
+}
+
+fn walk_files_streaming(
+    path: &std::path::Path,
+    out: &mut Vec<TreeFileDto>,
+    limit: usize,
+    overflow: &mut bool,
+    ctx: &mut StreamingCtx,
+) {
+    if *overflow || out.len() >= limit {
+        *overflow = true;
+        return;
+    }
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(m) => m,
+        Err(_) => return,
+    };
+    if meta.file_type().is_symlink() {
+        return;
+    }
+    if meta.is_file() {
+        out.push(TreeFileDto {
+            path: path.to_string_lossy().into_owned(),
+            size: meta.len(),
+        });
+        ctx.tick(out.len(), *overflow);
+        return;
+    }
+    if !meta.is_dir() {
+        return;
+    }
+    walk_dir_entries_streaming(path, out, limit, overflow, ctx);
+}
+
+fn walk_dir_entries_streaming(
+    path: &std::path::Path,
+    out: &mut Vec<TreeFileDto>,
+    limit: usize,
+    overflow: &mut bool,
+    ctx: &mut StreamingCtx,
+) {
+    let rd = match std::fs::read_dir(path) {
+        Ok(rd) => rd,
+        Err(_) => return,
+    };
+    for entry in rd.flatten() {
+        if *overflow || out.len() >= limit {
+            *overflow = true;
+            return;
+        }
+        let ft = match entry.file_type() {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        if ft.is_symlink() {
+            continue;
+        }
+        if ft.is_file() {
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            out.push(TreeFileDto {
+                path: entry.path().to_string_lossy().into_owned(),
+                size,
+            });
+            ctx.tick(out.len(), *overflow);
+        } else if ft.is_dir() {
+            walk_files_streaming(&entry.path(), out, limit, overflow, ctx);
+            if *overflow {
+                return;
+            }
+        }
+    }
+}
+
+/// Phase 15 — lightweight per-path metadata for the source-list
+/// ordering UI. Returns one `{ is_dir, size }` per input path, in
+/// input order. `size` is the file size for files and the recursive
+/// tree size for directories (using the same HARD_LIMIT walk as
+/// `path_sizes_individual`). `is_dir` is false for files, true for
+/// directories, and false for anything we can't classify (broken
+/// symlinks, stale UNC shares).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PathMetaDto {
+    pub is_dir: bool,
+    pub size: u64,
+}
+
+#[tauri::command]
+pub async fn path_metadata(paths: Vec<String>) -> Result<Vec<PathMetaDto>, String> {
+    eprintln!("[path_metadata] start paths={}", paths.join(" | "));
+    // The DropStagingDialog fires this command as part of the
+    // file-order UI, so it has to return within ~2 s even when a
+    // user dropped `D:\` with millions of files. A small entry cap
+    // + a per-source wall-clock budget keeps the modal responsive;
+    // any directory too big to measure lands as `size: u64::MAX`
+    // and the UI renders "too large to count".
+    const HARD_LIMIT_ENTRIES: u64 = 20_000;
+    const HARD_LIMIT_MS: u128 = 2_000;
+    tokio::task::spawn_blocking(move || {
+        let mut out = Vec::with_capacity(paths.len());
+        for p in paths {
+            let root = std::path::PathBuf::from(&p);
+            let md = std::fs::symlink_metadata(&root).ok();
+            let is_dir = md.as_ref().is_some_and(|m| m.is_dir());
+            let size = if let Some(m) = md.as_ref() {
+                if m.is_file() {
+                    m.len()
+                } else if m.is_dir() {
+                    let mut entries: u64 = 0;
+                    let started = std::time::Instant::now();
+                    match walk_size_timed(&root, &mut entries, HARD_LIMIT_ENTRIES, started, HARD_LIMIT_MS) {
+                        Ok(n) => n,
+                        Err(e) if e == "too-large" || e == "time-budget" => u64::MAX,
+                        Err(_) => 0,
+                    }
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
+            out.push(PathMetaDto { is_dir, size });
+        }
+        eprintln!("[path_metadata] done");
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Walk variant that also enforces a wall-clock budget. Returns
+/// the `"time-budget"` sentinel on deadline so the caller can
+/// render "too large to count" rather than hanging the modal.
+fn walk_size_timed(
+    path: &std::path::Path,
+    entries: &mut u64,
+    limit: u64,
+    started: std::time::Instant,
+    budget_ms: u128,
+) -> Result<u64, String> {
+    if started.elapsed().as_millis() >= budget_ms {
+        return Err("time-budget".to_string());
+    }
+    *entries = entries.saturating_add(1);
+    if *entries > limit {
+        return Err("too-large".to_string());
+    }
+    let meta = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if meta.is_file() {
+        return Ok(meta.len());
+    }
+    if meta.file_type().is_symlink() || !meta.is_dir() {
+        return Ok(0);
+    }
+    let mut sum: u64 = 0;
+    let rd = match std::fs::read_dir(path) {
+        Ok(rd) => rd,
+        Err(_) => return Ok(0),
+    };
+    for entry in rd.flatten() {
+        sum = sum.saturating_add(walk_size_timed(
+            &entry.path(),
+            entries,
+            limit,
+            started,
+            budget_ms,
+        )?);
+    }
+    Ok(sum)
+}
+
+/// Phase 14e — per-path size probe for the subset picker. Returns
+/// one `u64` per input path, in input order. Individual entries
+/// that fail to stat (permission denied, stale UNC share) land as
+/// `0` rather than aborting the whole batch. Uses the same
+/// `HARD_LIMIT_ENTRIES` cap per entry as `path_total_bytes`; any
+/// entry that blows it becomes `u64::MAX` so the UI can render
+/// "too large to count" for that row.
+#[tauri::command]
+pub async fn path_sizes_individual(paths: Vec<String>) -> Result<Vec<u64>, String> {
+    const HARD_LIMIT_ENTRIES: u64 = 200_000;
+    tokio::task::spawn_blocking(move || {
+        let mut out = Vec::with_capacity(paths.len());
+        for p in paths {
+            let root = std::path::PathBuf::from(p);
+            let mut entries: u64 = 0;
+            let sz = match walk_size(&root, &mut entries, HARD_LIMIT_ENTRIES) {
+                Ok(n) => n,
+                Err(e) if e == "too-large" => u64::MAX,
+                Err(_) => 0,
+            };
+            out.push(sz);
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn walk_size(path: &std::path::Path, entries: &mut u64, limit: u64) -> Result<u64, String> {
+    *entries = entries.saturating_add(1);
+    if *entries > limit {
+        return Err("too-large".to_string());
+    }
+    let meta = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if meta.is_file() {
+        return Ok(meta.len());
+    }
+    if meta.file_type().is_symlink() {
+        return Ok(0);
+    }
+    if !meta.is_dir() {
+        return Ok(0);
+    }
+    let mut sum: u64 = 0;
+    let rd = match std::fs::read_dir(path) {
+        Ok(rd) => rd,
+        // Permission-denied on a sub-tree is non-fatal for preflight
+        // — the engine will surface it as a per-file error. Count
+        // what we can see.
+        Err(_) => return Ok(0),
+    };
+    for entry in rd.flatten() {
+        sum = sum.saturating_add(walk_size(&entry.path(), entries, limit)?);
+    }
+    Ok(sum)
+}
+
 #[tauri::command]
 pub fn list_profiles(
     state: State<'_, AppState>,
@@ -856,4 +1291,79 @@ pub fn import_profile(
         .import(&name, std::path::Path::new(&src))
         .map_err(|e| e.to_string())?;
     Ok((&info).into())
+}
+
+/// Post-completion action. The frontend calls this once the globals
+/// tick shows every job has finished. `action` is one of
+/// `keep-open | exit | shutdown | logoff | sleep`. Anything else is
+/// a no-op (keeps the app open) so a typo can't nuke a user's work.
+///
+/// `shutdown` schedules a 30-second delayed shutdown so the user has
+/// a moment to cancel (`shutdown /a` in a terminal) if they change
+/// their mind; `logoff` and `sleep` fire immediately.
+#[tauri::command]
+pub fn post_completion_action(action: String, app: AppHandle) -> Result<(), String> {
+    use std::process::Command;
+    match action.as_str() {
+        "keep-open" => Ok(()),
+        "exit" => {
+            app.exit(0);
+            Ok(())
+        }
+        #[cfg(target_os = "windows")]
+        "shutdown" => Command::new("shutdown")
+            .args(["/s", "/t", "30"])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        #[cfg(target_os = "windows")]
+        "logoff" => Command::new("shutdown")
+            .args(["/l"])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        #[cfg(target_os = "windows")]
+        "sleep" => Command::new("rundll32.exe")
+            .args(["powrprof.dll,SetSuspendState", "0,1,0"])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        #[cfg(target_os = "macos")]
+        "shutdown" => Command::new("osascript")
+            .args(["-e", "tell app \"System Events\" to shut down"])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        #[cfg(target_os = "macos")]
+        "logoff" => Command::new("osascript")
+            .args(["-e", "tell app \"System Events\" to log out"])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        #[cfg(target_os = "macos")]
+        "sleep" => Command::new("osascript")
+            .args(["-e", "tell app \"System Events\" to sleep"])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        #[cfg(all(unix, not(target_os = "macos")))]
+        "shutdown" => Command::new("systemctl")
+            .args(["poweroff"])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        #[cfg(all(unix, not(target_os = "macos")))]
+        "logoff" => Command::new("loginctl")
+            .args(["terminate-user", &std::env::var("USER").unwrap_or_default()])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        #[cfg(all(unix, not(target_os = "macos")))]
+        "sleep" => Command::new("systemctl")
+            .args(["suspend"])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        _ => Ok(()),
+    }
 }

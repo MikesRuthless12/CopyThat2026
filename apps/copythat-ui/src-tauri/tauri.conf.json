@@ -14,10 +14,10 @@
       {
         "label": "main",
         "title": "Copy That 2026",
-        "width": 720,
-        "height": 480,
-        "minWidth": 560,
-        "minHeight": 360,
+        "width": 1120,
+        "height": 640,
+        "minWidth": 960,
+        "minHeight": 420,
         "resizable": true,
         "fullscreen": false,
         "dragDropEnabled": true

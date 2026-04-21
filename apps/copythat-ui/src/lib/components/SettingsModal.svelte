@@ -25,7 +25,7 @@
   import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
 
   import Icon from "../icons/Icon.svelte";
-  import { locale, setLocale, t } from "../i18n";
+  import { i18nVersion, locale, setLocale, t } from "../i18n";
   import {
     closeSettings,
     pushToast,
@@ -279,6 +279,7 @@
     onclick={closeSettings}
     onkeydown={onKeydown}
   >
+    {#key $i18nVersion}
     <div
       class="modal"
       role="dialog"
@@ -633,6 +634,7 @@
         </div>
       {/if}
     </div>
+    {/key}
   </div>
 {/if}
 

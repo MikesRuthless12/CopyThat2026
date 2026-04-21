@@ -129,7 +129,28 @@ export const EVENTS = {
   errorResolved: "error-resolved",
   collisionRaised: "collision-raised",
   collisionResolved: "collision-resolved",
+  // Phase 13d
+  fileActivity: "file-activity",
 } as const;
+
+export type FileActivityPhase =
+  | "start"
+  | "progress"
+  | "done"
+  | "error"
+  | "dir";
+
+export interface FileActivityDto {
+  jobId: number;
+  seq: number;
+  phase: FileActivityPhase;
+  src: string;
+  dst: string;
+  bytesDone: number;
+  bytesTotal: number;
+  isDir: boolean;
+  message: string | null;
+}
 
 // Phase 8 DTOs
 export type ErrorKind =

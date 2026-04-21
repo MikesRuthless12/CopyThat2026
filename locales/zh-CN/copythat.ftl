@@ -509,3 +509,71 @@ toast-profile-loaded = 配置文件已加载
 toast-profile-exported = 配置文件已导出
 # MT
 toast-profile-imported = 配置文件已导入
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = 添加文件
+action-add-folders = 添加文件夹
+activity-title = 活动
+activity-clear = 清除活动列表
+activity-empty = 暂无文件活动。
+activity-after-done = 完成后:
+activity-keep-open = 保持应用打开
+activity-close-app = 关闭应用
+activity-shutdown = 关机
+activity-logoff = 注销
+activity-sleep = 睡眠
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = 目标位置空间不足
+preflight-warn-title = 目标位置空间较低
+preflight-unknown-title = 无法确定可用空间
+preflight-unknown-body = 源过大无法快速测量，或目标卷未响应。您可以继续；如果空间用完，引擎会干净地停止复制。
+preflight-required = 需要
+preflight-free = 可用
+preflight-reserve = 保留
+preflight-shortfall = 缺口
+preflight-continue = 仍然继续
+collision-modal-overwrite-older = 仅覆盖较旧的文件
+
+# Phase 14e — subset picker
+preflight-pick-subset = 选择要复制的内容…
+subset-title = 选择要复制的源
+subset-subtitle = 整体选择无法装入目标。勾选要复制的项目；其余将保留。
+subset-loading = 正在测量大小…
+subset-too-large = 过大无法计数
+subset-budget = 可用
+subset-remaining = 剩余
+subset-confirm = 复制所选
+history-rerun-hint = 重新运行此复制 — 重新扫描源树中的每个文件
+history-clear-all = 全部清除
+history-clear-all-confirm = 再次点击以确认
+history-clear-all-hint = 删除每一行历史记录。需要第二次点击确认。
+toast-history-cleared = 已清除历史（删除 { $count } 行）
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = 排序：
+sort-custom = 自定义
+sort-name-asc = 名称 A → Z（文件优先）
+sort-name-desc = 名称 Z → A（文件优先）
+sort-size-asc = 大小从小到大（文件优先）
+sort-size-desc = 大小从大到小（文件优先）
+sort-reorder = 重新排序
+sort-move-top = 移到最上
+sort-move-up = 上移
+sort-move-down = 下移
+sort-move-bottom = 移到最下
+sort-name-asc-simple = 名称 A → Z
+sort-name-desc-simple = 名称 Z → A
+sort-size-asc-simple = 从小到大
+sort-size-desc-simple = 从大到小
+activity-sort-locked = 复制进行中时禁用排序。暂停或等待完成后再更改顺序。
+drop-dialog-collision-label = 如果文件已存在:
+collision-policy-keep-both = 同时保留两者（将新副本重命名为 _2、_3 …）
+collision-policy-skip = 跳过新副本
+collision-policy-overwrite = 覆盖现有文件
+collision-policy-overwrite-if-newer = 仅在较新时覆盖
+collision-policy-prompt = 每次询问
+drop-dialog-busy-checking = 正在检查可用空间…
+drop-dialog-busy-enumerating = 正在统计文件…
+drop-dialog-busy-starting = 正在开始复制…
+toast-enumeration-deferred = 源树较大 — 跳过预列表；引擎处理时行会陆续显示。

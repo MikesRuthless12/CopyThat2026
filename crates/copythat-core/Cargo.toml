@@ -33,6 +33,7 @@ tokio = { version = "1", features = [
 walkdir = "2"
 
 [dev-dependencies]
+criterion = { version = "0.7", features = ["html_reports"] }
 rand = "0.9"
 tempfile = "3"
 tokio = { version = "1", features = [
@@ -56,3 +57,14 @@ path = "../../tests/smoke/phase_01_core_copy.rs"
 [[test]]
 name = "phase_02_tree_queue"
 path = "../../tests/smoke/phase_02_tree_queue.rs"
+
+# Phase 13 — Criterion benchmarks for the async copy engine.
+# `cargo bench -p copythat-core --bench copy_bench` runs the full
+# matrix (1 GiB single file, 10 k × 16 KiB many-small, mixed tree).
+# The `xtask bench-ci` wrapper runs a scaled-down subset (~100 MiB
+# instead of 1 GiB) so CI finishes in under 90 s and gates on
+# regression vs the last committed baseline in `docs/BENCHMARKS.md`.
+[[bench]]
+name = "copy_bench"
+harness = false
+path = "benches/copy_bench.rs"

@@ -6,8 +6,13 @@
 -->
 <script lang="ts">
   import Icon from "../icons/Icon.svelte";
-  import { t } from "../i18n";
-  import { formatBytes, formatRate, formatEta } from "../format";
+  import { i18nVersion, t } from "../i18n";
+  import {
+    averageRateBps,
+    formatBytes,
+    formatEtaVerbose,
+    formatRate,
+  } from "../format";
   import { revealInFolder } from "../ipc";
   import type { JobDto } from "../types";
 
@@ -17,6 +22,23 @@
   }
 
   let { job, onClose }: Props = $props();
+
+  const PROGRESS_STEPS = 10_000;
+  const steps = $derived(
+    job.bytesTotal > 0
+      ? Math.min(
+          PROGRESS_STEPS,
+          Math.max(
+            0,
+            Math.round((job.bytesDone / job.bytesTotal) * PROGRESS_STEPS),
+          ),
+        )
+      : 0,
+  );
+  const percentDisplay = $derived(
+    job.bytesTotal > 0 ? `${(steps / 100).toFixed(2)}%` : "—",
+  );
+  const avgRate = $derived(averageRateBps(job.bytesDone, job.startedAtMs));
 
   function onKeydown(e: KeyboardEvent) {
     if (e.key === "Escape") {
@@ -35,6 +57,7 @@
   aria-modal="true"
   aria-label={t("details-drawer-label")}
 >
+  {#key $i18nVersion}
   <header class="head">
     <div class="titlewrap">
       <h2>{job.name}</h2>
@@ -68,6 +91,8 @@
     {/if}
     <dt>{t("details-state")}</dt>
     <dd>{t(`state-${job.state}`)}</dd>
+    <dt>Progress</dt>
+    <dd class="tabular">{percentDisplay}</dd>
     <dt>{t("details-bytes")}</dt>
     <dd>
       {formatBytes(job.bytesDone)} / {formatBytes(job.bytesTotal)}
@@ -78,13 +103,16 @@
     </dd>
     <dt>{t("details-speed")}</dt>
     <dd>{formatRate(job.rateBps)}</dd>
+    <dt>Avg speed</dt>
+    <dd>{avgRate > 0 ? formatRate(avgRate) : "—"}</dd>
     <dt>{t("details-eta")}</dt>
-    <dd>{formatEta(job.etaSeconds, t)}</dd>
+    <dd>{formatEtaVerbose(job.etaSeconds)}</dd>
     {#if job.lastError}
       <dt>{t("details-error")}</dt>
       <dd class="error">{job.lastError}</dd>
     {/if}
   </dl>
+  {/key}
 </div>
 
 <style>
@@ -159,6 +187,10 @@
 
   dd {
     margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tabular {
     font-variant-numeric: tabular-nums;
   }
 
