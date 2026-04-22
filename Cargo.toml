@@ -9,6 +9,7 @@ members = [
     "crates/copythat-shellext",
     "crates/copythat-i18n",
     "crates/copythat-settings",
+    "crates/copythat-snapshot",
     "xtask",
     "apps/copythat-ui/src-tauri",
 ]

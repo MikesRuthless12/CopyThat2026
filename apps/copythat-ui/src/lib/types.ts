@@ -346,6 +346,12 @@ export type VerifyChoiceWire =
 
 export type ReflinkWire = "prefer" | "avoid" | "disabled";
 
+/**
+ * Phase 19b — wire value for the "When a file is locked" setting.
+ * Mirrors `copythat_core::LockedFilePolicy`.
+ */
+export type LockedFilePolicyWire = "ask" | "retry" | "skip" | "snapshot";
+
 export interface TransferSettingsDto {
   bufferSizeBytes: number;
   verify: VerifyChoiceWire;
@@ -356,6 +362,8 @@ export interface TransferSettingsDto {
   preserveTimestamps: boolean;
   preservePermissions: boolean;
   preserveAcls: boolean;
+  /// Phase 19b — filesystem-snapshot fallback for locked sources.
+  onLocked: LockedFilePolicyWire;
 }
 
 export interface ShellSettingsDto {

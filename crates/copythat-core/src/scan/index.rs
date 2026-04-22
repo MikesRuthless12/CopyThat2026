@@ -168,8 +168,9 @@ fn row_to_active(row: &rusqlite::Row<'_>) -> rusqlite::Result<ActiveScanRow> {
     let job_id: Option<String> = row.get(2)?;
     let created_at_ms: i64 = row.get(3)?;
     let status_str: String = row.get(4)?;
-    let scan_id = ScanId::parse(&scan_id_str)
-        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e)))?;
+    let scan_id = ScanId::parse(&scan_id_str).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
+    })?;
     let status = ScanStatus::parse(&status_str).unwrap_or(ScanStatus::Failed);
     Ok(ActiveScanRow {
         scan_id,

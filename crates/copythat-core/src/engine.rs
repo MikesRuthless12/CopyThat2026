@@ -18,7 +18,9 @@ use tokio::sync::mpsc;
 use crate::control::CopyControl;
 use crate::error::CopyError;
 use crate::event::{CopyEvent, CopyReport};
-use crate::options::{CopyOptions, CopyStrategy, FastCopyHookOutcome};
+use crate::options::{
+    CopyOptions, CopyStrategy, FastCopyHookOutcome, LockedFilePolicy, SnapshotLease,
+};
 use crate::safety::validate_path_no_traversal;
 use crate::verify::Hasher;
 
@@ -112,9 +114,13 @@ pub async fn copy_file(
     // - Multi-GiB files bump up to 4 MiB for better memory pipelining
     let buf_size = opts.buffer_size_for_file(total);
 
-    let src_file = open_src_with_retry(&src_path)
-        .await
-        .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
+    // Phase 19b — open the source, falling through to a snapshot if
+    // the sharing-violation / busy retry is exhausted and the caller
+    // opted into `LockedFilePolicy::Snapshot`. `_snapshot_lease` is
+    // held across the whole copy so the RAII guard only runs once the
+    // file finishes (success or failure).
+    let (src_file, _snapshot_lease) =
+        open_src_with_snapshot_fallback(&src_path, &dst_path, &opts, &events).await?;
 
     let mut open = OpenOptions::new();
     open.write(true).truncate(true);
@@ -558,6 +564,81 @@ async fn copy_symlink(
         duration: elapsed,
         rate_bps: 0,
     })
+}
+
+/// Phase 19b — open the source, then fall through to a snapshot if
+/// the short retry loop exhausts and the caller requested it.
+///
+/// The returned `Option<SnapshotLease>` is held by the caller for the
+/// full duration of the copy; its `Drop` releases the backend
+/// snapshot. On the happy path (no lock) the Option is `None`.
+async fn open_src_with_snapshot_fallback(
+    src: &Path,
+    dst: &Path,
+    opts: &CopyOptions,
+    events: &mpsc::Sender<CopyEvent>,
+) -> Result<(File, Option<SnapshotLease>), CopyError> {
+    match open_src_with_retry(src).await {
+        Ok(f) => Ok((f, None)),
+        Err(e) if is_sharing_violation(&e) => {
+            match opts.on_locked {
+                LockedFilePolicy::Snapshot => {
+                    let Some(hook) = opts.snapshot_hook.clone() else {
+                        return Err(CopyError::from_io(src, dst, e));
+                    };
+                    let lease = hook.open_for_read(src.to_path_buf()).await?;
+                    let _ = events
+                        .send(CopyEvent::SnapshotCreated {
+                            kind: lease.kind_wire,
+                            original: src.to_path_buf(),
+                            snap_mount: lease.mount_root.clone(),
+                        })
+                        .await;
+                    let translated = lease.translated.clone();
+                    match open_src_with_retry(&translated).await {
+                        Ok(f) => Ok((f, Some(lease))),
+                        Err(open_err) => Err(CopyError::from_io(src, dst, open_err)),
+                    }
+                }
+                // Retry / Skip / Ask all fall through to the
+                // sharing-violation error unchanged — Retry already
+                // ran inside open_src_with_retry, Skip is applied by
+                // the tree layer, Ask gets upgraded to one of the
+                // others by the runner before the engine is entered.
+                LockedFilePolicy::Retry | LockedFilePolicy::Skip | LockedFilePolicy::Ask => {
+                    Err(CopyError::from_io(src, dst, e))
+                }
+            }
+        }
+        Err(e) => Err(CopyError::from_io(src, dst, e)),
+    }
+}
+
+/// True when `err` indicates the source file is exclusively locked by
+/// another process. The rules are per-OS:
+///
+/// - Windows: `ERROR_SHARING_VIOLATION` (32) or `ERROR_LOCK_VIOLATION` (33).
+/// - Unix: `EBUSY` (16 on Linux) — triggered by certain FUSE mounts
+///   (fuse-overlayfs holding the underlying inode) and by kernel
+///   modules that refuse open-for-read on live files.
+fn is_sharing_violation(err: &std::io::Error) -> bool {
+    match err.raw_os_error() {
+        #[cfg(windows)]
+        Some(32) | Some(33) => true,
+        #[cfg(unix)]
+        Some(code) => code == libc_ebusy(),
+        _ => false,
+    }
+}
+
+#[cfg(unix)]
+#[inline]
+#[allow(non_snake_case)]
+fn libc_ebusy() -> i32 {
+    // EBUSY is 16 on Linux / macOS / BSD. We avoid pulling in the
+    // `libc` crate here — copythat-core is unsafe-code-free — so
+    // hardcode the well-known value.
+    16
 }
 
 /// Phase 14 — open the source file with the widest possible share

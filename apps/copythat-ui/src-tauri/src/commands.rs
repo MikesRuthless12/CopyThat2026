@@ -272,8 +272,34 @@ fn apply_options(
                 copythat_core::CopyStrategy::AlwaysAsync
             }
         },
+        on_locked: match settings.transfer.on_locked {
+            copythat_settings::LockedFilePolicyChoice::Ask => copythat_core::LockedFilePolicy::Ask,
+            copythat_settings::LockedFilePolicyChoice::Retry => {
+                copythat_core::LockedFilePolicy::Retry
+            }
+            copythat_settings::LockedFilePolicyChoice::Skip => {
+                copythat_core::LockedFilePolicy::Skip
+            }
+            copythat_settings::LockedFilePolicyChoice::Snapshot => {
+                copythat_core::LockedFilePolicy::Snapshot
+            }
+        },
         ..Default::default()
     };
+
+    // Phase 19b — attach the snapshot bridge whenever the user opted
+    // into `Snapshot` (and also eagerly when `Ask` is in effect, so
+    // the runner has a hook ready the moment the user resolves the
+    // prompt without a second IPC round-trip). The hook is stateless,
+    // so the Arc costs nothing when `on_locked == Retry`.
+    if matches!(
+        opts.on_locked,
+        copythat_core::LockedFilePolicy::Snapshot | copythat_core::LockedFilePolicy::Ask
+    ) {
+        opts.snapshot_hook = Some(std::sync::Arc::new(
+            copythat_snapshot::CopyThatSnapshotHook::new(),
+        ));
+    }
 
     if let Some(v) = dto.preserve_times {
         opts.preserve_times = v;

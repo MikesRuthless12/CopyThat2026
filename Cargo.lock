@@ -749,6 +749,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "copythat-snapshot"
+version = "1.0.0"
+dependencies = [
+ "copythat-core",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "copythat-ui"
 version = "1.0.0"
 dependencies = [
@@ -759,6 +775,7 @@ dependencies = [
  "copythat-platform",
  "copythat-secure-delete",
  "copythat-settings",
+ "copythat-snapshot",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
@@ -5149,6 +5166,7 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.61.2",

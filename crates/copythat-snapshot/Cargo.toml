@@ -1,0 +1,95 @@
+[package]
+name = "copythat-snapshot"
+description = "Filesystem snapshot source (VSS / ZFS / Btrfs / APFS) for locked-file read in Copy That v1.0.0."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints.rust]
+# Same carve-out as `copythat-platform`: the Windows VSS helper calls
+# raw COM / Win32 (ShellExecuteExW, WaitForSingleObject) and must use
+# `unsafe`. The main-process COM fallback is also unsafe.
+unsafe_code = "allow"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[features]
+default = []
+# Long-running integration tests (loopback Btrfs subvolume + flock;
+# real VSS snapshot create/delete). Off by default so normal
+# workspace test runs stay snappy.
+slow-tests = []
+
+[dependencies]
+# Phase 19b — SnapshotHook trait + CopyError live in core. Taking a
+# dep in this direction (rather than core → snapshot) preserves
+# copythat-core's `#![forbid(unsafe_code)]` and keeps the platform-
+# specific unsafe blocks confined to this crate.
+copythat-core = { path = "../copythat-core", version = "1" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "net",
+    "process",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+tracing = "0.1"
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+# Already in the tree at 0.61.3 via `copythat-ui`; pinning here keeps
+# a single resolved version. The `runas` helper only needs the Win32
+# shell-execute API; the in-process COM probe additionally needs
+# `Com` + `Foundation`.
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_IO",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "net",
+    "process",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "test-util",
+    "time",
+] }
+
+# Phase 19b smoke test lives at the workspace root.
+[[test]]
+name = "phase_19_snapshot"
+path = "../../tests/smoke/phase_19_snapshot.rs"
+
+# Phase 19b — elevated Windows VSS helper binary. Spawned by the main
+# process via `Start-Process -Verb RunAs` and talks over named-pipe
+# JSON-RPC. Compiles on every platform so the workspace build stays
+# uniform; on non-Windows targets `main()` is a one-line error.
+[[bin]]
+name = "copythat-helper-vss"
+path = "src/bin/helper_vss.rs"

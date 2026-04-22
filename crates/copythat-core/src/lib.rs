@@ -100,8 +100,8 @@ pub use event::{Collision, CollisionResolution, CopyEvent, CopyReport, ErrorProm
 pub use filter::{CompiledFilters, FilterError, FilterSet};
 pub use options::{
     CopyOptions, CopyStrategy, DEFAULT_BUFFER_SIZE, DEFAULT_TREE_CONCURRENCY, ErrorAction,
-    ErrorPolicy, FastCopyHook, FastCopyHookOutcome, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, MoveOptions,
-    TreeOptions,
+    ErrorPolicy, FastCopyHook, FastCopyHookOutcome, LockedFilePolicy, MAX_BUFFER_SIZE,
+    MIN_BUFFER_SIZE, MoveOptions, SnapshotGuard, SnapshotHook, SnapshotLease, TreeOptions,
 };
 pub use queue::{Job, JobId, JobKind, JobState, Queue, QueueEvent};
 pub use safety::{PathSafetyError, validate_all, validate_path_no_traversal};

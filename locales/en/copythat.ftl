@@ -469,3 +469,17 @@ advanced-scan-hash-during = Compute checksums during scan
 advanced-scan-db-path = Scan database location
 advanced-scan-retention-days = Auto-delete completed scans after (days)
 advanced-scan-max-keep = Maximum scan databases to keep
+
+# Phase 19b — filesystem-snapshot source for locked files.
+settings-on-locked = When a file is locked
+settings-on-locked-ask = Ask the first time
+settings-on-locked-retry = Retry briefly, then surface the error
+settings-on-locked-skip = Skip the locked file
+settings-on-locked-snapshot = Use a filesystem snapshot
+settings-on-locked-hint = Eliminate "file in use by another process" errors. Copy That snapshots the source volume (VSS on Windows, ZFS/Btrfs on Linux, APFS on macOS) and reads from the snapshot copy.
+snapshot-prompt-title = This file is in use by another process
+snapshot-prompt-body = Another program has { $path } open for exclusive write. Choose how Copy That should handle this and similar files on the same volume.
+snapshot-source-active = 📷 Reading from { $kind } snapshot of { $volume }
+snapshot-create-failed = Could not create a snapshot of the source volume
+snapshot-vss-needs-elevation = Reading from a VSS snapshot requires Administrator permission. Copy That will ask you to allow it.
+snapshot-cleanup-failed = The snapshot helper reported a cleanup failure — a leftover shadow copy may remain on the volume.

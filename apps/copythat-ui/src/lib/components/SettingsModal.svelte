@@ -605,6 +605,20 @@
                 />
                 <span class="label">{t("settings-preserve-acls")}</span>
               </label>
+
+              <label class="row">
+                <span class="label">{t("settings-on-locked")}</span>
+                <select
+                  bind:value={settings.transfer.onLocked}
+                  onchange={pushSettings}
+                >
+                  <option value="ask">{t("settings-on-locked-ask")}</option>
+                  <option value="retry">{t("settings-on-locked-retry")}</option>
+                  <option value="skip">{t("settings-on-locked-skip")}</option>
+                  <option value="snapshot">{t("settings-on-locked-snapshot")}</option>
+                </select>
+              </label>
+              <p class="hint">{t("settings-on-locked-hint")}</p>
             {:else if activeTab === "filters"}
               <p class="hint">{t("settings-filters-hint")}</p>
 

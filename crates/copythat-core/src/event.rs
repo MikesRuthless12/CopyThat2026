@@ -114,6 +114,23 @@ pub enum CopyEvent {
     /// reply the engine treats it as `Skip` (mirrors the Collision
     /// fallback).
     ErrorPrompt(ErrorPrompt),
+    /// Phase 19b — the engine hit an `ERROR_SHARING_VIOLATION` /
+    /// `EBUSY` / `NSFileLockingError` reading `original`, the
+    /// `on_locked` policy was `Snapshot`, and the hook minted a
+    /// filesystem snapshot. The UI renders a "📷 Reading from <kind>
+    /// snapshot of <original_root>" badge on the active row until
+    /// the file finishes.
+    SnapshotCreated {
+        /// Wire string: `"vss"` / `"zfs"` / `"btrfs"` / `"apfs"`.
+        kind: &'static str,
+        /// The original live-source path the engine was trying to
+        /// open before it fell through to the snapshot.
+        original: PathBuf,
+        /// Root of the snapshot mount — e.g.
+        /// `\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy5` for VSS
+        /// or `/mnt/pool/.zfs/snapshot/<name>` for ZFS.
+        snap_mount: PathBuf,
+    },
 }
 
 impl Clone for CopyEvent {
@@ -236,6 +253,15 @@ impl Clone for CopyEvent {
             CopyEvent::ErrorPrompt(_) => {
                 CopyEvent::ErrorPrompt(ErrorPrompt::placeholder_for_clone())
             }
+            CopyEvent::SnapshotCreated {
+                kind,
+                original,
+                snap_mount,
+            } => CopyEvent::SnapshotCreated {
+                kind,
+                original: original.clone(),
+                snap_mount: snap_mount.clone(),
+            },
         }
     }
 }
