@@ -692,3 +692,29 @@ advanced-scan-db-path = Posizione del database di scansione
 advanced-scan-retention-days = Elimina automaticamente le scansioni completate dopo (giorni)
 # MT
 advanced-scan-max-keep = Numero massimo di database di scansione da conservare
+
+# Phase 19b — filesystem-snapshot source for locked files.
+# MT
+settings-on-locked = When a file is locked
+# MT
+settings-on-locked-ask = Ask the first time
+# MT
+settings-on-locked-retry = Retry briefly, then surface the error
+# MT
+settings-on-locked-skip = Skip the locked file
+# MT
+settings-on-locked-snapshot = Use a filesystem snapshot
+# MT
+settings-on-locked-hint = Eliminate "file in use by another process" errors. Copy That snapshots the source volume (VSS on Windows, ZFS/Btrfs on Linux, APFS on macOS) and reads from the snapshot copy.
+# MT
+snapshot-prompt-title = This file is in use by another process
+# MT
+snapshot-prompt-body = Another program has { $path } open for exclusive write. Choose how Copy That should handle this and similar files on the same volume.
+# MT
+snapshot-source-active = 📷 Reading from { $kind } snapshot of { $volume }
+# MT
+snapshot-create-failed = Could not create a snapshot of the source volume
+# MT
+snapshot-vss-needs-elevation = Reading from a VSS snapshot requires Administrator permission. Copy That will ask you to allow it.
+# MT
+snapshot-cleanup-failed = The snapshot helper reported a cleanup failure — a leftover shadow copy may remain on the volume.

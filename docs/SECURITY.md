@@ -92,6 +92,50 @@ asserts six independent rejection paths: helper, engine entry,
 absolute-prefix variant, tree entry, source-side symmetry, and
 locale-key resolution.
 
+## Phase 19b — VSS privilege boundary (shipped)
+
+Phase 19b adds read-from-snapshot fallback for locked files. The
+threat-model impact is narrow but worth calling out explicitly:
+
+- **Windows VSS requires Administrator.** The main Copy That process
+  does not request elevation for itself. When the user opts into
+  `LockedFilePolicy::Snapshot` and VSS is the chosen backend, the
+  main process spawns a sibling binary `copythat-helper-vss.exe` via
+  `Start-Process -Verb RunAs`, which triggers the OS-native UAC
+  consent dialog. User consent is the only path to the elevated
+  surface; the main Copy That binary never holds an Administrator
+  token and never runs COM / WMI that requires one. Denial of the
+  UAC prompt surfaces as a typed `SnapshotError::UacDenied` and the
+  file falls through to the next `LockedFilePolicy`. This matches
+  the Phase 17 privilege-separation rules.
+- **JSON-RPC wire format is simple by design.** The helper accepts
+  exactly four request kinds (`hello` / `create` / `release` /
+  `shutdown`) carried as newline-delimited JSON over two named
+  pipes created by the main process *before* Start-Process runs.
+  The helper refuses mismatched protocol versions (`hello` carries
+  a `version` field; a mismatch returns `ok: false` and the main
+  process re-spawns). The helper tracks every shadow-copy ID it
+  mints and best-effort-releases them on EOF, so a crashed main
+  process cannot leak shadows for longer than the helper's own
+  lifetime.
+- **No new network surface.** Every snapshot backend is a local OS
+  primitive (`vssadmin`/WMI / `zfs` / `btrfs` / `tmutil`). Copy That
+  does not phone home to take or release a snapshot.
+- **File contents flow through the snapshot path unchanged.** The
+  engine reads `lease.translated` instead of the live source, hashes
+  / verifies / writes / destroys using the same code paths it uses
+  for any other source file. BLAKE3 verify (Phase 3) still runs
+  post-copy and still catches a snapshot-side corruption.
+- **Locale strings are translatable placeholders only.** The six
+  `snapshot-*` Fluent keys cover UI prose; none carry user data or
+  format structured logs. No user-data leak via i18n.
+
+The privilege boundary is asserted by the engine's type system:
+`CopyOptions::snapshot_hook` is the only path to a snapshot, the
+trait requires `Send + Sync`, and the lease holds the RAII guard for
+the full copy. A future phase that relaxes these invariants must
+revisit this threat-model entry.
+
 ## Build hardening (target, post-Phase 17)
 
 - Stack probes enabled.

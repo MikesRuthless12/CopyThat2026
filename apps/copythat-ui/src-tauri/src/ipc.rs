@@ -63,6 +63,11 @@ pub const EVENT_FILE_ACTIVITY: &str = "file-activity";
 /// toast or open the staging dialog based on the `count` field.
 pub const EVENT_CLIPBOARD_FILES_DETECTED: &str = "clipboard-files-detected";
 
+// Phase 19b — a snapshot source was created for a locked file.
+// The frontend shows a "📷 Reading from <kind> snapshot" badge on
+// the active row until the file completes.
+pub const EVENT_SNAPSHOT_CREATED: &str = "snapshot-created";
+
 // Phase 19a — disk-backed scan lifecycle bus.
 pub const EVENT_SCAN_STARTED: &str = "scan-started";
 pub const EVENT_SCAN_PROGRESS: &str = "scan-progress";
@@ -544,6 +549,10 @@ pub struct TransferDto {
     pub preserve_timestamps: bool,
     pub preserve_permissions: bool,
     pub preserve_acls: bool,
+    /// Phase 19b — `"ask" | "retry" | "skip" | "snapshot"`. Stored as
+    /// a short string so older frontends silently ignore unknown
+    /// values (falls back to `"ask"` via `LockedFilePolicyChoice::from_wire`).
+    pub on_locked: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -648,6 +657,21 @@ pub struct ScanDto {
     pub max_scans_to_keep: u32,
 }
 
+/// Phase 19b — `snapshot-created` payload. Emitted when the engine
+/// falls through to a filesystem snapshot because the live source was
+/// locked. The frontend renders a "📷 Reading from <kind> snapshot"
+/// badge on the active row until the file finishes.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotCreatedDto {
+    pub job_id: u64,
+    /// `"vss" | "zfs" | "btrfs" | "apfs"` — see
+    /// `copythat_snapshot::SnapshotKind::as_str`.
+    pub kind: &'static str,
+    pub original: String,
+    pub snap_mount: String,
+}
+
 /// Phase 19a — `scan-started` payload.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -742,6 +766,7 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 preserve_timestamps: s.transfer.preserve_timestamps,
                 preserve_permissions: s.transfer.preserve_permissions,
                 preserve_acls: s.transfer.preserve_acls,
+                on_locked: s.transfer.on_locked.as_str().to_string(),
             },
             shell: ShellDto {
                 context_menu_enabled: s.shell.context_menu_enabled,
@@ -816,6 +841,7 @@ impl SettingsDto {
     /// frontend sent, enforcing the "never on" contract at every
     /// boundary crossing.
     pub fn into_settings(self) -> copythat_settings::Settings {
+        use copythat_settings::LockedFilePolicyChoice;
         use copythat_settings::*;
         let mut s = Settings::default();
         s.general.language = self.general.language;
@@ -850,6 +876,7 @@ impl SettingsDto {
         s.transfer.preserve_timestamps = self.transfer.preserve_timestamps;
         s.transfer.preserve_permissions = self.transfer.preserve_permissions;
         s.transfer.preserve_acls = self.transfer.preserve_acls;
+        s.transfer.on_locked = LockedFilePolicyChoice::from_wire(&self.transfer.on_locked);
 
         s.shell.context_menu_enabled = self.shell.context_menu_enabled;
         s.shell.intercept_default_copy = self.shell.intercept_default_copy;

@@ -112,10 +112,7 @@ async fn run_scan_to_completion(
         }
     });
     let drainer = tokio::spawn(async move { while rx.recv().await.is_some() {} });
-    let report = scanner
-        .run(ctrl, tx)
-        .await
-        .expect("scan completes cleanly");
+    let report = scanner.run(ctrl, tx).await.expect("scan completes cleanly");
     monitor.abort();
     let _ = drainer.await;
     let peak = peak.load(Ordering::Relaxed);
@@ -168,11 +165,9 @@ async fn scan_produces_expected_row_count_and_stats() {
     // independent of whatever ScanStats surfaces.
     let conn = Connection::open(&db_path).unwrap();
     let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM scan_items WHERE kind=0",
-            [],
-            |r| r.get(0),
-        )
+        .query_row("SELECT COUNT(*) FROM scan_items WHERE kind=0", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(count as usize, files, "scan_items row count mismatch");
 
@@ -186,11 +181,9 @@ async fn scan_produces_expected_row_count_and_stats() {
 
     // scan_meta.status should have flipped to Complete.
     let status: String = conn
-        .query_row(
-            "SELECT value FROM scan_meta WHERE key='status'",
-            [],
-            |r| r.get(0),
-        )
+        .query_row("SELECT value FROM scan_meta WHERE key='status'", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(status, ScanStatus::Complete.as_str());
 }
@@ -337,16 +330,9 @@ async fn copy_tree_from_scan_mirrors_source_and_ignores_post_scan_changes() {
     let copy_ctrl = CopyControl::new();
     let (tx, mut rx) = mpsc::channel::<CopyEvent>(256);
     let drainer = tokio::spawn(async move { while rx.recv().await.is_some() {} });
-    let report = copy_tree_from_scan(
-        &db_path,
-        &src,
-        &dst,
-        TreeOptions::default(),
-        copy_ctrl,
-        tx,
-    )
-    .await
-    .expect("copy_tree_from_scan");
+    let report = copy_tree_from_scan(&db_path, &src, &dst, TreeOptions::default(), copy_ctrl, tx)
+        .await
+        .expect("copy_tree_from_scan");
     let _ = drainer.await;
 
     assert_eq!(

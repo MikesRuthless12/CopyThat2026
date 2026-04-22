@@ -65,8 +65,8 @@ mod types;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Instant, SystemTime};
 
 use rusqlite::{Connection, params};
@@ -114,11 +114,7 @@ impl Scanner {
     /// with the root path + start time. On a previously-seen
     /// `scan_id` (resume) the existing DB is re-opened, the runtime
     /// PRAGMAs are re-applied, and the status is flipped to `Running`.
-    pub fn create(
-        scan_id: ScanId,
-        root: &Path,
-        opts: ScanOptions,
-    ) -> Result<Self, CopyError> {
+    pub fn create(scan_id: ScanId, root: &Path, opts: ScanOptions) -> Result<Self, CopyError> {
         // Phase 17a — reject traversal payloads at the trust boundary
         // before opening any file handle.
         if let Err(e) = validate_path_no_traversal(root) {
@@ -128,11 +124,11 @@ impl Scanner {
 
         let db_dir = match &opts.db_dir {
             Some(dir) => dir.clone(),
-            None => default_scan_dir().ok_or_else(|| other_err(&root, "no OS config dir available"))?,
+            None => {
+                default_scan_dir().ok_or_else(|| other_err(&root, "no OS config dir available"))?
+            }
         };
-        std::fs::create_dir_all(&db_dir).map_err(|e| {
-            CopyError::from_io(&root, &db_dir, e)
-        })?;
+        std::fs::create_dir_all(&db_dir).map_err(|e| CopyError::from_io(&root, &db_dir, e))?;
         let db_path = db_dir.join(format!("scan-{}.db", scan_id.as_str()));
 
         let mut conn = Connection::open(&db_path).map_err(|e| rusqlite_err(&root, &db_path, e))?;
@@ -142,21 +138,29 @@ impl Scanner {
         // Seed / refresh scan_meta.
         let now_ms = now_ms();
         let existing_status: Option<String> = conn
-            .query_row(
-                "SELECT value FROM scan_meta WHERE key='status'",
-                [],
-                |r| r.get(0),
-            )
+            .query_row("SELECT value FROM scan_meta WHERE key='status'", [], |r| {
+                r.get(0)
+            })
             .ok();
-        let is_resume = existing_status.as_deref().is_some_and(|s| {
-            matches!(s, "Paused" | "Running")
-        });
-        set_meta(&conn, "root_path", &root.to_string_lossy()).map_err(|e| rusqlite_err(&root, &db_path, e))?;
-        if !is_resume {
-            set_meta(&conn, "started_at_ms", &now_ms.to_string()).map_err(|e| rusqlite_err(&root, &db_path, e))?;
-        }
-        set_meta(&conn, "hash_algorithm", if opts.hash_during_scan { "blake3-256" } else { "none" })
+        let is_resume = existing_status
+            .as_deref()
+            .is_some_and(|s| matches!(s, "Paused" | "Running"));
+        set_meta(&conn, "root_path", &root.to_string_lossy())
             .map_err(|e| rusqlite_err(&root, &db_path, e))?;
+        if !is_resume {
+            set_meta(&conn, "started_at_ms", &now_ms.to_string())
+                .map_err(|e| rusqlite_err(&root, &db_path, e))?;
+        }
+        set_meta(
+            &conn,
+            "hash_algorithm",
+            if opts.hash_during_scan {
+                "blake3-256"
+            } else {
+                "none"
+            },
+        )
+        .map_err(|e| rusqlite_err(&root, &db_path, e))?;
         set_meta(&conn, "status", ScanStatus::Running.as_str())
             .map_err(|e| rusqlite_err(&root, &db_path, e))?;
 
@@ -165,14 +169,7 @@ impl Scanner {
         if let Some(ip) = &index_path
             && let Ok(idx) = index::open_index(ip)
         {
-            let _ = index::register(
-                &idx,
-                scan_id,
-                &db_path,
-                None,
-                now_ms,
-                ScanStatus::Running,
-            );
+            let _ = index::register(&idx, scan_id, &db_path, None, now_ms, ScanStatus::Running);
         }
 
         Ok(Self {
@@ -358,17 +355,22 @@ impl Scanner {
                                 let _ = writer_events
                                     .send(ScanEvent::BatchFlushed {
                                         batch_size: n,
-                                        files_committed: writer_files_written.load(Ordering::Relaxed),
+                                        files_committed: writer_files_written
+                                            .load(Ordering::Relaxed),
                                         last_rel_path: last_path,
                                     })
                                     .await;
                                 if writer_progress_every > 0 {
                                     let _ = writer_events
                                         .send(ScanEvent::Progress {
-                                            files_discovered: writer_files_disc.load(Ordering::Relaxed),
-                                            bytes_discovered: writer_bytes_disc.load(Ordering::Relaxed),
-                                            files_written: writer_files_written.load(Ordering::Relaxed),
-                                            files_hashed: writer_files_hashed.load(Ordering::Relaxed),
+                                            files_discovered: writer_files_disc
+                                                .load(Ordering::Relaxed),
+                                            bytes_discovered: writer_bytes_disc
+                                                .load(Ordering::Relaxed),
+                                            files_written: writer_files_written
+                                                .load(Ordering::Relaxed),
+                                            files_hashed: writer_files_hashed
+                                                .load(Ordering::Relaxed),
                                         })
                                         .await;
                                 }
@@ -456,7 +458,11 @@ impl Scanner {
                 Err(err),
             )
         } else if ctrl.is_cancelled() {
-            (Some(ScanEvent::Cancelled), ScanStatus::Cancelled, Err(CopyError::cancelled(&root, &db_path)))
+            (
+                Some(ScanEvent::Cancelled),
+                ScanStatus::Cancelled,
+                Err(CopyError::cancelled(&root, &db_path)),
+            )
         } else {
             (
                 Some(ScanEvent::Completed {
@@ -844,11 +850,14 @@ fn attr_flags_for(meta: &std::fs::Metadata) -> AttrFlags {
 
 fn read_stats(conn: &Connection) -> Result<ScanStats, rusqlite::Error> {
     let mut stats = ScanStats::default();
-    let mut stmt = conn.prepare(
-        "SELECT kind, COUNT(*), COALESCE(SUM(size), 0) FROM scan_items GROUP BY kind",
-    )?;
+    let mut stmt = conn
+        .prepare("SELECT kind, COUNT(*), COALESCE(SUM(size), 0) FROM scan_items GROUP BY kind")?;
     let rows = stmt.query_map([], |r| {
-        Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?))
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, i64>(2)?,
+        ))
     })?;
     for r in rows {
         let (k, c, b) = r?;
@@ -931,4 +940,3 @@ fn other_err(src: &Path, msg: &str) -> CopyError {
         message: msg.to_string(),
     }
 }
-

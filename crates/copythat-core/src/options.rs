@@ -17,6 +17,96 @@ pub const DEFAULT_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
 pub const MIN_BUFFER_SIZE: usize = 64 * 1024; // 64 KiB
 pub const MAX_BUFFER_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
 
+/// What the engine should do when a file can't be opened for read
+/// because another process holds an exclusive lock
+/// (`ERROR_SHARING_VIOLATION` on Windows, `EBUSY` on certain Linux FUSE
+/// mounts, `NSFileLockingError` on macOS).
+///
+/// Added in Phase 19b to let the user opt into filesystem-snapshot
+/// reads (VSS / ZFS / Btrfs / APFS). `Retry` preserves the Phase 14
+/// behaviour so older call sites see no change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LockedFilePolicy {
+    /// Short exponential-backoff retry (50 / 100 / 200 ms) inside
+    /// `copy_file` itself. Handles the common "Office has the .docx
+    /// open for write, saves in a few hundred ms" case without any
+    /// escalation. The default.
+    #[default]
+    Retry,
+    /// Skip the file after the retry loop is exhausted. The tree
+    /// engine records a `FileError` / `errored++` and moves on.
+    Skip,
+    /// After retry exhausts, ask
+    /// [`CopyOptions::snapshot_hook`](super::CopyOptions::snapshot_hook)
+    /// for a snapshot-side path and reopen the read against it. On
+    /// success, [`CopyEvent::SnapshotCreated`](super::CopyEvent::SnapshotCreated)
+    /// is emitted so the UI can render a "📷 Reading from VSS
+    /// snapshot of C:" badge. On failure falls through to a typed
+    /// error (respecting the tree-level `on_error` policy).
+    Snapshot,
+    /// Emit a one-time prompt to the UI asking which of the above to
+    /// apply (and whether to remember per-volume). The runner layer
+    /// translates the user's answer into one of the above and feeds
+    /// it back into the engine. Equivalent to `Retry` if no prompter
+    /// is attached.
+    Ask,
+}
+
+/// Opaque lease returned by a [`SnapshotHook`] — a snapshot-side path
+/// the engine opens in place of the locked live source, plus a Drop
+/// guard that releases the snapshot when the lease is dropped.
+///
+/// The engine holds the lease for the duration of the copy; dropping
+/// it after `copy_file` returns is what releases the underlying
+/// snapshot.
+#[derive(Debug)]
+pub struct SnapshotLease {
+    /// The path the engine should open for read in place of the
+    /// original locked source.
+    pub translated: PathBuf,
+    /// Stable wire string — `"vss"` / `"zfs"` / `"btrfs"` / `"apfs"`.
+    pub kind_wire: &'static str,
+    /// Live-source root the snapshot covers. The UI renders this
+    /// alongside the badge — "VSS snapshot of `C:\`".
+    pub original_root: PathBuf,
+    /// Root mount of the snapshot itself — used by the UI mostly for
+    /// debugging / verbose modes.
+    pub mount_root: PathBuf,
+    /// The lease's RAII guard. Dropping this calls the backend's
+    /// `zfs destroy` / `btrfs subvolume delete` / VSS `Delete()`.
+    pub guard: Box<dyn SnapshotGuard>,
+}
+
+/// Marker trait for a `SnapshotLease` drop guard.
+///
+/// Implementors hold whatever state the backend needs to tear the
+/// snapshot down; the engine never inspects it. The tearing-down
+/// logic runs in the impl's `Drop` — this trait exists purely so
+/// [`SnapshotLease::guard`] can hold a trait object.
+pub trait SnapshotGuard: Send + Sync + std::fmt::Debug {}
+
+/// Bridge contract for a filesystem-snapshot source.
+///
+/// Implemented by `copythat_snapshot::CopyThatSnapshotHook`. Kept in
+/// this crate so [`CopyOptions`] can hold a trait object without a
+/// dependency cycle between `copythat-core` and `copythat-snapshot`.
+///
+/// The hook is consulted exactly once per locked source file, after
+/// [`open_src_with_retry`]'s own sharing-violation backoff has
+/// exhausted. If the hook returns `Err`, the engine surfaces the
+/// error (as configured by the tree-level `on_error` policy). If the
+/// hook returns `Ok(lease)`, the engine opens `lease.translated` for
+/// read and carries on with the normal copy loop.
+pub trait SnapshotHook: Send + Sync + std::fmt::Debug {
+    /// Take a snapshot of the volume containing `src` and return a
+    /// [`SnapshotLease`] whose `translated` path the engine can open
+    /// for read.
+    fn open_for_read<'a>(
+        &'a self,
+        src: PathBuf,
+    ) -> Pin<Box<dyn Future<Output = Result<SnapshotLease, CopyError>> + Send + 'a>>;
+}
+
 /// Behaviour knobs for a single `copy_file` invocation.
 #[derive(Debug, Clone)]
 pub struct CopyOptions {
@@ -80,6 +170,19 @@ pub struct CopyOptions {
     /// bytes, so verifying through them would require a third-pass
     /// re-read of both files and lose the integration's perf win.
     pub fast_copy_hook: Option<Arc<dyn FastCopyHook>>,
+    /// Phase 19b — what to do when the source is open for exclusive
+    /// write by another process. Defaults to `Retry` which preserves
+    /// the pre-Phase-19b 50/100/200 ms backoff. Set to `Snapshot` to
+    /// opt into the VSS / ZFS / Btrfs / APFS fallback when a
+    /// [`snapshot_hook`](Self::snapshot_hook) is installed.
+    pub on_locked: LockedFilePolicy,
+    /// Phase 19b — filesystem-snapshot bridge.
+    ///
+    /// Consulted by the engine when `on_locked` is `Snapshot` and the
+    /// short retry loop couldn't open the source. Only
+    /// `copythat-snapshot::CopyThatSnapshotHook` implements this in
+    /// tree; a custom hook can be wired for testing.
+    pub snapshot_hook: Option<Arc<dyn SnapshotHook>>,
 }
 
 /// User-selectable copy strategy.
@@ -159,6 +262,8 @@ impl Default for CopyOptions {
             fsync_before_verify: true,
             strategy: CopyStrategy::Auto,
             fast_copy_hook: None,
+            on_locked: LockedFilePolicy::default(),
+            snapshot_hook: None,
         }
     }
 }
