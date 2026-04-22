@@ -630,3 +630,37 @@ settings-filters-skip-hidden = 跳过隐藏的文件 / 文件夹
 settings-filters-skip-system = 跳过系统文件(仅 Windows)
 # MT
 settings-filters-skip-readonly = 跳过只读文件
+
+# Phase 15 — auto-update
+# MT
+settings-tab-updater = 更新
+# MT
+settings-updater-hint = Copy That 每天最多检查一次签名更新。更新将在下次退出应用时安装。
+# MT
+settings-updater-auto-check = 启动时检查更新
+# MT
+settings-updater-channel = 发布通道
+# MT
+settings-updater-channel-stable = 稳定版
+# MT
+settings-updater-channel-beta = 测试版(预发布)
+# MT
+settings-updater-last-check = 上次检查
+# MT
+settings-updater-last-never = 从未
+# MT
+settings-updater-check-now = 立即检查更新
+# MT
+settings-updater-checking = 检查中…
+# MT
+settings-updater-available = 有可用更新
+# MT
+settings-updater-up-to-date = 你正在使用最新版本。
+# MT
+settings-updater-dismiss = 跳过此版本
+# MT
+settings-updater-dismissed = 已跳过
+# MT
+toast-update-available = 有新版本可用
+# MT
+toast-update-up-to-date = 你已是最新版本

@@ -45,6 +45,7 @@ pub mod reveal;
 pub mod runner;
 pub mod shell;
 pub mod state;
+pub mod updater;
 
 use std::sync::Mutex;
 
@@ -153,6 +154,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(app_state)
         .on_window_event(|window, event| {
             match event {
@@ -244,6 +246,9 @@ pub fn run() {
             commands::path_sizes_individual,
             commands::path_metadata,
             commands::enumerate_tree_files,
+            // Phase 15 — auto-update manifest check + dismiss.
+            commands::updater_check_now,
+            commands::updater_dismiss_version,
         ])
         .setup(move |app| {
             // Phase 16 — tray icon + menu. Visible regardless of the

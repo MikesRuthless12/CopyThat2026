@@ -630,3 +630,37 @@ settings-filters-skip-hidden = Gizli dosyaları / klasörleri atla
 settings-filters-skip-system = Sistem dosyalarını atla (yalnızca Windows)
 # MT
 settings-filters-skip-readonly = Salt okunur dosyaları atla
+
+# Phase 15 — auto-update
+# MT
+settings-tab-updater = Güncellemeler
+# MT
+settings-updater-hint = Copy That, imzalı güncellemeleri günde en fazla bir kez kontrol eder. Güncellemeler bir sonraki uygulama çıkışında yüklenir.
+# MT
+settings-updater-auto-check = Başlangıçta güncellemeleri kontrol et
+# MT
+settings-updater-channel = Yayın kanalı
+# MT
+settings-updater-channel-stable = Kararlı
+# MT
+settings-updater-channel-beta = Beta (ön sürüm)
+# MT
+settings-updater-last-check = Son kontrol
+# MT
+settings-updater-last-never = Asla
+# MT
+settings-updater-check-now = Güncellemeleri şimdi kontrol et
+# MT
+settings-updater-checking = Kontrol ediliyor…
+# MT
+settings-updater-available = Güncelleme mevcut
+# MT
+settings-updater-up-to-date = En son sürümü kullanıyorsunuz.
+# MT
+settings-updater-dismiss = Bu sürümü atla
+# MT
+settings-updater-dismissed = Atlandı
+# MT
+toast-update-available = Yeni bir sürüm mevcut
+# MT
+toast-update-up-to-date = Zaten en son sürümdesiniz

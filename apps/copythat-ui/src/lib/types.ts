@@ -415,6 +415,17 @@ export interface FiltersDto {
   skipReadonly: boolean;
 }
 
+/** Phase 15 — auto-update channel + throttle state. */
+export type UpdateChannelWire = "stable" | "beta";
+
+export interface UpdaterSettingsDto {
+  autoCheck: boolean;
+  channel: UpdateChannelWire;
+  lastCheckUnixSecs: number;
+  dismissedVersion: string;
+  checkIntervalSecs: number;
+}
+
 export interface SettingsDto {
   general: GeneralSettingsDto;
   transfer: TransferSettingsDto;
@@ -422,6 +433,17 @@ export interface SettingsDto {
   secureDelete: SecureDeleteSettingsDto;
   advanced: AdvancedSettingsDto;
   filters: FiltersDto;
+  updater: UpdaterSettingsDto;
+}
+
+/** Phase 15 — return shape of `updater_check_now`. */
+export interface UpdateCheckDto {
+  availableVersion: string;
+  notes: string;
+  pubDate: string;
+  isNewer: boolean;
+  checkedAtUnixSecs: number;
+  skippedByThrottle: boolean;
 }
 
 export interface ProfileInfoDto {

@@ -630,3 +630,37 @@ settings-filters-skip-hidden = Omitir archivos / carpetas ocultos
 settings-filters-skip-system = Omitir archivos de sistema (solo Windows)
 # MT
 settings-filters-skip-readonly = Omitir archivos de solo lectura
+
+# Phase 15 — auto-update
+# MT
+settings-tab-updater = Actualizaciones
+# MT
+settings-updater-hint = Copy That busca actualizaciones firmadas como máximo una vez al día. Las actualizaciones se instalan al salir de la app.
+# MT
+settings-updater-auto-check = Buscar actualizaciones al iniciar
+# MT
+settings-updater-channel = Canal de publicación
+# MT
+settings-updater-channel-stable = Estable
+# MT
+settings-updater-channel-beta = Beta (preliminar)
+# MT
+settings-updater-last-check = Última comprobación
+# MT
+settings-updater-last-never = Nunca
+# MT
+settings-updater-check-now = Buscar actualizaciones ahora
+# MT
+settings-updater-checking = Buscando…
+# MT
+settings-updater-available = Actualización disponible
+# MT
+settings-updater-up-to-date = Estás usando la última versión.
+# MT
+settings-updater-dismiss = Omitir esta versión
+# MT
+settings-updater-dismissed = Omitida
+# MT
+toast-update-available = Hay una versión más reciente disponible
+# MT
+toast-update-up-to-date = Ya tienes la última versión

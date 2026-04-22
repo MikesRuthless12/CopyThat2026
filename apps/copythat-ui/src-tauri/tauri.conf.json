@@ -30,6 +30,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -37,5 +38,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "UNTRUSTED_COMMENT_REPLACE_ME_WITH_RELEASE_PUBKEY",
+      "endpoints": [
+        "https://releases.copythat.app/{{channel}}/{{target}}-{{arch}}.json"
+      ]
+    }
   }
 }

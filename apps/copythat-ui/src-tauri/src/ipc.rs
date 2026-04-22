@@ -496,6 +496,8 @@ pub struct SettingsDto {
     pub advanced: AdvancedDto,
     /// Phase 14a — enumeration-time filters.
     pub filters: FiltersDto,
+    /// Phase 15 — auto-update channel + throttle state.
+    pub updater: UpdaterDto,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -589,6 +591,19 @@ pub struct ProfileInfoDto {
     pub path: String,
 }
 
+/// Phase 15 — wire form of `copythat_settings::UpdaterSettings`.
+/// `channel` is a short string (`"stable" | "beta"`); every other
+/// field maps straight across.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdaterDto {
+    pub auto_check: bool,
+    pub channel: String,
+    pub last_check_unix_secs: i64,
+    pub dismissed_version: String,
+    pub check_interval_secs: u32,
+}
+
 /// Phase 14a — TOML-friendly mirror of `copythat_settings::FilterSettings`
 /// in camelCase for TypeScript consumption. Dates are signed Unix
 /// epoch seconds (so pre-1970 mtimes don't wrap), sizes are byte
@@ -677,6 +692,13 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 skip_system: s.filters.skip_system,
                 skip_readonly: s.filters.skip_readonly,
             },
+            updater: UpdaterDto {
+                auto_check: s.updater.auto_check,
+                channel: s.updater.channel.as_str().to_string(),
+                last_check_unix_secs: s.updater.last_check_unix_secs,
+                dismissed_version: s.updater.dismissed_version.clone(),
+                check_interval_secs: s.updater.check_interval_secs,
+            },
         }
     }
 }
@@ -763,6 +785,17 @@ impl SettingsDto {
             skip_hidden: self.filters.skip_hidden,
             skip_system: self.filters.skip_system,
             skip_readonly: self.filters.skip_readonly,
+        };
+
+        s.updater = copythat_settings::UpdaterSettings {
+            auto_check: self.updater.auto_check,
+            channel: match self.updater.channel.as_str() {
+                "beta" => copythat_settings::UpdateChannel::Beta,
+                _ => copythat_settings::UpdateChannel::Stable,
+            },
+            last_check_unix_secs: self.updater.last_check_unix_secs,
+            dismissed_version: self.updater.dismissed_version,
+            check_interval_secs: self.updater.check_interval_secs,
         };
         s
     }

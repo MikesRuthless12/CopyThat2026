@@ -630,3 +630,37 @@ settings-filters-skip-hidden = Bỏ qua tệp / thư mục ẩn
 settings-filters-skip-system = Bỏ qua tệp hệ thống (chỉ Windows)
 # MT
 settings-filters-skip-readonly = Bỏ qua tệp chỉ đọc
+
+# Phase 15 — auto-update
+# MT
+settings-tab-updater = Cập nhật
+# MT
+settings-updater-hint = Copy That kiểm tra các bản cập nhật đã ký tối đa một lần mỗi ngày. Các bản cập nhật được cài đặt vào lần thoát ứng dụng tiếp theo.
+# MT
+settings-updater-auto-check = Kiểm tra cập nhật khi khởi động
+# MT
+settings-updater-channel = Kênh phát hành
+# MT
+settings-updater-channel-stable = Ổn định
+# MT
+settings-updater-channel-beta = Beta (phát hành trước)
+# MT
+settings-updater-last-check = Lần kiểm tra cuối
+# MT
+settings-updater-last-never = Không bao giờ
+# MT
+settings-updater-check-now = Kiểm tra cập nhật ngay
+# MT
+settings-updater-checking = Đang kiểm tra…
+# MT
+settings-updater-available = Có bản cập nhật
+# MT
+settings-updater-up-to-date = Bạn đang chạy phiên bản mới nhất.
+# MT
+settings-updater-dismiss = Bỏ qua phiên bản này
+# MT
+settings-updater-dismissed = Đã bỏ qua
+# MT
+toast-update-available = Có phiên bản mới hơn
+# MT
+toast-update-up-to-date = Bạn đã ở phiên bản mới nhất

@@ -916,6 +916,144 @@ pub fn effective_buffer_size(state: State<'_, AppState>) -> u64 {
     state.settings_snapshot().transfer.effective_buffer_size() as u64
 }
 
+/// Phase 15 — hit the configured updater endpoint for the current
+/// channel, parse the manifest, and report back whether the advertised
+/// version is strictly newer than the running binary.
+///
+/// When `force` is `false`, the 24 h throttle gates the network hit —
+/// the reply in that case carries `skippedByThrottle = true` so the UI
+/// can render "last checked: X h ago" without lying about having just
+/// hit the server. Independent of `force`, a successful fetch bumps
+/// the persisted `last_check_unix_secs` timestamp so the next launch
+/// check honours the throttle.
+///
+/// The `endpoint_override` argument lets tests point at a local HTTP
+/// fixture without mutating `settings.toml`. Production calls pass
+/// `None` and the handler composes the endpoint from the first entry
+/// of `tauri.conf.json` → `plugins.updater.endpoints` after placeholder
+/// substitution.
+#[tauri::command]
+pub async fn updater_check_now(
+    force: bool,
+    endpoint_override: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<crate::updater::UpdateCheckDto, String> {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    // Snapshot throttle state + channel without holding the lock
+    // across the network call.
+    let (due, channel, current_ver) = {
+        let snap = state.settings_snapshot();
+        let due = force || snap.updater.due_for_check(now_secs);
+        (due, snap.updater.channel.as_str().to_string(), env!("CARGO_PKG_VERSION").to_string())
+    };
+
+    if !due {
+        // Throttle the auto-check path; the UI can still call with
+        // `force: true` from the "check now" button.
+        return Ok(crate::updater::UpdateCheckDto {
+            available_version: String::new(),
+            notes: String::new(),
+            pub_date: String::new(),
+            is_newer: false,
+            checked_at_unix_secs: {
+                // Echo the stored last-check timestamp so the UI can
+                // render "last checked: …".
+                state.settings_snapshot().updater.last_check_unix_secs
+            },
+            skipped_by_throttle: true,
+        });
+    }
+
+    let endpoint = match endpoint_override {
+        Some(u) => u,
+        None => {
+            // Compose from the first configured endpoint. Placeholder
+            // substitution matches the format Tauri's plugin expects.
+            let tmpl = DEFAULT_UPDATER_ENDPOINT_TEMPLATE.to_string();
+            crate::updater::format_endpoint(
+                &tmpl,
+                &channel,
+                crate::updater::current_target_platform().split('-').next().unwrap_or("windows"),
+                crate::updater::current_target_platform().split('-').nth(1).unwrap_or("x86_64"),
+                &current_ver,
+            )
+        }
+    };
+
+    // Network hit off the Tauri-runtime thread — the helper is
+    // blocking but bounded by the 10 s timeout.
+    let manifest_res = tokio::task::spawn_blocking(move || {
+        crate::updater::fetch_manifest_http(&endpoint, Duration::from_secs(10))
+    })
+    .await
+    .map_err(|e| format!("updater-task-join: {e}"))?;
+
+    let manifest = manifest_res.map_err(|e| e.to_string())?;
+
+    let is_newer = crate::updater::is_strictly_newer(&manifest.version, &current_ver);
+
+    // Persist the successful check. Only writes if a settings_path
+    // was resolved (production launch); tests pass an empty path and
+    // the write step is a no-op.
+    {
+        let path = state.settings_path.as_ref();
+        let mut live = state
+            .settings
+            .write()
+            .map_err(|_| "settings-lock-poisoned".to_string())?;
+        live.updater.last_check_unix_secs = now_secs;
+        if !path.as_os_str().is_empty() {
+            let _ = live.save_to(path);
+        }
+    }
+
+    Ok(crate::updater::UpdateCheckDto {
+        available_version: manifest.version,
+        notes: manifest.notes,
+        pub_date: manifest.pub_date,
+        is_newer,
+        checked_at_unix_secs: now_secs,
+        skipped_by_throttle: false,
+    })
+}
+
+/// Phase 15 — persist that the user actively dismissed the named
+/// version ("skip this release"). The updater UI suppresses banners
+/// for exactly that version until a newer one is announced. Passing
+/// an empty string clears the dismissal.
+#[tauri::command]
+pub fn updater_dismiss_version(
+    version: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let path = state.settings_path.as_ref().clone();
+    let mut live = state
+        .settings
+        .write()
+        .map_err(|_| "settings-lock-poisoned".to_string())?;
+    live.updater.dismissed_version = version;
+    if !path.as_os_str().is_empty() {
+        live.save_to(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Default manifest endpoint template. Encoded as a constant here
+/// (rather than hard-coded in `tauri.conf.json`) so tests that stand
+/// up a local HTTP server can override via `endpoint_override` without
+/// mutating shipped config. Placeholder grammar:
+/// - `{{channel}}` — `"stable"` / `"beta"` from `UpdaterSettings`.
+/// - `{{target}}` / `{{arch}}` — OS / CPU from `current_target_platform`.
+/// - `{{current_version}}` — `CARGO_PKG_VERSION`.
+const DEFAULT_UPDATER_ENDPOINT_TEMPLATE: &str =
+    "https://releases.copythat.app/{{channel}}/{{target}}-{{arch}}.json";
+
 /// Phase 14 — free bytes available on the volume backing `path`.
 /// Powers the preflight check in the UI. Returns `0` when the probe
 /// can't resolve the volume (unmounted, permission denied, UNC host

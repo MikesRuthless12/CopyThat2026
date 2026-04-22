@@ -630,3 +630,37 @@ settings-filters-skip-hidden = Verborgen bestanden / mappen overslaan
 settings-filters-skip-system = Systeembestanden overslaan (alleen Windows)
 # MT
 settings-filters-skip-readonly = Alleen-lezen bestanden overslaan
+
+# Phase 15 — auto-update
+# MT
+settings-tab-updater = Updates
+# MT
+settings-updater-hint = Copy That controleert ondertekende updates maximaal één keer per dag. Updates worden geïnstalleerd bij het volgende afsluiten van de app.
+# MT
+settings-updater-auto-check = Bij opstarten op updates controleren
+# MT
+settings-updater-channel = Release-kanaal
+# MT
+settings-updater-channel-stable = Stabiel
+# MT
+settings-updater-channel-beta = Beta (pre-release)
+# MT
+settings-updater-last-check = Laatst gecontroleerd
+# MT
+settings-updater-last-never = Nooit
+# MT
+settings-updater-check-now = Nu op updates controleren
+# MT
+settings-updater-checking = Bezig met controleren…
+# MT
+settings-updater-available = Update beschikbaar
+# MT
+settings-updater-up-to-date = Je gebruikt de nieuwste versie.
+# MT
+settings-updater-dismiss = Deze versie overslaan
+# MT
+settings-updater-dismissed = Overgeslagen
+# MT
+toast-update-available = Er is een nieuwere versie beschikbaar
+# MT
+toast-update-up-to-date = Je hebt al de nieuwste versie

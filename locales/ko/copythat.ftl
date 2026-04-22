@@ -630,3 +630,37 @@ settings-filters-skip-hidden = 숨김 파일 / 폴더 건너뛰기
 settings-filters-skip-system = 시스템 파일 건너뛰기(Windows 전용)
 # MT
 settings-filters-skip-readonly = 읽기 전용 파일 건너뛰기
+
+# Phase 15 — auto-update
+# MT
+settings-tab-updater = 업데이트
+# MT
+settings-updater-hint = Copy That는 하루에 한 번 서명된 업데이트를 확인합니다. 다음 앱 종료 시 업데이트가 설치됩니다.
+# MT
+settings-updater-auto-check = 실행 시 업데이트 확인
+# MT
+settings-updater-channel = 릴리스 채널
+# MT
+settings-updater-channel-stable = 안정 버전
+# MT
+settings-updater-channel-beta = 베타 (프리릴리스)
+# MT
+settings-updater-last-check = 마지막 확인
+# MT
+settings-updater-last-never = 없음
+# MT
+settings-updater-check-now = 지금 업데이트 확인
+# MT
+settings-updater-checking = 확인 중…
+# MT
+settings-updater-available = 업데이트 사용 가능
+# MT
+settings-updater-up-to-date = 최신 릴리스를 사용 중입니다.
+# MT
+settings-updater-dismiss = 이 버전 건너뛰기
+# MT
+settings-updater-dismissed = 건너뜀
+# MT
+toast-update-available = 새 버전이 사용 가능합니다
+# MT
+toast-update-up-to-date = 이미 최신 버전입니다
