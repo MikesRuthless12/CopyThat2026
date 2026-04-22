@@ -99,6 +99,11 @@ arboard = { version = "3", features = ["wayland-data-control"] }
 tempfile = "3"
 copythat-settings = { path = "../../../crates/copythat-settings", version = "0.1" }
 copythat-platform = { path = "../../../crates/copythat-platform", version = "0.1" }
+# Phase 18 E2E smoke uses walkdir to independently re-count the copied
+# tree as a ground-truth cross-check on `TreeReport.files` / `.bytes`.
+# Already a transitive workspace dep via `copythat-core` / `-secure-delete`;
+# listing it explicitly here keeps the smoke test's deps legible.
+walkdir = "2"
 tokio = { version = "1", features = [
     "fs",
     "macros",
@@ -170,3 +175,15 @@ path = "../../../tests/smoke/phase_15_update.rs"
 [[test]]
 name = "phase_16_package"
 path = "../../../tests/smoke/phase_16_package.rs"
+
+# Phase 18 end-to-end smoke — seeds a 500-file tree (or 10 000 with
+# `COPYTHAT_PHASE18_FULL=1`), copy_tree-with-BLAKE3-verify, records the
+# job in an in-memory history DB, round-trips CSV export, then
+# shred_tree's the source and asserts final state. Covers the
+# engine-level half of the Phase 18 prompt's "install → copy → verify →
+# secure-delete → history → CSV → uninstall" brief. `install` /
+# `uninstall` are exercised manually against the release.yml artifacts
+# per `docs/RELEASE_CHECKLIST.md`.
+[[test]]
+name = "phase_18_e2e"
+path = "../../../tests/smoke/phase_18_e2e.rs"
