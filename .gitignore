@@ -63,6 +63,8 @@ apps/copythat-ui/src-tauri/Cargo.lock
 # NOT listed here (README.md is rendered by GitHub; SECURITY.md is
 # the repo's security-disclosure policy).
 /CopyThat2026-Build-Prompts-Guide.md
+/CopyThat2026-Build-Prompts-Guide2.md
+/CT26.txt
 /docs/ARCHITECTURE.md
 /docs/CHANGELOG.md
 /docs/I18N_TODO.md
