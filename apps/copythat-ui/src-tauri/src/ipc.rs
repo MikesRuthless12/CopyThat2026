@@ -63,6 +63,16 @@ pub const EVENT_FILE_ACTIVITY: &str = "file-activity";
 /// toast or open the staging dialog based on the `count` field.
 pub const EVENT_CLIPBOARD_FILES_DETECTED: &str = "clipboard-files-detected";
 
+// Phase 19a — disk-backed scan lifecycle bus.
+pub const EVENT_SCAN_STARTED: &str = "scan-started";
+pub const EVENT_SCAN_PROGRESS: &str = "scan-progress";
+pub const EVENT_SCAN_BATCH: &str = "scan-batch";
+pub const EVENT_SCAN_PAUSED: &str = "scan-paused";
+pub const EVENT_SCAN_RESUMED: &str = "scan-resumed";
+pub const EVENT_SCAN_COMPLETED: &str = "scan-completed";
+pub const EVENT_SCAN_CANCELLED: &str = "scan-cancelled";
+pub const EVENT_SCAN_FAILED: &str = "scan-failed";
+
 /// Single entry in the live activity list.
 ///
 /// `phase`:
@@ -498,6 +508,8 @@ pub struct SettingsDto {
     pub filters: FiltersDto,
     /// Phase 15 — auto-update channel + throttle state.
     pub updater: UpdaterDto,
+    /// Phase 19a — scan database configuration.
+    pub scan: ScanDto,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -623,6 +635,88 @@ pub struct FiltersDto {
     pub skip_readonly: bool,
 }
 
+/// Phase 19a — wire form of `copythat_settings::ScanSettings`.
+/// Mirrors the config TOML group exposed by the Advanced → Scan
+/// database pane in `SettingsModal`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanDto {
+    pub hash_during_scan: bool,
+    /// Absolute path, or `null` for "use default `<config-dir>/scans/`".
+    pub database_path: Option<String>,
+    pub auto_delete_after_days: u32,
+    pub max_scans_to_keep: u32,
+}
+
+/// Phase 19a — `scan-started` payload.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanStartedDto {
+    pub scan_id: String,
+    pub root: String,
+    pub db_path: String,
+}
+
+/// Phase 19a — `scan-progress` payload. Running counters emitted
+/// every `ScanOptions::progress_every` committed files.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanProgressDto {
+    pub scan_id: String,
+    pub files_discovered: u64,
+    pub bytes_discovered: u64,
+    pub files_written: u64,
+    pub files_hashed: u64,
+}
+
+/// Phase 19a — `scan-batch` payload, fired after each 1000-row
+/// transaction flush. The `lastRelPath` doubles as a live "last
+/// file I saw" status line.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanBatchDto {
+    pub scan_id: String,
+    pub batch_size: u32,
+    pub files_committed: u64,
+    pub last_rel_path: String,
+}
+
+/// Phase 19a — `scan-completed` payload. Final counters + scan DB
+/// path so the frontend can immediately trigger a copy from the
+/// same database without a round-trip query.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanCompletedDto {
+    pub scan_id: String,
+    pub db_path: String,
+    pub root: String,
+    pub files: u64,
+    pub bytes: u64,
+    pub hashed_files: u64,
+    pub duration_ms: u64,
+}
+
+/// Phase 19a — `scan-failed` payload.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanFailedDto {
+    pub scan_id: String,
+    pub message: String,
+}
+
+/// Phase 19a — one row of `main.db::active_scans`, surfaced to the
+/// frontend so it can offer to resume a pending scan at launch.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveScanDto {
+    pub scan_id: String,
+    pub db_path: String,
+    pub job_id: Option<String>,
+    pub created_at_ms: i64,
+    /// `"Running" | "Paused" | "Complete" | "Cancelled" | "Failed"`.
+    pub status: String,
+}
+
 // --- Settings ⇄ DTO conversions ---------------------------------------
 
 impl From<&copythat_settings::Settings> for SettingsDto {
@@ -698,6 +792,16 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 last_check_unix_secs: s.updater.last_check_unix_secs,
                 dismissed_version: s.updater.dismissed_version.clone(),
                 check_interval_secs: s.updater.check_interval_secs,
+            },
+            scan: ScanDto {
+                hash_during_scan: s.scan.hash_during_scan,
+                database_path: s
+                    .scan
+                    .database_path
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string()),
+                auto_delete_after_days: s.scan.auto_delete_after_days,
+                max_scans_to_keep: s.scan.max_scans_to_keep,
             },
         }
     }
@@ -797,6 +901,14 @@ impl SettingsDto {
             dismissed_version: self.updater.dismissed_version,
             check_interval_secs: self.updater.check_interval_secs,
         };
+
+        s.scan = copythat_settings::ScanSettings {
+            hash_during_scan: self.scan.hash_during_scan,
+            database_path: self.scan.database_path.map(std::path::PathBuf::from),
+            auto_delete_after_days: self.scan.auto_delete_after_days,
+            max_scans_to_keep: self.scan.max_scans_to_keep,
+        };
+
         s
     }
 }

@@ -88,6 +88,7 @@ pub mod filter;
 mod options;
 pub mod queue;
 pub mod safety;
+pub mod scan;
 mod tree;
 pub mod verify;
 
@@ -104,5 +105,5 @@ pub use options::{
 };
 pub use queue::{Job, JobId, JobKind, JobState, Queue, QueueEvent};
 pub use safety::{PathSafetyError, validate_all, validate_path_no_traversal};
-pub use tree::{copy_tree, move_file, move_tree};
+pub use tree::{copy_tree, copy_tree_from_scan, move_file, move_tree};
 pub use verify::{Hasher, Verifier};
