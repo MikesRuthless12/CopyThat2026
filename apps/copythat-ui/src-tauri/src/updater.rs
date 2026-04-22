@@ -181,8 +181,7 @@ pub fn fetch_manifest_http(url: &str, timeout: Duration) -> Result<UpdateManifes
         .ok_or_else(|| UpdaterError::BadJson("no closing brace".into()))?;
     let slice = &body[start..=end];
 
-    serde_json::from_str::<UpdateManifest>(slice)
-        .map_err(|e| UpdaterError::BadJson(e.to_string()))
+    serde_json::from_str::<UpdateManifest>(slice).map_err(|e| UpdaterError::BadJson(e.to_string()))
 }
 
 fn read_line<R: BufRead>(reader: &mut R) -> Result<String, UpdaterError> {
@@ -282,10 +281,7 @@ mod tests {
             "x86_64",
             "0.1.0",
         );
-        assert_eq!(
-            url,
-            "https://rel.example.com/beta/windows/x86_64/0.1.0"
-        );
+        assert_eq!(url, "https://rel.example.com/beta/windows/x86_64/0.1.0");
     }
 
     #[test]

@@ -1,0 +1,42 @@
+# Flatpak manifest for Copy That 2026. Submitted to Flathub (free).
+# The Flathub build pipeline pulls directly from the source tag, so
+# we don't ship a pre-built AppImage through flatpak — the manifest
+# just tells the builder how to `cargo build` + `pnpm build` inside
+# the Freedesktop SDK runtime.
+app-id: com.copythat.desktop
+runtime: org.freedesktop.Platform
+runtime-version: "24.08"
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.node20
+command: copythat-ui
+finish-args:
+  # Needed for the webview.
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # File copier — full home access is the minimum usable scope.
+  # Users can narrow this via Flatseal if they prefer.
+  - --filesystem=home
+  # Auto-update checks over HTTPS.
+  - --share=network
+  # System tray via AppIndicator.
+  - --talk-name=org.kde.StatusNotifierWatcher
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node20/bin
+  env:
+    CARGO_HOME: /run/build/copythat/cargo
+modules:
+  - name: copythat
+    buildsystem: simple
+    build-commands:
+      - cargo build --release -p copythat-ui --target-dir target
+      - install -Dm755 target/release/copythat-ui /app/bin/copythat-ui
+      - install -Dm644 packaging/linux/copythat.desktop /app/share/applications/com.copythat.desktop.desktop
+      - install -Dm644 apps/copythat-ui/src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/com.copythat.desktop.png
+      - install -Dm644 packaging/linux/flatpak/com.copythat.desktop.appdata.xml /app/share/metainfo/com.copythat.desktop.appdata.xml
+    sources:
+      - type: dir
+        path: ../../..
