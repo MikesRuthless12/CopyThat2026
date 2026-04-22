@@ -167,6 +167,8 @@ err-interrupted = İşlem kesildi
 # MT
 err-verify-failed = Kopya sonrası doğrulama başarısız
 # MT
+err-path-escape = Yol reddedildi — üst dizin (..) parçaları veya geçersiz baytlar içeriyor
+# MT
 err-io-other = Bilinmeyen G/Ç hatası
 
 # MT — Collision modal

@@ -19,6 +19,7 @@ use crate::control::CopyControl;
 use crate::error::CopyError;
 use crate::event::{CopyEvent, CopyReport};
 use crate::options::{CopyOptions, CopyStrategy, FastCopyHookOutcome};
+use crate::safety::validate_path_no_traversal;
 use crate::verify::Hasher;
 
 const PROGRESS_MIN_BYTES: u64 = 16 * 1024;
@@ -38,6 +39,16 @@ pub async fn copy_file(
 ) -> Result<CopyReport, CopyError> {
     let src_path = src.to_path_buf();
     let dst_path = dst.to_path_buf();
+
+    // Phase 17a — reject traversal / NUL-byte paths up front. The
+    // check is lexical and filesystem-free; see
+    // `copythat_core::safety` for the threat model.
+    if let Err(e) = validate_path_no_traversal(&src_path) {
+        return Err(CopyError::path_escape(&src_path, &dst_path, e));
+    }
+    if let Err(e) = validate_path_no_traversal(&dst_path) {
+        return Err(CopyError::path_escape(&src_path, &dst_path, e));
+    }
 
     let metadata_result = if opts.follow_symlinks {
         tokio::fs::metadata(&src_path).await

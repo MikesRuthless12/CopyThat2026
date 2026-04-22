@@ -167,6 +167,8 @@ err-interrupted = تمت مقاطعة العملية
 # MT
 err-verify-failed = فشل التحقق بعد النسخ
 # MT
+err-path-escape = تم رفض المسار — يحتوي على مقاطع الدليل الأصلي (..) أو بايتات غير مسموح بها
+# MT
 err-io-other = خطأ إدخال/إخراج غير معروف
 
 # MT — Collision modal

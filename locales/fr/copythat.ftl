@@ -167,6 +167,8 @@ err-interrupted = Opération interrompue
 # MT
 err-verify-failed = Vérification après copie échouée
 # MT
+err-path-escape = Chemin rejeté — contient des segments de répertoire parent (..) ou des octets illégaux
+# MT
 err-io-other = Erreur d'E/S inconnue
 
 # MT — Collision modal

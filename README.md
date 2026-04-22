@@ -190,6 +190,9 @@ cargo test -p copythat-ui --test phase_13_bench -- --nocapture
 
 # Phase 16 — free-first packaging tripwire (no paid signing, free runners only)
 cargo test -p copythat-ui --test phase_16_package -- --nocapture
+
+# Phase 17a — red-team `..` traversal rejection at every trust boundary
+cargo test -p copythat-core --test phase_17_security -- --nocapture
 ```
 
 ## Installing

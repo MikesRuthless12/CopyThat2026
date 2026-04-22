@@ -167,6 +167,8 @@ err-interrupted = ऑपरेशन बाधित
 # MT
 err-verify-failed = प्रतिलिपि के बाद सत्यापन विफल
 # MT
+err-path-escape = पथ अस्वीकृत — मूल-निर्देशिका (..) खंड या अवैध बाइट्स शामिल हैं
+# MT
 err-io-other = अज्ञात I/O त्रुटि
 
 # MT — Collision modal

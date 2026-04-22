@@ -167,6 +167,8 @@ err-interrupted = 操作被中断
 # MT
 err-verify-failed = 复制后校验失败
 # MT
+err-path-escape = 路径被拒绝 — 包含父目录（..）段或非法字节
+# MT
 err-io-other = 未知 I/O 错误
 
 # MT — Collision modal
