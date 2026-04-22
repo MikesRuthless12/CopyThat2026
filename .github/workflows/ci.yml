@@ -97,10 +97,14 @@ jobs:
   tauri-build:
     name: Tauri debug build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # Tauri debug build typically completes in 2-10 minutes; cap at 30 to
-    # match the clippy-test cap and protect against the same runner-glitch
-    # mode that hung Phase 3+4 for 6 hours.
-    timeout-minutes: 30
+    # Tauri debug build typically completes in 2-10 minutes with a warm
+    # Swatinem/rust-cache. First-run / evicted-cache builds on ubuntu-latest
+    # routinely need 25-35 minutes (apt-get install + webkit2gtk headers
+    # + ~350 Rust crates + pnpm install + frontend bundling), which was
+    # enough to cancel the Phase 18 PR #3 CI run at the old 30-min cap.
+    # Raise to 45 to cover the cold path while still failing fast on a
+    # true runner glitch.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
