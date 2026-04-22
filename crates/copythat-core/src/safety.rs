@@ -183,8 +183,15 @@ mod tests {
         assert!(matches!(err, PathSafetyError::ParentTraversal { .. }));
     }
 
+    #[cfg(windows)]
     #[test]
     fn rejects_windows_backslash_traversal() {
+        // Gated to Windows: on POSIX, `Path::components` does not
+        // treat `\` as a path separator, so `C:\a\..` parses as a
+        // single component string and the `..` never surfaces as a
+        // `ParentDir`. That's not a safety gap — a POSIX caller
+        // hands POSIX paths — but it means the test only makes
+        // sense where `\` is the real separator.
         let err = validate_path_no_traversal(Path::new(r"C:\Users\user\..\..\..\Windows\System32"))
             .unwrap_err();
         assert!(matches!(err, PathSafetyError::ParentTraversal { .. }));
