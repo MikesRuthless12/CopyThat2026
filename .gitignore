@@ -69,6 +69,7 @@ apps/copythat-ui/src-tauri/Cargo.lock
 /docs/CHANGELOG.md
 /docs/I18N_TODO.md
 /docs/ROADMAP.md
+/docs/SIGNING_UPGRADE.md
 /packaging/linux/README.md
 
 # --- Icon workshop scratch output ---

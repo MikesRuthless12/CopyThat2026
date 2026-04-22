@@ -161,3 +161,12 @@ path = "../../../tests/smoke/phase_13_bench.rs"
 [[test]]
 name = "phase_15_update"
 path = "../../../tests/smoke/phase_15_update.rs"
+
+# Phase 16 smoke test — free-first packaging tripwire. Filesystem-only:
+# asserts `release.yml` never wires a paid-signing service outside
+# commented-out upgrade blocks, `tauri.conf.json` uses ad-hoc codesign
+# for macOS, every packaging manifest exists, and `docs/SIGNING_UPGRADE.md`
+# documents the enable-when steps.
+[[test]]
+name = "phase_16_package"
+path = "../../../tests/smoke/phase_16_package.rs"

@@ -206,9 +206,8 @@ mod tests {
         // None. Both are acceptable. What matters is that it
         // doesn't panic and returns either None or a positive u64.
         let here = PathBuf::from(".");
-        match free_space_bytes(&here) {
-            Some(n) => assert!(n > 0, "free space should not be 0 on . ({n})"),
-            None => {}
+        if let Some(n) = free_space_bytes(&here) {
+            assert!(n > 0, "free space should not be 0 on . ({n})");
         }
     }
 

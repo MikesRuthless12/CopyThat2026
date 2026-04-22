@@ -15,6 +15,10 @@
 //!   reported but not fatal — CI stays green on a machine that
 //!   doesn't have every competitor installed. Results are printed
 //!   as a markdown table.
+//! - `release`: drive the Phase 16 free-first packaging path locally.
+//!   Shells out to `pnpm tauri build --bundles …` with
+//!   `APPLE_SIGNING_IDENTITY=-` set so macOS picks up ad-hoc codesign.
+//!   Mirrors `.github/workflows/release.yml`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -22,6 +26,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 mod bench;
+mod release;
 
 const LOCALES: &[&str] = &[
     "en", "es", "zh-CN", "hi", "ar", "pt-BR", "ru", "ja", "de", "fr", "ko", "it", "tr", "vi", "pl",
@@ -87,6 +92,16 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("release") => {
+            let rest: Vec<String> = args.collect();
+            match release::run(rest) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("xtask release: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("--help" | "-h") | None => {
             print_help();
             ExitCode::SUCCESS
@@ -101,7 +116,7 @@ fn main() -> ExitCode {
 
 fn print_help() {
     println!(
-        "Usage: xtask <command>\n\nCommands:\n  i18n-lint   Verify key parity, literal-key coverage, and Fluent syntax\n              across locales/<code>/copythat.ftl\n  bench       Run the Criterion bench suite at full size\n  bench-ci    Run the Criterion bench suite at CI-scaled sizes\n  bench-vs    Time our engine against OS copy tools on PATH\n"
+        "Usage: xtask <command>\n\nCommands:\n  i18n-lint   Verify key parity, literal-key coverage, and Fluent syntax\n              across locales/<code>/copythat.ftl\n  bench       Run the Criterion bench suite at full size\n  bench-ci    Run the Criterion bench suite at CI-scaled sizes\n  bench-vs    Time our engine against OS copy tools on PATH\n  release     Drive the Phase 16 free-first packaging path (pnpm tauri build)\n"
     );
 }
 

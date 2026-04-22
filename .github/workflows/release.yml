@@ -1,0 +1,242 @@
+# Phase 16 — Release (free-first).
+#
+# Triggered by tags matching v*.*.* (e.g. v0.1.0). Builds platform
+# installers on the three free GitHub-hosted runners and uploads them
+# to a GitHub Release. The workflow deliberately does NOT depend on
+# any paid service, code-signing certificate, or Apple Developer
+# membership:
+#
+# - Windows: MSI + NSIS, unsigned. SmartScreen reputation clears the
+#   binary after ~100 downloads. Winget manifests (under
+#   packaging/windows/winget) provide tamper-proof install via hash.
+# - macOS:   .app + .dmg, ad-hoc signed (APPLE_SIGNING_IDENTITY=-).
+#   Gatekeeper: users right-click → Open on first launch.
+# - Linux:   AppImage + .deb + .rpm. GPG self-sign is optional and
+#   gated on a GPG key being provided in GH secrets; absence does not
+#   fail the build.
+#
+# Paid-signing upgrade paths (Azure Trusted Signing, Apple Developer
+# notarization) live as commented-out jobs at the bottom. Enabling
+# them is a secret-management change, not a code change. See
+# docs/SIGNING_UPGRADE.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Dry-run tag (e.g. v0.1.0-dev); creates artifacts only"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    name: Build (${{ matrix.target.label }})
+    runs-on: ${{ matrix.target.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - os: ubuntu-latest
+            label: linux-x86_64
+            rust-target: x86_64-unknown-linux-gnu
+            bundles: deb,rpm,appimage
+          - os: macos-latest
+            label: macos-aarch64
+            rust-target: aarch64-apple-darwin
+            bundles: app,dmg
+          - os: macos-13
+            label: macos-x86_64
+            rust-target: x86_64-apple-darwin
+            bundles: app,dmg
+          - os: windows-latest
+            label: windows-x86_64
+            rust-target: x86_64-pc-windows-msvc
+            bundles: msi,nsis
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux Tauri prerequisites
+        if: matrix.target.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libxdo-dev \
+            patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target.rust-target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            apps/copythat-ui/src-tauri
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: apps/copythat-ui/pnpm-lock.yaml
+
+      - name: Install frontend deps
+        working-directory: apps/copythat-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Tauri build (release, ${{ matrix.target.bundles }})
+        working-directory: apps/copythat-ui
+        env:
+          # Ad-hoc codesign for macOS (free — no Apple Developer cert).
+          # The dash identity tells codesign to stamp a self-contained
+          # signature. Gatekeeper still shows the right-click-Open
+          # prompt on first launch, but the bundle runs on any machine
+          # after that one click. See docs/SIGNING_UPGRADE.md for the
+          # paid-Notary upgrade path.
+          APPLE_SIGNING_IDENTITY: "-"
+        run: pnpm tauri build --target ${{ matrix.target.rust-target }} --bundles ${{ matrix.target.bundles }}
+
+      - name: Collect Windows artifacts
+        if: matrix.target.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-staging | Out-Null
+          Get-ChildItem -Recurse `
+            "apps/copythat-ui/src-tauri/target/${{ matrix.target.rust-target }}/release/bundle" `
+            -Include *.msi,*.exe,*.zip,*.sig,latest.json `
+            -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName -Destination release-staging }
+
+      - name: Collect macOS artifacts
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p release-staging
+          find "apps/copythat-ui/src-tauri/target/${{ matrix.target.rust-target }}/release/bundle" \
+            -type f \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.sig" -o -name "latest.json" \) \
+            -exec cp {} release-staging/ \; || true
+
+      - name: Collect Linux artifacts
+        if: matrix.target.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          mkdir -p release-staging
+          find "apps/copythat-ui/src-tauri/target/${{ matrix.target.rust-target }}/release/bundle" \
+            -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.tar.gz" -o -name "*.sig" -o -name "latest.json" \) \
+            -exec cp {} release-staging/ \; || true
+
+      - name: Linux GPG sign (optional, skipped if no key)
+        if: matrix.target.os == 'ubuntu-latest'
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+        shell: bash
+        run: |
+          if [ -z "$GPG_SIGNING_KEY" ]; then
+            echo "No GPG_SIGNING_KEY secret; skipping detached signatures (this is the free-first default)."
+            exit 0
+          fi
+          echo "$GPG_SIGNING_KEY" | gpg --batch --import
+          for f in release-staging/*.AppImage release-staging/*.deb release-staging/*.rpm; do
+            [ -e "$f" ] || continue
+            gpg --batch --yes --detach-sign --armor "$f"
+          done
+
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: false
+          files: |
+            release-staging/*
+
+      - name: Upload build artifacts (dry-run)
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: copythat-${{ matrix.target.label }}
+          path: release-staging/
+          if-no-files-found: ignore
+
+  # Updater-manifest publishing job. Gated off until a MiniSign key
+  # pair is in place (tracked in docs/SIGNING_UPGRADE.md). The updater
+  # plugin refuses to install unsigned artifacts, so there is no point
+  # publishing a manifest before the key exists. Flip `if:` to true
+  # once TAURI_SIGNING_PRIVATE_KEY + TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+  # are added as repository secrets.
+  publish-updater-manifest:
+    name: Publish updater manifest
+    needs: build
+    runs-on: ubuntu-latest
+    if: false
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: manifests
+      - name: Assemble updater manifest
+        run: |
+          bash scripts/build-updater-manifest.sh "${GITHUB_REF_NAME#v}" manifests dist-manifest
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-manifest
+      - uses: actions/deploy-pages@v4
+
+  # ------------------------------------------------------------------
+  # Paid-signing upgrade hooks. Keep commented until revenue justifies
+  # the subscription; the upgrade is a secret-management change plus
+  # un-commenting a job, not a code change. Matches the guidance in
+  # docs/SIGNING_UPGRADE.md.
+  # ------------------------------------------------------------------
+
+  # TODO: enable when Azure Trusted Signing is subscribed (~$10/mo).
+  # windows-sign:
+  #   name: Windows code signing (Azure Trusted Signing)
+  #   needs: build
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/download-artifact@v4
+  #     - uses: Azure/trusted-signing-action@v0.4.0
+  #       with:
+  #         endpoint: https://eus.codesigning.azure.net/
+  #         trusted-signing-account-name: copythat-signing
+  #         certificate-profile-name: copythat-cert-profile
+  #         files-folder: release-staging
+  #         files-folder-filter: msi,exe
+
+  # TODO: enable when Apple Developer Program is subscribed ($99/yr).
+  # macos-notarize:
+  #   name: macOS notarization (Apple Notary)
+  #   needs: build
+  #   runs-on: macos-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/download-artifact@v4
+  #     - name: Submit to Apple Notary
+  #       run: |
+  #         xcrun notarytool submit "$ARTIFACT" --wait

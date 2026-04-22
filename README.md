@@ -187,7 +187,58 @@ cargo test -p copythat-platform --test phase_06_fast_paths -- --nocapture
 
 # Phase 13 — throughput floor (20 MiB/s on a 100 MiB single-file copy)
 cargo test -p copythat-ui --test phase_13_bench -- --nocapture
+
+# Phase 16 — free-first packaging tripwire (no paid signing, free runners only)
+cargo test -p copythat-ui --test phase_16_package -- --nocapture
 ```
+
+## Installing
+
+Installable artifacts for every supported platform are produced by a
+tag-triggered workflow (`.github/workflows/release.yml`) that runs
+exclusively on free GitHub-hosted runners. Tag a commit with `v*.*.*`
+and the release job uploads:
+
+| Platform | Artifact                    | Install command / channel                                    |
+| -------- | --------------------------- | ------------------------------------------------------------ |
+| Windows  | MSI + NSIS (`.exe`)          | Double-click, or `winget install CopyThat.CopyThat` (after the winget-pkgs PR merges) |
+| macOS    | `.app` + `.dmg` (x64 + arm64)| Right-click → Open on first launch, or `brew install --cask copythat` |
+| Linux    | AppImage + `.deb` + `.rpm`   | `sudo apt install ./copythat-ui_<ver>_amd64.deb`, or Flathub / AUR |
+
+Everything above ships **without paying for code-signing**:
+
+- Windows installers are unsigned. SmartScreen shows a one-time
+  warning for the first ~100 downloads, then Microsoft's reputation
+  service clears the binary. Winget's SHA-256 verification gives a
+  tamper-proof install path in the meantime.
+- macOS bundles are **ad-hoc signed** (`codesign -s -`). Gatekeeper
+  asks you to right-click → Open on first launch; subsequent launches
+  are silent. Homebrew cask auto-clears the quarantine flag.
+- Linux artifacts are GPG-signed only if the maintainers have set the
+  optional `GPG_SIGNING_KEY` repository secret; otherwise they ship
+  unsigned and distros verify via the AppImage hash + apt/rpm trust.
+
+The free-first guarantee is enforced by
+[`tests/smoke/phase_16_package.rs`](tests/smoke/phase_16_package.rs),
+which fails the build if the release workflow ever imports a
+paid-signing service outside a commented-out upgrade block. The paid
+upgrade paths (Azure Trusted Signing ~$10/mo, Apple Developer $99/yr,
+MiniSign updater signing) are captured in a maintainer-local
+`docs/SIGNING_UPGRADE.md` planning doc; the commented-out
+`windows-sign:` and `macos-notarize:` job blocks at the bottom of
+`.github/workflows/release.yml` mirror the exact wiring.
+
+Package channel manifests:
+
+- [`packaging/windows/winget/`](packaging/windows/winget/) —
+  microsoft/winget-pkgs submission triple.
+- [`packaging/windows/chocolatey/`](packaging/windows/chocolatey/) —
+  Chocolatey community repo.
+- [`packaging/macos/homebrew-cask/`](packaging/macos/homebrew-cask/) —
+  Homebrew cask Ruby definition.
+- [`packaging/linux/flatpak/`](packaging/linux/flatpak/) — Flathub
+  manifest + AppStream appdata.
+- [`packaging/linux/aur/`](packaging/linux/aur/) — AUR `PKGBUILD`.
 
 ## License
 
