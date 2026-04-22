@@ -43,6 +43,7 @@ pub mod icon;
 pub mod ipc;
 pub mod reveal;
 pub mod runner;
+pub mod scan_commands;
 pub mod shell;
 pub mod state;
 pub mod updater;
@@ -249,6 +250,12 @@ pub fn run() {
             // Phase 15 — auto-update manifest check + dismiss.
             commands::updater_check_now,
             commands::updater_dismiss_version,
+            // Phase 19a — disk-backed scan lifecycle.
+            scan_commands::scan_start,
+            scan_commands::scan_pause,
+            scan_commands::scan_resume,
+            scan_commands::scan_cancel,
+            scan_commands::scan_list_unfinished,
         ])
         .setup(move |app| {
             // Phase 16 — tray icon + menu. Visible regardless of the

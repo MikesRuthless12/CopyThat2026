@@ -666,3 +666,29 @@ settings-updater-dismissed = 건너뜀
 toast-update-available = 새 버전이 사용 가능합니다
 # MT
 toast-update-up-to-date = 이미 최신 버전입니다
+
+# Phase 19a — disk-backed file enumeration (TeraCopy-compatible scan DB)
+# MT
+scan-progress-title = 스캔 중…
+# MT
+scan-progress-stats = { $files } 파일 · 지금까지 { $bytes }
+# MT
+scan-pause-button = 스캔 일시 정지
+# MT
+scan-resume-button = 스캔 재개
+# MT
+scan-cancel-button = 스캔 취소
+# MT
+scan-cancel-confirm = 스캔을 취소하고 진행 상황을 버리시겠습니까?
+# MT
+scan-db-header = 스캔 데이터베이스
+# MT
+scan-db-hint = 수백만 개 파일 작업을 위한 디스크 기반 스캔 데이터베이스.
+# MT
+advanced-scan-hash-during = 스캔 중 체크섬 계산
+# MT
+advanced-scan-db-path = 스캔 데이터베이스 위치
+# MT
+advanced-scan-retention-days = 완료된 스캔 자동 삭제 기간(일)
+# MT
+advanced-scan-max-keep = 보관할 최대 스캔 데이터베이스 수

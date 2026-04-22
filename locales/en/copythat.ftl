@@ -455,3 +455,17 @@ settings-updater-dismiss = Skip this version
 settings-updater-dismissed = Skipped
 toast-update-available = A newer version is available
 toast-update-up-to-date = You're already on the latest version
+
+# Phase 19a — disk-backed file enumeration (TeraCopy-compatible scan DB)
+scan-progress-title = Scanning…
+scan-progress-stats = { $files } files · { $bytes } so far
+scan-pause-button = Pause scan
+scan-resume-button = Resume scan
+scan-cancel-button = Cancel scan
+scan-cancel-confirm = Cancel scan and discard progress?
+scan-db-header = Scan database
+scan-db-hint = On-disk scan database for multi-million-file jobs.
+advanced-scan-hash-during = Compute checksums during scan
+advanced-scan-db-path = Scan database location
+advanced-scan-retention-days = Auto-delete completed scans after (days)
+advanced-scan-max-keep = Maximum scan databases to keep

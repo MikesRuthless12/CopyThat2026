@@ -666,3 +666,29 @@ settings-updater-dismissed = スキップ済み
 toast-update-available = 新しいバージョンが利用可能です
 # MT
 toast-update-up-to-date = 既に最新バージョンです
+
+# Phase 19a — disk-backed file enumeration (TeraCopy-compatible scan DB)
+# MT
+scan-progress-title = スキャン中…
+# MT
+scan-progress-stats = { $files } ファイル · これまでに { $bytes }
+# MT
+scan-pause-button = スキャンを一時停止
+# MT
+scan-resume-button = スキャンを再開
+# MT
+scan-cancel-button = スキャンをキャンセル
+# MT
+scan-cancel-confirm = スキャンをキャンセルして進行状況を破棄しますか？
+# MT
+scan-db-header = スキャン データベース
+# MT
+scan-db-hint = 数百万ファイル規模のジョブ向けのディスク上スキャン データベース。
+# MT
+advanced-scan-hash-during = スキャン中にチェックサムを計算
+# MT
+advanced-scan-db-path = スキャン データベースの場所
+# MT
+advanced-scan-retention-days = 完了したスキャンを自動削除（日数）
+# MT
+advanced-scan-max-keep = 保持するスキャン データベースの最大数

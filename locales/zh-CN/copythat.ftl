@@ -666,3 +666,29 @@ settings-updater-dismissed = 已跳过
 toast-update-available = 有新版本可用
 # MT
 toast-update-up-to-date = 你已是最新版本
+
+# Phase 19a — disk-backed file enumeration (TeraCopy-compatible scan DB)
+# MT
+scan-progress-title = 正在扫描…
+# MT
+scan-progress-stats = { $files } 个文件 · 至今 { $bytes }
+# MT
+scan-pause-button = 暂停扫描
+# MT
+scan-resume-button = 恢复扫描
+# MT
+scan-cancel-button = 取消扫描
+# MT
+scan-cancel-confirm = 取消扫描并放弃进度？
+# MT
+scan-db-header = 扫描数据库
+# MT
+scan-db-hint = 用于数百万文件任务的磁盘扫描数据库。
+# MT
+advanced-scan-hash-during = 扫描时计算校验和
+# MT
+advanced-scan-db-path = 扫描数据库位置
+# MT
+advanced-scan-retention-days = 完成的扫描自动删除（天）
+# MT
+advanced-scan-max-keep = 保留的最大扫描数据库数

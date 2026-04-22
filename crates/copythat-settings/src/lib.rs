@@ -57,6 +57,9 @@ pub struct Settings {
     /// Phase 15 — auto-update channel + throttle state. See
     /// [`UpdaterSettings`].
     pub updater: UpdaterSettings,
+    /// Phase 19a — disk-backed scan database configuration. See
+    /// [`ScanSettings`].
+    pub scan: ScanSettings,
 }
 
 impl Settings {
@@ -617,6 +620,45 @@ impl UpdaterSettings {
         }
         let elapsed = now_unix_secs.saturating_sub(self.last_check_unix_secs);
         elapsed >= self.check_interval_secs as i64
+    }
+}
+
+/// Phase 19a — disk-backed scan database preferences.
+///
+/// Every field is serialized with `#[serde(default)]` so an older
+/// `settings.toml` missing the `[scan]` table loads with defaults
+/// and a newer on-disk file with extra keys decodes cleanly on
+/// pre-Phase-19a binaries (they drop the unknown keys).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct ScanSettings {
+    /// Compute BLAKE3 content hashes while the enumerator streams
+    /// entries into the DB. Off by default — hashing roughly doubles
+    /// scan time on HDD storage; leave opt-in for users who need
+    /// deterministic source hashes for the Phase 3 verify pipeline.
+    pub hash_during_scan: bool,
+    /// Override the on-disk location of `scan-<uuid>.db` and
+    /// `main.db`. `None` keeps the default
+    /// `<config-dir>/scans/`.
+    pub database_path: Option<PathBuf>,
+    /// Days a completed scan DB is retained before the background
+    /// sweeper deletes it. `0` disables auto-cleanup. The default
+    /// of 7 matches TeraCopy's retention window.
+    pub auto_delete_after_days: u32,
+    /// Hard cap on the number of scan DBs the sweeper keeps on
+    /// disk. Older DBs are pruned past this count regardless of the
+    /// age window. Default 50.
+    pub max_scans_to_keep: u32,
+}
+
+impl Default for ScanSettings {
+    fn default() -> Self {
+        Self {
+            hash_during_scan: false,
+            database_path: None,
+            auto_delete_after_days: 7,
+            max_scans_to_keep: 50,
+        }
     }
 }
 
