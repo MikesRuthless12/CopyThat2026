@@ -630,3 +630,37 @@ settings-filters-skip-hidden = Versteckte Dateien / Ordner überspringen
 settings-filters-skip-system = Systemdateien überspringen (nur Windows)
 # MT
 settings-filters-skip-readonly = Schreibgeschützte Dateien überspringen
+
+# Phase 15 — auto-update
+# MT
+settings-tab-updater = Updates
+# MT
+settings-updater-hint = Copy That prüft höchstens einmal am Tag auf signierte Updates. Updates werden beim nächsten Beenden der App installiert.
+# MT
+settings-updater-auto-check = Beim Start nach Updates suchen
+# MT
+settings-updater-channel = Veröffentlichungskanal
+# MT
+settings-updater-channel-stable = Stabil
+# MT
+settings-updater-channel-beta = Beta (Vorabversion)
+# MT
+settings-updater-last-check = Letzte Prüfung
+# MT
+settings-updater-last-never = Nie
+# MT
+settings-updater-check-now = Jetzt nach Updates suchen
+# MT
+settings-updater-checking = Wird geprüft…
+# MT
+settings-updater-available = Update verfügbar
+# MT
+settings-updater-up-to-date = Du verwendest die neueste Version.
+# MT
+settings-updater-dismiss = Diese Version überspringen
+# MT
+settings-updater-dismissed = Übersprungen
+# MT
+toast-update-available = Eine neuere Version ist verfügbar
+# MT
+toast-update-up-to-date = Du hast bereits die neueste Version

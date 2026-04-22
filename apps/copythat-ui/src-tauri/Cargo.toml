@@ -53,6 +53,12 @@ tauri-plugin-single-instance = "2"
 # same staging-dialog path the drag-drop and shell-extension flows
 # already use.
 tauri-plugin-global-shortcut = "2"
+# Phase 15 — auto-update via Tauri's signed-manifest updater. Desktop-
+# only (the plugin is gated to those targets upstream). Handles the
+# actual download + signature verification + install-on-quit flow;
+# we layer our own manifest pre-fetch + 24 h throttle on top in
+# `updater.rs`.
+tauri-plugin-updater = "2"
 
 # Windows-only clipboard reader: raw CF_HDROP access via
 # `windows-rs`. Nothing else in the UI crate needs the Win32 surface,
@@ -145,3 +151,13 @@ path = "../../../tests/smoke/phase_12_settings.rs"
 [[test]]
 name = "phase_13_bench"
 path = "../../../tests/smoke/phase_13_bench.rs"
+
+# Phase 15 smoke test — auto-update manifest pre-fetch. Spins up a
+# local HTTP listener serving a v99.0.0 fixture and asserts the
+# updater module resolves + parses + is-strictly-newer within the
+# 10 s bound. Exercises `copythat_ui_lib::updater` — the pure-Rust
+# surface the UI uses to show "Update available" before the Tauri
+# updater plugin takes over for the signed install.
+[[test]]
+name = "phase_15_update"
+path = "../../../tests/smoke/phase_15_update.rs"

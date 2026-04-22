@@ -42,8 +42,10 @@
     resetSettings,
     saveProfile,
     updateSettings,
+    updaterCheckNow,
+    updaterDismissVersion,
   } from "../ipc";
-  import type { ProfileInfoDto, SettingsDto } from "../types";
+  import type { ProfileInfoDto, SettingsDto, UpdateCheckDto } from "../types";
 
   type TabId =
     | "general"
@@ -52,6 +54,7 @@
     | "shell"
     | "secure-delete"
     | "advanced"
+    | "updater"
     | "profiles";
 
   let activeTab: TabId = $state("general");
@@ -304,6 +307,63 @@
       closeSettings();
     }
   }
+
+  // ---- Phase 15 updater -----------------------------------------------
+  // Most-recent check result; populated on demand. Rendered below the
+  // channel selector when non-null.
+  let lastCheck = $state<UpdateCheckDto | null>(null);
+  let checking = $state(false);
+
+  async function onCheckForUpdatesNow() {
+    checking = true;
+    try {
+      // `force: true` bypasses the 24 h throttle — the UI button is
+      // an explicit user action so the throttle doesn't apply.
+      const res = await updaterCheckNow(true, null);
+      lastCheck = res;
+      // The backend bumped `lastCheckUnixSecs` on its side; re-pull
+      // settings so the displayed timestamp stays in sync without the
+      // user having to close+reopen the modal.
+      if (settings) {
+        const s = await getSettings();
+        settings = s;
+      }
+      if (res.isNewer) {
+        pushToast("info", "toast-update-available");
+      } else if (res.availableVersion) {
+        pushToast("success", "toast-update-up-to-date");
+      }
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    } finally {
+      checking = false;
+    }
+  }
+
+  async function onDismissAvailable() {
+    if (!lastCheck || !lastCheck.availableVersion) return;
+    try {
+      await updaterDismissVersion(lastCheck.availableVersion);
+      if (settings) {
+        settings = {
+          ...settings,
+          updater: {
+            ...settings.updater,
+            dismissedVersion: lastCheck.availableVersion,
+          },
+        };
+      }
+      lastCheck = null;
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function formatLastCheckLabel(unixSecs: number): string {
+    if (!unixSecs || unixSecs <= 0) return t("settings-updater-last-never");
+    const d = new Date(unixSecs * 1000);
+    return d.toLocaleString();
+  }
 </script>
 
 {#if $settingsOpen}
@@ -340,7 +400,7 @@
       {:else}
         <div class="body">
           <div class="tabs" role="tablist" aria-label={t("settings-title")}>
-            {#each [["general", "settings-tab-general"], ["transfer", "settings-tab-transfer"], ["filters", "settings-tab-filters"], ["shell", "settings-tab-shell"], ["secure-delete", "settings-tab-secure-delete"], ["advanced", "settings-tab-advanced"], ["profiles", "settings-tab-profiles"]] as const as [id, key] (id)}
+            {#each [["general", "settings-tab-general"], ["transfer", "settings-tab-transfer"], ["filters", "settings-tab-filters"], ["shell", "settings-tab-shell"], ["secure-delete", "settings-tab-secure-delete"], ["advanced", "settings-tab-advanced"], ["updater", "settings-tab-updater"], ["profiles", "settings-tab-profiles"]] as const as [id, key] (id)}
               <button
                 type="button"
                 role="tab"
@@ -796,6 +856,82 @@
                   {t("settings-reset-all")}
                 </button>
               </div>
+            {:else if activeTab === "updater"}
+              <p class="hint">{t("settings-updater-hint")}</p>
+
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.updater.autoCheck}
+                  onchange={pushSettings}
+                />
+                <span class="label">{t("settings-updater-auto-check")}</span>
+              </label>
+
+              <label class="row">
+                <span class="label">{t("settings-updater-channel")}</span>
+                <select
+                  bind:value={settings.updater.channel}
+                  onchange={pushSettings}
+                >
+                  <option value="stable">{t("settings-updater-channel-stable")}</option>
+                  <option value="beta">{t("settings-updater-channel-beta")}</option>
+                </select>
+              </label>
+
+              <div class="row">
+                <span class="label">{t("settings-updater-last-check")}</span>
+                <span class="muted">
+                  {formatLastCheckLabel(settings.updater.lastCheckUnixSecs)}
+                </span>
+              </div>
+
+              <div class="row end">
+                <button
+                  type="button"
+                  class="secondary"
+                  onclick={onCheckForUpdatesNow}
+                  disabled={checking}
+                >
+                  {checking
+                    ? t("settings-updater-checking")
+                    : t("settings-updater-check-now")}
+                </button>
+              </div>
+
+              {#if lastCheck && lastCheck.availableVersion}
+                <div class="row update-summary" data-tone={lastCheck.isNewer ? "available" : "up-to-date"}>
+                  {#if lastCheck.isNewer}
+                    <span class="label">
+                      {t("settings-updater-available")} —
+                      <strong>{lastCheck.availableVersion}</strong>
+                    </span>
+                  {:else}
+                    <span class="label">{t("settings-updater-up-to-date")}</span>
+                  {/if}
+                </div>
+                {#if lastCheck.notes}
+                  <p class="hint notes">{lastCheck.notes}</p>
+                {/if}
+                {#if lastCheck.isNewer}
+                  <div class="row end">
+                    <button
+                      type="button"
+                      class="tiny"
+                      onclick={onDismissAvailable}
+                    >
+                      {t("settings-updater-dismiss")}
+                    </button>
+                  </div>
+                {/if}
+              {/if}
+
+              {#if settings.updater.dismissedVersion}
+                <p class="hint">
+                  {t("settings-updater-dismissed")}:
+                  <strong>{settings.updater.dismissedVersion}</strong>
+                </p>
+              {/if}
             {:else if activeTab === "profiles"}
               <p class="hint">{t("settings-profiles-hint")}</p>
               <div class="row">

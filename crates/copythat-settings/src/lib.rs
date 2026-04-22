@@ -54,6 +54,9 @@ pub struct Settings {
     /// Phase 14a — enumeration-time filters (include/exclude globs,
     /// size range, date range, attribute bits). See [`FilterSettings`].
     pub filters: FilterSettings,
+    /// Phase 15 — auto-update channel + throttle state. See
+    /// [`UpdaterSettings`].
+    pub updater: UpdaterSettings,
 }
 
 impl Settings {
@@ -529,6 +532,95 @@ impl FilterSettings {
 }
 
 // ---------------------------------------------------------------------
+// Updater (Phase 15)
+// ---------------------------------------------------------------------
+
+/// Release channel the updater consumes manifests from. The channel
+/// name is substituted into the endpoint URL (`{{channel}}`) so the
+/// server can serve separate `stable.json` / `beta.json` manifests
+/// from a single deployment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UpdateChannel {
+    #[default]
+    Stable,
+    Beta,
+}
+
+impl UpdateChannel {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Stable => "stable",
+            Self::Beta => "beta",
+        }
+    }
+}
+
+/// Phase 15 — auto-update preferences and throttle state.
+///
+/// The updater hits `endpoints` once per launch (gated by the 24 h
+/// `last_check_unix_secs` throttle) unless `auto_check` is off. When
+/// a newer version is announced, the UI surfaces a notification and
+/// offers to install-on-quit via Tauri's updater plugin. Signing
+/// material lives in `tauri.conf.json` → `plugins.updater.pubkey`;
+/// this struct intentionally carries no crypto material.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct UpdaterSettings {
+    /// Master switch. `true` by default — silent check-on-launch is
+    /// an expected part of a modern desktop app. `false` disables
+    /// both the automatic launch check and the 24 h throttle; the
+    /// user can still trigger a manual check from Settings.
+    pub auto_check: bool,
+    /// Release channel. `stable` by default; `beta` opts into
+    /// pre-release manifests.
+    pub channel: UpdateChannel,
+    /// Unix epoch seconds of the last successful check. `0` means
+    /// "never checked" and always lets the next launch check fire.
+    /// Signed so a clock skew back to pre-1970 doesn't pin the
+    /// throttle forever.
+    pub last_check_unix_secs: i64,
+    /// Version string the user actively dismissed ("skip this
+    /// release"). While non-empty, the updater surfaces no banner
+    /// for exactly that version — a newer version flips this back
+    /// to empty on its own.
+    pub dismissed_version: String,
+    /// Minimum seconds between two automatic checks. Default is
+    /// 86_400 (24 h). `0` disables the throttle — only useful for
+    /// tests; the UI pins the setting at 24 h and offers no knob.
+    pub check_interval_secs: u32,
+}
+
+impl Default for UpdaterSettings {
+    fn default() -> Self {
+        Self {
+            auto_check: true,
+            channel: UpdateChannel::Stable,
+            last_check_unix_secs: 0,
+            dismissed_version: String::new(),
+            check_interval_secs: 86_400,
+        }
+    }
+}
+
+impl UpdaterSettings {
+    /// True when `now` is far enough past `last_check_unix_secs` for
+    /// the next automatic check to fire. `check_interval_secs == 0`
+    /// degenerates to "always fire" (the test knob). A negative /
+    /// zero `last_check` is treated as "never checked".
+    pub fn due_for_check(&self, now_unix_secs: i64) -> bool {
+        if self.check_interval_secs == 0 {
+            return true;
+        }
+        if self.last_check_unix_secs <= 0 {
+            return true;
+        }
+        let elapsed = now_unix_secs.saturating_sub(self.last_check_unix_secs);
+        elapsed >= self.check_interval_secs as i64
+    }
+}
+
+// ---------------------------------------------------------------------
 // Convenience surface
 // ---------------------------------------------------------------------
 
@@ -822,6 +914,79 @@ log-level = "debug"
         s.save_to(&path).unwrap();
         let back = Settings::load_from(&path).unwrap();
         assert_eq!(back.filters, s.filters);
+    }
+
+    #[test]
+    fn updater_defaults_are_auto_check_stable_24h() {
+        let u = UpdaterSettings::default();
+        assert!(u.auto_check);
+        assert_eq!(u.channel, UpdateChannel::Stable);
+        assert_eq!(u.check_interval_secs, 86_400);
+        assert_eq!(u.last_check_unix_secs, 0);
+        assert!(u.dismissed_version.is_empty());
+    }
+
+    #[test]
+    fn updater_due_for_check_honors_throttle() {
+        // Fresh defaults — never checked → always due.
+        let u = UpdaterSettings::default();
+        assert!(u.due_for_check(1_748_736_000));
+
+        // Checked one second ago → not due yet.
+        let u = UpdaterSettings {
+            last_check_unix_secs: 1_748_735_999,
+            ..Default::default()
+        };
+        assert!(!u.due_for_check(1_748_736_000));
+
+        // Checked exactly 24 h ago → due.
+        let u = UpdaterSettings {
+            last_check_unix_secs: 1_748_736_000 - 86_400,
+            ..Default::default()
+        };
+        assert!(u.due_for_check(1_748_736_000));
+
+        // Interval = 0 (test knob) → always due.
+        let u = UpdaterSettings {
+            check_interval_secs: 0,
+            last_check_unix_secs: 1_748_735_999,
+            ..Default::default()
+        };
+        assert!(u.due_for_check(1_748_736_000));
+    }
+
+    #[test]
+    fn updater_round_trips_via_toml() {
+        let d = tempdir().unwrap();
+        let path = d.path().join("settings.toml");
+        let s = Settings {
+            updater: UpdaterSettings {
+                auto_check: false,
+                channel: UpdateChannel::Beta,
+                last_check_unix_secs: 1_748_736_000,
+                dismissed_version: "1.2.3".to_string(),
+                check_interval_secs: 3_600,
+            },
+            ..Settings::default()
+        };
+        s.save_to(&path).unwrap();
+        let back = Settings::load_from(&path).unwrap();
+        assert_eq!(back.updater, s.updater);
+    }
+
+    #[test]
+    fn updater_toml_uses_kebab_case_keys() {
+        let mut s = Settings::default();
+        s.updater.channel = UpdateChannel::Beta;
+        s.updater.dismissed_version = "0.9.9".to_string();
+        let dumped = toml::to_string(&s).unwrap();
+        assert!(dumped.contains("auto-check = true"), "{dumped}");
+        assert!(dumped.contains(r#"channel = "beta""#), "{dumped}");
+        assert!(
+            dumped.contains(r#"dismissed-version = "0.9.9""#),
+            "{dumped}"
+        );
+        assert!(dumped.contains("check-interval-secs = 86400"), "{dumped}");
     }
 
     #[test]

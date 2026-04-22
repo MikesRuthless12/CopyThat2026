@@ -303,3 +303,28 @@ export async function enumerateTreeFiles(
 ): Promise<TreeEnumerationDto> {
   return invoke<TreeEnumerationDto>("enumerate_tree_files", { paths });
 }
+
+// ---------- Phase 15 updater ----------
+
+import type { UpdateCheckDto } from "./types";
+
+/** Ask the backend to hit the configured updater endpoint for the
+ *  current channel. When `force` is false, the 24 h throttle gates
+ *  the network call and the reply carries `skippedByThrottle = true`
+ *  alongside the stored `lastCheckUnixSecs`. `endpointOverride` is
+ *  for tests — production callers pass `null`. */
+export async function updaterCheckNow(
+  force: boolean,
+  endpointOverride: string | null = null,
+): Promise<UpdateCheckDto> {
+  return invoke<UpdateCheckDto>("updater_check_now", {
+    force,
+    endpointOverride,
+  });
+}
+
+/** Persist that the user dismissed the named version. Empty string
+ *  clears the dismissal. */
+export async function updaterDismissVersion(version: string): Promise<void> {
+  await invoke("updater_dismiss_version", { version });
+}
