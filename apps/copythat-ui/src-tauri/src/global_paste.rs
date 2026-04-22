@@ -26,8 +26,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use crate::clipboard;
 use crate::ipc::{
-    ClipboardFilesDetectedDto, EVENT_CLIPBOARD_FILES_DETECTED, EVENT_SHELL_ENQUEUE,
-    ShellEnqueueDto,
+    ClipboardFilesDetectedDto, EVENT_CLIPBOARD_FILES_DETECTED, EVENT_SHELL_ENQUEUE, ShellEnqueueDto,
 };
 use crate::state::AppState;
 

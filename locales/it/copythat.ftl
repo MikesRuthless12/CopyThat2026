@@ -590,3 +590,43 @@ drop-dialog-busy-checking = Verifica spazio libero…
 drop-dialog-busy-enumerating = Conteggio file…
 drop-dialog-busy-starting = Avvio della copia…
 toast-enumeration-deferred = L'albero di origine è grande — lista preliminare saltata; le righe appariranno mentre il motore le elabora.
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = Filtri
+# MT
+settings-filters-hint = Salta i file durante l'enumerazione così il motore non li apre nemmeno. Gli inclusi si applicano solo ai file; gli esclusi potano anche le cartelle corrispondenti.
+# MT
+settings-filters-enabled = Abilita i filtri per le copie di alberi
+# MT
+settings-filters-include-globs = Glob di inclusione
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = Un glob per riga. Se non vuoto, un file deve corrispondere ad almeno uno. Le cartelle sono sempre attraversate.
+# MT
+settings-filters-exclude-globs = Glob di esclusione
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = Un glob per riga. Le corrispondenze potano l'intero sottoalbero per le cartelle; i file corrispondenti vengono saltati.
+# MT
+settings-filters-size-range = Intervallo di dimensione
+# MT
+settings-filters-min-size-bytes = Dimensione minima (byte, vuoto = nessun limite inferiore)
+# MT
+settings-filters-max-size-bytes = Dimensione massima (byte, vuoto = nessun limite superiore)
+# MT
+settings-filters-date-range = Intervallo data di modifica
+# MT
+settings-filters-min-mtime = Modificato a partire dal
+# MT
+settings-filters-max-mtime = Modificato fino al
+# MT
+settings-filters-attributes = Attributi
+# MT
+settings-filters-skip-hidden = Salta file / cartelle nascosti
+# MT
+settings-filters-skip-system = Salta file di sistema (solo Windows)
+# MT
+settings-filters-skip-readonly = Salta file di sola lettura

@@ -590,3 +590,43 @@ drop-dialog-busy-checking = Vrije ruimte controleren…
 drop-dialog-busy-enumerating = Bestanden tellen…
 drop-dialog-busy-starting = Kopie starten…
 toast-enumeration-deferred = Bronstructuur is groot — voorbereide lijst overgeslagen; regels verschijnen terwijl de engine ze verwerkt.
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = Filters
+# MT
+settings-filters-hint = Slaat bestanden over tijdens het opsommen, zodat de engine ze niet eens opent. Insluiten geldt alleen voor bestanden; uitsluiten snoeit ook overeenkomende mappen.
+# MT
+settings-filters-enabled = Filters inschakelen voor boomkopieën
+# MT
+settings-filters-include-globs = Insluit-globs
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = Eén glob per regel. Indien niet leeg moet een bestand met ten minste één overeenkomen. Mappen worden altijd doorlopen.
+# MT
+settings-filters-exclude-globs = Uitsluit-globs
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = Eén glob per regel. Treffers snoeien de hele subboom voor mappen; overeenkomende bestanden worden overgeslagen.
+# MT
+settings-filters-size-range = Bestandsgroottebereik
+# MT
+settings-filters-min-size-bytes = Minimum grootte (bytes, leeg = geen ondergrens)
+# MT
+settings-filters-max-size-bytes = Maximum grootte (bytes, leeg = geen bovengrens)
+# MT
+settings-filters-date-range = Wijzigingstijdbereik
+# MT
+settings-filters-min-mtime = Gewijzigd op of na
+# MT
+settings-filters-max-mtime = Gewijzigd op of voor
+# MT
+settings-filters-attributes = Attributen
+# MT
+settings-filters-skip-hidden = Verborgen bestanden / mappen overslaan
+# MT
+settings-filters-skip-system = Systeembestanden overslaan (alleen Windows)
+# MT
+settings-filters-skip-readonly = Alleen-lezen bestanden overslaan

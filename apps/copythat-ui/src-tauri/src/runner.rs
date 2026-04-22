@@ -18,8 +18,8 @@ use std::sync::atomic::Ordering;
 
 use copythat_core::{
     CollisionPolicy, CopyControl, CopyError, CopyErrorKind, CopyEvent, CopyOptions, ErrorPolicy,
-    Job, JobId, JobKind, JobState, MoveOptions, Queue, TreeOptions, copy_file, copy_tree,
-    move_file, move_tree,
+    FilterSet, Job, JobId, JobKind, JobState, MoveOptions, Queue, TreeOptions, copy_file,
+    copy_tree, move_file, move_tree,
 };
 use copythat_history::{ItemRow, JobRowId, JobSummary};
 use tauri::{AppHandle, Emitter};
@@ -68,6 +68,11 @@ pub(crate) struct RunJob {
     /// `Auto` case. `None` falls back to the engine's built-in
     /// default (4) so tests that construct `RunJob` by hand still work.
     pub tree_concurrency: Option<usize>,
+    /// Phase 14a — enumeration-time filters built from
+    /// `Settings.filters`. `None` or an empty `FilterSet` leaves the
+    /// pre-14a behaviour unchanged (every discovered entry enters
+    /// the plan).
+    pub filters: Option<FilterSet>,
 }
 
 /// Entry point for a newly-enqueued job. Caller has already added
@@ -87,6 +92,7 @@ pub(crate) async fn run_job(job: RunJob) {
         collision_policy,
         error_policy,
         tree_concurrency,
+        filters,
     } = job;
     eprintln!(
         "[run_job] id={} kind={:?} src={} dst={:?}",
@@ -145,7 +151,11 @@ pub(crate) async fn run_job(job: RunJob) {
             eprintln!(
                 "[run_job] source_is_dir={} — about to call {}",
                 source_is_dir,
-                if source_is_dir { "copy_tree" } else { "copy_file" }
+                if source_is_dir {
+                    "copy_tree"
+                } else {
+                    "copy_file"
+                }
             );
             if source_is_dir {
                 let tree_opts = TreeOptions {
@@ -153,12 +163,16 @@ pub(crate) async fn run_job(job: RunJob) {
                     collision: collision_policy,
                     on_error: error_policy,
                     concurrency: tree_concurrency.unwrap_or(TreeOptions::default().concurrency),
+                    filters: filters.clone(),
                     ..TreeOptions::default()
                 };
                 let out = copy_tree(&src, &dst_path, tree_opts, ctrl, tx.clone())
                     .await
                     .map(|_| ());
-                eprintln!("[run_job] copy_tree returned: {:?}", out.as_ref().map(|_| "ok").map_err(|e| &e.message));
+                eprintln!(
+                    "[run_job] copy_tree returned: {:?}",
+                    out.as_ref().map(|_| "ok").map_err(|e| &e.message)
+                );
                 out
             } else {
                 copy_file(&src, &dst_path, copy_opts_with_verify, ctrl, tx.clone())
@@ -444,7 +458,14 @@ async fn forward_events(
                     .queue
                     .set_progress(id, cur_bytes, bytes_so_far, cur_files, files_so_far);
                 emit_progress(
-                    &app, &state, id, cur_bytes, bytes_so_far, cur_files, files_so_far, 0,
+                    &app,
+                    &state,
+                    id,
+                    cur_bytes,
+                    bytes_so_far,
+                    cur_files,
+                    files_so_far,
+                    0,
                 );
             }
             CopyEvent::TreeStarted {

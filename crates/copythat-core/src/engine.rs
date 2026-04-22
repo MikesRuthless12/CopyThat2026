@@ -589,12 +589,12 @@ async fn open_src_with_retry(src: &Path) -> std::io::Result<File> {
                 Err(join_err) => return Err(std::io::Error::other(format!("join: {join_err}"))),
             }
         }
-        return Err(last_err.unwrap_or_else(|| {
+        Err(last_err.unwrap_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::WouldBlock,
                 "sharing-violation-retries-exhausted",
             )
-        }));
+        }))
     }
     #[cfg(not(windows))]
     {

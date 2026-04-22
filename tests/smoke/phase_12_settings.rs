@@ -83,6 +83,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
             history_retention_days: 90,
             database_path: Some(std::path::PathBuf::from("/custom/path/copythat.db")),
         },
+        filters: copythat_settings::FilterSettings::default(),
     };
 
     before.save_to(&path).expect("save_to");
@@ -133,6 +134,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
             history_retention_days: 90,
             database_path: Some(std::path::PathBuf::from("/custom/path/copythat.db")),
         },
+        filters: copythat_settings::FilterSettings::default(),
     };
     assert_eq!(after, expected);
 }
