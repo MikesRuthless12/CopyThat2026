@@ -1,4 +1,4 @@
-// Copy That 2026 — Finder Sync Extension.
+// Copy That v1.0.0 — Finder Sync Extension.
 //
 // Registers "Copy with Copy That" and "Move with Copy That" in the
 // Finder context menu (right-click on a selection) and in the Finder
@@ -8,7 +8,7 @@
 //     copythat --enqueue <copy|move> -- <paths…>
 //
 // The extension lives in a .appex bundle embedded inside the main
-// `Copy That 2026.app` (see packaging/macos/scripts/bundle-appex.sh).
+// `Copy That v1.0.0.app` (see packaging/macos/scripts/bundle-appex.sh).
 // macOS loads the bundle in a sandboxed XPC process; the spawned
 // `copythat` child runs in the user's session, and the Phase 7a
 // single-instance plumbing hands its argv to the live app instance.
@@ -25,7 +25,7 @@ import FinderSync
 private let copyThatBinaryCandidates: [String] = [
     "/usr/local/bin/copythat",
     "/opt/homebrew/bin/copythat",
-    "/Applications/Copy That 2026.app/Contents/MacOS/copythat",
+    "/Applications/Copy That v1.0.0.app/Contents/MacOS/copythat",
 ]
 
 /// Root the sync watches. `/` covers every local volume; macOS scopes

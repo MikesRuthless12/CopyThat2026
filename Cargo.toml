@@ -14,11 +14,11 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.85"
 license = "LicenseRef-AllRightsReserved"
-authors = ["Copy That 2026 Contributors"]
+authors = ["Copy That Contributors"]
 repository = "https://github.com/MikesRuthless12/CopyThat2026"
 homepage = "https://github.com/MikesRuthless12/CopyThat2026"
 readme = "README.md"

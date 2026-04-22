@@ -1,4 +1,4 @@
-# Copy That 2026 — performance benchmarks
+# Copy That v1.0.0 — performance benchmarks
 
 Phase 13 shipped a Criterion-backed bench harness under
 `crates/copythat-core/benches/copy_bench.rs` plus three xtask

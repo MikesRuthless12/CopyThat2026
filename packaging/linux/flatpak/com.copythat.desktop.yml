@@ -1,4 +1,4 @@
-# Flatpak manifest for Copy That 2026. Submitted to Flathub (free).
+# Flatpak manifest for Copy That v1.0.0. Submitted to Flathub (free).
 # The Flathub build pipeline pulls directly from the source tag, so
 # we don't ship a pre-built AppImage through flatpak — the manifest
 # just tells the builder how to `cargo build` + `pnpm build` inside

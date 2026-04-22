@@ -1,16 +1,16 @@
 PackageIdentifier: CopyThat.CopyThat
-PackageVersion: 0.1.0
+PackageVersion: 1.0.0
 PackageLocale: en-US
-Publisher: Copy That 2026 Contributors
+Publisher: Copy That Contributors
 PublisherUrl: https://github.com/MikesRuthless12/CopyThat2026
 PublisherSupportUrl: https://github.com/MikesRuthless12/CopyThat2026/issues
-PackageName: Copy That 2026
+PackageName: Copy That v1.0.0
 PackageUrl: https://github.com/MikesRuthless12/CopyThat2026
 License: LicenseRef-AllRightsReserved
 LicenseUrl: https://github.com/MikesRuthless12/CopyThat2026/blob/main/LICENSE
 ShortDescription: Byte-exact cross-platform file copier (Rust + Tauri 2).
 Description: |
-  Copy That 2026 is a lightweight, cross-platform, async, byte-exact
+  Copy That v1.0.0 is a lightweight, cross-platform, async, byte-exact
   file and folder copier. Matches every TeraCopy feature while staying
   as fast as — or faster than — Explorer, Finder, cp, and rsync for
   typical desktop workloads. Ships verify (CRC32/MD5/SHA/BLAKE3/xxHash),
@@ -25,6 +25,6 @@ Tags:
   - verify
   - rust
   - tauri
-ReleaseNotesUrl: https://github.com/MikesRuthless12/CopyThat2026/releases/tag/v0.1.0
+ReleaseNotesUrl: https://github.com/MikesRuthless12/CopyThat2026/releases/tag/v1.0.0
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0

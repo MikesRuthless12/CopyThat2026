@@ -1,6 +1,6 @@
 [package]
 name = "copythat-settings"
-description = "Persistent user preferences + named profiles for Copy That 2026."
+description = "Persistent user preferences + named profiles for Copy That v1.0.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

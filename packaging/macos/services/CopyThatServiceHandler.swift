@@ -1,4 +1,4 @@
-// Copy That 2026 — macOS Services menu handler.
+// Copy That v1.0.0 — macOS Services menu handler.
 //
 // Registers two entries in every app's `<AppName> ▸ Services` submenu:
 // "Copy with Copy That" and "Move with Copy That". They show up
@@ -33,7 +33,7 @@ public final class CopyThatServiceHandler: NSObject {
     private static let binaryCandidates: [String] = [
         "/usr/local/bin/copythat",
         "/opt/homebrew/bin/copythat",
-        "/Applications/Copy That 2026.app/Contents/MacOS/copythat",
+        "/Applications/Copy That v1.0.0.app/Contents/MacOS/copythat",
     ]
 
     /// Register this handler with NSApplication so the selectors are

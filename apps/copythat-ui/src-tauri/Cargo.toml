@@ -1,6 +1,6 @@
 [package]
 name = "copythat-ui"
-description = "Copy That 2026 — Tauri 2.x application shell."
+description = "Copy That v1.0.0 — Tauri 2.x application shell."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -20,12 +20,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-copythat-core = { path = "../../../crates/copythat-core", version = "0.1" }
-copythat-hash = { path = "../../../crates/copythat-hash", version = "0.1" }
-copythat-history = { path = "../../../crates/copythat-history", version = "0.1" }
-copythat-platform = { path = "../../../crates/copythat-platform", version = "0.1" }
-copythat-secure-delete = { path = "../../../crates/copythat-secure-delete", version = "0.1" }
-copythat-settings = { path = "../../../crates/copythat-settings", version = "0.1" }
+copythat-core = { path = "../../../crates/copythat-core", version = "1" }
+copythat-hash = { path = "../../../crates/copythat-hash", version = "1" }
+copythat-history = { path = "../../../crates/copythat-history", version = "1" }
+copythat-platform = { path = "../../../crates/copythat-platform", version = "1" }
+copythat-secure-delete = { path = "../../../crates/copythat-secure-delete", version = "1" }
+copythat-settings = { path = "../../../crates/copythat-settings", version = "1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon"] }
@@ -97,8 +97,8 @@ arboard = { version = "3", features = ["wayland-data-control"] }
 
 [dev-dependencies]
 tempfile = "3"
-copythat-settings = { path = "../../../crates/copythat-settings", version = "0.1" }
-copythat-platform = { path = "../../../crates/copythat-platform", version = "0.1" }
+copythat-settings = { path = "../../../crates/copythat-settings", version = "1" }
+copythat-platform = { path = "../../../crates/copythat-platform", version = "1" }
 # Phase 18 E2E smoke uses walkdir to independently re-count the copied
 # tree as a ground-truth cross-check on `TreeReport.files` / `.bytes`.
 # Already a transitive workspace dep via `copythat-core` / `-secure-delete`;
