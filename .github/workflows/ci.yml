@@ -139,6 +139,21 @@ jobs:
       - name: Install frontend deps
         working-directory: apps/copythat-ui
         run: pnpm install --frozen-lockfile
+      # Debug build skips the rpm target on ubuntu-latest — Tauri's
+      # `rpmbuild` shells out silently for ~25 min on hosted runners
+      # (no stdout during GPG/host-key resolution), which pushed the
+      # Phase 18 PR #3 CI run 24799604751 past the 45-min cap even
+      # though every other step finished in under 15 min. The
+      # tagged release.yml workflow still produces rpm artifacts
+      # with its own 60-min cap. The host-matched bundle list
+      # (msi+nsis on Windows, app+dmg on macOS, appimage+deb on
+      # Linux) keeps CI fast without losing smoke coverage — the
+      # Tauri bundler itself runs identically across targets.
+      - name: Tauri build (debug — Linux subset)
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: apps/copythat-ui
+        run: pnpm tauri build --debug --bundles deb,appimage
       - name: Tauri build (debug)
+        if: matrix.os != 'ubuntu-latest'
         working-directory: apps/copythat-ui
         run: pnpm tauri build --debug
