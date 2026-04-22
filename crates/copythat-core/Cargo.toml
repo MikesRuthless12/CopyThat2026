@@ -1,6 +1,6 @@
 [package]
 name = "copythat-core"
-description = "Async byte-exact file copy engine for Copy That 2026."
+description = "Async byte-exact file copy engine for Copy That v1.0.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

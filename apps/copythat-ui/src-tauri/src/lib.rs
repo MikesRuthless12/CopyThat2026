@@ -1,4 +1,4 @@
-//! Copy That 2026 — Tauri 2.x application shell.
+//! Copy That v1.0.0 — Tauri 2.x application shell.
 //!
 //! The Rust side wires the Phase 1–4 engines to the Svelte frontend:
 //!
@@ -259,7 +259,7 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "tray-quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
             let _tray = TrayIconBuilder::with_id("copythat-main-tray")
-                .tooltip("Copy That 2026")
+                .tooltip("Copy That v1.0.0")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -314,7 +314,7 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running Copy That 2026");
+        .expect("error while running Copy That v1.0.0");
 }
 
 /// Phase 16 — restore the main window from the tray. `show` +

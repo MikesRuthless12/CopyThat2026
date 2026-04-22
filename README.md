@@ -1,4 +1,4 @@
-# Copy That 2026
+# Copy That v1.0.0
 
 A lightweight, cross-platform, async, byte-exact file/folder copier in Rust —
 matching every feature of TeraCopy and pushing past it, while staying as fast

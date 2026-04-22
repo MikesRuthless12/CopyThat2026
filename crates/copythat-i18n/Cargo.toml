@@ -1,6 +1,6 @@
 [package]
 name = "copythat-i18n"
-description = "Fluent (`.ftl`) loader and locale resolution for Copy That 2026."
+description = "Fluent (`.ftl`) loader and locale resolution for Copy That v1.0.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
