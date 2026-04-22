@@ -132,6 +132,8 @@ toast-error-resolved = Đã giải quyết lỗi
 toast-collision-resolved = Đã giải quyết xung đột
 # MT
 toast-elevated-unavailable = Thử lại với quyền nâng cao sẽ có ở Giai đoạn 17 — hiện chưa khả dụng
+toast-clipboard-files-detected = Có tệp trên clipboard — nhấn phím tắt dán để sao chép qua Copy That
+toast-clipboard-no-files = Clipboard không có tệp nào để dán
 # MT
 toast-error-log-exported = Đã xuất nhật ký lỗi
 
@@ -151,6 +153,8 @@ error-modal-abort = Hủy tất cả
 error-modal-path-label = Đường dẫn
 # MT
 error-modal-code-label = Mã
+error-drawer-pending-count = Thêm lỗi đang chờ
+error-drawer-toggle = Thu gọn hoặc mở rộng
 
 # MT — Error-kind labels
 err-not-found = Không tìm thấy tệp
@@ -395,6 +399,15 @@ settings-start-with-os = Khởi chạy cùng hệ thống
 settings-single-instance = Chỉ một phiên chạy
 # MT
 settings-minimize-to-tray = Thu nhỏ vào khay khi đóng
+settings-error-display-mode = Kiểu thông báo lỗi
+settings-error-display-modal = Hộp thoại (chặn ứng dụng)
+settings-error-display-drawer = Ngăn kéo (không chặn)
+settings-error-display-mode-hint = Hộp thoại dừng hàng đợi cho đến khi bạn quyết định. Ngăn kéo giữ hàng đợi chạy và cho phép bạn xử lý lỗi ở góc.
+settings-paste-shortcut = Dán tệp qua phím tắt toàn hệ thống
+settings-paste-shortcut-combo = Tổ hợp phím tắt
+settings-paste-shortcut-hint = Nhấn tổ hợp này ở bất cứ đâu trên hệ thống để dán các tệp được sao chép từ Explorer / Finder / Files qua Copy That. CmdOrCtrl chuyển thành Cmd trên macOS và Ctrl trên Windows / Linux.
+settings-clipboard-watcher = Theo dõi clipboard để phát hiện tệp được sao chép
+settings-clipboard-watcher-hint = Hiển thị thông báo khi URL tệp xuất hiện trên clipboard, gợi ý rằng bạn có thể dán qua Copy That. Thăm dò mỗi 500 ms khi được bật.
 
 # MT
 settings-buffer-size = Kích thước bộ đệm

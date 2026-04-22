@@ -19,6 +19,7 @@
   import DetailsDrawer from "./lib/components/DetailsDrawer.svelte";
   import DropStagingDialog from "./lib/components/DropStagingDialog.svelte";
   import ErrorModal from "./lib/components/ErrorModal.svelte";
+  import ErrorPromptDrawer from "./lib/components/ErrorPromptDrawer.svelte";
   import CollisionModal from "./lib/components/CollisionModal.svelte";
   import ErrorLogDrawer from "./lib/components/ErrorLogDrawer.svelte";
   import HistoryDrawer from "./lib/components/HistoryDrawer.svelte";
@@ -28,7 +29,7 @@
 
   import { initI18n, t } from "./lib/i18n";
   import { initTheme } from "./lib/theme";
-  import { dropped, initStores, jobs } from "./lib/stores";
+  import { dropped, errorDisplayMode, initStores, jobs } from "./lib/stores";
   import {
     cancelJob,
     pauseJob,
@@ -170,8 +171,13 @@
     <DropStagingDialog paths={$dropped} />
   {/if}
 
-  <!-- Phase 8: prompt modals + error-log drawer -->
-  <ErrorModal />
+  <!-- Phase 8: error prompt (modal or drawer, user-configurable),
+       collision modal, + historical error-log drawer. -->
+  {#if $errorDisplayMode === "drawer"}
+    <ErrorPromptDrawer />
+  {:else}
+    <ErrorModal />
+  {/if}
   <CollisionModal />
   <ErrorLogDrawer />
 

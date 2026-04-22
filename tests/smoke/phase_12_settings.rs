@@ -27,8 +27,8 @@
 //! unit tests; this file is the full end-to-end ergonomic check.
 
 use copythat_settings::{
-    ConcurrencyChoice, ErrorPolicyChoice, LogLevel, ProfileStore, ReflinkPreference, Settings,
-    ShredMethodChoice, ThemePreference, VerifyChoice, defaults,
+    ConcurrencyChoice, ErrorDisplayMode, ErrorPolicyChoice, LogLevel, ProfileStore,
+    ReflinkPreference, Settings, ShredMethodChoice, ThemePreference, VerifyChoice, defaults,
 };
 use tempfile::tempdir;
 
@@ -48,6 +48,10 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
             start_with_os: true,
             single_instance: false,
             minimize_to_tray: true,
+            error_display_mode: ErrorDisplayMode::Drawer,
+            paste_shortcut_enabled: false,
+            paste_shortcut: "Alt+Shift+V".into(),
+            clipboard_watcher_enabled: true,
         },
         transfer: copythat_settings::TransferSettings {
             buffer_size_bytes: 4 * 1024 * 1024,
@@ -58,6 +62,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
             preserve_timestamps: true,
             preserve_permissions: false,
             preserve_acls: true,
+            reserve_free_space_bytes: 0,
         },
         shell: copythat_settings::ShellSettings {
             context_menu_enabled: false,
@@ -93,6 +98,10 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
             start_with_os: true,
             single_instance: false,
             minimize_to_tray: true,
+            error_display_mode: ErrorDisplayMode::Drawer,
+            paste_shortcut_enabled: false,
+            paste_shortcut: "Alt+Shift+V".into(),
+            clipboard_watcher_enabled: true,
         },
         transfer: copythat_settings::TransferSettings {
             buffer_size_bytes: 4 * 1024 * 1024,
@@ -103,6 +112,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
             preserve_timestamps: true,
             preserve_permissions: false,
             preserve_acls: true,
+            reserve_free_space_bytes: 0,
         },
         shell: copythat_settings::ShellSettings {
             context_menu_enabled: false,

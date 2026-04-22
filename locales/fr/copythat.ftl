@@ -132,6 +132,8 @@ toast-error-resolved = Erreur résolue
 toast-collision-resolved = Conflit résolu
 # MT
 toast-elevated-unavailable = La nouvelle tentative avec droits élevés arrive en phase 17 — pas encore disponible
+toast-clipboard-files-detected = Fichiers dans le presse-papiers — appuyez sur votre raccourci de collage pour copier via Copy That
+toast-clipboard-no-files = Le presse-papiers ne contient aucun fichier à coller
 # MT
 toast-error-log-exported = Journal des erreurs exporté
 
@@ -151,6 +153,8 @@ error-modal-abort = Tout annuler
 error-modal-path-label = Chemin
 # MT
 error-modal-code-label = Code
+error-drawer-pending-count = Autres erreurs en attente
+error-drawer-toggle = Réduire ou développer
 
 # MT — Error-kind labels
 err-not-found = Fichier introuvable
@@ -395,6 +399,15 @@ settings-start-with-os = Lancer au démarrage du système
 settings-single-instance = Instance unique
 # MT
 settings-minimize-to-tray = Réduire dans la zone de notification à la fermeture
+settings-error-display-mode = Style d'invite d'erreur
+settings-error-display-modal = Modale (bloque l'application)
+settings-error-display-drawer = Panneau latéral (non bloquant)
+settings-error-display-mode-hint = La modale suspend la file d'attente jusqu'à votre décision. Le panneau latéral maintient la file active et permet de trier les erreurs dans le coin.
+settings-paste-shortcut = Coller des fichiers via un raccourci global
+settings-paste-shortcut-combo = Combinaison du raccourci
+settings-paste-shortcut-hint = Appuyez sur cette combinaison n'importe où dans le système pour coller des fichiers copiés depuis l'Explorateur / Finder / Fichiers via Copy That. CmdOrCtrl se résout en Cmd sur macOS et en Ctrl sur Windows / Linux.
+settings-clipboard-watcher = Surveiller le presse-papiers pour les fichiers copiés
+settings-clipboard-watcher-hint = Affiche une notification lorsque des URLs de fichiers apparaissent dans le presse-papiers, suggérant que vous pouvez coller via Copy That. Scrute toutes les 500 ms lorsque activé.
 
 # MT
 settings-buffer-size = Taille du tampon

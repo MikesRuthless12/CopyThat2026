@@ -47,6 +47,47 @@ tokio = { version = "1", features = [
 # Android / iOS — Tauri gates the plugin to desktop targets.
 [target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "2"
+# Post-Phase-12 — system-wide "paste files via Copy That" shortcut.
+# Registers a configurable combo (default CmdOrCtrl+Shift+V) that
+# reads file URLs off the OS clipboard and routes them through the
+# same staging-dialog path the drag-drop and shell-extension flows
+# already use.
+tauri-plugin-global-shortcut = "2"
+
+# Windows-only clipboard reader: raw CF_HDROP access via
+# `windows-rs`. Nothing else in the UI crate needs the Win32 surface,
+# so the dep is scoped to this target triple.
+[target.'cfg(windows)'.dependencies]
+# Matches the version `copythat-shellext` already pins, so the
+# workspace uses one resolution of the Win32 bindings.
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_UI_Shell",
+] }
+
+# macOS-only clipboard reader: NSPasteboard via the modern `objc2`
+# bindings. `objc2-foundation` covers NSArray / NSString / NSURL and
+# `objc2-app-kit` wraps NSPasteboard itself.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = [
+    "NSArray",
+    "NSString",
+    "NSURL",
+] }
+objc2-app-kit = { version = "0.3", features = [
+    "NSPasteboard",
+] }
+
+# Linux-only clipboard reader: `arboard` speaks both X11 and Wayland
+# (via `wayland-data-control`), so the same call works on GNOME,
+# KDE, and XFCE without per-distro branching. File lists come across
+# as text/uri-list; the parser lives in `clipboard.rs`.
+[target.'cfg(target_os = "linux")'.dependencies]
+arboard = { version = "3", features = ["wayland-data-control"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -14,3 +14,10 @@ pub const MIN_BUFFER_SIZE: usize = 64 * 1024;
 
 /// Mirror of `copythat_core::options::MAX_BUFFER_SIZE` (16 MiB).
 pub const MAX_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+
+/// Default system-wide hotkey for "paste files via Copy That".
+/// Tauri's `global-shortcut` plugin resolves `CmdOrCtrl` to Cmd on
+/// macOS and Ctrl on Windows / Linux, so one spelling covers all three
+/// hosts. `Shift` avoids colliding with the platform-native paste
+/// (Cmd+V / Ctrl+V) so users keep normal text-paste semantics.
+pub const DEFAULT_PASTE_SHORTCUT: &str = "CmdOrCtrl+Shift+V";

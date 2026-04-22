@@ -6,12 +6,13 @@
 //! `Clone + Send + Sync`.
 
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use copythat_core::Queue;
 use copythat_history::History;
 use copythat_settings::{ProfileStore, Settings};
 
+use crate::clipboard_watcher::WatcherHandle;
 use crate::collisions::CollisionRegistry;
 use crate::errors::ErrorRegistry;
 
@@ -52,6 +53,12 @@ pub struct AppState {
     /// Phase 12 — named profile store. Lazily creates its
     /// directory on first save; construction has no IO.
     pub profiles: ProfileStore,
+    /// Post-Phase-12 — the clipboard-watcher task handle. `Some`
+    /// while the opt-in setting is on; swapped to `None` when the
+    /// user toggles off. Drop stops the task within one poll
+    /// interval. Wrapped in `Mutex` because `update_settings` needs
+    /// a `&mut` view to start / stop without cloning `AppState`.
+    pub clipboard_watcher: Arc<Mutex<Option<WatcherHandle>>>,
 }
 
 impl AppState {
@@ -87,6 +94,7 @@ impl AppState {
             settings: Arc::new(RwLock::new(settings)),
             settings_path: Arc::new(settings_path),
             profiles,
+            clipboard_watcher: Arc::new(Mutex::new(None)),
         }
     }
 

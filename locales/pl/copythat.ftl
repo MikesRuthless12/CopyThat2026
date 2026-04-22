@@ -132,6 +132,8 @@ toast-error-resolved = Błąd rozwiązany
 toast-collision-resolved = Konflikt rozwiązany
 # MT
 toast-elevated-unavailable = Ponowienie z podwyższonymi uprawnieniami pojawi się w fazie 17 — jeszcze niedostępne
+toast-clipboard-files-detected = Pliki w schowku — naciśnij skrót wklejania, aby skopiować za pomocą Copy That
+toast-clipboard-no-files = Schowek nie zawiera plików do wklejenia
 # MT
 toast-error-log-exported = Dziennik błędów wyeksportowany
 
@@ -151,6 +153,8 @@ error-modal-abort = Przerwij wszystko
 error-modal-path-label = Ścieżka
 # MT
 error-modal-code-label = Kod
+error-drawer-pending-count = Więcej błędów czeka
+error-drawer-toggle = Zwiń lub rozwiń
 
 # MT — Error-kind labels
 err-not-found = Nie znaleziono pliku
@@ -395,6 +399,15 @@ settings-start-with-os = Uruchom z systemem
 settings-single-instance = Pojedyncza aktywna instancja
 # MT
 settings-minimize-to-tray = Minimalizuj do zasobnika przy zamknięciu
+settings-error-display-mode = Styl okna błędu
+settings-error-display-modal = Modalne (blokuje aplikację)
+settings-error-display-drawer = Panel boczny (nieblokujący)
+settings-error-display-mode-hint = Okno modalne wstrzymuje kolejkę do czasu decyzji. Panel boczny utrzymuje kolejkę w ruchu i pozwala zarządzać błędami w rogu.
+settings-paste-shortcut = Wklej pliki za pomocą skrótu globalnego
+settings-paste-shortcut-combo = Kombinacja skrótu
+settings-paste-shortcut-hint = Naciśnij tę kombinację w dowolnym miejscu systemu, aby wkleić pliki skopiowane z Eksploratora / Findera / Plików za pomocą Copy That. CmdOrCtrl to Cmd na macOS i Ctrl na Windows / Linux.
+settings-clipboard-watcher = Monitoruj schowek pod kątem skopiowanych plików
+settings-clipboard-watcher-hint = Pokazuje powiadomienie, gdy adresy URL plików pojawią się w schowku, wskazując, że możesz wkleić za pomocą Copy That. Odpytuje co 500 ms, gdy włączone.
 
 # MT
 settings-buffer-size = Rozmiar bufora

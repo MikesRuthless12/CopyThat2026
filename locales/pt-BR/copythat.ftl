@@ -132,6 +132,8 @@ toast-error-resolved = Erro resolvido
 toast-collision-resolved = Conflito resolvido
 # MT
 toast-elevated-unavailable = A nova tentativa com permissões elevadas chega na fase 17 — ainda não disponível
+toast-clipboard-files-detected = Arquivos na área de transferência — pressione seu atalho de colar para copiar via Copy That
+toast-clipboard-no-files = A área de transferência não tem arquivos para colar
 # MT
 toast-error-log-exported = Registro de erros exportado
 
@@ -151,6 +153,8 @@ error-modal-abort = Cancelar tudo
 error-modal-path-label = Caminho
 # MT
 error-modal-code-label = Código
+error-drawer-pending-count = Mais erros aguardando
+error-drawer-toggle = Recolher ou expandir
 
 # MT — Error-kind labels
 err-not-found = Arquivo não encontrado
@@ -395,6 +399,15 @@ settings-start-with-os = Iniciar com o sistema
 settings-single-instance = Instância única em execução
 # MT
 settings-minimize-to-tray = Minimizar para a bandeja ao fechar
+settings-error-display-mode = Estilo de aviso de erro
+settings-error-display-modal = Modal (bloqueia o app)
+settings-error-display-drawer = Painel lateral (não bloqueante)
+settings-error-display-mode-hint = O modal interrompe a fila até você decidir. O painel lateral mantém a fila em andamento e permite lidar com os erros no canto.
+settings-paste-shortcut = Colar arquivos via atalho global
+settings-paste-shortcut-combo = Combinação de teclas
+settings-paste-shortcut-hint = Pressione esta combinação em qualquer lugar do sistema para colar arquivos copiados do Explorer / Finder / Arquivos via Copy That. CmdOrCtrl resolve para Cmd no macOS e Ctrl no Windows / Linux.
+settings-clipboard-watcher = Monitorar a área de transferência para arquivos copiados
+settings-clipboard-watcher-hint = Mostra um aviso quando URLs de arquivo aparecem na área de transferência, sugerindo colar via Copy That. Consulta a cada 500 ms quando ativo.
 
 # MT
 settings-buffer-size = Tamanho do buffer

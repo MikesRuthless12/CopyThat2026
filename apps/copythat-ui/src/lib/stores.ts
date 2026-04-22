@@ -10,15 +10,18 @@ import { derived, writable, type Readable } from "svelte/store";
 
 import {
   enumerateTreeFiles,
+  getSettings,
   listJobs,
   globals as fetchGlobals,
   onEvent,
 } from "./ipc";
 import {
   EVENTS,
+  type ClipboardFilesDetectedDto,
   type CollisionPromptDto,
   type CollisionResolvedDto,
   type DropReceivedDto,
+  type ErrorDisplayModeWire,
   type ErrorPromptDto,
   type ErrorResolvedDto,
   type FileActivityDto,
@@ -64,6 +67,12 @@ const totalsDrawerOpenStore = writable<boolean>(false);
 // tab with Language only — Phase 12 extends to Transfer, Shell,
 // Secure-delete, Advanced tabs.
 const settingsOpenStore = writable<boolean>(false);
+// How error prompts render — mirrors
+// `general.error_display_mode` from the settings crate. Seeded by
+// `initStores` via `getSettings()`; re-written whenever the user
+// flips the toggle in SettingsModal. App.svelte picks between
+// ErrorModal and ErrorPromptDrawer based on this value.
+const errorDisplayModeStore = writable<ErrorDisplayModeWire>("modal");
 
 // Phase 13d / 16 — the Activity panel doubles as the full file list
 // for each queued job. When a new job lands, we recursively enumerate
@@ -187,6 +196,16 @@ export function openSettings(): void {
 }
 export function closeSettings(): void {
   settingsOpenStore.set(false);
+}
+
+// Error display mode — readable + write-through setter. SettingsModal
+// calls the setter after a successful `updateSettings` round-trip so
+// the rest of the UI picks up the change without a reload.
+export const errorDisplayMode: Readable<ErrorDisplayModeWire> = {
+  subscribe: errorDisplayModeStore.subscribe,
+};
+export function setErrorDisplayMode(mode: ErrorDisplayModeWire): void {
+  errorDisplayModeStore.set(mode);
 }
 
 // Phase 13d — file-activity feed exports.
@@ -570,6 +589,18 @@ export async function initStores(): Promise<() => void> {
   jobsStore.set(initialJobs);
   globalsStore.set(initialGlobals);
 
+  // Pull the persisted error-display-mode preference once at startup
+  // so the conditional render in App.svelte mounts the right
+  // component from the first frame. Failures fall back to the
+  // default ("modal") — a fresh install with no settings.toml is the
+  // common case and that's exactly what Settings::default() returns.
+  try {
+    const s = await getSettings();
+    errorDisplayModeStore.set(s.general.errorDisplayMode);
+  } catch {
+    // Non-fatal: Tauri may not be ready yet in test harnesses.
+  }
+
   const unlisten = await Promise.all([
     onEvent<JobDto>(EVENTS.jobAdded, (job) => {
       jobsStore.update(($jobs) => {
@@ -666,6 +697,26 @@ export async function initStores(): Promise<() => void> {
     onEvent<FileActivityDto>(EVENTS.fileActivity, (p) => {
       queueActivityEvent(p);
     }),
+    // Post-Phase-12 paste-hotkey + clipboard-watcher. `count > 0`
+    // with `paths` is a live detection ("files appeared on the
+    // clipboard"); `count = 0` is the "hotkey fired but nothing to
+    // paste" ping. Both surface as toasts — the hotkey's empty case
+    // tells the user why nothing happened; the non-empty case
+    // hints at the combo.
+    onEvent<ClipboardFilesDetectedDto>(
+      EVENTS.clipboardFilesDetected,
+      (p) => {
+        if (p.count === 0) {
+          pushToast("info", "toast-clipboard-no-files");
+          return;
+        }
+        // Store last-seen combo so the toast key can interpolate
+        // the user-configured shortcut. For now the toast message
+        // is a fixed key; the count and combo flow via a future
+        // Fluent argument, keeping parity rules simple.
+        pushToast("info", "toast-clipboard-files-detected");
+      },
+    ),
   ]);
 
   return () => {
