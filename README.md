@@ -193,6 +193,11 @@ cargo test -p copythat-ui --test phase_16_package -- --nocapture
 
 # Phase 17a — red-team `..` traversal rejection at every trust boundary
 cargo test -p copythat-core --test phase_17_security -- --nocapture
+
+# Phase 18 — end-to-end: seed → copy_tree(BLAKE3) → history → CSV → shred_tree
+cargo test -p copythat-ui --test phase_18_e2e -- --nocapture
+# Scale up the phase 18 run to the literal Phase 18 brief (10 000 files):
+COPYTHAT_PHASE18_FULL=1 cargo test -p copythat-ui --test phase_18_e2e --release
 ```
 
 ## Installing

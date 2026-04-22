@@ -79,6 +79,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # `cargo test --workspace` picks up every per-phase smoke via
+      # each crate's [[test]] registration — including the Phase 17a
+      # red-team (`phase_17_security`) and the Phase 18 engine-level
+      # end-to-end (`phase_18_e2e`, 50 files + BLAKE3 verify + history
+      # round-trip + shred_tree; ~60 s on Windows, faster on
+      # Linux / macOS). Tauri-build coverage is in the tauri-build job
+      # below; install / uninstall round-trip runs against the tagged
+      # release artifacts per docs/RELEASE_CHECKLIST.md, not here.
       - name: Test
         run: cargo test --workspace
 
