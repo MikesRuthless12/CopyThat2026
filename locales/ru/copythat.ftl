@@ -630,3 +630,37 @@ settings-filters-skip-hidden = Пропускать скрытые файлы / 
 settings-filters-skip-system = Пропускать системные файлы (только Windows)
 # MT
 settings-filters-skip-readonly = Пропускать файлы только для чтения
+
+# Phase 15 — auto-update
+# MT
+settings-tab-updater = Обновления
+# MT
+settings-updater-hint = Copy That проверяет подписанные обновления не чаще одного раза в день. Обновления устанавливаются при следующем выходе из приложения.
+# MT
+settings-updater-auto-check = Проверять обновления при запуске
+# MT
+settings-updater-channel = Канал выпуска
+# MT
+settings-updater-channel-stable = Стабильный
+# MT
+settings-updater-channel-beta = Бета (предварительный)
+# MT
+settings-updater-last-check = Последняя проверка
+# MT
+settings-updater-last-never = Никогда
+# MT
+settings-updater-check-now = Проверить обновления сейчас
+# MT
+settings-updater-checking = Проверка…
+# MT
+settings-updater-available = Доступно обновление
+# MT
+settings-updater-up-to-date = Вы используете последнюю версию.
+# MT
+settings-updater-dismiss = Пропустить эту версию
+# MT
+settings-updater-dismissed = Пропущено
+# MT
+toast-update-available = Доступна новая версия
+# MT
+toast-update-up-to-date = У вас уже последняя версия

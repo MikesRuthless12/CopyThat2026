@@ -630,3 +630,37 @@ settings-filters-skip-hidden = Lewati berkas / folder tersembunyi
 settings-filters-skip-system = Lewati berkas sistem (hanya Windows)
 # MT
 settings-filters-skip-readonly = Lewati berkas baca-saja
+
+# Phase 15 — auto-update
+# MT
+settings-tab-updater = Pembaruan
+# MT
+settings-updater-hint = Copy That memeriksa pembaruan yang ditandatangani maksimal sekali sehari. Pembaruan dipasang saat aplikasi ditutup berikutnya.
+# MT
+settings-updater-auto-check = Periksa pembaruan saat mulai
+# MT
+settings-updater-channel = Saluran rilis
+# MT
+settings-updater-channel-stable = Stabil
+# MT
+settings-updater-channel-beta = Beta (pra-rilis)
+# MT
+settings-updater-last-check = Pemeriksaan terakhir
+# MT
+settings-updater-last-never = Tidak pernah
+# MT
+settings-updater-check-now = Periksa pembaruan sekarang
+# MT
+settings-updater-checking = Memeriksa…
+# MT
+settings-updater-available = Pembaruan tersedia
+# MT
+settings-updater-up-to-date = Anda menggunakan rilis terbaru.
+# MT
+settings-updater-dismiss = Lewati versi ini
+# MT
+settings-updater-dismissed = Dilewati
+# MT
+toast-update-available = Versi yang lebih baru tersedia
+# MT
+toast-update-up-to-date = Anda sudah menggunakan versi terbaru

@@ -331,6 +331,7 @@ settings-tab-filters = Filters
 settings-tab-shell = Shell
 settings-tab-secure-delete = Secure delete
 settings-tab-advanced = Advanced
+settings-tab-updater = Updates
 settings-tab-profiles = Profiles
 
 # General tab additions
@@ -436,3 +437,20 @@ settings-filters-attributes = Attribute bits
 settings-filters-skip-hidden = Skip hidden files / folders
 settings-filters-skip-system = Skip system files (Windows only)
 settings-filters-skip-readonly = Skip read-only files
+
+# Phase 15 — auto-update
+settings-updater-hint = Copy That checks for signed updates at most once a day. Updates install on the next app quit.
+settings-updater-auto-check = Check for updates on launch
+settings-updater-channel = Release channel
+settings-updater-channel-stable = Stable
+settings-updater-channel-beta = Beta (pre-release)
+settings-updater-last-check = Last checked
+settings-updater-last-never = Never
+settings-updater-check-now = Check for updates now
+settings-updater-checking = Checking…
+settings-updater-available = Update available
+settings-updater-up-to-date = You're running the latest release.
+settings-updater-dismiss = Skip this version
+settings-updater-dismissed = Skipped
+toast-update-available = A newer version is available
+toast-update-up-to-date = You're already on the latest version
