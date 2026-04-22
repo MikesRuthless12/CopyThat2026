@@ -590,3 +590,43 @@ drop-dialog-busy-checking = Boş alan kontrol ediliyor…
 drop-dialog-busy-enumerating = Dosyalar sayılıyor…
 drop-dialog-busy-starting = Kopyalama başlatılıyor…
 toast-enumeration-deferred = Kaynak ağaç büyük — ön liste atlanıyor; satırlar motor işlediğinde görünecek.
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = Filtreler
+# MT
+settings-filters-hint = Dosyaları sıralama sırasında atlayarak motorun onları hiç açmamasını sağlar. Dahil etme yalnızca dosyalara uygulanır; hariç tutma eşleşen klasörleri de budar.
+# MT
+settings-filters-enabled = Ağaç kopyaları için filtreleri etkinleştir
+# MT
+settings-filters-include-globs = Dahil etme globları
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = Satır başına bir glob. Boş değilse dosyanın en az biriyle eşleşmesi gerekir. Klasörlere daima girilir.
+# MT
+settings-filters-exclude-globs = Hariç tutma globları
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = Satır başına bir glob. Klasör eşleşmeleri tüm alt ağacı budar; eşleşen dosyalar atlanır.
+# MT
+settings-filters-size-range = Dosya boyutu aralığı
+# MT
+settings-filters-min-size-bytes = Minimum boyut (bayt, boş = alt sınır yok)
+# MT
+settings-filters-max-size-bytes = Maksimum boyut (bayt, boş = üst sınır yok)
+# MT
+settings-filters-date-range = Değişiklik tarihi aralığı
+# MT
+settings-filters-min-mtime = Şu tarihte veya sonrası
+# MT
+settings-filters-max-mtime = Şu tarihte veya öncesi
+# MT
+settings-filters-attributes = Öznitelikler
+# MT
+settings-filters-skip-hidden = Gizli dosyaları / klasörleri atla
+# MT
+settings-filters-skip-system = Sistem dosyalarını atla (yalnızca Windows)
+# MT
+settings-filters-skip-readonly = Salt okunur dosyaları atla

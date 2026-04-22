@@ -590,3 +590,43 @@ drop-dialog-busy-checking = Đang kiểm tra dung lượng trống…
 drop-dialog-busy-enumerating = Đang đếm tệp…
 drop-dialog-busy-starting = Đang bắt đầu sao chép…
 toast-enumeration-deferred = Cây nguồn lớn — bỏ qua danh sách trước; các dòng sẽ xuất hiện khi bộ máy xử lý.
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = Bộ lọc
+# MT
+settings-filters-hint = Bỏ qua các tệp ngay khi liệt kê để bộ máy không phải mở chúng. Bao gồm chỉ áp dụng cho tệp; Loại trừ cũng cắt bỏ các thư mục khớp.
+# MT
+settings-filters-enabled = Bật bộ lọc cho sao chép cây
+# MT
+settings-filters-include-globs = Glob bao gồm
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = Mỗi dòng một glob. Nếu không rỗng, tệp phải khớp ít nhất một. Luôn duyệt qua thư mục.
+# MT
+settings-filters-exclude-globs = Glob loại trừ
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = Mỗi dòng một glob. Khớp sẽ cắt bỏ toàn bộ cây con đối với thư mục; tệp khớp sẽ bị bỏ qua.
+# MT
+settings-filters-size-range = Khoảng kích thước tệp
+# MT
+settings-filters-min-size-bytes = Kích thước tối thiểu (byte, trống = không giới hạn)
+# MT
+settings-filters-max-size-bytes = Kích thước tối đa (byte, trống = không giới hạn)
+# MT
+settings-filters-date-range = Khoảng thời gian sửa đổi
+# MT
+settings-filters-min-mtime = Sửa vào hoặc sau ngày
+# MT
+settings-filters-max-mtime = Sửa vào hoặc trước ngày
+# MT
+settings-filters-attributes = Thuộc tính
+# MT
+settings-filters-skip-hidden = Bỏ qua tệp / thư mục ẩn
+# MT
+settings-filters-skip-system = Bỏ qua tệp hệ thống (chỉ Windows)
+# MT
+settings-filters-skip-readonly = Bỏ qua tệp chỉ đọc

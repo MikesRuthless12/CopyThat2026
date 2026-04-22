@@ -590,3 +590,43 @@ drop-dialog-busy-checking = 正在检查可用空间…
 drop-dialog-busy-enumerating = 正在统计文件…
 drop-dialog-busy-starting = 正在开始复制…
 toast-enumeration-deferred = 源树较大 — 跳过预列表；引擎处理时行会陆续显示。
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = 过滤器
+# MT
+settings-filters-hint = 在枚举时跳过文件,引擎不会打开它们。包含仅作用于文件;排除也会剪除匹配的目录。
+# MT
+settings-filters-enabled = 为树复制启用过滤器
+# MT
+settings-filters-include-globs = 包含通配符
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = 每行一个。非空时文件必须至少匹配其一。目录始终会被遍历。
+# MT
+settings-filters-exclude-globs = 排除通配符
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = 每行一个。匹配会剪除目录的整个子树;匹配的文件会被跳过。
+# MT
+settings-filters-size-range = 文件大小范围
+# MT
+settings-filters-min-size-bytes = 最小大小(字节,留空 = 无下限)
+# MT
+settings-filters-max-size-bytes = 最大大小(字节,留空 = 无上限)
+# MT
+settings-filters-date-range = 修改时间范围
+# MT
+settings-filters-min-mtime = 修改于此日期之后
+# MT
+settings-filters-max-mtime = 修改于此日期之前
+# MT
+settings-filters-attributes = 属性位
+# MT
+settings-filters-skip-hidden = 跳过隐藏的文件 / 文件夹
+# MT
+settings-filters-skip-system = 跳过系统文件(仅 Windows)
+# MT
+settings-filters-skip-readonly = 跳过只读文件

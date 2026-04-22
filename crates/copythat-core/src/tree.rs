@@ -29,6 +29,7 @@ use crate::control::CopyControl;
 use crate::engine::copy_file;
 use crate::error::{CopyError, CopyErrorKind};
 use crate::event::{CopyEvent, ErrorPrompt, TreeReport};
+use crate::filter::CompiledFilters;
 use crate::options::{ErrorAction, ErrorPolicy, MoveOptions, TreeOptions};
 
 /// Copy `src_dir` into `dst_dir`, preserving structure.
@@ -313,6 +314,27 @@ async fn copy_tree_inner(
     // at the extreme end; default walks stay well under that).
     let mut all_dirs: Vec<(PathBuf, PathBuf)> = Vec::new();
 
+    // Compile Phase 14a filters up-front. A bad glob becomes an
+    // IoOther error before we spawn the walker — no point walking a
+    // tree we can't filter.
+    let compiled_filters: Option<Arc<CompiledFilters>> = match &opts.filters {
+        Some(set) if !set.is_empty() => match set.compile() {
+            Ok(c) => Some(Arc::new(c)),
+            Err(e) => {
+                let err = CopyError {
+                    kind: CopyErrorKind::IoOther,
+                    src: src_root.clone(),
+                    dst: dst_root.clone(),
+                    raw_os_error: None,
+                    message: e.to_string(),
+                };
+                let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+                return Err(err);
+            }
+        },
+        _ => None,
+    };
+
     // Spawn walker. Channel capacity 2 = one chunk can be in flight
     // while the dispatcher processes the previous one, modest
     // backpressure when the dispatcher falls behind.
@@ -320,10 +342,12 @@ async fn copy_tree_inner(
     let events_for_walker = events.clone();
     let follow_symlinks = opts.follow_symlinks_in_tree;
     let src_for_walker = src_root.clone();
+    let filters_for_walker = compiled_filters.clone();
     let walker_handle = tokio::task::spawn_blocking(move || {
         enumerate_streaming(
             src_for_walker,
             follow_symlinks,
+            filters_for_walker,
             chunk_tx,
             events_for_walker,
         )
@@ -366,7 +390,11 @@ async fn copy_tree_inner(
         }
 
         // Spawn copies for file / symlink entries in this chunk.
-        for entry in chunk.entries.into_iter().filter(|e| e.kind != EntryKind::Dir) {
+        for entry in chunk
+            .entries
+            .into_iter()
+            .filter(|e| e.kind != EntryKind::Dir)
+        {
             if ctrl.is_cancelled() {
                 break;
             }
@@ -436,8 +464,7 @@ async fn copy_tree_inner(
 
                 let outcome = outcome?;
                 if let FileOutcome::Done(bytes) = &outcome {
-                    let done_bytes =
-                        bytes_done_task.fetch_add(*bytes, Ordering::Relaxed) + *bytes;
+                    let done_bytes = bytes_done_task.fetch_add(*bytes, Ordering::Relaxed) + *bytes;
                     let done_files = files_done_task.fetch_add(1, Ordering::Relaxed) + 1;
                     let tot_files = files_total_task.load(Ordering::Relaxed);
                     let tot_bytes = bytes_total_task.load(Ordering::Relaxed);
@@ -535,10 +562,9 @@ async fn copy_tree_inner(
             };
             let atime = FileTime::from_last_access_time(&src_md);
             let mtime = FileTime::from_last_modification_time(&src_md);
-            let _ = tokio::task::spawn_blocking(move || {
-                filetime::set_file_times(&dst, atime, mtime)
-            })
-            .await;
+            let _ =
+                tokio::task::spawn_blocking(move || filetime::set_file_times(&dst, atime, mtime))
+                    .await;
         }
     }
 
@@ -705,9 +731,14 @@ async fn record_file_error(
 /// ticks every `PROGRESS_EMIT_EVERY` discovered files. No in-memory
 /// cap on total tree size — memory is bounded to one chunk at a
 /// time (~60 MB per 100 k-entry chunk on Windows paths).
+///
+/// When `filters` is `Some`, every yielded entry is gated: files
+/// that fail are omitted from the plan, directories that fail have
+/// their subtree pruned via `walkdir::IntoIter::skip_current_dir`.
 fn enumerate_streaming(
     root: PathBuf,
     follow_symlinks: bool,
+    filters: Option<Arc<CompiledFilters>>,
     chunk_tx: mpsc::Sender<Plan>,
     events: mpsc::Sender<CopyEvent>,
 ) -> std::io::Result<()> {
@@ -718,22 +749,21 @@ fn enumerate_streaming(
     const CHUNK_SIZE: usize = 100_000;
     const PROGRESS_EMIT_EVERY: u64 = 500;
 
-    eprintln!(
-        "[tree::enumerate_streaming] begin root={}",
-        root.display()
-    );
+    eprintln!("[tree::enumerate_streaming] begin root={}", root.display());
 
     let mut current = Plan::default();
     let mut total_files: u64 = 0;
     let mut total_bytes: u64 = 0;
     let mut last_emitted: u64 = 0;
     let mut skipped_denied: u64 = 0;
+    let mut skipped_by_filter: u64 = 0;
     let mut chunks_sent: u64 = 0;
 
-    let walker = walkdir::WalkDir::new(&root)
+    let mut it = walkdir::WalkDir::new(&root)
         .follow_links(follow_symlinks)
-        .sort_by_file_name();
-    for entry in walker {
+        .sort_by_file_name()
+        .into_iter();
+    while let Some(entry) = it.next() {
         if total_files >= last_emitted + PROGRESS_EMIT_EVERY {
             let _ = events.try_send(CopyEvent::TreeEnumerating {
                 files_so_far: total_files,
@@ -771,8 +801,35 @@ fn enumerate_streaming(
         } else {
             EntryKind::File
         };
+
+        // Metadata: cached here so the filter and the len calculation
+        // share one stat call per entry instead of two.
+        let meta = entry.metadata().ok();
+
+        if let Some(f) = filters.as_deref() {
+            match kind {
+                EntryKind::Dir => {
+                    if let Some(m) = meta.as_ref() {
+                        if !f.passes_dir(&rel, m) {
+                            it.skip_current_dir();
+                            skipped_by_filter = skipped_by_filter.saturating_add(1);
+                            continue;
+                        }
+                    }
+                }
+                EntryKind::File | EntryKind::Symlink => {
+                    if let Some(m) = meta.as_ref() {
+                        if !f.passes_file(&rel, m) {
+                            skipped_by_filter = skipped_by_filter.saturating_add(1);
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
         let len = if kind == EntryKind::File {
-            entry.metadata().map(|m| m.len()).unwrap_or(0)
+            meta.as_ref().map(|m| m.len()).unwrap_or(0)
         } else {
             0
         };
@@ -819,8 +876,8 @@ fn enumerate_streaming(
     drop(chunk_tx);
 
     eprintln!(
-        "[tree::enumerate_streaming] done total_files={} total_bytes={} chunks={} skipped_denied={}",
-        total_files, total_bytes, chunks_sent, skipped_denied
+        "[tree::enumerate_streaming] done total_files={} total_bytes={} chunks={} skipped_denied={} skipped_by_filter={}",
+        total_files, total_bytes, chunks_sent, skipped_denied, skipped_by_filter
     );
     Ok(())
 }

@@ -48,9 +48,9 @@ pub mod state;
 
 use std::sync::Mutex;
 
-use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
 use tauri::menu::{Menu, MenuEvent, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
 
 use crate::cli::CliAction;
 use crate::state::AppState;
@@ -132,18 +132,19 @@ pub fn run() {
     // does that from the setup hook based on live settings. Handler
     // dispatches to `handle_paste_press`, which reads the clipboard
     // and funnels files through the existing shell-enqueue event.
-    let paste_handler = |app: &tauri::AppHandle,
-                         shortcut: &tauri_plugin_global_shortcut::Shortcut,
-                         event: tauri_plugin_global_shortcut::ShortcutEvent| {
-        // `shortcut.into_string()` renders the same canonical form we
-        // persist in settings, modulo case. Compare case-insensitive
-        // so "cmdorctrl+shift+v" and "CmdOrCtrl+Shift+V" both match.
-        let pressed = shortcut.into_string();
-        if !crate::global_paste::shortcut_matches(app, &pressed, event.state()) {
-            return;
-        }
-        crate::global_paste::handle_paste_press(app);
-    };
+    let paste_handler =
+        |app: &tauri::AppHandle,
+         shortcut: &tauri_plugin_global_shortcut::Shortcut,
+         event: tauri_plugin_global_shortcut::ShortcutEvent| {
+            // `shortcut.into_string()` renders the same canonical form we
+            // persist in settings, modulo case. Compare case-insensitive
+            // so "cmdorctrl+shift+v" and "CmdOrCtrl+Shift+V" both match.
+            let pressed = shortcut.into_string();
+            if !crate::global_paste::shortcut_matches(app, &pressed, event.state()) {
+                return;
+            }
+            crate::global_paste::handle_paste_press(app);
+        };
 
     builder
         .plugin(
@@ -288,10 +289,9 @@ pub fn run() {
             if let Some(state) = handle.try_state::<AppState>() {
                 let snap = state.settings_snapshot();
                 if snap.general.paste_shortcut_enabled {
-                    if let Err(e) = global_paste::register_paste_shortcut(
-                        &handle,
-                        &snap.general.paste_shortcut,
-                    ) {
+                    if let Err(e) =
+                        global_paste::register_paste_shortcut(&handle, &snap.general.paste_shortcut)
+                    {
                         eprintln!("[paste-hotkey] initial register failed: {e}");
                     }
                 }

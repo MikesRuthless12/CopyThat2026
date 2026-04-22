@@ -10,6 +10,7 @@ use tokio::sync::mpsc;
 use crate::control::CopyControl;
 use crate::error::CopyError;
 use crate::event::{CopyEvent, CopyReport};
+use crate::filter::FilterSet;
 use crate::verify::Verifier;
 
 pub const DEFAULT_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
@@ -337,6 +338,15 @@ pub struct TreeOptions {
     /// catches files that grow during the copy or partial-fit
     /// selections that still happen to overflow.
     pub reserve_dst_bytes: u64,
+    /// Phase 14a — enumeration-time include/exclude filters.
+    ///
+    /// When `Some(set)` and `set.is_empty() == false`, the walker
+    /// compiles the filter once and applies it per entry: files
+    /// failing the include / exclude / size / date / attribute checks
+    /// are omitted from the plan entirely, and directories matching
+    /// an exclude glob prune their whole subtree. See
+    /// [`crate::filter`] for the precise semantics.
+    pub filters: Option<FilterSet>,
 }
 
 impl Default for TreeOptions {
@@ -349,6 +359,7 @@ impl Default for TreeOptions {
             follow_symlinks_in_tree: false,
             preserve_directory_times: true,
             reserve_dst_bytes: 0,
+            filters: None,
         }
     }
 }
@@ -385,7 +396,10 @@ mod tests {
         // 50 KiB file, 1 MiB configured → shrink but stay at/above MIN.
         let buf = opts.buffer_size_for_file(50 * 1024);
         assert!(buf >= MIN_BUFFER_SIZE);
-        assert!(buf < DEFAULT_BUFFER_SIZE, "tiny files should not allocate the full 1 MiB default");
+        assert!(
+            buf < DEFAULT_BUFFER_SIZE,
+            "tiny files should not allocate the full 1 MiB default"
+        );
     }
 
     #[test]

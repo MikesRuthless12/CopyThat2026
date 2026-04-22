@@ -142,7 +142,9 @@ async fn keep_both_creates_parenthesised_suffix() {
     let (report, _) = run_tree(&src, &dst, opts).await;
     report.unwrap();
     assert_eq!(std::fs::read(dst.join("doc.txt")).unwrap(), b"OLD");
-    assert_eq!(std::fs::read(dst.join("doc (1).txt")).unwrap(), b"NEW");
+    // `keep_both_path` names the duplicate `doc_2.txt` — the original
+    // is the implicit "1", so the first generated suffix is `_2`.
+    assert_eq!(std::fs::read(dst.join("doc_2.txt")).unwrap(), b"NEW");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

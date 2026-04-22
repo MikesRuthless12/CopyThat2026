@@ -25,8 +25,8 @@
 use std::env;
 use std::path::PathBuf;
 
-use copythat_core::{CopyOptions, copy_file, copy_tree};
 use copythat_core::{CopyControl, TreeOptions};
+use copythat_core::{CopyOptions, copy_file, copy_tree};
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use tempfile::tempdir;
 use tokio::runtime::Runtime;
@@ -154,8 +154,7 @@ fn buffer_size_sweep(c: &mut Criterion) {
                         };
                         let ctrl = CopyControl::new();
                         let (tx, mut rx) = mpsc::channel(32);
-                        let drain =
-                            tokio::spawn(async move { while rx.recv().await.is_some() {} });
+                        let drain = tokio::spawn(async move { while rx.recv().await.is_some() {} });
                         copy_file(&src, &dst, opts, ctrl, tx).await.expect("copy");
                         drain.abort();
                     });
@@ -234,12 +233,12 @@ fn mixed_tree(c: &mut Criterion) {
     let subdirs = if ci_mode() { 2 } else { 4 };
     let per_subdir = if ci_mode() { 6 } else { 12 };
     let sizes: [usize; 6] = [
-        10 * 1024,          // 10 KiB  — tiny
-        100 * 1024,         // 100 KiB — small
-        1024 * 1024,        // 1 MiB   — medium
-        10 * 1024 * 1024,   // 10 MiB  — medium-large
-        50 * 1024 * 1024,   // 50 MiB  — large
-        250 * 1024 * 1024,  // 250 MiB — huge
+        10 * 1024,         // 10 KiB  — tiny
+        100 * 1024,        // 100 KiB — small
+        1024 * 1024,       // 1 MiB   — medium
+        10 * 1024 * 1024,  // 10 MiB  — medium-large
+        50 * 1024 * 1024,  // 50 MiB  — large
+        250 * 1024 * 1024, // 250 MiB — huge
     ];
 
     let tmp = tempdir().expect("tempdir");

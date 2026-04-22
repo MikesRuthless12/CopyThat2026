@@ -590,3 +590,43 @@ drop-dialog-busy-checking = Memeriksa ruang kosong…
 drop-dialog-busy-enumerating = Menghitung file…
 drop-dialog-busy-starting = Memulai penyalinan…
 toast-enumeration-deferred = Pohon sumber besar — melewati daftar awal; baris akan muncul seiring mesin memprosesnya.
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = Filter
+# MT
+settings-filters-hint = Melewati berkas saat enumerasi sehingga mesin bahkan tidak membukanya. Sertakan hanya berlaku untuk berkas; Kecualikan juga memangkas direktori yang cocok.
+# MT
+settings-filters-enabled = Aktifkan filter untuk salinan pohon
+# MT
+settings-filters-include-globs = Glob penyertaan
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = Satu glob per baris. Jika tidak kosong, berkas harus cocok dengan setidaknya satu. Direktori selalu ditelusuri.
+# MT
+settings-filters-exclude-globs = Glob pengecualian
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = Satu glob per baris. Kecocokan memangkas seluruh subpohon untuk direktori; berkas yang cocok dilewati.
+# MT
+settings-filters-size-range = Rentang ukuran berkas
+# MT
+settings-filters-min-size-bytes = Ukuran minimum (byte, kosong = tanpa batas bawah)
+# MT
+settings-filters-max-size-bytes = Ukuran maksimum (byte, kosong = tanpa batas atas)
+# MT
+settings-filters-date-range = Rentang waktu modifikasi
+# MT
+settings-filters-min-mtime = Dimodifikasi pada atau setelah
+# MT
+settings-filters-max-mtime = Dimodifikasi pada atau sebelum
+# MT
+settings-filters-attributes = Atribut
+# MT
+settings-filters-skip-hidden = Lewati berkas / folder tersembunyi
+# MT
+settings-filters-skip-system = Lewati berkas sistem (hanya Windows)
+# MT
+settings-filters-skip-readonly = Lewati berkas baca-saja

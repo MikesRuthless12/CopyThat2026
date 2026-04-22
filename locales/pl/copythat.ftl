@@ -590,3 +590,43 @@ drop-dialog-busy-checking = Sprawdzanie wolnego miejsca…
 drop-dialog-busy-enumerating = Liczenie plików…
 drop-dialog-busy-starting = Uruchamianie kopiowania…
 toast-enumeration-deferred = Drzewo źródłowe jest duże — pomijanie listy wstępnej; wiersze pojawią się w trakcie przetwarzania.
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = Filtry
+# MT
+settings-filters-hint = Pomija pliki na etapie wyliczania, więc silnik ich nawet nie otwiera. „Dołącz" działa tylko na plikach; „Wyklucz" przycina też pasujące foldery.
+# MT
+settings-filters-enabled = Włącz filtry dla kopii drzew
+# MT
+settings-filters-include-globs = Globy włączające
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = Jeden glob na linię. Jeśli nie jest pusty, plik musi pasować do co najmniej jednego. Katalogi są zawsze przeglądane.
+# MT
+settings-filters-exclude-globs = Globy wykluczające
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = Jeden glob na linię. Dopasowania przycinają całe poddrzewo dla folderów; pasujące pliki są pomijane.
+# MT
+settings-filters-size-range = Zakres rozmiaru pliku
+# MT
+settings-filters-min-size-bytes = Minimalny rozmiar (bajty, puste = brak dolnej granicy)
+# MT
+settings-filters-max-size-bytes = Maksymalny rozmiar (bajty, puste = brak górnej granicy)
+# MT
+settings-filters-date-range = Zakres czasu modyfikacji
+# MT
+settings-filters-min-mtime = Zmodyfikowano w dniu lub po
+# MT
+settings-filters-max-mtime = Zmodyfikowano w dniu lub przed
+# MT
+settings-filters-attributes = Atrybuty
+# MT
+settings-filters-skip-hidden = Pomijaj ukryte pliki / foldery
+# MT
+settings-filters-skip-system = Pomijaj pliki systemowe (tylko Windows)
+# MT
+settings-filters-skip-readonly = Pomijaj pliki tylko do odczytu

@@ -104,9 +104,12 @@ async fn phase_02_smoke_tree_roundtrip_and_move() {
     let mut tree_completed = false;
     while let Some(evt) = rx.recv().await {
         match evt {
-            CopyEvent::TreeStarted { total_files, .. } => {
+            CopyEvent::TreeStarted { .. } => {
+                // The streaming walker (Phase 13) fires `TreeStarted`
+                // with zero totals — the real denominator grows via
+                // `TreeEnumerating` events as the walker discovers
+                // files. Final count lands in `TreeCompleted` below.
                 tree_started = true;
-                assert_eq!(total_files as usize, FILES);
             }
             CopyEvent::TreeCompleted { files, .. } => {
                 tree_completed = true;

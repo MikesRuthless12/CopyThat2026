@@ -590,3 +590,43 @@ drop-dialog-busy-checking = खाली स्थान की जाँच…
 drop-dialog-busy-enumerating = फ़ाइलें गिनी जा रही हैं…
 drop-dialog-busy-starting = कॉपी आरंभ हो रही है…
 toast-enumeration-deferred = स्रोत ट्री बड़ा है — अग्रिम सूची छोड़ दी गई; जैसे-जैसे इंजन काम करेगा पंक्तियाँ दिखेंगी।
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = फ़िल्टर
+# MT
+settings-filters-hint = गणना के समय फ़ाइलों को छोड़ दें ताकि इंजन उन्हें खोले ही नहीं। शामिल करें केवल फ़ाइलों पर लागू होता है; बहिष्कृत मिलते हुए फ़ोल्डर भी छाँट देता है।
+# MT
+settings-filters-enabled = पेड़ कॉपी के लिए फ़िल्टर सक्षम करें
+# MT
+settings-filters-include-globs = शामिल ग्लोब
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = प्रति पंक्ति एक ग्लोब। रिक्त न हो तो फ़ाइल को कम से कम एक से मेल खाना चाहिए। फ़ोल्डर हमेशा देखे जाते हैं।
+# MT
+settings-filters-exclude-globs = बहिष्कृत ग्लोब
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = प्रति पंक्ति एक ग्लोब। फ़ोल्डर मिलान पूरा उपपेड़ छाँट देता है; मेल खाती फ़ाइलें छूट जाती हैं।
+# MT
+settings-filters-size-range = फ़ाइल आकार सीमा
+# MT
+settings-filters-min-size-bytes = न्यूनतम आकार (बाइट, रिक्त = कोई निचली सीमा नहीं)
+# MT
+settings-filters-max-size-bytes = अधिकतम आकार (बाइट, रिक्त = कोई ऊपरी सीमा नहीं)
+# MT
+settings-filters-date-range = संशोधन समय सीमा
+# MT
+settings-filters-min-mtime = इस तिथि को या उसके बाद संशोधित
+# MT
+settings-filters-max-mtime = इस तिथि को या उससे पहले संशोधित
+# MT
+settings-filters-attributes = विशेषताएँ
+# MT
+settings-filters-skip-hidden = छिपी हुई फ़ाइलें / फ़ोल्डर छोड़ें
+# MT
+settings-filters-skip-system = सिस्टम फ़ाइलें छोड़ें (केवल Windows)
+# MT
+settings-filters-skip-readonly = केवल-पढ़ने-योग्य फ़ाइलें छोड़ें

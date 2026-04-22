@@ -590,3 +590,43 @@ drop-dialog-busy-checking = 空き容量を確認中…
 drop-dialog-busy-enumerating = ファイルを数えています…
 drop-dialog-busy-starting = コピーを開始しています…
 toast-enumeration-deferred = ソースツリーが大きいため事前リストを省略しました。エンジンが処理するごとに行が表示されます。
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = フィルター
+# MT
+settings-filters-hint = 列挙時にファイルをスキップし、エンジンが開くことすらしません。含めるはファイルのみ、除外はディレクトリも剪定します。
+# MT
+settings-filters-enabled = ツリーコピー時にフィルターを有効化
+# MT
+settings-filters-include-globs = 含めるグロブ
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = 1 行につき 1 つ。指定があるときは、ファイルは少なくとも 1 つに一致する必要があります。ディレクトリは常に降下します。
+# MT
+settings-filters-exclude-globs = 除外グロブ
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = 1 行につき 1 つ。ディレクトリに一致するとサブツリー全体が剪定され、ファイルに一致するとスキップされます。
+# MT
+settings-filters-size-range = ファイルサイズ範囲
+# MT
+settings-filters-min-size-bytes = 最小サイズ(バイト、空白 = 下限なし)
+# MT
+settings-filters-max-size-bytes = 最大サイズ(バイト、空白 = 上限なし)
+# MT
+settings-filters-date-range = 更新日時の範囲
+# MT
+settings-filters-min-mtime = 更新日がこれ以降
+# MT
+settings-filters-max-mtime = 更新日がこれ以前
+# MT
+settings-filters-attributes = 属性
+# MT
+settings-filters-skip-hidden = 隠しファイル / フォルダーをスキップ
+# MT
+settings-filters-skip-system = システムファイルをスキップ(Windows のみ)
+# MT
+settings-filters-skip-readonly = 読み取り専用ファイルをスキップ

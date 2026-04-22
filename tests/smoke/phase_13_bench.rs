@@ -70,7 +70,10 @@ async fn phase_13_engine_meets_throughput_floor() {
 
     // Sanity: dst actually matches src in size.
     let got = std::fs::metadata(&dst).expect("dst metadata").len();
-    assert_eq!(got as usize, WORKLOAD_BYTES, "copy produced wrong byte count");
+    assert_eq!(
+        got as usize, WORKLOAD_BYTES,
+        "copy produced wrong byte count"
+    );
 }
 
 async fn do_copy(src: &std::path::Path, dst: &std::path::Path) {
@@ -84,7 +87,9 @@ async fn do_copy(src: &std::path::Path, dst: &std::path::Path) {
     // Drain on a background task so backpressure never stalls the
     // engine.
     let drain = tokio::spawn(async move { while rx.recv().await.is_some() {} });
-    copy_file(src, dst, opts, ctrl, tx).await.expect("copy_file");
+    copy_file(src, dst, opts, ctrl, tx)
+        .await
+        .expect("copy_file");
     drain.abort();
 }
 

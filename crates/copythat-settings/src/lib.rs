@@ -51,6 +51,9 @@ pub struct Settings {
     pub shell: ShellSettings,
     pub secure_delete: SecureDeleteSettings,
     pub advanced: AdvancedSettings,
+    /// Phase 14a — enumeration-time filters (include/exclude globs,
+    /// size range, date range, attribute bits). See [`FilterSettings`].
+    pub filters: FilterSettings,
 }
 
 impl Settings {
@@ -473,6 +476,59 @@ pub enum ErrorPolicyChoice {
 }
 
 // ---------------------------------------------------------------------
+// Filters (Phase 14a)
+// ---------------------------------------------------------------------
+
+/// TOML-friendly mirror of `copythat_core::FilterSet`.
+///
+/// Kept in this crate so `Settings` can round-trip cleanly without
+/// pulling in a `copythat-core` dependency; the Tauri bridge is
+/// responsible for translating into `FilterSet` at enqueue time.
+///
+/// Date fields use Unix epoch seconds (signed — so pre-1970 mtimes
+/// don't silently wrap); `None` means "no bound on that end of the
+/// range". Size fields use `u64` bytes; `None` is unbounded.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct FilterSettings {
+    /// Master toggle. When `false`, the whole filter set is treated
+    /// as empty regardless of the lists below — this lets the user
+    /// temporarily disable filtering without losing the configured
+    /// patterns.
+    pub enabled: bool,
+    /// Include whitelist — if non-empty, a file must match at least
+    /// one pattern to survive. Directories are not gated.
+    pub include_globs: Vec<String>,
+    /// Exclude blacklist — any match (file or directory) is pruned.
+    pub exclude_globs: Vec<String>,
+    pub min_size_bytes: Option<u64>,
+    pub max_size_bytes: Option<u64>,
+    pub min_mtime_unix_secs: Option<i64>,
+    pub max_mtime_unix_secs: Option<i64>,
+    pub skip_hidden: bool,
+    pub skip_system: bool,
+    pub skip_readonly: bool,
+}
+
+impl FilterSettings {
+    /// True when there is nothing the engine needs to do — either
+    /// the master switch is off or every field is at its default.
+    /// The Tauri bridge skips compile/attach when this holds.
+    pub fn is_effectively_empty(&self) -> bool {
+        !self.enabled
+            || (self.include_globs.is_empty()
+                && self.exclude_globs.is_empty()
+                && self.min_size_bytes.is_none()
+                && self.max_size_bytes.is_none()
+                && self.min_mtime_unix_secs.is_none()
+                && self.max_mtime_unix_secs.is_none()
+                && !self.skip_hidden
+                && !self.skip_system
+                && !self.skip_readonly)
+    }
+}
+
+// ---------------------------------------------------------------------
 // Convenience surface
 // ---------------------------------------------------------------------
 
@@ -699,10 +755,7 @@ log-level = "debug"
         let g = GeneralSettings::default();
         assert!(g.paste_shortcut_enabled, "paste hotkey is on by default");
         assert_eq!(g.paste_shortcut, "CmdOrCtrl+Shift+V");
-        assert!(
-            !g.clipboard_watcher_enabled,
-            "clipboard polling is opt-in"
-        );
+        assert!(!g.clipboard_watcher_enabled, "clipboard polling is opt-in");
     }
 
     #[test]
@@ -727,5 +780,61 @@ log-level = "debug"
         Settings::default().save_to(&path).unwrap();
         assert!(path.exists());
         assert!(!d.path().join("settings.toml.tmp").exists());
+    }
+
+    #[test]
+    fn filters_default_is_effectively_empty() {
+        assert!(FilterSettings::default().is_effectively_empty());
+        assert!(Settings::default().filters.is_effectively_empty());
+    }
+
+    #[test]
+    fn filters_disabled_master_treats_everything_as_empty() {
+        // Even with populated lists, enabled=false must short-circuit.
+        let f = FilterSettings {
+            enabled: false,
+            include_globs: vec!["**/*.txt".into()],
+            min_size_bytes: Some(100),
+            ..Default::default()
+        };
+        assert!(f.is_effectively_empty());
+    }
+
+    #[test]
+    fn filters_round_trip_via_toml() {
+        let d = tempdir().unwrap();
+        let path = d.path().join("settings.toml");
+        let s = Settings {
+            filters: FilterSettings {
+                enabled: true,
+                include_globs: vec!["**/*.rs".into(), "**/*.md".into()],
+                exclude_globs: vec!["**/target/**".into()],
+                min_size_bytes: Some(1024),
+                max_size_bytes: Some(10 * 1024 * 1024),
+                min_mtime_unix_secs: Some(1_700_000_000),
+                max_mtime_unix_secs: None,
+                skip_hidden: true,
+                skip_system: false,
+                skip_readonly: true,
+            },
+            ..Settings::default()
+        };
+        s.save_to(&path).unwrap();
+        let back = Settings::load_from(&path).unwrap();
+        assert_eq!(back.filters, s.filters);
+    }
+
+    #[test]
+    fn filters_toml_uses_kebab_case_keys() {
+        let mut s = Settings::default();
+        s.filters.enabled = true;
+        s.filters.skip_hidden = true;
+        s.filters.min_mtime_unix_secs = Some(1_700_000_000);
+        let dumped = toml::to_string(&s).unwrap();
+        assert!(dumped.contains("skip-hidden = true"), "{dumped}");
+        assert!(
+            dumped.contains("min-mtime-unix-secs = 1700000000"),
+            "{dumped}"
+        );
     }
 }

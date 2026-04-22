@@ -45,17 +45,13 @@ async fn copy_tree_preserves_structure_and_contents() {
     let mut tree_progress_count = 0;
     while let Some(evt) = rx.recv().await {
         match evt {
-            CopyEvent::TreeStarted {
-                total_files,
-                total_bytes,
-                ..
-            } => {
+            CopyEvent::TreeStarted { .. } => {
+                // Streaming walker (Phase 13) fires `TreeStarted` with
+                // zero totals — the real denominator arrives via
+                // `TreeEnumerating` events as the walker discovers
+                // entries. The final numbers are asserted via
+                // `report.files` / `report.bytes` below.
                 saw_tree_started = true;
-                assert_eq!(total_files, 5);
-                // 1024 (small) + 128 KiB (mid) + 512 KiB (big) + 0 (zero.bin)
-                // + 11 ("hello world"). Kept unfolded so a future size tweak
-                // is obvious.
-                assert_eq!(total_bytes, 1024 + 128 * 1024 + 512 * 1024 + 11);
             }
             CopyEvent::TreeProgress { .. } => tree_progress_count += 1,
             CopyEvent::TreeCompleted { .. } => saw_tree_completed = true,

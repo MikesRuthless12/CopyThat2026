@@ -590,3 +590,43 @@ drop-dialog-busy-checking = Freier Speicher wird geprüft…
 drop-dialog-busy-enumerating = Dateien werden gezählt…
 drop-dialog-busy-starting = Kopiervorgang wird gestartet…
 toast-enumeration-deferred = Der Quellbaum ist groß — Vorabliste wird übersprungen; Zeilen erscheinen, sobald die Engine sie verarbeitet.
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = Filter
+# MT
+settings-filters-hint = Überspringt Dateien bereits beim Aufzählen, bevor die Engine sie öffnet. Einschließen gilt nur für Dateien; Ausschließen bereinigt auch passende Ordner.
+# MT
+settings-filters-enabled = Filter für Baumkopien aktivieren
+# MT
+settings-filters-include-globs = Einschluss-Globs
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = Ein Glob pro Zeile. Wenn vorhanden, muss eine Datei mindestens einem entsprechen. Ordner werden stets durchlaufen.
+# MT
+settings-filters-exclude-globs = Ausschluss-Globs
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = Ein Glob pro Zeile. Treffer schneiden den gesamten Unterbaum für Ordner ab; passende Dateien werden übersprungen.
+# MT
+settings-filters-size-range = Dateigrößenbereich
+# MT
+settings-filters-min-size-bytes = Mindestgröße (Bytes, leer = keine Untergrenze)
+# MT
+settings-filters-max-size-bytes = Höchstgröße (Bytes, leer = keine Obergrenze)
+# MT
+settings-filters-date-range = Änderungszeitraum
+# MT
+settings-filters-min-mtime = Geändert ab
+# MT
+settings-filters-max-mtime = Geändert bis
+# MT
+settings-filters-attributes = Attribute
+# MT
+settings-filters-skip-hidden = Versteckte Dateien / Ordner überspringen
+# MT
+settings-filters-skip-system = Systemdateien überspringen (nur Windows)
+# MT
+settings-filters-skip-readonly = Schreibgeschützte Dateien überspringen

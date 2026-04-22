@@ -494,6 +494,8 @@ pub struct SettingsDto {
     pub shell: ShellDto,
     pub secure_delete: SecureDeleteDto,
     pub advanced: AdvancedDto,
+    /// Phase 14a — enumeration-time filters.
+    pub filters: FiltersDto,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -587,6 +589,25 @@ pub struct ProfileInfoDto {
     pub path: String,
 }
 
+/// Phase 14a — TOML-friendly mirror of `copythat_settings::FilterSettings`
+/// in camelCase for TypeScript consumption. Dates are signed Unix
+/// epoch seconds (so pre-1970 mtimes don't wrap), sizes are byte
+/// counts, `None` = "no bound on this end".
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FiltersDto {
+    pub enabled: bool,
+    pub include_globs: Vec<String>,
+    pub exclude_globs: Vec<String>,
+    pub min_size_bytes: Option<u64>,
+    pub max_size_bytes: Option<u64>,
+    pub min_mtime_unix_secs: Option<i64>,
+    pub max_mtime_unix_secs: Option<i64>,
+    pub skip_hidden: bool,
+    pub skip_system: bool,
+    pub skip_readonly: bool,
+}
+
 // --- Settings ⇄ DTO conversions ---------------------------------------
 
 impl From<&copythat_settings::Settings> for SettingsDto {
@@ -643,6 +664,18 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                     .database_path
                     .as_ref()
                     .map(|p| p.to_string_lossy().to_string()),
+            },
+            filters: FiltersDto {
+                enabled: s.filters.enabled,
+                include_globs: s.filters.include_globs.clone(),
+                exclude_globs: s.filters.exclude_globs.clone(),
+                min_size_bytes: s.filters.min_size_bytes,
+                max_size_bytes: s.filters.max_size_bytes,
+                min_mtime_unix_secs: s.filters.min_mtime_unix_secs,
+                max_mtime_unix_secs: s.filters.max_mtime_unix_secs,
+                skip_hidden: s.filters.skip_hidden,
+                skip_system: s.filters.skip_system,
+                skip_readonly: s.filters.skip_readonly,
             },
         }
     }
@@ -718,6 +751,19 @@ impl SettingsDto {
         };
         s.advanced.history_retention_days = self.advanced.history_retention_days;
         s.advanced.database_path = self.advanced.database_path.map(std::path::PathBuf::from);
+
+        s.filters = copythat_settings::FilterSettings {
+            enabled: self.filters.enabled,
+            include_globs: self.filters.include_globs,
+            exclude_globs: self.filters.exclude_globs,
+            min_size_bytes: self.filters.min_size_bytes,
+            max_size_bytes: self.filters.max_size_bytes,
+            min_mtime_unix_secs: self.filters.min_mtime_unix_secs,
+            max_mtime_unix_secs: self.filters.max_mtime_unix_secs,
+            skip_hidden: self.filters.skip_hidden,
+            skip_system: self.filters.skip_system,
+            skip_readonly: self.filters.skip_readonly,
+        };
         s
     }
 }

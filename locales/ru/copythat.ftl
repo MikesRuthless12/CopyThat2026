@@ -590,3 +590,43 @@ drop-dialog-busy-checking = Проверка свободного места…
 drop-dialog-busy-enumerating = Подсчёт файлов…
 drop-dialog-busy-starting = Запуск копирования…
 toast-enumeration-deferred = Исходное дерево большое — предварительный список пропущен; строки появятся по мере работы движка.
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = Фильтры
+# MT
+settings-filters-hint = Пропускает файлы на этапе перечисления — движок их даже не открывает. Включения действуют только на файлы; исключения также обрезают совпадающие папки.
+# MT
+settings-filters-enabled = Включить фильтры для копирования дерева
+# MT
+settings-filters-include-globs = Шаблоны включения
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = По одному шаблону на строку. Если непусто, файл должен совпасть хотя бы с одним. Папки всегда обходятся.
+# MT
+settings-filters-exclude-globs = Шаблоны исключения
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = По одному шаблону на строку. Совпадения обрезают всё поддерево для папок; совпадающие файлы пропускаются.
+# MT
+settings-filters-size-range = Диапазон размера файла
+# MT
+settings-filters-min-size-bytes = Мин. размер (байт, пусто = без нижнего предела)
+# MT
+settings-filters-max-size-bytes = Макс. размер (байт, пусто = без верхнего предела)
+# MT
+settings-filters-date-range = Диапазон времени изменения
+# MT
+settings-filters-min-mtime = Изменено не раньше
+# MT
+settings-filters-max-mtime = Изменено не позже
+# MT
+settings-filters-attributes = Атрибуты
+# MT
+settings-filters-skip-hidden = Пропускать скрытые файлы / папки
+# MT
+settings-filters-skip-system = Пропускать системные файлы (только Windows)
+# MT
+settings-filters-skip-readonly = Пропускать файлы только для чтения

@@ -590,3 +590,43 @@ drop-dialog-busy-checking = جارٍ فحص المساحة الفارغة…
 drop-dialog-busy-enumerating = جارٍ إحصاء الملفات…
 drop-dialog-busy-starting = جارٍ بدء النسخ…
 toast-enumeration-deferred = شجرة المصدر كبيرة — تخطّي قائمة الملفات المسبقة؛ ستظهر الصفوف أثناء معالجة المحرك.
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = المرشحات
+# MT
+settings-filters-hint = يتخطى الملفات أثناء العدّ فلا يفتحها المحرك أصلاً. "تضمين" يُطبّق على الملفات فقط؛ "استبعاد" يقلّم المجلدات المطابقة أيضًا.
+# MT
+settings-filters-enabled = تفعيل المرشحات لنسخ الأشجار
+# MT
+settings-filters-include-globs = أنماط التضمين
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = نمط واحد في كل سطر. إن لم تكن فارغة، يجب أن يطابق الملف نمطًا واحدًا على الأقل. تُجتاز المجلدات دائمًا.
+# MT
+settings-filters-exclude-globs = أنماط الاستبعاد
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = نمط واحد في كل سطر. تطابقات المجلدات تقلّم الشجرة الفرعية بأكملها؛ الملفات المطابقة تُتخطى.
+# MT
+settings-filters-size-range = نطاق حجم الملف
+# MT
+settings-filters-min-size-bytes = الحد الأدنى (بايت، فارغ = بلا حد)
+# MT
+settings-filters-max-size-bytes = الحد الأقصى (بايت، فارغ = بلا حد)
+# MT
+settings-filters-date-range = نطاق تاريخ التعديل
+# MT
+settings-filters-min-mtime = تم تعديله في أو بعد
+# MT
+settings-filters-max-mtime = تم تعديله في أو قبل
+# MT
+settings-filters-attributes = السمات
+# MT
+settings-filters-skip-hidden = تخطّي الملفات / المجلدات المخفية
+# MT
+settings-filters-skip-system = تخطّي ملفات النظام (Windows فقط)
+# MT
+settings-filters-skip-readonly = تخطّي الملفات للقراءة فقط

@@ -62,6 +62,9 @@ fn canned_args(key: &str) -> HashMap<&'static str, String> {
         "toast-history-purged" => {
             m.insert("count", "42".to_string());
         }
+        "toast-history-cleared" => {
+            m.insert("count", "17".to_string());
+        }
         "duration-ms" => {
             m.insert("ms", "250".to_string());
         }

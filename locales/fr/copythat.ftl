@@ -590,3 +590,43 @@ drop-dialog-busy-checking = Vérification de l'espace libre…
 drop-dialog-busy-enumerating = Comptage des fichiers…
 drop-dialog-busy-starting = Démarrage de la copie…
 toast-enumeration-deferred = L'arborescence source est volumineuse — liste préalable ignorée ; les lignes apparaîtront au fur et à mesure du traitement.
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = Filtres
+# MT
+settings-filters-hint = Ignore les fichiers lors de l'énumération, avant même que le moteur ne les ouvre. Les inclusions s'appliquent aux fichiers seuls ; les exclusions élaguent aussi les dossiers correspondants.
+# MT
+settings-filters-enabled = Activer les filtres pour les copies d'arborescence
+# MT
+settings-filters-include-globs = Globs d'inclusion
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = Un glob par ligne. Si non vide, un fichier doit correspondre à au moins un. Les dossiers sont toujours parcourus.
+# MT
+settings-filters-exclude-globs = Globs d'exclusion
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = Un glob par ligne. Les correspondances élaguent toute la sous-arborescence pour les dossiers ; les fichiers correspondants sont ignorés.
+# MT
+settings-filters-size-range = Plage de taille de fichier
+# MT
+settings-filters-min-size-bytes = Taille minimale (octets, vide = aucune limite basse)
+# MT
+settings-filters-max-size-bytes = Taille maximale (octets, vide = aucune limite haute)
+# MT
+settings-filters-date-range = Plage de date de modification
+# MT
+settings-filters-min-mtime = Modifié à partir du
+# MT
+settings-filters-max-mtime = Modifié jusqu'au
+# MT
+settings-filters-attributes = Attributs
+# MT
+settings-filters-skip-hidden = Ignorer les fichiers / dossiers cachés
+# MT
+settings-filters-skip-system = Ignorer les fichiers système (Windows uniquement)
+# MT
+settings-filters-skip-readonly = Ignorer les fichiers en lecture seule
