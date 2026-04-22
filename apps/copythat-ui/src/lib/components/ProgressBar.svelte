@@ -1,16 +1,35 @@
 <!--
-  Horizontal cumulative progress bar — thin 6 px strip between the
-  header and the job list. Binds to the globals store so it reflects
-  live totals across every active job.
+  Flat aggregate progress bar — thin 6 px strip directly above the
+  footer. Sums across every active job via the globals store and
+  ticks in the same 10 000-step model as each row's CircularProgress
+  so the visible "%" readout matches the bar fill exactly.
 -->
 <script lang="ts">
-  import { globals } from "../stores";
-  import { progressRatio } from "../format";
+  import { globals, liveBytes } from "../stores";
 
+  const PROGRESS_STEPS = 10_000;
   let g = $derived($globals);
-  let ratio = $derived(progressRatio(g.bytesDone, g.bytesTotal));
+  // Read aggregate bytes from the derived jobs-store snapshot instead
+  // of `GlobalsDto` so the bottom bar can't disagree with the per-row
+  // ring (they share the same source).
+  let bytes = $derived($liveBytes);
+  let steps = $derived(
+    bytes.total > 0
+      ? Math.min(
+          PROGRESS_STEPS,
+          Math.max(
+            0,
+            Math.round((bytes.done / bytes.total) * PROGRESS_STEPS),
+          ),
+        )
+      : 0,
+  );
+  let ratio = $derived(steps / PROGRESS_STEPS);
+  let percentLabel = $derived(
+    bytes.total > 0 ? `${(steps / 100).toFixed(2)}%` : "",
+  );
   let indeterminate = $derived(
-    g.bytesTotal === 0 && g.activeJobs + g.queuedJobs > 0,
+    bytes.total === 0 && g.activeJobs + g.queuedJobs > 0,
   );
 </script>
 
@@ -20,6 +39,7 @@
   aria-valuemin="0"
   aria-valuemax="100"
   aria-valuenow={Math.round(ratio * 100)}
+  aria-valuetext={percentLabel}
   data-state={g.state}
   class:indeterminate
 >

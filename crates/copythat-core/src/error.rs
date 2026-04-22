@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::safety::PathSafetyError;
+
 /// Classification of an engine error. Distilled to the kinds the UI and
 /// retry logic actually branch on; richer platform detail stays in the
 /// wrapped `io::Error` on the `source` field.
@@ -18,6 +20,11 @@ pub enum CopyErrorKind {
     /// and destination. The partial destination is removed unless
     /// `CopyOptions::keep_partial` is set.
     VerifyFailed,
+    /// Phase 17a — the IPC / CLI caller gave us a path containing
+    /// traversal (`..`) components or other unsafe bytes. The engine
+    /// refused before opening anything, so no partial destination
+    /// exists. See `copythat_core::safety`.
+    PathEscape,
     IoOther,
 }
 
@@ -35,6 +42,24 @@ impl CopyErrorKind {
                     Self::IoOther
                 }
             }
+        }
+    }
+
+    /// Stable i18n key that every UI renders through its locale table.
+    ///
+    /// The key is constant per variant so Phase 11's full i18n audit
+    /// doesn't need to touch the engine again — translations evolve
+    /// by editing the locale `.ftl` files. The `err-` prefix scopes
+    /// these inside the existing key namespace.
+    pub const fn localized_key(self) -> &'static str {
+        match self {
+            Self::NotFound => "err-not-found",
+            Self::PermissionDenied => "err-permission-denied",
+            Self::DiskFull => "err-disk-full",
+            Self::Interrupted => "err-interrupted",
+            Self::VerifyFailed => "err-verify-failed",
+            Self::PathEscape => "err-path-escape",
+            Self::IoOther => "err-io-other",
         }
     }
 }
@@ -108,6 +133,20 @@ impl CopyError {
         }
     }
 
+    /// Build a `CopyError::PathEscape` from a safety-layer rejection.
+    /// Carries both src + dst so the UI row still has full context —
+    /// even though by construction one of them is the path that
+    /// failed the lexical traversal check.
+    pub fn path_escape(src: &Path, dst: &Path, reason: PathSafetyError) -> Self {
+        Self {
+            kind: CopyErrorKind::PathEscape,
+            src: src.to_path_buf(),
+            dst: dst.to_path_buf(),
+            raw_os_error: None,
+            message: reason.to_string(),
+        }
+    }
+
     pub(crate) fn verify_failed(
         src: &Path,
         dst: &Path,
@@ -130,5 +169,11 @@ impl CopyError {
 
     pub fn is_verify_failed(&self) -> bool {
         self.kind == CopyErrorKind::VerifyFailed
+    }
+
+    /// Convenience delegator; spares call sites a two-hop through
+    /// `self.kind.localized_key()`.
+    pub const fn localized_key(&self) -> &'static str {
+        self.kind.localized_key()
     }
 }

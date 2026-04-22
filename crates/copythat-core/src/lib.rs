@@ -84,8 +84,10 @@ mod control;
 mod engine;
 mod error;
 mod event;
+pub mod filter;
 mod options;
 pub mod queue;
+pub mod safety;
 mod tree;
 pub mod verify;
 
@@ -93,11 +95,14 @@ pub use collision::CollisionPolicy;
 pub use control::CopyControl;
 pub use engine::copy_file;
 pub use error::{CopyError, CopyErrorKind};
-pub use event::{Collision, CollisionResolution, CopyEvent, CopyReport, TreeReport};
+pub use event::{Collision, CollisionResolution, CopyEvent, CopyReport, ErrorPrompt, TreeReport};
+pub use filter::{CompiledFilters, FilterError, FilterSet};
 pub use options::{
-    CopyOptions, CopyStrategy, DEFAULT_BUFFER_SIZE, DEFAULT_TREE_CONCURRENCY, FastCopyHook,
-    FastCopyHookOutcome, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, MoveOptions, TreeOptions,
+    CopyOptions, CopyStrategy, DEFAULT_BUFFER_SIZE, DEFAULT_TREE_CONCURRENCY, ErrorAction,
+    ErrorPolicy, FastCopyHook, FastCopyHookOutcome, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, MoveOptions,
+    TreeOptions,
 };
 pub use queue::{Job, JobId, JobKind, JobState, Queue, QueueEvent};
+pub use safety::{PathSafetyError, validate_all, validate_path_no_traversal};
 pub use tree::{copy_tree, move_file, move_tree};
 pub use verify::{Hasher, Verifier};

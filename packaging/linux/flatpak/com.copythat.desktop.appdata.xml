@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata consumed by GNOME Software / KDE Discover /
+     Flathub. Validate with `appstream-util validate-relax <file>`
+     before submitting. -->
+<component type="desktop-application">
+  <id>com.copythat.desktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-AllRightsReserved</project_license>
+  <name>Copy That v1.0.0</name>
+  <summary>Byte-exact cross-platform file copier</summary>
+  <description>
+    <p>
+      Copy That v1.0.0 is a lightweight, cross-platform, async, byte-exact
+      file and folder copier. Matches every TeraCopy feature while staying
+      as fast as — or faster than — Explorer, Finder, cp, and rsync for
+      typical desktop workloads.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Verify after copy (CRC32, MD5, SHA-1/256/512, xxHash3, BLAKE3)</li>
+      <li>Reflink clones on Btrfs, XFS, APFS, ReFS</li>
+      <li>SQLite history + lifetime totals dashboard</li>
+      <li>Multi-pass secure delete</li>
+      <li>18-language UI</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">com.copythat.desktop.desktop</launchable>
+  <url type="homepage">https://github.com/MikesRuthless12/CopyThat2026</url>
+  <url type="bugtracker">https://github.com/MikesRuthless12/CopyThat2026/issues</url>
+  <developer_name>Copy That Contributors</developer_name>
+  <categories>
+    <category>Utility</category>
+    <category>FileTools</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.0.0" date="2026-04-22">
+      <description>
+        <p>Initial public preview. See the GitHub release notes for details.</p>
+      </description>
+    </release>
+  </releases>
+</component>

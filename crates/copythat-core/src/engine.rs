@@ -19,6 +19,7 @@ use crate::control::CopyControl;
 use crate::error::CopyError;
 use crate::event::{CopyEvent, CopyReport};
 use crate::options::{CopyOptions, CopyStrategy, FastCopyHookOutcome};
+use crate::safety::validate_path_no_traversal;
 use crate::verify::Hasher;
 
 const PROGRESS_MIN_BYTES: u64 = 16 * 1024;
@@ -38,6 +39,16 @@ pub async fn copy_file(
 ) -> Result<CopyReport, CopyError> {
     let src_path = src.to_path_buf();
     let dst_path = dst.to_path_buf();
+
+    // Phase 17a — reject traversal / NUL-byte paths up front. The
+    // check is lexical and filesystem-free; see
+    // `copythat_core::safety` for the threat model.
+    if let Err(e) = validate_path_no_traversal(&src_path) {
+        return Err(CopyError::path_escape(&src_path, &dst_path, e));
+    }
+    if let Err(e) = validate_path_no_traversal(&dst_path) {
+        return Err(CopyError::path_escape(&src_path, &dst_path, e));
+    }
 
     let metadata_result = if opts.follow_symlinks {
         tokio::fs::metadata(&src_path).await
@@ -95,9 +106,13 @@ pub async fn copy_file(
     }
 
     let total = src_metadata.len();
-    let buf_size = opts.clamped_buffer_size();
+    // Phase 13c — pick a buffer size that matches the file:
+    // - Small files shrink the buffer so we don't overallocate
+    // - Mid-size files use the configured value verbatim
+    // - Multi-GiB files bump up to 4 MiB for better memory pipelining
+    let buf_size = opts.buffer_size_for_file(total);
 
-    let src_file = File::open(&src_path)
+    let src_file = open_src_with_retry(&src_path)
         .await
         .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
 
@@ -543,6 +558,59 @@ async fn copy_symlink(
         duration: elapsed,
         rate_bps: 0,
     })
+}
+
+/// Phase 14 — open the source file with the widest possible share
+/// mode and retry on sharing violations. Lets us copy a file that
+/// another process has open for read/write/delete (common on Windows
+/// — log files being written, loaded DLLs, Office documents with an
+/// exclusive lock). Unix kernels don't block reads on open files,
+/// so this compiles down to a plain `File::open` there.
+async fn open_src_with_retry(src: &Path) -> std::io::Result<File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE.
+        // Tells the OS we are OK with others writing / deleting
+        // while we read — matches what `robocopy /B` would use in
+        // backup semantics mode.
+        const SHARE_ALL: u32 = 0x1 | 0x2 | 0x4;
+        let mut last_err: Option<std::io::Error> = None;
+        for attempt in 0..3u32 {
+            let mut opts = std::fs::OpenOptions::new();
+            opts.read(true).share_mode(SHARE_ALL);
+            let res = {
+                let path = src.to_path_buf();
+                tokio::task::spawn_blocking(move || opts.open(&path)).await
+            };
+            match res {
+                Ok(Ok(std_file)) => return Ok(File::from_std(std_file)),
+                Ok(Err(e)) => {
+                    // ERROR_SHARING_VIOLATION = 32. Retry with
+                    // exponential backoff; most short-lived locks
+                    // clear within a few hundred ms.
+                    if e.raw_os_error() == Some(32) {
+                        let ms = 50u64 << attempt; // 50, 100, 200
+                        tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+                        last_err = Some(e);
+                        continue;
+                    }
+                    return Err(e);
+                }
+                Err(join_err) => return Err(std::io::Error::other(format!("join: {join_err}"))),
+            }
+        }
+        Err(last_err.unwrap_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::WouldBlock,
+                "sharing-violation-retries-exhausted",
+            )
+        }))
+    }
+    #[cfg(not(windows))]
+    {
+        File::open(src).await
+    }
 }
 
 #[cfg(unix)]

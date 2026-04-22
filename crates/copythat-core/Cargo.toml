@@ -1,6 +1,6 @@
 [package]
 name = "copythat-core"
-description = "Async byte-exact file copy engine for Copy That 2026."
+description = "Async byte-exact file copy engine for Copy That v1.0.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -20,6 +20,10 @@ slow-tests = []
 
 [dependencies]
 filetime = "0.2"
+# Phase 14a — compiled glob sets for include/exclude filters applied
+# at enumeration time. `globset` is what ripgrep uses; it compiles the
+# patterns once and matches without per-path allocation.
+globset = "0.4"
 thiserror = "2"
 tokio = { version = "1", features = [
     "fs",
@@ -33,6 +37,7 @@ tokio = { version = "1", features = [
 walkdir = "2"
 
 [dev-dependencies]
+criterion = { version = "0.7", features = ["html_reports"] }
 rand = "0.9"
 tempfile = "3"
 tokio = { version = "1", features = [
@@ -56,3 +61,27 @@ path = "../../tests/smoke/phase_01_core_copy.rs"
 [[test]]
 name = "phase_02_tree_queue"
 path = "../../tests/smoke/phase_02_tree_queue.rs"
+
+# Phase 14a — enumeration-time filters (glob / size / date / attribute).
+[[test]]
+name = "phase_14a_filters"
+path = "../../tests/smoke/phase_14a_filters.rs"
+
+# Phase 17a — red-team check that copy_file / copy_tree / move_*
+# reject `..` traversal at the engine boundary with a typed
+# CopyErrorKind::PathEscape (i.e. the safety guard wired in
+# `crates/copythat-core/src/safety.rs`).
+[[test]]
+name = "phase_17_security"
+path = "../../tests/smoke/phase_17_security.rs"
+
+# Phase 13 — Criterion benchmarks for the async copy engine.
+# `cargo bench -p copythat-core --bench copy_bench` runs the full
+# matrix (1 GiB single file, 10 k × 16 KiB many-small, mixed tree).
+# The `xtask bench-ci` wrapper runs a scaled-down subset (~100 MiB
+# instead of 1 GiB) so CI finishes in under 90 s and gates on
+# regression vs the last committed baseline in `docs/BENCHMARKS.md`.
+[[bench]]
+name = "copy_bench"
+harness = false
+path = "benches/copy_bench.rs"

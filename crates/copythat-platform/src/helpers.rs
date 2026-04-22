@@ -59,6 +59,113 @@ pub fn supports_reflink(path: &Path) -> Option<bool> {
     }
 }
 
+/// Phase 14 — return the number of bytes currently free on the
+/// volume that backs `path`. `None` when the OS probe fails (unknown
+/// path, permission denied, unmounted volume). The caller can treat
+/// `None` as "reserve-check unavailable" and proceed without guard.
+///
+/// Windows uses `GetDiskFreeSpaceExW`; Unix uses `statvfs`. Both are
+/// cheap enough to call on every file inside a tree, which is what
+/// the engine's per-file reserve enforcement relies on.
+pub fn free_space_bytes(path: &Path) -> Option<u64> {
+    free_space_impl(path)
+}
+
+/// Phase 14 — volume identity for cross-volume detection.
+///
+/// Returns an opaque `u64` that is stable for all paths living on
+/// the same mounted volume and different between volumes. Used by
+/// the reflink path to avoid paying the syscall cost on a copy that
+/// can't possibly reflink (different volume → reflink is a hard
+/// rejection). `None` when the OS probe fails — callers should treat
+/// unknown as "may be same volume, try reflink".
+///
+/// Windows: GetVolumeInformationByHandleW's VolumeSerialNumber.
+/// Unix: the `st_dev` from `stat`.
+pub fn volume_id(path: &Path) -> Option<u64> {
+    volume_id_impl(path)
+}
+
+#[cfg(target_os = "windows")]
+fn free_space_impl(path: &Path) -> Option<u64> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    // GetDiskFreeSpaceExW wants a directory path. If the caller hands
+    // us a file, probe the parent.
+    let target: &Path = if path.is_file() { path.parent()? } else { path };
+    let mut wide: Vec<u16> = OsStr::new(target).encode_wide().collect();
+    wide.push(0);
+    let mut free_to_caller: u64 = 0;
+    let mut _total: u64 = 0;
+    let mut _free_total: u64 = 0;
+    // SAFETY: we pass a NUL-terminated UTF-16 string and three u64
+    // out-pointers that live for the duration of the call.
+    let ok = unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(
+            wide.as_ptr(),
+            &mut free_to_caller,
+            &mut _total,
+            &mut _free_total,
+        )
+    };
+    if ok == 0 { None } else { Some(free_to_caller) }
+}
+
+#[cfg(unix)]
+fn free_space_impl(path: &Path) -> Option<u64> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let target: &Path = if path.is_file() { path.parent()? } else { path };
+    let cstr = CString::new(target.as_os_str().as_bytes()).ok()?;
+    let mut sv: libc::statvfs = unsafe { std::mem::zeroed() };
+    // SAFETY: cstr is NUL-terminated and sv is a zero-init statvfs.
+    let ret = unsafe { libc::statvfs(cstr.as_ptr(), &mut sv) };
+    if ret != 0 {
+        return None;
+    }
+    Some((sv.f_bavail as u64).saturating_mul(sv.f_frsize as u64))
+}
+
+#[cfg(not(any(target_os = "windows", unix)))]
+fn free_space_impl(_path: &Path) -> Option<u64> {
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn volume_id_impl(path: &Path) -> Option<u64> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    let target: &Path = if path.is_file() { path.parent()? } else { path };
+    let mut wide: Vec<u16> = OsStr::new(target).encode_wide().collect();
+    wide.push(0);
+    let mut serial: u32 = 0;
+    // SAFETY: wide is NUL-terminated, serial lives for the call.
+    let ok = unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetVolumeInformationW(
+            wide.as_ptr(),
+            std::ptr::null_mut(),
+            0,
+            &mut serial,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if ok == 0 { None } else { Some(serial as u64) }
+}
+
+#[cfg(unix)]
+fn volume_id_impl(path: &Path) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).ok().map(|m| m.dev())
+}
+
+#[cfg(not(any(target_os = "windows", unix)))]
+fn volume_id_impl(_path: &Path) -> Option<u64> {
+    None
+}
+
 /// Recommend a concurrency level for a tree-copy walking from `src` to
 /// `dst`.
 ///
@@ -90,6 +197,38 @@ mod tests {
         let _ = is_ssd(&here);
         let _ = filesystem_name(&here);
         let _ = supports_reflink(&here);
+    }
+
+    #[test]
+    fn free_space_on_local_path_returns_some_positive_or_none() {
+        // Host-dependent — on a real dev box the probe returns a
+        // real number; in some sandboxed CI runners it may return
+        // None. Both are acceptable. What matters is that it
+        // doesn't panic and returns either None or a positive u64.
+        let here = PathBuf::from(".");
+        if let Some(n) = free_space_bytes(&here) {
+            assert!(n > 0, "free space should not be 0 on . ({n})");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn free_space_on_unc_path_tolerates_offline_host() {
+        // UNC path to a server that almost certainly doesn't exist.
+        // The probe must return `None` rather than panic or block.
+        let fake = PathBuf::from(r"\\copythat-test-host-does-not-exist\share");
+        let res = free_space_bytes(&fake);
+        assert!(res.is_none(), "expected None for offline UNC, got {res:?}");
+    }
+
+    #[test]
+    fn volume_id_is_stable_for_same_path() {
+        // Calling twice on the same mount should yield the same id
+        // (or None twice). Either case indicates a well-behaved probe.
+        let here = PathBuf::from(".");
+        let a = volume_id(&here);
+        let b = volume_id(&here);
+        assert_eq!(a, b);
     }
 
     #[test]

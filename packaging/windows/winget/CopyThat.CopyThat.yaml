@@ -1,0 +1,15 @@
+# winget manifest (version). Submitted to microsoft/winget-pkgs via PR
+# on each tagged release. The installer + locale manifests live next
+# to this file; update the three of them together — the winget CLI
+# requires all of them to validate.
+#
+# Winget handles SHA-256 verification at install time, so shipping
+# unsigned MSIs through winget still gives users a tamper-proof
+# install without us paying for an EV cert.
+#
+# Spec: https://github.com/microsoft/winget-cli/blob/master/doc/ManifestSpecv1.6.md
+PackageIdentifier: CopyThat.CopyThat
+PackageVersion: 1.0.0
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0
