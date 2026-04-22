@@ -214,6 +214,11 @@ mod macos_impl {
         // across our polling interval.
         // SAFETY: `generalPasteboard` returns a non-null singleton for
         // the lifetime of the app; `changeCount` is a simple getter.
+        // `allow(unused_unsafe)`: newer `objc2-app-kit` marks these
+        // calls safe; older versions required `unsafe`. The block
+        // stays for doc-comment locality even when clippy says the
+        // wrapper is redundant.
+        #[allow(unused_unsafe)]
         unsafe {
             let pb = NSPasteboard::generalPasteboard();
             pb.changeCount() as u64
@@ -225,6 +230,7 @@ mod macos_impl {
         // singleton with reference-type arguments; the returned
         // NSPasteboardItem's `stringForType:` yields a retained
         // NSString we convert to `String` before drop.
+        #[allow(unused_unsafe)]
         unsafe {
             let pb = NSPasteboard::generalPasteboard();
             let Some(items) = pb.pasteboardItems() else {
