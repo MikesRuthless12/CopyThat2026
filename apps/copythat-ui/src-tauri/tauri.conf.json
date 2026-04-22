@@ -29,15 +29,42 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["msi", "nsis", "app", "dmg", "appimage", "deb", "rpm"],
     "createUpdaterArtifacts": true,
+    "category": "Utility",
+    "shortDescription": "Byte-exact cross-platform file copier.",
+    "longDescription": "Copy That 2026 is a lightweight, cross-platform, async, byte-exact file and folder copier. Matches every TeraCopy feature while staying as fast as — or faster than — Explorer, Finder, cp, and rsync for typical desktop workloads.",
+    "homepage": "https://github.com/MikesRuthless12/CopyThat2026",
+    "publisher": "Copy That 2026 Contributors",
+    "copyright": "Copyright (C) 2026 Copy That 2026 Contributors",
+    "licenseFile": "../../../LICENSE",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "allowDowngrades": true
+    },
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": true
+    },
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1"]
+      },
+      "rpm": {
+        "depends": ["webkit2gtk4.1", "gtk3", "libayatana-appindicator-gtk3"]
+      },
+      "appimage": {
+        "bundleMediaFramework": true
+      }
+    }
   },
   "plugins": {
     "updater": {

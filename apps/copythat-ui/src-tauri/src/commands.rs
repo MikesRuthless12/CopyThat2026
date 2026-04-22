@@ -950,7 +950,11 @@ pub async fn updater_check_now(
     let (due, channel, current_ver) = {
         let snap = state.settings_snapshot();
         let due = force || snap.updater.due_for_check(now_secs);
-        (due, snap.updater.channel.as_str().to_string(), env!("CARGO_PKG_VERSION").to_string())
+        (
+            due,
+            snap.updater.channel.as_str().to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+        )
     };
 
     if !due {
@@ -979,8 +983,14 @@ pub async fn updater_check_now(
             crate::updater::format_endpoint(
                 &tmpl,
                 &channel,
-                crate::updater::current_target_platform().split('-').next().unwrap_or("windows"),
-                crate::updater::current_target_platform().split('-').nth(1).unwrap_or("x86_64"),
+                crate::updater::current_target_platform()
+                    .split('-')
+                    .next()
+                    .unwrap_or("windows"),
+                crate::updater::current_target_platform()
+                    .split('-')
+                    .nth(1)
+                    .unwrap_or("x86_64"),
                 &current_ver,
             )
         }
@@ -1028,10 +1038,7 @@ pub async fn updater_check_now(
 /// for exactly that version until a newer one is announced. Passing
 /// an empty string clears the dismissal.
 #[tauri::command]
-pub fn updater_dismiss_version(
-    version: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub fn updater_dismiss_version(version: String, state: State<'_, AppState>) -> Result<(), String> {
     let path = state.settings_path.as_ref().clone();
     let mut live = state
         .settings
