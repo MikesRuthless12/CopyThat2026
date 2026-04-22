@@ -29,6 +29,7 @@ workloads.
 - **Access-denied tolerance** — `$RECYCLE.BIN\S-1-5-*`, `System Volume Information`, `Config.Msi`, etc. are skipped and counted, not fatal.
 - **Collision policy** picked up-front in the drop dialog: *Keep both* (`foo.txt` → `foo_2.txt`, `foo_3.txt`, …), *Skip*, *Overwrite*, *Overwrite only if newer*, *Ask each time*.
 - **Error policy** per-job: *Ask*, *Skip*, *Abort*, or *Retry N times*.
+- **Error prompt style** — blocking modal or non-blocking corner drawer; user-configurable in Settings → General.
 - **Pause / resume / cancel** on every job, plus pause-all / resume-all / cancel-all.
 - **Reserve free space on destination** — optional minimum, preflight-warned before the first byte moves.
 
@@ -46,6 +47,8 @@ workloads.
 - **System tray** with minimize-to-tray-on-close option.
 - **Drag-and-drop and picker** entry points: drag onto the window, or use *Add files* / *Add folders* in the header.
 - **Shell integration** — Windows IExplorerCommand, macOS Finder Sync, Linux `.desktop` / KDE ServiceMenu / Thunar UCA all route into the same queue via `copythat --enqueue <verb> <paths…> [--destination <dst>]`.
+- **Global paste hotkey** — press Ctrl+Shift+V (Windows / Linux) or Cmd+Shift+V (macOS) anywhere on the system to paste files copied from Explorer / Finder / Files through Copy That's staging dialog. Combo is user-configurable; the shortcut can be toggled off entirely.
+- **Clipboard watcher** (opt-in) — surfaces a toast when file URLs land on the OS clipboard, hinting the paste hotkey is ready. Polls every 500 ms while enabled; silent when off.
 - **Secure delete** — single-pass zero / random, DoD 3-pass, DoD 7-pass, Gutmann 35-pass, NIST 800-88. SSD-aware (skips multi-pass overwrites on SSDs by default — use TRIM instead).
 
 ### Internationalisation

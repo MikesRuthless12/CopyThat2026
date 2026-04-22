@@ -132,6 +132,8 @@ toast-error-resolved = Fehler behoben
 toast-collision-resolved = Konflikt gelöst
 # MT
 toast-elevated-unavailable = Wiederholung mit erhöhten Rechten kommt in Phase 17 — noch nicht verfügbar
+toast-clipboard-files-detected = Dateien in der Zwischenablage — Tastenkürzel drücken, um über Copy That zu kopieren
+toast-clipboard-no-files = Zwischenablage enthält keine Dateien zum Einfügen
 # MT
 toast-error-log-exported = Fehlerprotokoll exportiert
 
@@ -151,6 +153,8 @@ error-modal-abort = Alle abbrechen
 error-modal-path-label = Pfad
 # MT
 error-modal-code-label = Code
+error-drawer-pending-count = Weitere Fehler warten
+error-drawer-toggle = Einklappen oder ausklappen
 
 # MT — Error-kind labels
 err-not-found = Datei nicht gefunden
@@ -395,6 +399,15 @@ settings-start-with-os = Beim Systemstart starten
 settings-single-instance = Einzelne laufende Instanz
 # MT
 settings-minimize-to-tray = Beim Schließen in den Tray minimieren
+settings-error-display-mode = Fehler-Dialogstil
+settings-error-display-modal = Modal (blockiert die App)
+settings-error-display-drawer = Seitenleiste (nicht blockierend)
+settings-error-display-mode-hint = Das Modal hält die Warteschlange an, bis Sie entscheiden. Die Seitenleiste hält die Warteschlange am Laufen und lässt Sie Fehler in der Ecke abarbeiten.
+settings-paste-shortcut = Dateien per globalem Tastenkürzel einfügen
+settings-paste-shortcut-combo = Tastenkombination
+settings-paste-shortcut-hint = Drücken Sie diese Kombination an beliebiger Stelle im System, um aus Explorer / Finder / Dateien kopierte Dateien über Copy That einzufügen. CmdOrCtrl entspricht Cmd auf macOS und Strg auf Windows / Linux.
+settings-clipboard-watcher = Zwischenablage auf kopierte Dateien überwachen
+settings-clipboard-watcher-hint = Zeigt eine Einblendung, wenn Datei-URLs in der Zwischenablage erscheinen, und weist darauf hin, dass Sie über Copy That einfügen können. Prüft alle 500 ms, solange aktiv.
 
 # MT
 settings-buffer-size = Puffergröße

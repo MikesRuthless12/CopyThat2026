@@ -132,6 +132,8 @@ toast-error-resolved = त्रुटि हल हुई
 toast-collision-resolved = टकराव हल हुआ
 # MT
 toast-elevated-unavailable = बढ़े हुए अधिकारों से पुनः प्रयास चरण 17 में आएगा — अभी उपलब्ध नहीं
+toast-clipboard-files-detected = क्लिपबोर्ड पर फ़ाइलें — Copy That के माध्यम से कॉपी करने के लिए पेस्ट शॉर्टकट दबाएँ
+toast-clipboard-no-files = क्लिपबोर्ड में पेस्ट करने के लिए कोई फ़ाइल नहीं है
 # MT
 toast-error-log-exported = त्रुटि लॉग निर्यात किया गया
 
@@ -151,6 +153,8 @@ error-modal-abort = सभी निरस्त करें
 error-modal-path-label = पथ
 # MT
 error-modal-code-label = कोड
+error-drawer-pending-count = अन्य त्रुटियाँ प्रतीक्षा में
+error-drawer-toggle = संकुचित या विस्तारित करें
 
 # MT — Error-kind labels
 err-not-found = फ़ाइल नहीं मिली
@@ -395,6 +399,15 @@ settings-start-with-os = सिस्टम शुरू होने पर च
 settings-single-instance = एकल चलने वाला इंस्टेंस
 # MT
 settings-minimize-to-tray = बंद करने पर ट्रे में छोटा करें
+settings-error-display-mode = त्रुटि संकेत शैली
+settings-error-display-modal = मोडल (ऐप को ब्लॉक करता है)
+settings-error-display-drawer = ड्रॉअर (गैर-अवरोधक)
+settings-error-display-mode-hint = मोडल आपके निर्णय तक कतार को रोक देता है। ड्रॉअर कतार को चालू रखता है और आपको कोने में त्रुटियों का समाधान करने देता है।
+settings-paste-shortcut = वैश्विक शॉर्टकट के माध्यम से फ़ाइलें पेस्ट करें
+settings-paste-shortcut-combo = शॉर्टकट संयोजन
+settings-paste-shortcut-hint = Copy That के माध्यम से Explorer / Finder / Files से कॉपी की गई फ़ाइलें पेस्ट करने के लिए सिस्टम पर कहीं भी यह संयोजन दबाएँ। CmdOrCtrl macOS पर Cmd और Windows / Linux पर Ctrl के रूप में हल होता है।
+settings-clipboard-watcher = कॉपी की गई फ़ाइलों के लिए क्लिपबोर्ड पर नज़र रखें
+settings-clipboard-watcher-hint = जब फ़ाइल URL क्लिपबोर्ड में दिखाई देते हैं तो टोस्ट दिखाता है, संकेत देता है कि आप Copy That के माध्यम से पेस्ट कर सकते हैं। सक्षम होने पर हर 500 मिलीसेकंड पर पोल करता है।
 
 # MT
 settings-buffer-size = बफर का आकार

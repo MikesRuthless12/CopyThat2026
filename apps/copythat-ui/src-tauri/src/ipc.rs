@@ -57,6 +57,12 @@ pub const EVENT_COLLISION_RESOLVED: &str = "collision-resolved";
 /// trees don't overwhelm the event bus.
 pub const EVENT_FILE_ACTIVITY: &str = "file-activity";
 
+/// Post-Phase-12 — fired by both the paste hotkey (`global_paste.rs`)
+/// and the clipboard watcher (`clipboard_watcher.rs`) when files
+/// appear on the OS clipboard. Frontend decides whether to pop a
+/// toast or open the staging dialog based on the `count` field.
+pub const EVENT_CLIPBOARD_FILES_DETECTED: &str = "clipboard-files-detected";
+
 /// Single entry in the live activity list.
 ///
 /// `phase`:
@@ -193,6 +199,19 @@ pub struct ShellEnqueueDto {
     /// `"copy"` or `"move"`.
     pub verb: &'static str,
     pub paths: Vec<String>,
+}
+
+/// Emitted by both the paste hotkey and the clipboard watcher when
+/// they observe files landing on the OS clipboard. `count = 0` with
+/// an empty `paths` is a legitimate "nothing to paste" ping — the UI
+/// uses it to show "clipboard has no files" when the hotkey fires on
+/// a text-only clipboard.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipboardFilesDetectedDto {
+    pub paths: Vec<String>,
+    pub count: usize,
+    pub shortcut: String,
 }
 
 /// File-icon classification returned by the `file_icon` command.
@@ -486,6 +505,12 @@ pub struct GeneralDto {
     pub start_with_os: bool,
     pub single_instance: bool,
     pub minimize_to_tray: bool,
+    /// `"modal" | "drawer"` — see `copythat_settings::ErrorDisplayMode`.
+    pub error_display_mode: String,
+    pub paste_shortcut_enabled: bool,
+    /// Tauri `global-shortcut` combo string (e.g. `"CmdOrCtrl+Shift+V"`).
+    pub paste_shortcut: String,
+    pub clipboard_watcher_enabled: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -573,6 +598,10 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 start_with_os: s.general.start_with_os,
                 single_instance: s.general.single_instance,
                 minimize_to_tray: s.general.minimize_to_tray,
+                error_display_mode: s.general.error_display_mode.as_str().to_string(),
+                paste_shortcut_enabled: s.general.paste_shortcut_enabled,
+                paste_shortcut: s.general.paste_shortcut.clone(),
+                clipboard_watcher_enabled: s.general.clipboard_watcher_enabled,
             },
             transfer: TransferDto {
                 buffer_size_bytes: s.transfer.buffer_size_bytes as u64,
@@ -639,6 +668,20 @@ impl SettingsDto {
         s.general.start_with_os = self.general.start_with_os;
         s.general.single_instance = self.general.single_instance;
         s.general.minimize_to_tray = self.general.minimize_to_tray;
+        s.general.error_display_mode = match self.general.error_display_mode.as_str() {
+            "drawer" => ErrorDisplayMode::Drawer,
+            _ => ErrorDisplayMode::Modal,
+        };
+        s.general.paste_shortcut_enabled = self.general.paste_shortcut_enabled;
+        // Empty or whitespace-only combos fall back to the default to
+        // avoid persisting a combo the plugin can't parse.
+        let combo = self.general.paste_shortcut.trim();
+        s.general.paste_shortcut = if combo.is_empty() {
+            defaults::DEFAULT_PASTE_SHORTCUT.to_string()
+        } else {
+            combo.to_string()
+        };
+        s.general.clipboard_watcher_enabled = self.general.clipboard_watcher_enabled;
 
         s.transfer.buffer_size_bytes = self.transfer.buffer_size_bytes as usize;
         s.transfer.verify = parse_verify(&self.transfer.verify);

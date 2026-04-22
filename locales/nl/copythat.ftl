@@ -132,6 +132,8 @@ toast-error-resolved = Fout opgelost
 toast-collision-resolved = Conflict opgelost
 # MT
 toast-elevated-unavailable = Opnieuw proberen met verhoogde rechten komt in fase 17 — nog niet beschikbaar
+toast-clipboard-files-detected = Bestanden op het klembord — druk op uw plak-sneltoets om te kopiëren via Copy That
+toast-clipboard-no-files = Klembord bevat geen bestanden om te plakken
 # MT
 toast-error-log-exported = Foutenlogboek geëxporteerd
 
@@ -151,6 +153,8 @@ error-modal-abort = Alles afbreken
 error-modal-path-label = Pad
 # MT
 error-modal-code-label = Code
+error-drawer-pending-count = Meer fouten wachten
+error-drawer-toggle = Inklappen of uitklappen
 
 # MT — Error-kind labels
 err-not-found = Bestand niet gevonden
@@ -395,6 +399,15 @@ settings-start-with-os = Starten bij opstarten systeem
 settings-single-instance = Enkele actieve instantie
 # MT
 settings-minimize-to-tray = Minimaliseren naar systeemvak bij sluiten
+settings-error-display-mode = Stijl foutprompt
+settings-error-display-modal = Modaal (blokkeert de app)
+settings-error-display-drawer = Zijpaneel (niet-blokkerend)
+settings-error-display-mode-hint = Een modaal pauzeert de wachtrij totdat u beslist. Het zijpaneel laat de wachtrij doorlopen en u fouten in de hoek afhandelen.
+settings-paste-shortcut = Bestanden plakken via globale sneltoets
+settings-paste-shortcut-combo = Sneltoetscombinatie
+settings-paste-shortcut-hint = Druk op deze combinatie ergens in het systeem om bestanden die uit Verkenner / Finder / Bestanden zijn gekopieerd, via Copy That te plakken. CmdOrCtrl wordt Cmd op macOS en Ctrl op Windows / Linux.
+settings-clipboard-watcher = Klembord in de gaten houden voor gekopieerde bestanden
+settings-clipboard-watcher-hint = Toont een melding wanneer bestand-URL's op het klembord verschijnen, met de hint dat u via Copy That kunt plakken. Scant elke 500 ms wanneer ingeschakeld.
 
 # MT
 settings-buffer-size = Buffergrootte

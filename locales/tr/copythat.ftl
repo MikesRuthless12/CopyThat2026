@@ -132,6 +132,8 @@ toast-error-resolved = Hata çözüldü
 toast-collision-resolved = Çakışma çözüldü
 # MT
 toast-elevated-unavailable = Yükseltilmiş izinle yeniden deneme 17. aşamada gelecek — henüz kullanılamıyor
+toast-clipboard-files-detected = Panoda dosyalar var — Copy That ile kopyalamak için yapıştırma kısayoluna basın
+toast-clipboard-no-files = Panoda yapıştırılacak dosya yok
 # MT
 toast-error-log-exported = Hata günlüğü dışa aktarıldı
 
@@ -151,6 +153,8 @@ error-modal-abort = Tümünü iptal et
 error-modal-path-label = Yol
 # MT
 error-modal-code-label = Kod
+error-drawer-pending-count = Daha fazla hata bekliyor
+error-drawer-toggle = Daralt veya genişlet
 
 # MT — Error-kind labels
 err-not-found = Dosya bulunamadı
@@ -395,6 +399,15 @@ settings-start-with-os = Sistem başlangıcında çalıştır
 settings-single-instance = Tek çalışan örnek
 # MT
 settings-minimize-to-tray = Kapatırken sistem tepsisine küçült
+settings-error-display-mode = Hata istemi stili
+settings-error-display-modal = Modal (uygulamayı engeller)
+settings-error-display-drawer = Çekmece (engellemeyen)
+settings-error-display-mode-hint = Modal, siz karar verene kadar kuyruğu durdurur. Çekmece kuyruğu çalışır durumda tutar ve hataları köşede ayıklamanıza izin verir.
+settings-paste-shortcut = Global kısayolla dosyaları yapıştır
+settings-paste-shortcut-combo = Kısayol kombinasyonu
+settings-paste-shortcut-hint = Explorer / Finder / Dosyalar'dan kopyalanan dosyaları Copy That üzerinden yapıştırmak için sisteminizde herhangi bir yerde bu kombinasyona basın. CmdOrCtrl, macOS'ta Cmd'ye ve Windows / Linux'ta Ctrl'ye çözümlenir.
+settings-clipboard-watcher = Kopyalanan dosyalar için panoyu izle
+settings-clipboard-watcher-hint = Dosya URL'leri panoda göründüğünde bir bildirim gösterir ve Copy That ile yapıştırabileceğinizi belirtir. Etkinken her 500 ms'de bir sorgular.
 
 # MT
 settings-buffer-size = Arabellek boyutu

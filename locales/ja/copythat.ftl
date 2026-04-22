@@ -132,6 +132,8 @@ toast-error-resolved = エラーを解決しました
 toast-collision-resolved = 競合を解決しました
 # MT
 toast-elevated-unavailable = 昇格権限での再試行は Phase 17 で提供されます — まだ利用できません
+toast-clipboard-files-detected = クリップボードにファイル — 貼り付けショートカットを押して Copy That でコピー
+toast-clipboard-no-files = クリップボードに貼り付けるファイルがありません
 # MT
 toast-error-log-exported = エラーログをエクスポートしました
 
@@ -151,6 +153,8 @@ error-modal-abort = すべて中止
 error-modal-path-label = パス
 # MT
 error-modal-code-label = コード
+error-drawer-pending-count = 他のエラーが待機中
+error-drawer-toggle = 折りたたむ / 展開する
 
 # MT — Error-kind labels
 err-not-found = ファイルが見つかりません
@@ -395,6 +399,15 @@ settings-start-with-os = システム起動時に起動
 settings-single-instance = インスタンスを 1 つだけ実行
 # MT
 settings-minimize-to-tray = 閉じるときにトレイに最小化
+settings-error-display-mode = エラー通知スタイル
+settings-error-display-modal = モーダル (アプリをブロック)
+settings-error-display-drawer = ドロワー (非ブロック)
+settings-error-display-mode-hint = モーダルは判断するまでキューを停止します。ドロワーはキューを継続させ、隅でエラーを整理できます。
+settings-paste-shortcut = グローバルショートカットでファイルを貼り付け
+settings-paste-shortcut-combo = ショートカットの組み合わせ
+settings-paste-shortcut-hint = システムのどこででもこの組み合わせを押すと、Explorer / Finder / ファイルからコピーしたファイルを Copy That 経由で貼り付けます。CmdOrCtrl は macOS では Cmd、Windows / Linux では Ctrl に解決されます。
+settings-clipboard-watcher = コピーされたファイルのクリップボードを監視
+settings-clipboard-watcher-hint = ファイル URL がクリップボードに現れたときにトーストを表示し、Copy That で貼り付けられることを示します。有効時は 500 ms ごとにポーリング。
 
 # MT
 settings-buffer-size = バッファサイズ

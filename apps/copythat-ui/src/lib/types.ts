@@ -131,6 +131,8 @@ export const EVENTS = {
   collisionResolved: "collision-resolved",
   // Phase 13d
   fileActivity: "file-activity",
+  // Post-Phase-12 paste hotkey + clipboard watcher
+  clipboardFilesDetected: "clipboard-files-detected",
 } as const;
 
 export type FileActivityPhase =
@@ -307,12 +309,28 @@ export interface DayTotalDto {
 // apps/copythat-ui/src-tauri/src/ipc.rs. Enum-shaped fields are
 // kebab-case lowercase strings on the wire; the UI formats them.
 
+export type ErrorDisplayModeWire = "modal" | "drawer";
+
 export interface GeneralSettingsDto {
   language: string;
   theme: "auto" | "light" | "dark";
   startWithOs: boolean;
   singleInstance: boolean;
   minimizeToTray: boolean;
+  errorDisplayMode: ErrorDisplayModeWire;
+  pasteShortcutEnabled: boolean;
+  /** Tauri global-shortcut combo (e.g. "CmdOrCtrl+Shift+V"). */
+  pasteShortcut: string;
+  clipboardWatcherEnabled: boolean;
+}
+
+/** Phase-post-12 — fired when the clipboard watcher sees new files land
+ *  on the OS clipboard. The UI surfaces a toast hint; the user can then
+ *  press the configured paste shortcut to open the staging dialog. */
+export interface ClipboardFilesDetectedDto {
+  paths: string[];
+  count: number;
+  shortcut: string;
 }
 
 export type VerifyChoiceWire =

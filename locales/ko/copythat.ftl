@@ -132,6 +132,8 @@ toast-error-resolved = 오류가 해결되었습니다
 toast-collision-resolved = 충돌이 해결되었습니다
 # MT
 toast-elevated-unavailable = 상승 권한으로 재시도 기능은 17단계에서 제공됩니다 — 아직 사용할 수 없음
+toast-clipboard-files-detected = 클립보드에 파일 있음 — 붙여넣기 단축키를 눌러 Copy That으로 복사
+toast-clipboard-no-files = 클립보드에 붙여넣을 파일이 없음
 # MT
 toast-error-log-exported = 오류 로그를 내보냈습니다
 
@@ -151,6 +153,8 @@ error-modal-abort = 모두 중단
 error-modal-path-label = 경로
 # MT
 error-modal-code-label = 코드
+error-drawer-pending-count = 대기 중인 추가 오류
+error-drawer-toggle = 접기 또는 펼치기
 
 # MT — Error-kind labels
 err-not-found = 파일을 찾을 수 없습니다
@@ -395,6 +399,15 @@ settings-start-with-os = 시스템 시작 시 실행
 settings-single-instance = 단일 인스턴스 실행
 # MT
 settings-minimize-to-tray = 닫을 때 트레이로 최소화
+settings-error-display-mode = 오류 프롬프트 스타일
+settings-error-display-modal = 모달 (앱 차단)
+settings-error-display-drawer = 드로어 (비차단)
+settings-error-display-mode-hint = 모달은 결정할 때까지 큐를 중지합니다. 드로어는 큐를 계속 실행하고 모서리에서 오류를 분류할 수 있습니다.
+settings-paste-shortcut = 전역 단축키로 파일 붙여넣기
+settings-paste-shortcut-combo = 단축키 조합
+settings-paste-shortcut-hint = 시스템 어디에서나 이 조합을 누르면 Explorer / Finder / Files에서 복사한 파일을 Copy That을 통해 붙여넣을 수 있습니다. CmdOrCtrl은 macOS에서는 Cmd, Windows / Linux에서는 Ctrl로 해석됩니다.
+settings-clipboard-watcher = 복사된 파일에 대해 클립보드 감시
+settings-clipboard-watcher-hint = 파일 URL이 클립보드에 나타날 때 토스트를 표시하여 Copy That으로 붙여넣을 수 있음을 알립니다. 활성화된 동안 500 ms마다 폴링합니다.
 
 # MT
 settings-buffer-size = 버퍼 크기

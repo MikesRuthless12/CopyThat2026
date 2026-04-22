@@ -132,6 +132,8 @@ toast-error-resolved = Errore risolto
 toast-collision-resolved = Conflitto risolto
 # MT
 toast-elevated-unavailable = Il riprova con permessi elevati arriva nella fase 17 — non ancora disponibile
+toast-clipboard-files-detected = File negli appunti — premi la scorciatoia di incolla per copiare tramite Copy That
+toast-clipboard-no-files = Gli appunti non contengono file da incollare
 # MT
 toast-error-log-exported = Registro errori esportato
 
@@ -151,6 +153,8 @@ error-modal-abort = Interrompi tutto
 error-modal-path-label = Percorso
 # MT
 error-modal-code-label = Codice
+error-drawer-pending-count = Altri errori in attesa
+error-drawer-toggle = Comprimi o espandi
 
 # MT — Error-kind labels
 err-not-found = File non trovato
@@ -395,6 +399,15 @@ settings-start-with-os = Avvia con il sistema
 settings-single-instance = Istanza singola
 # MT
 settings-minimize-to-tray = Riduci nella barra delle applicazioni alla chiusura
+settings-error-display-mode = Stile avviso di errore
+settings-error-display-modal = Modale (blocca l'app)
+settings-error-display-drawer = Pannello laterale (non bloccante)
+settings-error-display-mode-hint = La modale ferma la coda finché non decidi. Il pannello laterale mantiene la coda attiva e ti lascia gestire gli errori nell'angolo.
+settings-paste-shortcut = Incolla file tramite scorciatoia globale
+settings-paste-shortcut-combo = Combinazione tasti
+settings-paste-shortcut-hint = Premi questa combinazione ovunque nel sistema per incollare file copiati da Esplora risorse / Finder / File tramite Copy That. CmdOrCtrl si risolve in Cmd su macOS e Ctrl su Windows / Linux.
+settings-clipboard-watcher = Controlla gli appunti per file copiati
+settings-clipboard-watcher-hint = Mostra un avviso quando URL di file appaiono negli appunti, suggerendo che puoi incollare tramite Copy That. Controlla ogni 500 ms quando attivo.
 
 # MT
 settings-buffer-size = Dimensione del buffer

@@ -132,6 +132,8 @@ toast-error-resolved = Kesalahan teratasi
 toast-collision-resolved = Konflik teratasi
 # MT
 toast-elevated-unavailable = Coba lagi dengan izin tinggi akan hadir di Fase 17 — belum tersedia
+toast-clipboard-files-detected = Berkas di papan klip — tekan pintasan tempel untuk menyalin via Copy That
+toast-clipboard-no-files = Tidak ada berkas di papan klip untuk ditempel
 # MT
 toast-error-log-exported = Log kesalahan diekspor
 
@@ -151,6 +153,8 @@ error-modal-abort = Batalkan semua
 error-modal-path-label = Jalur
 # MT
 error-modal-code-label = Kode
+error-drawer-pending-count = Kesalahan lain menunggu
+error-drawer-toggle = Ciutkan atau perluas
 
 # MT — Error-kind labels
 err-not-found = File tidak ditemukan
@@ -395,6 +399,15 @@ settings-start-with-os = Jalankan saat sistem dimulai
 settings-single-instance = Satu instansi berjalan
 # MT
 settings-minimize-to-tray = Minimalkan ke baki saat ditutup
+settings-error-display-mode = Gaya peringatan kesalahan
+settings-error-display-modal = Modal (memblokir aplikasi)
+settings-error-display-drawer = Panel samping (tidak memblokir)
+settings-error-display-mode-hint = Modal menghentikan antrean sampai Anda memutuskan. Panel samping menjaga antrean tetap berjalan dan memungkinkan Anda menangani kesalahan di sudut.
+settings-paste-shortcut = Tempel berkas via pintasan global
+settings-paste-shortcut-combo = Kombinasi pintasan
+settings-paste-shortcut-hint = Tekan kombinasi ini di mana saja di sistem untuk menempelkan berkas yang disalin dari Explorer / Finder / Files melalui Copy That. CmdOrCtrl menjadi Cmd di macOS dan Ctrl di Windows / Linux.
+settings-clipboard-watcher = Awasi papan klip untuk berkas yang disalin
+settings-clipboard-watcher-hint = Menampilkan pemberitahuan saat URL berkas muncul di papan klip, mengisyaratkan Anda bisa menempel via Copy That. Memeriksa setiap 500 ms saat aktif.
 
 # MT
 settings-buffer-size = Ukuran buffer

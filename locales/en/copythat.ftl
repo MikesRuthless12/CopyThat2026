@@ -158,6 +158,8 @@ toast-move-queued = Move queued
 toast-error-resolved = Error resolved
 toast-collision-resolved = Collision resolved
 toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
+toast-clipboard-files-detected = Files on clipboard — press your paste shortcut to copy via Copy That
+toast-clipboard-no-files = Clipboard has no files to paste
 toast-error-log-exported = Error log exported
 
 # Error modal (Phase 8)
@@ -169,6 +171,8 @@ error-modal-skip-all-kind = Skip all errors of this kind
 error-modal-abort = Abort all
 error-modal-path-label = Path
 error-modal-code-label = Code
+error-drawer-pending-count = More errors waiting
+error-drawer-toggle = Collapse or expand
 
 # Error-kind labels (Phase 8). Source of truth — engine maps each
 # `CopyErrorKind` to one of these keys via `localized_key()`.
@@ -336,6 +340,15 @@ settings-theme-dark = Dark
 settings-start-with-os = Launch on system startup
 settings-single-instance = Single running instance
 settings-minimize-to-tray = Minimize to tray on close
+settings-error-display-mode = Error prompt style
+settings-error-display-modal = Modal (blocks the app)
+settings-error-display-drawer = Drawer (non-blocking)
+settings-error-display-mode-hint = Modal stops the queue until you decide. Drawer keeps the queue moving and lets you triage errors in the corner.
+settings-paste-shortcut = Paste files via global shortcut
+settings-paste-shortcut-combo = Shortcut combo
+settings-paste-shortcut-hint = Press this combo anywhere on your system to paste files copied from Explorer / Finder / Files via Copy That. CmdOrCtrl resolves to Cmd on macOS, Ctrl on Windows / Linux.
+settings-clipboard-watcher = Watch clipboard for copied files
+settings-clipboard-watcher-hint = Show a toast when file URLs appear on the clipboard, hinting you can paste via Copy That. Polls every 500 ms while enabled.
 
 # Transfer tab
 settings-buffer-size = Buffer size
