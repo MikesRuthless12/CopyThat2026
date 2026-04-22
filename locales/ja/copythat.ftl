@@ -167,6 +167,8 @@ err-interrupted = 操作が中断されました
 # MT
 err-verify-failed = コピー後の検証に失敗しました
 # MT
+err-path-escape = パスは拒否されました — 親ディレクトリ（..）セグメントまたは無効なバイトが含まれています
+# MT
 err-io-other = 不明な I/O エラー
 
 # MT — Collision modal

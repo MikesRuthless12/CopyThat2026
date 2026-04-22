@@ -167,6 +167,8 @@ err-interrupted = Bewerking onderbroken
 # MT
 err-verify-failed = Controle na kopiëren mislukt
 # MT
+err-path-escape = Pad geweigerd — bevat bovenliggende map-segmenten (..) of ongeldige bytes
+# MT
 err-io-other = Onbekende I/O-fout
 
 # MT — Collision modal

@@ -167,6 +167,8 @@ err-interrupted = Operasi terputus
 # MT
 err-verify-failed = Verifikasi pasca-salin gagal
 # MT
+err-path-escape = Jalur ditolak — berisi segmen direktori induk (..) atau byte ilegal
+# MT
 err-io-other = Kesalahan I/O tidak dikenal
 
 # MT — Collision modal

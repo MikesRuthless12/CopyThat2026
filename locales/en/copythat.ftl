@@ -181,6 +181,7 @@ err-permission-denied = Permission denied
 err-disk-full = Destination disk is full
 err-interrupted = Operation interrupted
 err-verify-failed = Post-copy verification failed
+err-path-escape = Path rejected — contains parent-directory (..) segments or illegal bytes
 err-io-other = Unknown I/O error
 
 # Collision modal (Phase 8)

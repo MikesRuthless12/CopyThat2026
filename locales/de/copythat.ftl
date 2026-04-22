@@ -167,6 +167,8 @@ err-interrupted = Vorgang unterbrochen
 # MT
 err-verify-failed = Prüfung nach Kopie fehlgeschlagen
 # MT
+err-path-escape = Pfad abgelehnt — enthält übergeordnete Verzeichnissegmente (..) oder ungültige Bytes
+# MT
 err-io-other = Unbekannter E/A-Fehler
 
 # MT — Collision modal

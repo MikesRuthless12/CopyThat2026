@@ -12,7 +12,10 @@
 
 use std::path::{Path, PathBuf};
 
-use copythat_core::{CollisionPolicy, CopyOptions, ErrorPolicy, FilterSet, JobKind, Verifier};
+use copythat_core::{
+    CollisionPolicy, CopyOptions, ErrorPolicy, FilterSet, JobKind, Verifier,
+    validate_path_no_traversal,
+};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::cli::{CliAction, EnqueueArgs, EnqueueVerb};
@@ -170,7 +173,26 @@ fn dispatch_enqueue(app: &AppHandle, args: EnqueueArgs) {
         EnqueueVerb::Move => JobKind::Move,
     };
 
+    // Phase 17a — the CLI path bypasses `start_copy` / `start_move`,
+    // so we run the same lexical safety guard here. A shell-extension
+    // COM DLL or scripted pipeline is just as valid an attacker as
+    // the webview; rejecting before `enqueue_jobs` runs keeps the
+    // job out of the history log + queue entirely.
+    for p in &args.paths {
+        if let Err(e) = validate_path_no_traversal(p) {
+            eprintln!("[cli enqueue] rejected source `{}`: {e}", p.display());
+            return;
+        }
+    }
+
     if let Some(dst_root) = args.destination {
+        if let Err(e) = validate_path_no_traversal(&dst_root) {
+            eprintln!(
+                "[cli enqueue] rejected destination `{}`: {e}",
+                dst_root.display()
+            );
+            return;
+        }
         // Non-interactive: skip the staging dialog and drop straight
         // into the queue. Used by scripted pipelines and tests.
         let state = app.state::<AppState>().inner().clone();
