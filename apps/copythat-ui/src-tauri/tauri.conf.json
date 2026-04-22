@@ -30,7 +30,7 @@
   "bundle": {
     "active": true,
     "targets": ["msi", "nsis", "app", "dmg", "appimage", "deb", "rpm"],
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "category": "Utility",
     "shortDescription": "Byte-exact cross-platform file copier.",
     "longDescription": "Copy That 2026 is a lightweight, cross-platform, async, byte-exact file and folder copier. Matches every TeraCopy feature while staying as fast as — or faster than — Explorer, Finder, cp, and rsync for typical desktop workloads.",
