@@ -1,14 +1,19 @@
 //! Tree-level copy and move.
 //!
-//! `copy_tree` is a two-phase operation:
-//!   1. `spawn_blocking` a BFS walk of the source tree to gather the
-//!      complete set of directories, files, and symlinks plus their
-//!      total byte count. This gives accurate totals for progress.
-//!   2. Recreate the directory shape at the destination, then drive
-//!      bounded-concurrency per-file copies through `copy_file`.
+//! `copy_tree` runs a streaming walker + dispatcher: a background
+//! task feeds `Entry` items into a bounded channel as `walkdir`
+//! yields them, while a dispatcher pulls entries off the channel
+//! and processes them — directories are created at the destination
+//! inline, files are handed off to a concurrency-limited worker
+//! pool. The two phases overlap: copies start as soon as the first
+//! directory has been seen, and the engine never holds the whole
+//! tree in memory. Tree size is bounded only by the destination
+//! volume, not by RAM — a 100 M-file / 2 PB source is the same
+//! workload as a 10-file one, just longer.
 //!
-//! `move_tree` tries an atomic `rename` first; on cross-device failure
-//! it falls back to `copy_tree` + bottom-up source deletion.
+//! `move_tree` tries an atomic `rename` first; on cross-device
+//! failure it falls back to `copy_tree` + a streaming, bottom-up
+//! source-deletion walk.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -16,15 +21,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use filetime::FileTime;
-use tokio::sync::{Semaphore, mpsc};
+use tokio::sync::{Semaphore, mpsc, oneshot};
 use tokio::task::JoinSet;
 
 use crate::collision::{self, Decision};
 use crate::control::CopyControl;
 use crate::engine::copy_file;
 use crate::error::{CopyError, CopyErrorKind};
-use crate::event::{CopyEvent, TreeReport};
-use crate::options::{MoveOptions, TreeOptions};
+use crate::event::{CopyEvent, ErrorPrompt, TreeReport};
+use crate::options::{ErrorAction, ErrorPolicy, MoveOptions, TreeOptions};
 
 /// Copy `src_dir` into `dst_dir`, preserving structure.
 ///
@@ -37,11 +42,7 @@ pub async fn copy_tree(
     ctrl: CopyControl,
     events: mpsc::Sender<CopyEvent>,
 ) -> Result<TreeReport, CopyError> {
-    copy_tree_inner(
-        src_dir, dst_dir, opts, ctrl, events, /*is_move_fallback*/ false,
-    )
-    .await
-    .map(|(report, _)| report)
+    copy_tree_inner(src_dir, dst_dir, opts, ctrl, events).await
 }
 
 /// Move a single file. Tries `rename` first, falls back to
@@ -122,6 +123,7 @@ pub async fn move_tree(
                 duration: Duration::ZERO,
                 rate_bps: 0,
                 skipped: 0,
+                errored: 0,
             };
             let _ = events
                 .send(CopyEvent::TreeCompleted {
@@ -144,48 +146,60 @@ pub async fn move_tree(
         file: opts.copy.clone(),
         ..TreeOptions::default()
     };
-    let (report, plan) = copy_tree_inner(
-        src_dir,
-        dst_dir,
-        tree_opts,
-        ctrl.clone(),
-        events.clone(),
-        true,
-    )
-    .await?;
+    let report = copy_tree_inner(src_dir, dst_dir, tree_opts, ctrl.clone(), events.clone()).await?;
     if ctrl.is_cancelled() {
         return Err(CopyError::cancelled(src_dir, dst_dir));
     }
 
-    // Bottom-up source cleanup. Delete files first, then directories
-    // in reverse-BFS order.
-    let mut dirs_to_delete: Vec<PathBuf> = Vec::new();
-    for entry in &plan.entries {
-        match entry.kind {
-            EntryKind::File | EntryKind::Symlink => {
-                if let Err(e) = tokio::fs::remove_file(&entry.src).await {
-                    // Ignore NotFound — entry may have already been
-                    // unlinked (e.g. symlink that replaced a file
-                    // during the walk).
-                    if e.kind() != std::io::ErrorKind::NotFound {
-                        return Err(CopyError::from_io(&entry.src, dst_dir, e));
+    // Streaming bottom-up source deletion. `walkdir::contents_first`
+    // yields files before their containing directory, which is what
+    // delete order wants — we never hold the full list in memory.
+    let src_for_delete = src_dir.to_path_buf();
+    let dst_for_delete = dst_dir.to_path_buf();
+    let delete_result = tokio::task::spawn_blocking(move || -> Result<(), CopyError> {
+        for entry in walkdir::WalkDir::new(&src_for_delete).contents_first(true) {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(e) => {
+                    let denied = e
+                        .io_error()
+                        .map(|io| io.kind() == std::io::ErrorKind::PermissionDenied)
+                        .unwrap_or(false);
+                    if denied {
+                        continue;
                     }
+                    return Err(CopyError::from_io(
+                        &src_for_delete,
+                        &dst_for_delete,
+                        std::io::Error::other(format!("walk error at {:?}: {e}", e.path())),
+                    ));
+                }
+            };
+            let path = entry.path();
+            let ft = entry.file_type();
+            let result = if ft.is_dir() {
+                std::fs::remove_dir(path)
+            } else {
+                std::fs::remove_file(path)
+            };
+            if let Err(e) = result {
+                match e.kind() {
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty => {}
+                    _ => return Err(CopyError::from_io(path, &dst_for_delete, e)),
                 }
             }
-            EntryKind::Dir => dirs_to_delete.push(entry.src.clone()),
         }
-    }
-    // Deepest first.
-    dirs_to_delete.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
-    for dir in dirs_to_delete {
-        if let Err(e) = tokio::fs::remove_dir(&dir).await
-            && e.kind() != std::io::ErrorKind::NotFound
-            && e.kind() != std::io::ErrorKind::DirectoryNotEmpty
-        {
-            return Err(CopyError::from_io(&dir, dst_dir, e));
-        }
-    }
-
+        Ok(())
+    })
+    .await
+    .map_err(|e| CopyError {
+        kind: CopyErrorKind::IoOther,
+        src: src_dir.to_path_buf(),
+        dst: dst_dir.to_path_buf(),
+        raw_os_error: None,
+        message: format!("source-delete task panicked: {e}"),
+    })?;
+    delete_result?;
     Ok(report)
 }
 
@@ -240,12 +254,11 @@ async fn copy_tree_inner(
     opts: TreeOptions,
     ctrl: CopyControl,
     events: mpsc::Sender<CopyEvent>,
-    _is_move_fallback: bool,
-) -> Result<(TreeReport, Plan), CopyError> {
+) -> Result<TreeReport, CopyError> {
     let src_root = src_dir.to_path_buf();
     let dst_root = dst_dir.to_path_buf();
 
-    // Validate + enumerate.
+    // Validate source.
     let src_meta = tokio::fs::metadata(&src_root)
         .await
         .map_err(|e| CopyError::from_io(&src_root, &dst_root, e))?;
@@ -259,19 +272,6 @@ async fn copy_tree_inner(
         });
     }
 
-    let plan = enumerate(src_root.clone(), opts.follow_symlinks_in_tree)
-        .await
-        .map_err(|e| CopyError::from_io(&src_root, &dst_root, e))?;
-
-    let _ = events
-        .send(CopyEvent::TreeStarted {
-            root_src: src_root.clone(),
-            root_dst: dst_root.clone(),
-            total_files: plan.total_files,
-            total_bytes: plan.total_bytes,
-        })
-        .await;
-
     // Ensure destination root exists.
     if let Err(e) = tokio::fs::create_dir_all(&dst_root).await {
         let err = CopyError::from_io(&src_root, &dst_root, e);
@@ -279,114 +279,189 @@ async fn copy_tree_inner(
         return Err(err);
     }
 
-    // Recreate directory skeleton first so per-file copies find their
-    // parent ready. Ordering: shallowest-to-deepest (which is what
-    // walkdir gives us for directories).
-    for entry in plan.entries.iter().filter(|e| e.kind == EntryKind::Dir) {
-        let dst_path = dst_root.join(&entry.rel);
-        if let Err(e) = tokio::fs::create_dir_all(&dst_path).await {
-            let err = CopyError::from_io(&entry.src, &dst_path, e);
-            let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
-            return Err(err);
-        }
-    }
+    // TreeStarted fires with zeros — with streaming enumeration we
+    // don't know the final totals until the walker finishes. The
+    // TreeEnumerating + TreeProgress events grow the UI's
+    // denominator as discovery continues.
+    let _ = events
+        .send(CopyEvent::TreeStarted {
+            root_src: src_root.clone(),
+            root_dst: dst_root.clone(),
+            total_files: 0,
+            total_bytes: 0,
+        })
+        .await;
 
     let started = Instant::now();
     let bytes_done = Arc::new(AtomicU64::new(0));
     let files_done = Arc::new(AtomicU64::new(0));
     let skipped = Arc::new(AtomicU64::new(0));
+    let errored = Arc::new(AtomicU64::new(0));
+    // Growing denominator. Each chunk received from the walker adds
+    // its own `total_files` / `total_bytes` into these counters;
+    // per-file TreeProgress events read them as the "total so far".
+    let files_total_so_far = Arc::new(AtomicU64::new(0));
+    let bytes_total_so_far = Arc::new(AtomicU64::new(0));
 
+    let on_error = opts.clamped_on_error();
     let semaphore = Arc::new(Semaphore::new(opts.clamped_concurrency()));
     let mut set: JoinSet<Result<FileOutcome, CopyError>> = JoinSet::new();
 
-    // Prepare the file + symlink entries; dirs are already created.
-    let file_entries: Vec<Entry> = plan
-        .entries
-        .iter()
-        .filter(|e| e.kind != EntryKind::Dir)
-        .cloned()
-        .collect();
+    // Dir accumulator for preserve_directory_times — we only remember
+    // (src, dst) pairs, not whole Entry objects. Cheap enough to
+    // keep for any realistic tree (10 M dirs × ~200 B = 2 GB only
+    // at the extreme end; default walks stay well under that).
+    let mut all_dirs: Vec<(PathBuf, PathBuf)> = Vec::new();
 
-    for entry in file_entries {
-        if ctrl.is_cancelled() {
-            break;
-        }
-        let permit_owner = semaphore.clone();
-        let ctrl_task = ctrl.clone();
-        let events_task = events.clone();
-        let opts_file = opts.file.clone();
-        let collision = opts.collision.clone();
-        let dst_root_task = dst_root.clone();
-        let bytes_done_task = bytes_done.clone();
-        let files_done_task = files_done.clone();
-        let skipped_task = skipped.clone();
-        let total_files = plan.total_files;
-        let total_bytes = plan.total_bytes;
-        let entry = entry.clone();
-
-        set.spawn(async move {
-            let permit = permit_owner.acquire_owned().await.map_err(|_| CopyError {
-                kind: CopyErrorKind::IoOther,
-                src: entry.src.clone(),
-                dst: dst_root_task.join(&entry.rel),
-                raw_os_error: None,
-                message: "tree copy semaphore closed".to_string(),
-            })?;
-
-            let dst_initial = dst_root_task.join(&entry.rel);
-            let decision =
-                collision::resolve(&collision, &entry.src, &dst_initial, &events_task).await;
-
-            let outcome = match decision {
-                Decision::Skip => {
-                    skipped_task.fetch_add(1, Ordering::Relaxed);
-                    FileOutcome::Skipped
-                }
-                Decision::Abort => FileOutcome::Aborted,
-                Decision::Write(dst_final) => match entry.kind {
-                    EntryKind::Symlink => {
-                        copy_symlink_entry(&entry.src, &dst_final).await?;
-                        FileOutcome::Done(0)
-                    }
-                    EntryKind::File => {
-                        let per_file_opts = opts_file.clone();
-                        let report = copy_file(
-                            &entry.src,
-                            &dst_final,
-                            per_file_opts,
-                            ctrl_task.clone(),
-                            events_task.clone(),
-                        )
-                        .await?;
-                        FileOutcome::Done(report.bytes)
-                    }
-                    EntryKind::Dir => unreachable!("dirs filtered above"),
-                },
-            };
-
-            if let FileOutcome::Done(bytes) = &outcome {
-                let done_bytes = bytes_done_task.fetch_add(*bytes, Ordering::Relaxed) + *bytes;
-                let done_files = files_done_task.fetch_add(1, Ordering::Relaxed) + 1;
-                let elapsed = started.elapsed();
-                let rate = rate_bps(done_bytes, elapsed);
-                let _ = events_task
-                    .send(CopyEvent::TreeProgress {
-                        files_done: done_files,
-                        files_total: total_files,
-                        bytes_done: done_bytes,
-                        bytes_total: total_bytes,
-                        rate_bps: rate,
-                    })
-                    .await;
-            }
-
-            drop(permit);
-            Ok(outcome)
-        });
-    }
+    // Spawn walker. Channel capacity 2 = one chunk can be in flight
+    // while the dispatcher processes the previous one, modest
+    // backpressure when the dispatcher falls behind.
+    let (chunk_tx, mut chunk_rx) = mpsc::channel::<Plan>(2);
+    let events_for_walker = events.clone();
+    let follow_symlinks = opts.follow_symlinks_in_tree;
+    let src_for_walker = src_root.clone();
+    let walker_handle = tokio::task::spawn_blocking(move || {
+        enumerate_streaming(
+            src_for_walker,
+            follow_symlinks,
+            chunk_tx,
+            events_for_walker,
+        )
+    });
 
     let mut aborted = false;
     let mut first_error: Option<CopyError> = None;
+
+    // Consume chunks as the walker produces them.
+    while let Some(chunk) = chunk_rx.recv().await {
+        if ctrl.is_cancelled() {
+            break;
+        }
+
+        // Grow the discovered totals. Per-file TreeProgress events
+        // read these atomics as the denominator, so by the time the
+        // user sees "X / Y" the Y is always ≥ what's been discovered.
+        files_total_so_far.fetch_add(chunk.total_files, Ordering::Relaxed);
+        bytes_total_so_far.fetch_add(chunk.total_bytes, Ordering::Relaxed);
+
+        // Recreate this chunk's directories. Walkdir yields dirs
+        // shallow-first within each chunk, so create_dir_all
+        // (which no-ops on existing) lands in order.
+        for entry in chunk.entries.iter().filter(|e| e.kind == EntryKind::Dir) {
+            if ctrl.is_cancelled() {
+                break;
+            }
+            let dst_path = dst_root.join(&entry.rel);
+            if let Err(e) = tokio::fs::create_dir_all(&dst_path).await {
+                let err = CopyError::from_io(&entry.src, &dst_path, e);
+                if first_error.is_none() {
+                    first_error = Some(err);
+                }
+                ctrl.cancel();
+                break;
+            }
+            if opts.preserve_directory_times {
+                all_dirs.push((entry.src.clone(), dst_path));
+            }
+        }
+
+        // Spawn copies for file / symlink entries in this chunk.
+        for entry in chunk.entries.into_iter().filter(|e| e.kind != EntryKind::Dir) {
+            if ctrl.is_cancelled() {
+                break;
+            }
+            let permit_owner = semaphore.clone();
+            let ctrl_task = ctrl.clone();
+            let events_task = events.clone();
+            let opts_file = opts.file.clone();
+            let collision = opts.collision.clone();
+            let dst_root_task = dst_root.clone();
+            let bytes_done_task = bytes_done.clone();
+            let files_done_task = files_done.clone();
+            let skipped_task = skipped.clone();
+            let errored_task = errored.clone();
+            let files_total_task = files_total_so_far.clone();
+            let bytes_total_task = bytes_total_so_far.clone();
+            let on_error_task = on_error;
+
+            set.spawn(async move {
+                let permit = permit_owner.acquire_owned().await.map_err(|_| CopyError {
+                    kind: CopyErrorKind::IoOther,
+                    src: entry.src.clone(),
+                    dst: dst_root_task.join(&entry.rel),
+                    raw_os_error: None,
+                    message: "tree copy semaphore closed".to_string(),
+                })?;
+
+                let dst_initial = dst_root_task.join(&entry.rel);
+                let decision =
+                    collision::resolve(&collision, &entry.src, &dst_initial, &events_task).await;
+
+                let outcome: Result<FileOutcome, CopyError> = match decision {
+                    Decision::Skip => {
+                        skipped_task.fetch_add(1, Ordering::Relaxed);
+                        Ok(FileOutcome::Skipped)
+                    }
+                    Decision::Abort => Ok(FileOutcome::Aborted),
+                    Decision::Write(dst_final) => match entry.kind {
+                        EntryKind::Symlink => {
+                            match copy_symlink_entry(&entry.src, &dst_final).await {
+                                Ok(()) => Ok(FileOutcome::Done(0)),
+                                Err(err) => {
+                                    handle_per_file_error(
+                                        err,
+                                        on_error_task,
+                                        &events_task,
+                                        &errored_task,
+                                    )
+                                    .await
+                                }
+                            }
+                        }
+                        EntryKind::File => {
+                            attempt_copy_with_policy(
+                                &entry.src,
+                                &dst_final,
+                                &opts_file,
+                                &ctrl_task,
+                                &events_task,
+                                on_error_task,
+                                &errored_task,
+                            )
+                            .await
+                        }
+                        EntryKind::Dir => unreachable!("dirs filtered above"),
+                    },
+                };
+
+                let outcome = outcome?;
+                if let FileOutcome::Done(bytes) = &outcome {
+                    let done_bytes =
+                        bytes_done_task.fetch_add(*bytes, Ordering::Relaxed) + *bytes;
+                    let done_files = files_done_task.fetch_add(1, Ordering::Relaxed) + 1;
+                    let tot_files = files_total_task.load(Ordering::Relaxed);
+                    let tot_bytes = bytes_total_task.load(Ordering::Relaxed);
+                    let elapsed = started.elapsed();
+                    let rate = rate_bps(done_bytes, elapsed);
+                    let _ = events_task
+                        .send(CopyEvent::TreeProgress {
+                            files_done: done_files,
+                            files_total: tot_files,
+                            bytes_done: done_bytes,
+                            bytes_total: tot_bytes,
+                            rate_bps: rate,
+                        })
+                        .await;
+                }
+
+                drop(permit);
+                Ok(outcome)
+            });
+        }
+    }
+
+    // Walker has closed the channel (or dispatcher cancelled).
+    // Drain the remaining copy tasks.
     while let Some(joined) = set.join_next().await {
         match joined {
             Ok(Ok(FileOutcome::Aborted)) => {
@@ -398,12 +473,9 @@ async fn copy_tree_inner(
                 if first_error.is_none() {
                     first_error = Some(err);
                 }
-                // Cancel remaining tasks — one file's failure stops
-                // the tree.
                 ctrl.cancel();
             }
             Err(_join_err) => {
-                // Task panicked. Report.
                 if first_error.is_none() {
                     first_error = Some(CopyError {
                         kind: CopyErrorKind::IoOther,
@@ -418,6 +490,29 @@ async fn copy_tree_inner(
         }
     }
 
+    // Join the walker task itself so we can surface walker errors
+    // (permission-denied on the root, non-dir source, etc.).
+    match walker_handle.await {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => {
+            let err = CopyError::from_io(&src_root, &dst_root, e);
+            if first_error.is_none() {
+                first_error = Some(err);
+            }
+        }
+        Err(join_err) => {
+            if first_error.is_none() {
+                first_error = Some(CopyError {
+                    kind: CopyErrorKind::IoOther,
+                    src: src_root.clone(),
+                    dst: dst_root.clone(),
+                    raw_os_error: None,
+                    message: format!("walker task panicked: {join_err}"),
+                });
+            }
+        }
+    }
+
     if let Some(err) = first_error {
         let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
         return Err(err);
@@ -428,27 +523,20 @@ async fn copy_tree_inner(
         return Err(err);
     }
 
-    // Directory times last: walkdir gives us directories shallow-first,
-    // but times should be applied deepest-first so we don't write a
-    // file into a directory after its mtime has been set.
+    // Directory times last, deepest-first so setting a parent's
+    // mtime doesn't get invalidated by a later file-copy into its
+    // children.
     if opts.preserve_directory_times {
-        let mut dirs: Vec<&Entry> = plan
-            .entries
-            .iter()
-            .filter(|e| e.kind == EntryKind::Dir)
-            .collect();
-        dirs.sort_by_key(|e| std::cmp::Reverse(e.rel.components().count()));
-        for dir in dirs {
-            let src_md = match std::fs::metadata(&dir.src) {
+        all_dirs.sort_by_key(|(_, dst)| std::cmp::Reverse(dst.components().count()));
+        for (src, dst) in all_dirs {
+            let src_md = match std::fs::metadata(&src) {
                 Ok(m) => m,
                 Err(_) => continue,
             };
-            let dst_path = dst_root.join(&dir.rel);
             let atime = FileTime::from_last_access_time(&src_md);
             let mtime = FileTime::from_last_modification_time(&src_md);
-            let dst_clone = dst_path.clone();
             let _ = tokio::task::spawn_blocking(move || {
-                filetime::set_file_times(&dst_clone, atime, mtime)
+                filetime::set_file_times(&dst, atime, mtime)
             })
             .await;
         }
@@ -475,31 +563,195 @@ async fn copy_tree_inner(
         duration: elapsed,
         rate_bps: rate,
         skipped: skipped.load(Ordering::Relaxed),
+        errored: errored.load(Ordering::Relaxed),
     };
-    Ok((report, plan))
+    Ok(report)
 }
 
 enum FileOutcome {
     Done(u64),
     Skipped,
+    /// Per-file failure absorbed by the error policy (Skip or
+    /// RetryN-exhausted). Separate from `Skipped` because the tree
+    /// report tracks each count independently.
+    Errored,
     Aborted,
 }
 
-async fn enumerate(root: PathBuf, follow_symlinks: bool) -> std::io::Result<Plan> {
-    tokio::task::spawn_blocking(move || enumerate_sync(&root, follow_symlinks))
-        .await
-        .map_err(|e| std::io::Error::other(format!("walk task panicked: {e}")))?
+/// Drive per-file copy with retry / ask / skip / abort semantics.
+///
+/// Split out of the task closure for readability. Returns:
+/// - `Ok(FileOutcome::Done(bytes))` on success.
+/// - `Ok(FileOutcome::Errored)` when the policy absorbed the error
+///   (tree continues).
+/// - `Ok(FileOutcome::Aborted)` when the engine was cancelled via
+///   `CopyControl` mid-attempt.
+/// - `Err(CopyError)` only on `ErrorPolicy::Abort` (fatal) or an
+///   `ErrorAction::Abort` response.
+async fn attempt_copy_with_policy(
+    src: &Path,
+    dst: &Path,
+    opts_file: &crate::options::CopyOptions,
+    ctrl: &CopyControl,
+    events: &mpsc::Sender<CopyEvent>,
+    policy: ErrorPolicy,
+    errored: &Arc<AtomicU64>,
+) -> Result<FileOutcome, CopyError> {
+    let mut retries_left: u32 = match policy {
+        ErrorPolicy::RetryN { max_attempts, .. } => max_attempts as u32,
+        _ => 0,
+    };
+    let backoff = match policy {
+        ErrorPolicy::RetryN { backoff_ms, .. } => Duration::from_millis(backoff_ms),
+        _ => Duration::ZERO,
+    };
+
+    loop {
+        let result = copy_file(src, dst, opts_file.clone(), ctrl.clone(), events.clone()).await;
+        match result {
+            Ok(report) => return Ok(FileOutcome::Done(report.bytes)),
+            Err(err) if err.is_cancelled() => return Ok(FileOutcome::Aborted),
+            Err(err) => {
+                match policy {
+                    ErrorPolicy::Abort => return Err(err),
+                    ErrorPolicy::Skip => {
+                        record_file_error(err, events, errored).await;
+                        return Ok(FileOutcome::Errored);
+                    }
+                    ErrorPolicy::RetryN { .. } => {
+                        if retries_left == 0 {
+                            record_file_error(err, events, errored).await;
+                            return Ok(FileOutcome::Errored);
+                        }
+                        retries_left -= 1;
+                        if !backoff.is_zero() {
+                            tokio::time::sleep(backoff).await;
+                        }
+                        continue;
+                    }
+                    ErrorPolicy::Ask => {
+                        let (tx, rx) = oneshot::channel();
+                        let prompt = ErrorPrompt::new(err.clone(), tx);
+                        // If the receiver is gone (event channel
+                        // closed), treat as Skip — same pattern as
+                        // Collision::resolve.
+                        if events.send(CopyEvent::ErrorPrompt(prompt)).await.is_err() {
+                            record_file_error(err, events, errored).await;
+                            return Ok(FileOutcome::Errored);
+                        }
+                        match rx.await {
+                            Ok(ErrorAction::Retry) => continue,
+                            Ok(ErrorAction::Skip) | Err(_) => {
+                                record_file_error(err, events, errored).await;
+                                return Ok(FileOutcome::Errored);
+                            }
+                            Ok(ErrorAction::Abort) => return Err(err),
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
-fn enumerate_sync(root: &Path, follow_symlinks: bool) -> std::io::Result<Plan> {
-    let mut plan = Plan::default();
-    let walker = walkdir::WalkDir::new(root)
+/// For paths that hit an error *before* `copy_file` ran (symlink
+/// creation, etc.). Applies the same policy choice, minus the retry
+/// loop (a symlink failure usually retries identically).
+async fn handle_per_file_error(
+    err: CopyError,
+    policy: ErrorPolicy,
+    events: &mpsc::Sender<CopyEvent>,
+    errored: &Arc<AtomicU64>,
+) -> Result<FileOutcome, CopyError> {
+    match policy {
+        ErrorPolicy::Abort => Err(err),
+        ErrorPolicy::Skip | ErrorPolicy::RetryN { .. } => {
+            record_file_error(err, events, errored).await;
+            Ok(FileOutcome::Errored)
+        }
+        ErrorPolicy::Ask => {
+            let (tx, rx) = oneshot::channel();
+            let prompt = ErrorPrompt::new(err.clone(), tx);
+            if events.send(CopyEvent::ErrorPrompt(prompt)).await.is_err() {
+                record_file_error(err, events, errored).await;
+                return Ok(FileOutcome::Errored);
+            }
+            match rx.await {
+                Ok(ErrorAction::Retry) | Ok(ErrorAction::Skip) | Err(_) => {
+                    // Retry doesn't make sense for non-copy_file
+                    // failures; honour the user's intent as best we
+                    // can — skip and keep going.
+                    record_file_error(err, events, errored).await;
+                    Ok(FileOutcome::Errored)
+                }
+                Ok(ErrorAction::Abort) => Err(err),
+            }
+        }
+    }
+}
+
+async fn record_file_error(
+    err: CopyError,
+    events: &mpsc::Sender<CopyEvent>,
+    errored: &Arc<AtomicU64>,
+) {
+    errored.fetch_add(1, Ordering::Relaxed);
+    let _ = events.send(CopyEvent::FileError { err }).await;
+}
+
+/// Streaming enumerator. Runs in a `spawn_blocking` task, pushes
+/// `Plan` chunks of up to `CHUNK_SIZE` entries through the channel
+/// as walkdir yields them, and emits `TreeEnumerating` progress
+/// ticks every `PROGRESS_EMIT_EVERY` discovered files. No in-memory
+/// cap on total tree size — memory is bounded to one chunk at a
+/// time (~60 MB per 100 k-entry chunk on Windows paths).
+fn enumerate_streaming(
+    root: PathBuf,
+    follow_symlinks: bool,
+    chunk_tx: mpsc::Sender<Plan>,
+    events: mpsc::Sender<CopyEvent>,
+) -> std::io::Result<()> {
+    // Chunk size picks a point where the dispatcher's per-chunk
+    // overhead (mkdir inline pass, spawn loop) is amortized across
+    // enough entries to matter, without holding a huge batch in
+    // memory. 100 k entries × ~500 B per Entry ≈ 50 MB peak.
+    const CHUNK_SIZE: usize = 100_000;
+    const PROGRESS_EMIT_EVERY: u64 = 500;
+
+    eprintln!(
+        "[tree::enumerate_streaming] begin root={}",
+        root.display()
+    );
+
+    let mut current = Plan::default();
+    let mut total_files: u64 = 0;
+    let mut total_bytes: u64 = 0;
+    let mut last_emitted: u64 = 0;
+    let mut skipped_denied: u64 = 0;
+    let mut chunks_sent: u64 = 0;
+
+    let walker = walkdir::WalkDir::new(&root)
         .follow_links(follow_symlinks)
         .sort_by_file_name();
     for entry in walker {
+        if total_files >= last_emitted + PROGRESS_EMIT_EVERY {
+            let _ = events.try_send(CopyEvent::TreeEnumerating {
+                files_so_far: total_files,
+                bytes_so_far: total_bytes,
+            });
+            last_emitted = total_files;
+        }
         let entry = match entry {
             Ok(e) => e,
             Err(e) => {
+                let denied = e
+                    .io_error()
+                    .map(|io| io.kind() == std::io::ErrorKind::PermissionDenied)
+                    .unwrap_or(false);
+                if denied {
+                    skipped_denied = skipped_denied.saturating_add(1);
+                    continue;
+                }
                 return Err(std::io::Error::other(format!(
                     "walk error at {:?}: {e}",
                     e.path()
@@ -507,10 +759,8 @@ fn enumerate_sync(root: &Path, follow_symlinks: bool) -> std::io::Result<Plan> {
             }
         };
         let path = entry.path();
-        let rel = path.strip_prefix(root).unwrap_or(path).to_path_buf();
+        let rel = path.strip_prefix(&root).unwrap_or(path).to_path_buf();
         if rel.as_os_str().is_empty() {
-            // The root itself — tracked as the root dir at the
-            // destination via create_dir_all earlier; no entry needed.
             continue;
         }
         let ft = entry.file_type();
@@ -527,16 +777,52 @@ fn enumerate_sync(root: &Path, follow_symlinks: bool) -> std::io::Result<Plan> {
             0
         };
         if kind == EntryKind::File {
-            plan.total_files += 1;
-            plan.total_bytes += len;
+            current.total_files += 1;
+            current.total_bytes += len;
+            total_files += 1;
+            total_bytes += len;
         }
-        plan.entries.push(Entry {
+        current.entries.push(Entry {
             src: path.to_path_buf(),
             rel,
             kind,
         });
+
+        if current.entries.len() >= CHUNK_SIZE {
+            let ready = std::mem::take(&mut current);
+            if chunk_tx.blocking_send(ready).is_err() {
+                // Receiver dropped — dispatcher cancelled mid-walk.
+                // Stop walking; the dispatcher handles teardown.
+                eprintln!(
+                    "[tree::enumerate_streaming] receiver dropped after {} chunks; stopping",
+                    chunks_sent
+                );
+                return Ok(());
+            }
+            chunks_sent += 1;
+        }
     }
-    Ok(plan)
+
+    // Final emit so the UI counter lands on the real total.
+    let _ = events.try_send(CopyEvent::TreeEnumerating {
+        files_so_far: total_files,
+        bytes_so_far: total_bytes,
+    });
+
+    // Send trailing partial chunk if any entries remain.
+    if !current.entries.is_empty() {
+        let _ = chunk_tx.blocking_send(current);
+        chunks_sent += 1;
+    }
+    // Dropping chunk_tx here closes the channel — the dispatcher
+    // will see `None` from `recv()` and exit its loop cleanly.
+    drop(chunk_tx);
+
+    eprintln!(
+        "[tree::enumerate_streaming] done total_files={} total_bytes={} chunks={} skipped_denied={}",
+        total_files, total_bytes, chunks_sent, skipped_denied
+    );
+    Ok(())
 }
 
 async fn copy_symlink_entry(src: &Path, dst: &Path) -> Result<(), CopyError> {
@@ -563,10 +849,33 @@ async fn create_symlink(target: &Path, link: &Path, probe: &Path) -> std::io::Re
         .map(|p| p.join(target))
         .unwrap_or_else(|| target.to_path_buf());
     let md = tokio::fs::metadata(&src_target).await;
-    match md {
-        Ok(m) if m.is_dir() => tokio::fs::symlink_dir(target, link).await,
-        _ => tokio::fs::symlink_file(target, link).await,
+    let is_dir = matches!(md, Ok(ref m) if m.is_dir());
+
+    let first = if is_dir {
+        tokio::fs::symlink_dir(target, link).await
+    } else {
+        tokio::fs::symlink_file(target, link).await
+    };
+    match first {
+        Ok(()) => return Ok(()),
+        // ERROR_PRIVILEGE_NOT_HELD — process lacks SeCreateSymbolicLink
+        // privilege *and* Developer Mode isn't on. Fall back to
+        // copying the *target* contents into the destination, so the
+        // tree still lands usable data even when the symlink can't
+        // be recreated. Directories can't be flattened this way —
+        // surface the original error for the tree engine's
+        // per-file policy to handle.
+        Err(e) if e.raw_os_error() == Some(1314) => {
+            if is_dir {
+                return Err(e);
+            }
+        }
+        Err(e) => return Err(e),
     }
+    // Unprivileged fallback: copy the resolved target as a regular
+    // file. User ends up with a plain file where the source had a
+    // symlink, but no data is lost.
+    tokio::fs::copy(&src_target, link).await.map(|_| ())
 }
 
 fn rate_bps(bytes: u64, elapsed: Duration) -> u64 {

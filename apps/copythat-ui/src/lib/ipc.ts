@@ -3,12 +3,34 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+
+/// Open the native file picker (multi-select). Returns [] if the
+/// user cancels. The Header "Add files" button pipes the result
+/// into the staging queue, where the DropStagingDialog handles
+/// destination + copy / move.
+export async function pickFiles(): Promise<string[]> {
+  const picked = await openDialog({ multiple: true, directory: false });
+  if (picked === null || picked === undefined) return [];
+  return Array.isArray(picked) ? picked : [picked];
+}
+
+/// Open the native folder picker (multi-select). Same flow as
+/// `pickFiles` but `directory: true`.
+export async function pickFolders(): Promise<string[]> {
+  const picked = await openDialog({ multiple: true, directory: true });
+  if (picked === null || picked === undefined) return [];
+  return Array.isArray(picked) ? picked : [picked];
+}
 
 import type {
+  CollisionAction,
   CopyOptionsDto,
+  ErrorAction,
   FileIconDto,
   GlobalsDto,
   JobDto,
+  LoggedErrorDto,
 } from "./types";
 
 export async function startCopy(
@@ -90,4 +112,194 @@ export async function onEvent<T>(
   handler: (payload: T) => void,
 ): Promise<UnlistenFn> {
   return listen<T>(name, (event) => handler(event.payload));
+}
+
+// ---------- Phase 8 error / collision / log ----------
+
+export async function resolveError(
+  id: number,
+  action: ErrorAction,
+  applyToAll: boolean = false,
+): Promise<void> {
+  await invoke("resolve_error", { id, action, applyToAll });
+}
+
+export async function resolveCollision(
+  id: number,
+  resolution: CollisionAction,
+  renameTo: string | null = null,
+  applyToAll: boolean = false,
+): Promise<void> {
+  await invoke("resolve_collision", { id, resolution, renameTo, applyToAll });
+}
+
+export async function errorLog(): Promise<LoggedErrorDto[]> {
+  return invoke<LoggedErrorDto[]>("error_log");
+}
+
+export async function clearErrorLog(): Promise<void> {
+  await invoke("clear_error_log");
+}
+
+export async function errorLogExport(
+  format: "csv" | "txt",
+  path: string,
+): Promise<number> {
+  return invoke<number>("error_log_export", { format, path });
+}
+
+export async function retryElevated(id: number): Promise<void> {
+  await invoke("retry_elevated", { id });
+}
+
+// ---------- Phase 9 history ----------
+
+import type {
+  DayTotalDto,
+  HistoryFilterDto,
+  HistoryItemDto,
+  HistoryJobDto,
+  TotalsDto,
+} from "./types";
+
+export async function historySearch(
+  filter?: HistoryFilterDto,
+): Promise<HistoryJobDto[]> {
+  return invoke<HistoryJobDto[]>("history_search", { filter });
+}
+
+export async function historyItems(rowId: number): Promise<HistoryItemDto[]> {
+  return invoke<HistoryItemDto[]>("history_items", { rowId });
+}
+
+export async function historyPurge(days: number): Promise<number> {
+  return invoke<number>("history_purge", { days });
+}
+
+export async function historyExportCsv(
+  path: string,
+  filter?: HistoryFilterDto,
+): Promise<number> {
+  return invoke<number>("history_export_csv", { path, filter });
+}
+
+export async function historyRerun(rowId: number): Promise<number[]> {
+  return invoke<number[]>("history_rerun", { rowId });
+}
+
+// ---------- Phase 10 totals ----------
+
+export async function historyTotals(sinceMs?: number): Promise<TotalsDto> {
+  return invoke<TotalsDto>("history_totals", { sinceMs });
+}
+
+export async function historyDaily(sinceMs: number): Promise<DayTotalDto[]> {
+  return invoke<DayTotalDto[]>("history_daily", { sinceMs });
+}
+
+export async function historyClearAll(): Promise<number> {
+  return invoke<number>("history_clear_all");
+}
+
+// ---------- Phase 12 settings + profiles ----------
+
+import type { ProfileInfoDto, SettingsDto } from "./types";
+
+export async function getSettings(): Promise<SettingsDto> {
+  return invoke<SettingsDto>("get_settings");
+}
+
+export async function updateSettings(dto: SettingsDto): Promise<SettingsDto> {
+  return invoke<SettingsDto>("update_settings", { dto });
+}
+
+export async function resetSettings(): Promise<SettingsDto> {
+  return invoke<SettingsDto>("reset_settings");
+}
+
+/// Debug hook used by the Phase 12 smoke test; returns the clamped
+/// buffer size the engine would use given current settings.
+export async function effectiveBufferSize(): Promise<number> {
+  return invoke<number>("effective_buffer_size");
+}
+
+export async function listProfiles(): Promise<ProfileInfoDto[]> {
+  return invoke<ProfileInfoDto[]>("list_profiles");
+}
+
+export async function saveProfile(name: string): Promise<ProfileInfoDto> {
+  return invoke<ProfileInfoDto>("save_profile", { name });
+}
+
+export async function loadProfile(name: string): Promise<SettingsDto> {
+  return invoke<SettingsDto>("load_profile", { name });
+}
+
+export async function deleteProfile(name: string): Promise<void> {
+  await invoke("delete_profile", { name });
+}
+
+export async function exportProfile(
+  name: string,
+  dest: string,
+): Promise<void> {
+  await invoke("export_profile", { name, dest });
+}
+
+export async function importProfile(
+  name: string,
+  src: string,
+): Promise<ProfileInfoDto> {
+  return invoke<ProfileInfoDto>("import_profile", { name, src });
+}
+
+export type PostCompletionAction =
+  | "keep-open"
+  | "exit"
+  | "shutdown"
+  | "logoff"
+  | "sleep";
+
+export async function postCompletionAction(
+  action: PostCompletionAction,
+): Promise<void> {
+  await invoke("post_completion_action", { action });
+}
+
+// Phase 14 — preflight space checks.
+export async function destinationFreeBytes(path: string): Promise<number> {
+  return invoke<number>("destination_free_bytes", { path });
+}
+
+export async function pathTotalBytes(paths: string[]): Promise<number> {
+  return invoke<number>("path_total_bytes", { paths });
+}
+
+export async function pathSizesIndividual(paths: string[]): Promise<number[]> {
+  return invoke<number[]>("path_sizes_individual", { paths });
+}
+
+export interface PathMetaDto {
+  isDir: boolean;
+  size: number;
+}
+
+export async function pathMetadata(paths: string[]): Promise<PathMetaDto[]> {
+  return invoke<PathMetaDto[]>("path_metadata", { paths });
+}
+
+export interface TreeFileDto {
+  path: string;
+  size: number;
+}
+
+export interface TreeEnumerationDto {
+  files: TreeFileDto[];
+  overflow: boolean;
+}
+
+export async function enumerateTreeFiles(
+  paths: string[],
+): Promise<TreeEnumerationDto> {
+  return invoke<TreeEnumerationDto>("enumerate_tree_files", { paths });
 }

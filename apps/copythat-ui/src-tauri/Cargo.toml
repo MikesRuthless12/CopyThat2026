@@ -22,10 +22,13 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 copythat-core = { path = "../../../crates/copythat-core", version = "0.1" }
 copythat-hash = { path = "../../../crates/copythat-hash", version = "0.1" }
+copythat-history = { path = "../../../crates/copythat-history", version = "0.1" }
+copythat-platform = { path = "../../../crates/copythat-platform", version = "0.1" }
 copythat-secure-delete = { path = "../../../crates/copythat-secure-delete", version = "0.1" }
+copythat-settings = { path = "../../../crates/copythat-settings", version = "0.1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 thiserror = "2"
 tokio = { version = "1", features = [
@@ -44,9 +47,52 @@ tokio = { version = "1", features = [
 # Android / iOS — Tauri gates the plugin to desktop targets.
 [target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "2"
+# Post-Phase-12 — system-wide "paste files via Copy That" shortcut.
+# Registers a configurable combo (default CmdOrCtrl+Shift+V) that
+# reads file URLs off the OS clipboard and routes them through the
+# same staging-dialog path the drag-drop and shell-extension flows
+# already use.
+tauri-plugin-global-shortcut = "2"
+
+# Windows-only clipboard reader: raw CF_HDROP access via
+# `windows-rs`. Nothing else in the UI crate needs the Win32 surface,
+# so the dep is scoped to this target triple.
+[target.'cfg(windows)'.dependencies]
+# Matches the version `copythat-shellext` already pins, so the
+# workspace uses one resolution of the Win32 bindings.
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_UI_Shell",
+] }
+
+# macOS-only clipboard reader: NSPasteboard via the modern `objc2`
+# bindings. `objc2-foundation` covers NSArray / NSString / NSURL and
+# `objc2-app-kit` wraps NSPasteboard itself.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = [
+    "NSArray",
+    "NSString",
+    "NSURL",
+] }
+objc2-app-kit = { version = "0.3", features = [
+    "NSPasteboard",
+] }
+
+# Linux-only clipboard reader: `arboard` speaks both X11 and Wayland
+# (via `wayland-data-control`), so the same call works on GNOME,
+# KDE, and XFCE without per-distro branching. File lists come across
+# as text/uri-list; the parser lives in `clipboard.rs`.
+[target.'cfg(target_os = "linux")'.dependencies]
+arboard = { version = "3", features = ["wayland-data-control"] }
 
 [dev-dependencies]
 tempfile = "3"
+copythat-settings = { path = "../../../crates/copythat-settings", version = "0.1" }
+copythat-platform = { path = "../../../crates/copythat-platform", version = "0.1" }
 tokio = { version = "1", features = [
     "fs",
     "macros",
@@ -62,3 +108,40 @@ tokio = { version = "1", features = [
 [[test]]
 name = "phase_07a_cli_enqueue"
 path = "../../../tests/smoke/phase_07a_cli_enqueue.rs"
+
+# Phase 8 smoke test — error handling + collision UX. Drives the
+# engine + `ErrorRegistry` without booting Tauri.
+[[test]]
+name = "phase_08_errors"
+path = "../../../tests/smoke/phase_08_errors.rs"
+
+# Phase 11a smoke test — i18n placeable parity + required-key guard.
+# Pure-filesystem test; no Tauri / webview involved.
+[[test]]
+name = "phase_11a_i18n"
+path = "../../../tests/smoke/phase_11a_i18n.rs"
+
+# Phase 11c smoke test — runtime substitute-pipeline check for
+# every locale + required direction flag. Pure-filesystem; mirrors
+# the TS `substitute()` so we don't need to boot a webview.
+[[test]]
+name = "phase_11c_substitute"
+path = "../../../tests/smoke/phase_11c_substitute.rs"
+
+# Phase 12 smoke test — settings persistence + profile round-trip
+# + effective-buffer-size clamp. Pure-filesystem; exercises the
+# `copythat-settings` crate through the same surface the Tauri IPC
+# handlers use.
+[[test]]
+name = "phase_12_settings"
+path = "../../../tests/smoke/phase_12_settings.rs"
+
+# Phase 13 smoke test — engine-throughput floor. Runs a 32 MiB
+# synthetic copy and fails if the observed throughput drops below
+# 20 MiB/s, catching the "accidentally slowed the engine by 10×"
+# class of regression. Requires `copythat-platform` in dev-deps
+# because it exercises the real `PlatformFastCopyHook` rather than
+# the pure-async fallback.
+[[test]]
+name = "phase_13_bench"
+path = "../../../tests/smoke/phase_13_bench.rs"

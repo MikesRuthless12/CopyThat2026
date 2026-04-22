@@ -13,3 +13,36 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# SQLite is bundled (no system libsqlite3 dep) so the Tauri bundle
+# ships a single binary on every platform. `directories` picks the
+# OS-appropriate user-data directory; `thiserror` gives us typed
+# errors without hand-rolling impl Display. `tokio` is used only
+# for `spawn_blocking` — rusqlite is sync, so every async call in
+# our API hops to a blocking thread to avoid stalling the runtime.
+directories = "6"
+rusqlite = { version = "0.39", features = ["bundled"] }
+thiserror = "2"
+tokio = { version = "1", features = ["rt", "sync"] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = [
+    "fs",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "test-util",
+    "time",
+] }
+
+# Phase 9 smoke test lives at the workspace root (same convention as
+# Phase 6/7a/7b/8).
+[[test]]
+name = "phase_09_history"
+path = "../../tests/smoke/phase_09_history.rs"
+
+# Phase 10 smoke test — totals + 30-day sparkline + clear_all.
+[[test]]
+name = "phase_10_totals"
+path = "../../tests/smoke/phase_10_totals.rs"

@@ -12,9 +12,11 @@ use tokio::sync::{mpsc, oneshot};
 use crate::event::{Collision, CollisionResolution, CopyEvent};
 
 /// What to do when `dst` already exists.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum CollisionPolicy {
-    /// Leave `dst` alone; do not copy this file.
+    /// Leave `dst` alone; do not copy this file. The pre-Phase-8
+    /// default and the one `Default` resolves to.
+    #[default]
     Skip,
     /// Truncate `dst` and overwrite.
     Overwrite,
@@ -84,8 +86,15 @@ async fn source_is_newer(src: &Path, dst: &Path) -> Option<bool> {
     Some(st > dt)
 }
 
-/// Produce a fresh destination path by appending " (1)", " (2)", ...
-/// before the extension until a free slot is found. Gives up at 10_000.
+/// Produce a fresh destination path by appending `_2`, `_3`, ...
+/// before the extension until a free slot is found. Starts at 2
+/// because the original file is the implicit "1". Gives up at
+/// 10_000.
+///
+/// The naming shape matches the user-facing convention: existing
+/// file `foo.txt` plus a copy yields `foo_2.txt`, then `foo_3.txt`,
+/// …. Folders (no extension) just get the suffix appended:
+/// `Photos` → `Photos_2`.
 async fn keep_both_path(dst: &Path) -> Option<PathBuf> {
     let parent = dst.parent()?;
     let stem = dst.file_stem()?.to_string_lossy().into_owned();
@@ -93,11 +102,11 @@ async fn keep_both_path(dst: &Path) -> Option<PathBuf> {
         .extension()
         .map(|e| e.to_string_lossy().into_owned())
         .unwrap_or_default();
-    for n in 1..10_000 {
+    for n in 2..10_000 {
         let name = if ext.is_empty() {
-            format!("{stem} ({n})")
+            format!("{stem}_{n}")
         } else {
-            format!("{stem} ({n}).{ext}")
+            format!("{stem}_{n}.{ext}")
         };
         let candidate = parent.join(&name);
         if !path_exists(&candidate).await {

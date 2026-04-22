@@ -126,3 +126,467 @@ toast-job-done = Transferência concluída
 toast-copy-queued = Cópia enfileirada
 # MT
 toast-move-queued = Movimentação enfileirada
+# MT — Phase 8 toast messages
+toast-error-resolved = Erro resolvido
+# MT
+toast-collision-resolved = Conflito resolvido
+# MT
+toast-elevated-unavailable = A nova tentativa com permissões elevadas chega na fase 17 — ainda não disponível
+toast-clipboard-files-detected = Arquivos na área de transferência — pressione seu atalho de colar para copiar via Copy That
+toast-clipboard-no-files = A área de transferência não tem arquivos para colar
+# MT
+toast-error-log-exported = Registro de erros exportado
+
+# MT — Error modal
+error-modal-title = Uma transferência falhou
+# MT
+error-modal-retry = Tentar novamente
+# MT
+error-modal-retry-elevated = Tentar novamente com permissões elevadas
+# MT
+error-modal-skip = Ignorar
+# MT
+error-modal-skip-all-kind = Ignorar todos os erros desse tipo
+# MT
+error-modal-abort = Cancelar tudo
+# MT
+error-modal-path-label = Caminho
+# MT
+error-modal-code-label = Código
+error-drawer-pending-count = Mais erros aguardando
+error-drawer-toggle = Recolher ou expandir
+
+# MT — Error-kind labels
+err-not-found = Arquivo não encontrado
+# MT
+err-permission-denied = Permissão negada
+# MT
+err-disk-full = O disco de destino está cheio
+# MT
+err-interrupted = Operação interrompida
+# MT
+err-verify-failed = Verificação pós-cópia falhou
+# MT
+err-io-other = Erro de E/S desconhecido
+
+# MT — Collision modal
+collision-modal-title = O arquivo já existe
+# MT
+collision-modal-overwrite = Sobrescrever
+# MT
+collision-modal-overwrite-if-newer = Sobrescrever se mais recente
+# MT
+collision-modal-skip = Ignorar
+# MT
+collision-modal-keep-both = Manter ambos
+# MT
+collision-modal-rename = Renomear…
+# MT
+collision-modal-apply-to-all = Aplicar a todos
+# MT
+collision-modal-source = Origem
+# MT
+collision-modal-destination = Destino
+# MT
+collision-modal-size = Tamanho
+# MT
+collision-modal-modified = Modificado
+# MT
+collision-modal-hash-check = Hash rápido (SHA-256)
+# MT
+collision-modal-rename-placeholder = Novo nome do arquivo
+# MT
+collision-modal-confirm-rename = Renomear
+
+# MT — Error log drawer
+error-log-title = Registro de erros
+# MT
+error-log-empty = Nenhum erro registrado
+# MT
+error-log-export-csv = Exportar CSV
+# MT
+error-log-export-txt = Exportar texto
+# MT
+error-log-clear = Limpar registro
+# MT
+error-log-col-time = Hora
+# MT
+error-log-col-job = Tarefa
+# MT
+error-log-col-path = Caminho
+# MT
+error-log-col-code = Código
+# MT
+error-log-col-message = Mensagem
+# MT
+error-log-col-resolution = Resolução
+
+# MT — History drawer (Phase 9)
+history-title = Histórico
+# MT
+history-empty = Nenhuma tarefa registrada ainda
+# MT
+history-unavailable = O histórico de cópias não está disponível. O aplicativo não conseguiu abrir o armazenamento SQLite na inicialização.
+# MT
+history-filter-any = qualquer
+# MT
+history-filter-kind = Tipo
+# MT
+history-filter-status = Estado
+# MT
+history-filter-text = Pesquisar
+# MT
+history-refresh = Atualizar
+# MT
+history-export-csv = Exportar CSV
+# MT
+history-purge-30 = Eliminar > 30 dias
+# MT
+history-rerun = Executar novamente
+# MT
+history-detail-open = Detalhes
+# MT
+history-detail-title = Detalhes da tarefa
+# MT
+history-detail-empty = Nenhum item registrado
+# MT
+history-col-date = Data
+# MT
+history-col-kind = Tipo
+# MT
+history-col-src = Origem
+# MT
+history-col-dst = Destino
+# MT
+history-col-files = Arquivos
+# MT
+history-col-size = Tamanho
+# MT
+history-col-status = Estado
+# MT
+history-col-duration = Duração
+# MT
+history-col-error = Erro
+
+# MT
+toast-history-exported = Histórico exportado
+# MT
+toast-history-rerun-queued = Nova execução na fila
+
+# MT — Totals drawer (Phase 10)
+footer-totals = Totais
+# MT
+totals-title = Totais
+# MT
+totals-loading = Carregando totais…
+# MT
+totals-card-bytes = Total de bytes copiados
+# MT
+totals-card-files = Arquivos
+# MT
+totals-card-jobs = Tarefas
+# MT
+totals-card-avg-rate = Taxa média
+# MT
+totals-errors = erros
+# MT
+totals-spark-title = Últimos 30 dias
+# MT
+totals-kinds-title = Por tipo
+# MT
+totals-saved-title = Tempo economizado (estimado)
+# MT
+totals-saved-note = Estimado em comparação com uma cópia de referência da mesma carga em um gerenciador de arquivos padrão.
+# MT
+totals-reset = Redefinir estatísticas
+# MT
+totals-reset-confirm = Isso exclui todas as tarefas e itens armazenados. Continuar?
+# MT
+totals-reset-confirm-yes = Sim, redefinir
+# MT
+toast-totals-reset = Estatísticas redefinidas
+
+# MT — Phase 11a additions
+header-language-label = Idioma
+# MT
+header-language-title = Alterar idioma
+
+# MT
+kind-copy = Copiar
+# MT
+kind-move = Mover
+# MT
+kind-delete = Excluir
+# MT
+kind-secure-delete = Exclusão segura
+
+# MT
+status-running = Em execução
+# MT
+status-succeeded = Concluído
+# MT
+status-failed = Falhou
+# MT
+status-cancelled = Cancelado
+# MT
+status-ok = OK
+# MT
+status-skipped = Ignorado
+
+# MT
+history-search-placeholder = /caminho
+# MT
+toast-history-purged = { $count } tarefas com mais de 30 dias removidas
+
+# MT
+err-source-required = É necessário pelo menos um caminho de origem.
+# MT
+err-destination-empty = O caminho de destino está vazio.
+# MT
+err-source-empty = O caminho de origem está vazio.
+
+# MT
+duration-lt-1s = < 1 s
+# MT
+duration-ms = { $ms } ms
+# MT
+duration-seconds = { $s } s
+# MT
+duration-minutes-seconds = { $m } min { $s } s
+# MT
+duration-hours-minutes = { $h } h { $m } min
+# MT
+duration-zero = 0 s
+
+# MT
+rate-unit-per-second = { $size }/s
+
+# MT — Phase 11b Settings modal
+settings-title = Configurações
+# MT
+settings-tab-general = Geral
+# MT
+settings-tab-appearance = Aparência
+# MT
+settings-section-language = Idioma
+# MT
+settings-phase-12-hint = Mais configurações (tema, padrões de transferência, algoritmo de verificação, perfis) chegarão na fase 12.
+
+# MT — Phase 12 Settings window
+settings-loading = Carregando configurações…
+# MT
+settings-tab-transfer = Transferência
+# MT
+settings-tab-shell = Shell
+# MT
+settings-tab-secure-delete = Exclusão segura
+# MT
+settings-tab-advanced = Avançado
+# MT
+settings-tab-profiles = Perfis
+
+# MT
+settings-section-theme = Tema
+# MT
+settings-theme-auto = Automático
+# MT
+settings-theme-light = Claro
+# MT
+settings-theme-dark = Escuro
+# MT
+settings-start-with-os = Iniciar com o sistema
+# MT
+settings-single-instance = Instância única em execução
+# MT
+settings-minimize-to-tray = Minimizar para a bandeja ao fechar
+settings-error-display-mode = Estilo de aviso de erro
+settings-error-display-modal = Modal (bloqueia o app)
+settings-error-display-drawer = Painel lateral (não bloqueante)
+settings-error-display-mode-hint = O modal interrompe a fila até você decidir. O painel lateral mantém a fila em andamento e permite lidar com os erros no canto.
+settings-paste-shortcut = Colar arquivos via atalho global
+settings-paste-shortcut-combo = Combinação de teclas
+settings-paste-shortcut-hint = Pressione esta combinação em qualquer lugar do sistema para colar arquivos copiados do Explorer / Finder / Arquivos via Copy That. CmdOrCtrl resolve para Cmd no macOS e Ctrl no Windows / Linux.
+settings-clipboard-watcher = Monitorar a área de transferência para arquivos copiados
+settings-clipboard-watcher-hint = Mostra um aviso quando URLs de arquivo aparecem na área de transferência, sugerindo colar via Copy That. Consulta a cada 500 ms quando ativo.
+
+# MT
+settings-buffer-size = Tamanho do buffer
+# MT
+settings-verify = Verificar após copiar
+# MT
+settings-verify-off = Desativado
+# MT
+settings-concurrency = Concorrência
+# MT
+settings-concurrency-auto = Automática
+# MT
+settings-reflink = Reflink / caminhos rápidos
+# MT
+settings-reflink-prefer = Preferir
+# MT
+settings-reflink-avoid = Evitar reflink
+# MT
+settings-reflink-disabled = Sempre usar o motor assíncrono
+# MT
+settings-fsync-on-close = Sincronizar com o disco ao fechar (mais lento, mais seguro)
+# MT
+settings-preserve-timestamps = Preservar carimbos de data/hora
+# MT
+settings-preserve-permissions = Preservar permissões
+# MT
+settings-preserve-acls = Preservar ACLs (Fase 14)
+
+# MT
+settings-context-menu = Habilitar entradas do menu de contexto
+# MT
+settings-intercept-copy = Interceptar gerenciador de cópia padrão (Windows)
+# MT
+settings-intercept-copy-hint = Quando ativo, Ctrl+C / Ctrl+V no Explorer passa pelo Copy That. Registro na Fase 14.
+# MT
+settings-notify-completion = Notificar ao concluir tarefa
+
+# MT
+settings-shred-method = Método de destruição padrão
+# MT
+settings-shred-zero = Zero (1 passagem)
+# MT
+settings-shred-random = Aleatório (1 passagem)
+# MT
+settings-shred-dod3 = DoD 5220.22-M (3 passagens)
+# MT
+settings-shred-dod7 = DoD 5220.22-M (7 passagens)
+# MT
+settings-shred-gutmann = Gutmann (35 passagens)
+# MT
+settings-shred-nist = NIST 800-88
+# MT
+settings-shred-confirm-twice = Exigir dupla confirmação antes da destruição
+
+# MT
+settings-log-level = Nível de log
+# MT
+settings-log-off = Desativado
+# MT
+settings-telemetry = Telemetria
+# MT
+settings-telemetry-never = Nunca — sem envio de dados em nenhum nível
+# MT
+settings-error-policy = Política de erro padrão
+# MT
+settings-error-policy-ask = Perguntar
+# MT
+settings-error-policy-skip = Ignorar
+# MT
+settings-error-policy-retry = Repetir com espera
+# MT
+settings-error-policy-abort = Cancelar ao primeiro erro
+# MT
+settings-history-retention = Retenção do histórico (dias)
+# MT
+settings-history-retention-hint = 0 = manter para sempre. Qualquer outro valor remove tarefas antigas na inicialização.
+# MT
+settings-database-path = Caminho do banco de dados
+# MT
+settings-database-path-default = (padrão — diretório de dados do SO)
+# MT
+settings-reset-all = Restaurar padrões
+# MT
+settings-reset-confirm = Redefinir todas as preferências? Os perfis não são afetados.
+
+# MT
+settings-profiles-hint = Salve as configurações atuais com um nome; carregue depois para alternar sem mexer nos controles individuais.
+# MT
+settings-profile-name-placeholder = Nome do perfil
+# MT
+settings-profile-save = Salvar
+# MT
+settings-profile-import = Importar…
+# MT
+settings-profile-load = Carregar
+# MT
+settings-profile-export = Exportar…
+# MT
+settings-profile-delete = Excluir
+# MT
+settings-profile-empty = Nenhum perfil salvo.
+# MT
+settings-profile-import-prompt = Nome para o perfil importado:
+
+# MT
+toast-settings-reset = Configurações redefinidas
+# MT
+toast-profile-saved = Perfil salvo
+# MT
+toast-profile-loaded = Perfil carregado
+# MT
+toast-profile-exported = Perfil exportado
+# MT
+toast-profile-imported = Perfil importado
+
+# Phase 13d — activity feed + header picker buttons
+action-add-files = Adicionar arquivos
+action-add-folders = Adicionar pastas
+activity-title = Atividade
+activity-clear = Limpar lista de atividade
+activity-empty = Ainda não há atividade.
+activity-after-done = Ao concluir:
+activity-keep-open = Manter o app aberto
+activity-close-app = Fechar o app
+activity-shutdown = Desligar o PC
+activity-logoff = Sair da sessão
+activity-sleep = Suspender
+
+# Phase 14 — preflight free-space dialog
+preflight-block-title = Espaço insuficiente no destino
+preflight-warn-title = Pouco espaço no destino
+preflight-unknown-title = Não foi possível determinar o espaço livre
+preflight-unknown-body = A origem é grande demais para ser medida rapidamente ou o volume de destino não respondeu. Você pode continuar; o limitador do mecanismo interromperá a cópia com segurança se o espaço acabar.
+preflight-required = Necessário
+preflight-free = Livre
+preflight-reserve = Reserva
+preflight-shortfall = Déficit
+preflight-continue = Continuar mesmo assim
+collision-modal-overwrite-older = Sobrescrever só os mais antigos
+
+# Phase 14e — subset picker
+preflight-pick-subset = Escolher o que copiar…
+subset-title = Escolha quais fontes copiar
+subset-subtitle = A seleção completa não cabe no destino. Marque o que deseja copiar; o restante fica para trás.
+subset-loading = Medindo tamanhos…
+subset-too-large = grande demais para contar
+subset-budget = Disponível
+subset-remaining = Restante
+subset-confirm = Copiar seleção
+history-rerun-hint = Executar esta cópia novamente — reexamina cada arquivo na árvore de origem
+history-clear-all = Limpar tudo
+history-clear-all-confirm = Clique novamente para confirmar
+history-clear-all-hint = Exclui todas as linhas do histórico. Requer um segundo clique para confirmar.
+toast-history-cleared = Histórico limpo ({ $count } linhas removidas)
+
+# Phase 15 — source-list ordering
+drop-dialog-sort-label = Ordem:
+sort-custom = Personalizado
+sort-name-asc = Nome A → Z (arquivos primeiro)
+sort-name-desc = Nome Z → A (arquivos primeiro)
+sort-size-asc = Tamanho crescente (arquivos primeiro)
+sort-size-desc = Tamanho decrescente (arquivos primeiro)
+sort-reorder = Reordenar
+sort-move-top = Mover para o topo
+sort-move-up = Para cima
+sort-move-down = Para baixo
+sort-move-bottom = Mover para o fim
+sort-name-asc-simple = Nome A → Z
+sort-name-desc-simple = Nome Z → A
+sort-size-asc-simple = Menores primeiro
+sort-size-desc-simple = Maiores primeiro
+activity-sort-locked = A ordenação está desativada enquanto uma cópia está em andamento. Pause ou aguarde terminar, depois mude a ordem.
+drop-dialog-collision-label = Se um arquivo já existir:
+collision-policy-keep-both = Manter os dois (renomear a nova cópia para _2, _3, …)
+collision-policy-skip = Ignorar a nova cópia
+collision-policy-overwrite = Sobrescrever o arquivo existente
+collision-policy-overwrite-if-newer = Sobrescrever apenas se for mais novo
+collision-policy-prompt = Perguntar sempre
+drop-dialog-busy-checking = Verificando espaço livre…
+drop-dialog-busy-enumerating = Contando arquivos…
+drop-dialog-busy-starting = Iniciando cópia…
+toast-enumeration-deferred = A árvore de origem é grande — lista prévia ignorada; linhas aparecerão conforme o mecanismo processar.

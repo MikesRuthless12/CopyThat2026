@@ -32,7 +32,12 @@
 //! into the `drop-received` IPC event for the Svelte layer.
 
 pub mod cli;
+pub mod clipboard;
+pub mod clipboard_watcher;
+pub mod collisions;
 pub mod commands;
+pub mod errors;
+pub mod global_paste;
 pub mod i18n;
 pub mod icon;
 pub mod ipc;
@@ -44,8 +49,11 @@ pub mod state;
 use std::sync::Mutex;
 
 use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
+use tauri::menu::{Menu, MenuEvent, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 use crate::cli::CliAction;
+use crate::state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -97,18 +105,90 @@ pub fn run() {
         ));
     }
 
+    // Phase 9 — open (or create) the SQLite history at the OS
+    // user-data directory. Failure is non-fatal: the app still
+    // launches with `history: None`, the runner skips recording,
+    // and the history drawer shows a typed "unavailable" message.
+    let history = open_history_blocking();
+
+    // Phase 12 — load persisted preferences. Failure is non-fatal
+    // too: a missing / unreadable `settings.toml` falls through to
+    // `Settings::default()`, and a bogus `settings-profiles/`
+    // directory just surfaces an empty profile list. Errors get
+    // logged to stderr so the first-run log captures them.
+    let (settings, settings_path) = load_settings_blocking();
+    let profiles = match copythat_settings::ProfileStore::default_store() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("copythat: profiles store init failed: {e}");
+            copythat_settings::ProfileStore::new(std::path::PathBuf::new())
+        }
+    };
+
+    let app_state = state::AppState::new_with(history, settings, settings_path, profiles);
+
+    // Post-Phase-12 — system-wide paste hotkey. The plugin registers
+    // no combos at build time; `global_paste::register_paste_shortcut`
+    // does that from the setup hook based on live settings. Handler
+    // dispatches to `handle_paste_press`, which reads the clipboard
+    // and funnels files through the existing shell-enqueue event.
+    let paste_handler = |app: &tauri::AppHandle,
+                         shortcut: &tauri_plugin_global_shortcut::Shortcut,
+                         event: tauri_plugin_global_shortcut::ShortcutEvent| {
+        // `shortcut.into_string()` renders the same canonical form we
+        // persist in settings, modulo case. Compare case-insensitive
+        // so "cmdorctrl+shift+v" and "CmdOrCtrl+Shift+V" both match.
+        let pressed = shortcut.into_string();
+        if !crate::global_paste::shortcut_matches(app, &pressed, event.state()) {
+            return;
+        }
+        crate::global_paste::handle_paste_press(app);
+    };
+
     builder
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(paste_handler)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
-        .manage(state::AppState::new())
+        .manage(app_state)
         .on_window_event(|window, event| {
-            if let WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) = event {
-                let dto = ipc::DropReceivedDto {
-                    paths: paths
-                        .iter()
-                        .map(|p| p.to_string_lossy().into_owned())
-                        .collect(),
-                };
-                let _ = window.app_handle().emit(ipc::EVENT_DROP_RECEIVED, dto);
+            match event {
+                WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
+                    eprintln!(
+                        "[drop-received] paths={}",
+                        paths
+                            .iter()
+                            .map(|p| p.to_string_lossy().into_owned())
+                            .collect::<Vec<_>>()
+                            .join(" | ")
+                    );
+                    let dto = ipc::DropReceivedDto {
+                        paths: paths
+                            .iter()
+                            .map(|p| p.to_string_lossy().into_owned())
+                            .collect(),
+                    };
+                    let _ = window.app_handle().emit(ipc::EVENT_DROP_RECEIVED, dto);
+                }
+                // Phase 16 — "Minimize to tray on close". When the user
+                // toggles the General-tab checkbox ON, pressing the
+                // window's X button hides the window into the tray
+                // instead of tearing down the process. The tray icon
+                // registered below keeps the runtime alive and lets
+                // the user restore / quit from its menu.
+                WindowEvent::CloseRequested { api, .. } => {
+                    let handle = window.app_handle();
+                    if let Some(state) = handle.try_state::<AppState>() {
+                        let minimize = state.settings_snapshot().general.minimize_to_tray;
+                        if minimize {
+                            api.prevent_close();
+                            let _ = window.hide();
+                        }
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -128,8 +208,101 @@ pub fn run() {
             commands::translations,
             commands::available_locales,
             commands::system_locale,
+            // Phase 8 — error / collision / log surface.
+            commands::resolve_error,
+            commands::resolve_collision,
+            commands::error_log,
+            commands::clear_error_log,
+            commands::error_log_export,
+            commands::retry_elevated,
+            // Phase 9 — SQLite history surface.
+            commands::history_search,
+            commands::history_items,
+            commands::history_purge,
+            commands::history_export_csv,
+            commands::history_rerun,
+            // Phase 10 — cumulative totals + daily buckets + reset.
+            commands::history_totals,
+            commands::history_daily,
+            commands::history_clear_all,
+            // Phase 12 — settings + profiles + debug hook.
+            commands::get_settings,
+            commands::update_settings,
+            commands::reset_settings,
+            commands::effective_buffer_size,
+            commands::list_profiles,
+            commands::save_profile,
+            commands::load_profile,
+            commands::delete_profile,
+            commands::export_profile,
+            commands::import_profile,
+            commands::post_completion_action,
+            // Phase 14 — preflight free-space + path-size probes.
+            commands::destination_free_bytes,
+            commands::path_total_bytes,
+            commands::path_sizes_individual,
+            commands::path_metadata,
+            commands::enumerate_tree_files,
         ])
         .setup(move |app| {
+            // Phase 16 — tray icon + menu. Visible regardless of the
+            // "minimize to tray" setting; the setting only changes
+            // what the window's close button does. The menu always
+            // lets the user re-show the window and quit cleanly.
+            let show = MenuItem::with_id(app, "tray-show", "Show", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "tray-quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &quit])?;
+            let _tray = TrayIconBuilder::with_id("copythat-main-tray")
+                .tooltip("Copy That 2026")
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event: MenuEvent| match event.id.as_ref() {
+                    "tray-show" => show_main_window(app),
+                    "tray-quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    // Left-click on the tray icon restores the main
+                    // window. Right-click opens the menu (Tauri's
+                    // default behaviour when `show_menu_on_left_click`
+                    // is false).
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        show_main_window(tray.app_handle());
+                    }
+                })
+                .build(app)?;
+
+            // Register the configured paste hotkey if enabled. Live
+            // re-binding (user flips the setting) goes through the
+            // `update_paste_shortcut` IPC command; this path is the
+            // first-run / cold-start case only.
+            let handle = app.handle().clone();
+            if let Some(state) = handle.try_state::<AppState>() {
+                let snap = state.settings_snapshot();
+                if snap.general.paste_shortcut_enabled {
+                    if let Err(e) = global_paste::register_paste_shortcut(
+                        &handle,
+                        &snap.general.paste_shortcut,
+                    ) {
+                        eprintln!("[paste-hotkey] initial register failed: {e}");
+                    }
+                }
+                if snap.general.clipboard_watcher_enabled {
+                    let watcher = clipboard_watcher::spawn(handle.clone());
+                    if let Ok(mut slot) = state.clipboard_watcher.lock() {
+                        *slot = Some(watcher);
+                    }
+                }
+            }
+
             if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {
                 shell::dispatch_cli_action(&app.handle().clone(), action);
             }
@@ -137,4 +310,57 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Copy That 2026");
+}
+
+/// Phase 16 — restore the main window from the tray. `show` +
+/// `unminimize` + `set_focus` is the idiomatic bring-to-front
+/// combination on every Tauri 2.x target; missing pieces no-op.
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+    }
+}
+
+/// Phase 9 — synchronous helper for opening the SQLite history from
+/// the non-async `run()` entry point. Spins a private 1-thread
+/// Tokio runtime just to call `History::open_default()` (which is
+/// async) and block on its completion. Returns `None` on any error
+/// so the UI can still boot.
+fn open_history_blocking() -> Option<copythat_history::History> {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .ok()?;
+    match rt.block_on(copythat_history::History::open_default()) {
+        Ok(h) => Some(h),
+        Err(e) => {
+            eprintln!("copythat: history open failed: {e}");
+            None
+        }
+    }
+}
+
+/// Phase 12 — load `settings.toml` from the OS config dir. Returns
+/// `(Settings, path)` — the companion path is handed to `AppState`
+/// so every subsequent `update_settings` writes back to the same
+/// file without re-resolving.
+fn load_settings_blocking() -> (copythat_settings::Settings, std::path::PathBuf) {
+    match copythat_settings::Settings::default_path() {
+        Ok(path) => {
+            let settings = copythat_settings::Settings::load_from(&path).unwrap_or_else(|e| {
+                eprintln!("copythat: settings load failed ({e}); falling back to defaults");
+                copythat_settings::Settings::default()
+            });
+            (settings, path)
+        }
+        Err(e) => {
+            eprintln!("copythat: settings path resolution failed: {e}");
+            (
+                copythat_settings::Settings::default(),
+                std::path::PathBuf::new(),
+            )
+        }
+    }
 }

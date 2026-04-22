@@ -44,10 +44,15 @@ $RECYCLE.BIN/
 
 # --- Claude Code (per-user, not team-shared) ---
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # --- Test artifacts ---
 coverage/
 *.profraw
+# Nautilus smoke test runs `python3 -m py_compile` against the
+# packaged extension, which drops a __pycache__/ next to the source.
+**/__pycache__/
+*.pyc
 
 # --- Generated tauri assets we don't want in git ---
 apps/copythat-ui/src-tauri/Cargo.lock
@@ -58,8 +63,16 @@ apps/copythat-ui/src-tauri/Cargo.lock
 # NOT listed here (README.md is rendered by GitHub; SECURITY.md is
 # the repo's security-disclosure policy).
 /CopyThat2026-Build-Prompts-Guide.md
+/CopyThat2026-Build-Prompts-Guide2.md
+/CT26.txt
 /docs/ARCHITECTURE.md
 /docs/CHANGELOG.md
 /docs/I18N_TODO.md
 /docs/ROADMAP.md
 /packaging/linux/README.md
+
+# --- Icon workshop scratch output ---
+# Per-iteration icon previews (rasterised SVG exports, pre-review
+# renders, etc.) live under `/icon-previews/` and are not tracked.
+# The approved deliverables live under `/icon/` and ARE tracked.
+/icon-previews/

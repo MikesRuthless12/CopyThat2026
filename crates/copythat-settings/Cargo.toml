@@ -1,0 +1,30 @@
+[package]
+name = "copythat-settings"
+description = "Persistent user preferences + named profiles for Copy That 2026."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# `directories` picks the OS-appropriate config dir
+# (%APPDATA%\CopyThat2026 on Windows, ~/Library/Application Support on macOS,
+# $XDG_CONFIG_HOME/copythat on Linux).
+# `serde` + `serde_json` + `toml` handle the round-trip for the
+# settings.toml main store and per-profile exports (JSON per the
+# Phase 12 spec — portable + hand-readable).
+# `thiserror` for typed error surface; same pattern as copythat-history.
+directories = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+toml = "0.9"
+
+[dev-dependencies]
+tempfile = "3"

@@ -17,16 +17,19 @@ use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 
 use copythat_core::{
-    CopyControl, CopyError, CopyErrorKind, CopyEvent, CopyOptions, Job, JobId, JobKind, JobState,
-    MoveOptions, Queue, TreeOptions, copy_file, copy_tree, move_file, move_tree,
+    CollisionPolicy, CopyControl, CopyError, CopyErrorKind, CopyEvent, CopyOptions, ErrorPolicy,
+    Job, JobId, JobKind, JobState, MoveOptions, Queue, TreeOptions, copy_file, copy_tree,
+    move_file, move_tree,
 };
+use copythat_history::{ItemRow, JobRowId, JobSummary};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
 
 use crate::ipc::{
-    EVENT_GLOBALS_TICK, EVENT_JOB_ADDED, EVENT_JOB_CANCELLED, EVENT_JOB_COMPLETED,
-    EVENT_JOB_FAILED, EVENT_JOB_PAUSED, EVENT_JOB_PROGRESS, EVENT_JOB_RESUMED, EVENT_JOB_STARTED,
-    GlobalsDto, JobDto, JobFailedDto, JobIdDto, JobProgressDto,
+    CollisionPromptDto, EVENT_COLLISION_RAISED, EVENT_ERROR_RAISED, EVENT_GLOBALS_TICK,
+    EVENT_JOB_ADDED, EVENT_JOB_CANCELLED, EVENT_JOB_COMPLETED, EVENT_JOB_FAILED, EVENT_JOB_PAUSED,
+    EVENT_JOB_PROGRESS, EVENT_JOB_RESUMED, EVENT_JOB_STARTED, ErrorPromptDto, GlobalsDto, JobDto,
+    JobFailedDto, JobIdDto, JobProgressDto,
 };
 use crate::state::AppState;
 
@@ -51,6 +54,20 @@ pub(crate) struct RunJob {
     pub ctrl: CopyControl,
     pub verifier: Option<copythat_core::Verifier>,
     pub copy_opts: CopyOptions,
+    /// Phase 8 — tree-level collision policy. Defaults to `Skip`
+    /// at the engine level; the command layer upgrades to `Prompt`
+    /// when the user leaves the setting on "Ask".
+    pub collision_policy: CollisionPolicy,
+    /// Phase 8 — how to respond to per-file failures inside a tree
+    /// copy. Defaults to `Abort` (pre-8 behaviour); the command
+    /// layer flips to `Ask` so the frontend can surface prompts.
+    pub error_policy: ErrorPolicy,
+    /// Phase 13c — maximum concurrent file copies inside a tree.
+    /// Resolved at enqueue time from `Settings.transfer.concurrency`
+    /// plus `copythat_platform::recommend_concurrency` for the
+    /// `Auto` case. `None` falls back to the engine's built-in
+    /// default (4) so tests that construct `RunJob` by hand still work.
+    pub tree_concurrency: Option<usize>,
 }
 
 /// Entry point for a newly-enqueued job. Caller has already added
@@ -67,16 +84,38 @@ pub(crate) async fn run_job(job: RunJob) {
         ctrl,
         verifier,
         copy_opts,
+        collision_policy,
+        error_policy,
+        tree_concurrency,
     } = job;
+    eprintln!(
+        "[run_job] id={} kind={:?} src={} dst={:?}",
+        id.as_u64(),
+        kind,
+        src.display(),
+        dst.as_ref().map(|p| p.display().to_string())
+    );
     state.queue.start(id);
     let _ = app.emit(EVENT_JOB_STARTED, JobIdDto { id: id.as_u64() });
     emit_globals(&app, &state);
+
+    // Phase 9 — record the job-start into the SQLite history. `None`
+    // return means history is disabled (in-memory AppState or disk
+    // open failed at boot); the runner still works, just without
+    // persistence.
+    let history_row = record_history_start(&state, kind, &src, dst.as_deref(), &verifier).await;
 
     let (tx, rx) = mpsc::channel::<CopyEvent>(EVENT_CHANNEL);
 
     let app_for_events = app.clone();
     let state_for_events = state.clone();
-    let forwarder = tokio::spawn(forward_events(app_for_events, state_for_events, id, rx));
+    let forwarder = tokio::spawn(forward_events(
+        app_for_events,
+        state_for_events,
+        id,
+        rx,
+        history_row,
+    ));
 
     let mut copy_opts_with_verify = copy_opts;
     copy_opts_with_verify.verify = verifier;
@@ -103,14 +142,24 @@ pub(crate) async fn run_job(job: RunJob) {
                 .await
                 .map(|m| m.is_dir())
                 .unwrap_or(false);
+            eprintln!(
+                "[run_job] source_is_dir={} — about to call {}",
+                source_is_dir,
+                if source_is_dir { "copy_tree" } else { "copy_file" }
+            );
             if source_is_dir {
                 let tree_opts = TreeOptions {
                     file: copy_opts_with_verify,
+                    collision: collision_policy,
+                    on_error: error_policy,
+                    concurrency: tree_concurrency.unwrap_or(TreeOptions::default().concurrency),
                     ..TreeOptions::default()
                 };
-                copy_tree(&src, &dst_path, tree_opts, ctrl, tx.clone())
+                let out = copy_tree(&src, &dst_path, tree_opts, ctrl, tx.clone())
                     .await
-                    .map(|_| ())
+                    .map(|_| ());
+                eprintln!("[run_job] copy_tree returned: {:?}", out.as_ref().map(|_| "ok").map_err(|e| &e.message));
+                out
             } else {
                 copy_file(&src, &dst_path, copy_opts_with_verify, ctrl, tx.clone())
                     .await
@@ -170,16 +219,30 @@ pub(crate) async fn run_job(job: RunJob) {
     drop(tx);
     let _ = forwarder.await;
 
-    match result {
+    // Terminal status for both the queue-level emit and the
+    // history-level finish stamp.
+    let terminal_status: &'static str = match &result {
         Ok(()) => {
-            // Check cancel: a cancelled job may return Ok from
-            // copy_file if the cancel raced the final write.
             if state
                 .queue
                 .get(id)
                 .map(|j| j.state == JobState::Cancelled)
                 .unwrap_or(false)
             {
+                "cancelled"
+            } else {
+                "succeeded"
+            }
+        }
+        Err(err) if err.is_cancelled() => "cancelled",
+        Err(_) => "failed",
+    };
+
+    match result {
+        Ok(()) => {
+            // Check cancel: a cancelled job may return Ok from
+            // copy_file if the cancel raced the final write.
+            if terminal_status == "cancelled" {
                 let _ = app.emit(EVENT_JOB_CANCELLED, JobIdDto { id: id.as_u64() });
             } else {
                 state.queue.mark_completed(id);
@@ -192,6 +255,30 @@ pub(crate) async fn run_job(job: RunJob) {
                 // `Queue::cancel_job`; just emit the UI-facing event.
                 let _ = app.emit(EVENT_JOB_CANCELLED, JobIdDto { id: id.as_u64() });
             } else {
+                // Single-file / early-abort failure path: the
+                // engine didn't loop through forward_events long
+                // enough to emit a per-file FileError or Completed,
+                // so log the failure as a one-row item now. (Tree
+                // paths already self-emit per-file events above.)
+                if let Some(row) = history_row
+                    && !err.src.as_os_str().is_empty()
+                {
+                    let history = state.history.clone();
+                    if let Some(h) = history {
+                        let item = ItemRow {
+                            job_row_id: row.as_i64(),
+                            src: err.src.clone(),
+                            dst: err.dst.clone(),
+                            size: 0,
+                            status: "failed".into(),
+                            hash_hex: None,
+                            error_code: Some(crate::errors::kind_name(err.kind).to_string()),
+                            error_msg: Some(err.message.clone()),
+                            timestamp_ms: now_ms() as i64,
+                        };
+                        let _ = h.record_item(&item).await;
+                    }
+                }
                 state.queue.mark_failed(id, err.clone());
                 let _ = app.emit(
                     EVENT_JOB_FAILED,
@@ -201,6 +288,23 @@ pub(crate) async fn run_job(job: RunJob) {
                     },
                 );
             }
+        }
+    }
+
+    // Phase 9 — stamp the terminal status + final totals into the
+    // history row.
+    if let Some(row) = history_row {
+        let snapshot = state.queue.get(id);
+        let total_bytes = snapshot.as_ref().map(|j| j.bytes_done).unwrap_or(0);
+        let files_ok = snapshot.as_ref().map(|j| j.files_done).unwrap_or(0);
+        let files_failed = snapshot
+            .as_ref()
+            .and_then(|j| j.files_total.checked_sub(j.files_done))
+            .unwrap_or(0);
+        if let Some(history) = &state.history {
+            let _ = history
+                .record_finish(row, terminal_status, total_bytes, files_ok, files_failed)
+                .await;
         }
     }
     emit_globals(&app, &state);
@@ -230,33 +334,177 @@ async fn forward_events(
     state: AppState,
     id: JobId,
     mut rx: mpsc::Receiver<CopyEvent>,
+    history_row: Option<JobRowId>,
 ) {
     let mut last_files_total: u64 = 0;
     let mut last_bytes_total: u64 = 0;
+    // Phase 16 — once the engine fires `TreeStarted`, per-file
+    // `Started` events inside that tree must NOT reset the queue's
+    // files-total back to 1 (which was the old single-file fallback
+    // behaviour). Track whether we're inside a tree so the Started
+    // branch knows to leave `last_files_total` / `last_bytes_total`
+    // alone.
+    let mut in_tree_mode = false;
+    // Track how many files have actually started inside the tree so
+    // we can show 1/103 → 2/103 → … as the engine progresses. The
+    // TreeProgress event pushes the authoritative `files_done`
+    // later; this is just so Started-before-first-TreeProgress
+    // doesn't regress the counter.
+    let mut tree_files_started: u64 = 0;
+    // Phase 9 — per-file history bookkeeping. `Started` sets the
+    // in-flight item; `VerifyCompleted` stashes its hash;
+    // `Completed` flushes it as a successful row. `FileError`
+    // records a failure row directly.
+    let mut current_item: Option<ItemInFlight> = None;
+
+    // Phase 13d — per-file UI activity feed. Monotonic `seq` gives
+    // the frontend a stable ordering key so out-of-order emissions
+    // (unlikely but allowed) still render consistently. `last_emit`
+    // rate-limits Progress ticks so a many-small-files tree doesn't
+    // spam the event bus.
+    let job_id_u64 = id.as_u64();
+    let mut activity_seq: u64 = 0;
+    let mut last_activity_src: std::path::PathBuf = std::path::PathBuf::new();
+    let mut last_progress_emit = std::time::Instant::now();
+    let progress_min_interval = std::time::Duration::from_millis(120);
 
     while let Some(evt) = rx.recv().await {
         match evt {
-            CopyEvent::Started { total_bytes, .. } => {
-                last_bytes_total = total_bytes;
-                last_files_total = 1;
-                state.queue.set_progress(id, 0, total_bytes, 0, 1);
+            CopyEvent::Started {
+                src,
+                dst,
+                total_bytes,
+            } => {
+                if !in_tree_mode {
+                    // Real single-file job — Started is the only size
+                    // signal we'll get.
+                    last_bytes_total = total_bytes;
+                    last_files_total = 1;
+                    state.queue.set_progress(id, 0, total_bytes, 0, 1);
+                } else {
+                    // Tree job: TreeProgress is the authoritative
+                    // source for the aggregate counters, so we
+                    // touch only per-file bookkeeping here. A
+                    // write to the queue on every Started was
+                    // clobbering `bytes_done` / `files_done` back
+                    // to 0, which produced the oscillating top
+                    // counter the user reported.
+                    tree_files_started = tree_files_started.saturating_add(1);
+                }
+                // Per-file activity ping: "a file just started". Fires
+                // for both single-file jobs and per-file starts inside
+                // a tree (the engine emits Started for each file).
+                activity_seq += 1;
+                let _ = app.emit(
+                    crate::ipc::EVENT_FILE_ACTIVITY,
+                    crate::ipc::FileActivityDto {
+                        job_id: job_id_u64,
+                        seq: activity_seq,
+                        phase: "start",
+                        src: src.to_string_lossy().into_owned(),
+                        dst: dst.to_string_lossy().into_owned(),
+                        bytes_done: 0,
+                        bytes_total: total_bytes,
+                        is_dir: false,
+                        message: None,
+                    },
+                );
+                last_activity_src = src.clone();
+                last_progress_emit = std::time::Instant::now();
+                if history_row.is_some() {
+                    let _ = total_bytes; // size is taken from the Completed event
+                    current_item = Some(ItemInFlight {
+                        src,
+                        dst,
+                        hash_hex: None,
+                    });
+                }
+            }
+            CopyEvent::TreeEnumerating {
+                files_so_far,
+                bytes_so_far,
+            } => {
+                // Streaming walk is in progress AND copies are
+                // already running in parallel. Only update the
+                // denominator (files_total, bytes_total) — never
+                // touch the numerator, otherwise every walker tick
+                // stomps the `files_done / bytes_done` the copiers
+                // have already advanced. That bug showed up as a
+                // top counter stuck on `0 B / 852 GiB` while the
+                // Activity list showed dozens of completed rows.
+                in_tree_mode = true;
+                last_files_total = files_so_far;
+                last_bytes_total = bytes_so_far;
+                let (cur_bytes, cur_files) = state
+                    .queue
+                    .get(id)
+                    .map(|j| (j.bytes_done, j.files_done))
+                    .unwrap_or((0, 0));
+                state
+                    .queue
+                    .set_progress(id, cur_bytes, bytes_so_far, cur_files, files_so_far);
+                emit_progress(
+                    &app, &state, id, cur_bytes, bytes_so_far, cur_files, files_so_far, 0,
+                );
             }
             CopyEvent::TreeStarted {
                 total_files,
                 total_bytes,
                 ..
             } => {
+                in_tree_mode = true;
+                tree_files_started = 0;
                 last_files_total = total_files;
                 last_bytes_total = total_bytes;
                 state.queue.set_progress(id, 0, total_bytes, 0, total_files);
+                // Fire the tree totals at the UI *immediately* so the
+                // JobRow ring + bottom ProgressBar show the right
+                // denominator (e.g. "0 / 103", "0 B / 4.9 GiB")
+                // before the first per-file Progress event lands.
+                // Without this the ring would sit at whatever the
+                // initial enqueue default was (`0 / 1`) until the
+                // first TreeProgress ticks in a few hundred ms later.
+                emit_progress(&app, &state, id, 0, total_bytes, 0, total_files, 0);
             }
             CopyEvent::Progress {
                 bytes,
                 total,
                 rate_bps,
             } => {
-                state.queue.set_progress(id, bytes, total, 0, 1);
-                emit_progress(&app, &state, id, bytes, total, 0, 1, rate_bps);
+                // Only let per-file Progress events drive the queue's
+                // aggregate counters in *single-file* mode. Inside a
+                // tree, TreeProgress is the authoritative aggregate
+                // source — letting per-file Progress write here
+                // would clobber `files_total` back to 1 and
+                // `bytes_total` to the current file's size, which is
+                // what made the ring + bottom bar show the active
+                // file instead of the tree total.
+                if !in_tree_mode {
+                    state.queue.set_progress(id, bytes, total, 0, 1);
+                    emit_progress(&app, &state, id, bytes, total, 0, 1, rate_bps);
+                }
+                // Rate-limited per-file progress tick for the
+                // activity list. This is the per-row bar that IS
+                // meant to follow the individual file — tree mode
+                // or not — so it stays outside the `if` above.
+                if last_progress_emit.elapsed() >= progress_min_interval {
+                    activity_seq += 1;
+                    let _ = app.emit(
+                        crate::ipc::EVENT_FILE_ACTIVITY,
+                        crate::ipc::FileActivityDto {
+                            job_id: job_id_u64,
+                            seq: activity_seq,
+                            phase: "progress",
+                            src: last_activity_src.to_string_lossy().into_owned(),
+                            dst: String::new(),
+                            bytes_done: bytes,
+                            bytes_total: total,
+                            is_dir: false,
+                            message: None,
+                        },
+                    );
+                    last_progress_emit = std::time::Instant::now();
+                }
             }
             CopyEvent::TreeProgress {
                 bytes_done,
@@ -314,26 +562,189 @@ async fn forward_events(
                     rate_bps,
                 );
             }
-            CopyEvent::VerifyCompleted { .. } | CopyEvent::VerifyFailed { .. } => {
-                // Engine will return the final Result — no state
-                // transition here.
+            CopyEvent::VerifyCompleted {
+                algorithm: _,
+                src_hex,
+                ..
+            } => {
+                // Stash the source hash on the in-flight item so
+                // Completed can persist it. Engine still returns
+                // the final Result separately.
+                if let Some(item) = current_item.as_mut() {
+                    item.hash_hex = Some(src_hex);
+                }
+            }
+            CopyEvent::VerifyFailed { .. } => {
+                // Engine returns VerifyFailed as part of the final
+                // Result. No state transition here.
             }
             CopyEvent::Completed { bytes, .. } => {
-                state.queue.set_progress(
-                    id,
-                    bytes,
-                    last_bytes_total.max(bytes),
-                    last_files_total.max(1),
-                    last_files_total.max(1),
+                // In tree mode, per-file Completed events fire as
+                // each file finishes — but TreeProgress (fired by
+                // the tree engine right after) is the authoritative
+                // update for files_done / files_total. Writing the
+                // max-of-everything here was jamming files_done all
+                // the way to the current discovered total, which
+                // TreeProgress then "corrected" back on the next
+                // tick → the oscillating counter. Only touch the
+                // queue in single-file mode.
+                if !in_tree_mode {
+                    state.queue.set_progress(
+                        id,
+                        bytes,
+                        last_bytes_total.max(bytes),
+                        last_files_total.max(1),
+                        last_files_total.max(1),
+                    );
+                }
+                // Per-file "done" ping — flip the row's icon to a
+                // checkmark on the frontend side.
+                activity_seq += 1;
+                let _ = app.emit(
+                    crate::ipc::EVENT_FILE_ACTIVITY,
+                    crate::ipc::FileActivityDto {
+                        job_id: job_id_u64,
+                        seq: activity_seq,
+                        phase: "done",
+                        src: last_activity_src.to_string_lossy().into_owned(),
+                        dst: String::new(),
+                        bytes_done: bytes,
+                        bytes_total: bytes,
+                        is_dir: false,
+                        message: None,
+                    },
                 );
+                // Phase 9 — persist the item row. Only if history
+                // is active and we saw a matching `Started`.
+                if let (Some(row), Some(item)) = (history_row, current_item.take())
+                    && let Some(history) = &state.history
+                {
+                    let entry = ItemRow {
+                        job_row_id: row.as_i64(),
+                        src: item.src,
+                        dst: item.dst,
+                        size: bytes,
+                        status: "ok".into(),
+                        hash_hex: item.hash_hex,
+                        error_code: None,
+                        error_msg: None,
+                        timestamp_ms: now_ms() as i64,
+                    };
+                    let _ = history.record_item(&entry).await;
+                }
             }
             CopyEvent::TreeCompleted { bytes, files, .. } => {
                 state.queue.set_progress(id, bytes, bytes, files, files);
             }
-            CopyEvent::Failed { .. } | CopyEvent::Collision(_) => {
-                // Failed is handled after the engine returns. Collision
-                // prompts will get their own flow in Phase 8; today the
-                // default policy (`Skip`) means we never see one here.
+            CopyEvent::Failed { .. } => {
+                // Terminal per-file / per-tree failure — handled after
+                // the engine returns from the top-level copy_* call.
+            }
+            CopyEvent::FileError { err } => {
+                // Per-file failure absorbed by the engine's error
+                // policy (Skip / exhausted RetryN). Log it and keep
+                // going; the tree continues.
+                state.errors.log_auto(id.as_u64(), &err);
+                // Flip the row to an error icon in the live list.
+                activity_seq += 1;
+                let _ = app.emit(
+                    crate::ipc::EVENT_FILE_ACTIVITY,
+                    crate::ipc::FileActivityDto {
+                        job_id: job_id_u64,
+                        seq: activity_seq,
+                        phase: "error",
+                        src: err.src.to_string_lossy().into_owned(),
+                        dst: err.dst.to_string_lossy().into_owned(),
+                        bytes_done: 0,
+                        bytes_total: 0,
+                        is_dir: false,
+                        message: Some(err.message.clone()),
+                    },
+                );
+                // Phase 9 — also record the item in history.
+                if let (Some(row), Some(history)) = (history_row, state.history.clone()) {
+                    let kind_str = crate::errors::kind_name(err.kind);
+                    let entry = ItemRow {
+                        job_row_id: row.as_i64(),
+                        src: err.src.clone(),
+                        dst: err.dst.clone(),
+                        size: 0,
+                        status: "failed".into(),
+                        hash_hex: None,
+                        error_code: Some(kind_str.to_string()),
+                        error_msg: Some(err.message.clone()),
+                        timestamp_ms: now_ms() as i64,
+                    };
+                    let _ = history.record_item(&entry).await;
+                }
+                // Drop any in-flight item that belonged to the
+                // failing file so a subsequent Completed from a
+                // later file doesn't inherit stale paths.
+                current_item = None;
+            }
+            CopyEvent::Collision(mut coll) => {
+                let job_id = id.as_u64();
+                // Honour a prior "Apply to all" decision without
+                // bothering the user again.
+                if let Some(cached) = state.collisions.cached_resolution(job_id) {
+                    coll.resolve(cached);
+                    continue;
+                }
+                // Extract the oneshot before we reach for the paths
+                // (taking moves the Sender out of the Option).
+                let Some(tx) = coll.resolver.take() else {
+                    // Cloned placeholder from a broadcast subscriber —
+                    // nothing to drive here.
+                    continue;
+                };
+                let src_path = coll.src.clone();
+                let dst_path = coll.dst.clone();
+                let (src_size, src_modified_ms) = peek_meta(&src_path).await;
+                let (dst_size, dst_modified_ms) = peek_meta(&dst_path).await;
+                let new_id =
+                    state
+                        .collisions
+                        .register(job_id, src_path.clone(), dst_path.clone(), tx);
+                let _ = app.emit(
+                    EVENT_COLLISION_RAISED,
+                    CollisionPromptDto {
+                        id: new_id,
+                        job_id,
+                        src: src_path.to_string_lossy().into_owned(),
+                        dst: dst_path.to_string_lossy().into_owned(),
+                        src_size,
+                        src_modified_ms,
+                        dst_size,
+                        dst_modified_ms,
+                    },
+                );
+            }
+            CopyEvent::ErrorPrompt(mut prompt) => {
+                let job_id = id.as_u64();
+                // Honour an earlier "Skip all of this kind" decision.
+                if let Some(cached) = state.errors.cached_action_for(job_id, &prompt.err) {
+                    prompt.resolve(cached);
+                    continue;
+                }
+                let Some(tx) = prompt.resolver.take() else {
+                    continue;
+                };
+                let err = prompt.err.clone();
+                let new_id = state.errors.register(job_id, err.clone(), tx);
+                let _ = app.emit(
+                    EVENT_ERROR_RAISED,
+                    ErrorPromptDto {
+                        id: new_id,
+                        job_id,
+                        src: err.src.to_string_lossy().into_owned(),
+                        dst: err.dst.to_string_lossy().into_owned(),
+                        kind: crate::errors::kind_name(err.kind),
+                        localized_key: err.localized_key(),
+                        message: err.message.clone(),
+                        raw_os_error: err.raw_os_error,
+                        created_at_ms: now_ms(),
+                    },
+                );
             }
             // `CopyEvent` is `#[non_exhaustive]`; any future variant
             // is forwarded as a no-op so the runner never panics on
@@ -462,4 +873,82 @@ fn emit_globals(app: &AppHandle, state: &AppState) {
 /// runner task even starts.
 pub fn emit_job_added(app: &AppHandle, dto: JobDto) {
     let _ = app.emit(EVENT_JOB_ADDED, dto);
+}
+
+/// Read size + mtime for a filesystem path, returning `(None, None)`
+/// if the path is missing or the call fails. Used by the collision
+/// prompt to prime the modal's source / destination preview panes.
+async fn peek_meta(path: &std::path::Path) -> (Option<u64>, Option<u64>) {
+    let Ok(md) = tokio::fs::metadata(path).await else {
+        return (None, None);
+    };
+    let size = Some(md.len());
+    let mtime = md
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64);
+    (size, mtime)
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// In-flight per-file bookkeeping used by `forward_events` to
+/// pair a `Started { src, dst }` event with the matching
+/// `Completed` or `FileError` so the history's `items` row
+/// carries the right path + hash.
+struct ItemInFlight {
+    src: std::path::PathBuf,
+    dst: std::path::PathBuf,
+    hash_hex: Option<String>,
+}
+
+/// Phase 9 — insert the `jobs` row at job start. Returns `None` if
+/// history is disabled (e.g. in-memory `AppState` used by tests)
+/// or if the insert failed; the runner continues regardless.
+async fn record_history_start(
+    state: &AppState,
+    kind: copythat_core::JobKind,
+    src: &std::path::Path,
+    dst: Option<&std::path::Path>,
+    verifier: &Option<copythat_core::Verifier>,
+) -> Option<JobRowId> {
+    let history = state.history.as_ref()?;
+    let summary = JobSummary {
+        row_id: 0,
+        kind: kind_to_wire(kind).to_string(),
+        status: "running".into(),
+        started_at_ms: now_ms() as i64,
+        finished_at_ms: None,
+        src_root: src.to_path_buf(),
+        dst_root: dst.map(|p| p.to_path_buf()).unwrap_or_default(),
+        total_bytes: 0,
+        files_ok: 0,
+        files_failed: 0,
+        // The `Verifier` value doesn't expose its algorithm name
+        // publicly today; Phase 11+ can thread that through. For
+        // now `"sha256"` vs `None` is the interesting distinction
+        // the History column needs — if *any* verifier is set,
+        // record a placeholder so queries on `verify_algo IS NOT
+        // NULL` still work.
+        verify_algo: verifier.as_ref().map(|_| "configured".to_string()),
+        options_json: None,
+    };
+    history.record_start(&summary).await.ok()
+}
+
+fn kind_to_wire(kind: copythat_core::JobKind) -> &'static str {
+    use copythat_core::JobKind;
+    match kind {
+        JobKind::Copy => "copy",
+        JobKind::Move => "move",
+        JobKind::Delete => "delete",
+        JobKind::SecureDelete => "secure-delete",
+        JobKind::Verify => "verify",
+    }
 }
