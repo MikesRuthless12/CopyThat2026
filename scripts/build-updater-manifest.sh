@@ -4,7 +4,7 @@
 # (https://releases.copythat.app/{{channel}}/{{target}}-{{arch}}.json).
 #
 # Arguments:
-#   $1 — version string (e.g. "0.1.0")
+#   $1 — version string (e.g. "1.0.0")
 #   $2 — directory containing the per-target latest.json fragments
 #        produced by `tauri build` (one subdir per matrix entry, see
 #        .github/workflows/release.yml).

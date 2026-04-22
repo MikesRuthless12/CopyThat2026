@@ -650,7 +650,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "criterion",
  "filetime",
@@ -664,7 +664,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-hash"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "copythat-core",
@@ -683,7 +683,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-history"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "directories",
  "rusqlite",
@@ -694,11 +694,11 @@ dependencies = [
 
 [[package]]
 name = "copythat-i18n"
-version = "0.1.0"
+version = "1.0.0"
 
 [[package]]
 name = "copythat-platform"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "copythat-core",
  "libc",
@@ -711,7 +711,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-secure-delete"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "copythat-core",
  "rand 0.9.4",
@@ -723,7 +723,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-settings"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "directories",
  "serde",
@@ -735,7 +735,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-shellext"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "tempfile",
  "windows",
@@ -745,7 +745,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-ui"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "arboard",
  "copythat-core",
@@ -6577,7 +6577,7 @@ checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "copythat-core",
  "copythat-platform",
