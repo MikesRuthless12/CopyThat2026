@@ -8,7 +8,7 @@
 //!
 //! The GUIDs were generated for this project — they are not
 //! recycled from any Microsoft sample; the `0xA7D2_C001` / `C002`
-//! prefix is a mnemonic ("Copy That 2026 class 01 / 02").
+//! prefix is a mnemonic ("Copy That class 01 / 02").
 
 /// CLSID for the "Copy with Copy That" `IExplorerCommand`.
 /// `{A7D2C001-C097-4C96-8F7A-5C970C097001}`.
@@ -36,10 +36,10 @@ pub const DISPLAY_COPY: &str = "Copy with Copy That";
 pub const DISPLAY_MOVE: &str = "Move with Copy That";
 
 /// ProgID-style friendly names under `HKCR\CLSID\{guid}\(default)`.
-pub const PROG_COPY: &str = "Copy That 2026 — Copy command";
+pub const PROG_COPY: &str = "Copy That v1.0.0 — Copy command";
 
 /// See [`PROG_COPY`].
-pub const PROG_MOVE: &str = "Copy That 2026 — Move command";
+pub const PROG_MOVE: &str = "Copy That v1.0.0 — Move command";
 
 /// Name of the target binary the verbs invoke. Resolved via PATH;
 /// Phase 16 packaging puts `copythat.exe` there (on Windows today,

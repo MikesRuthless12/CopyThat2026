@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Phase 18 — manual trigger so any branch can be validated on demand
+  # even when the head commit carries `[skip ci]`. Fire from the Actions
+  # tab → CI → Run workflow.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -79,16 +83,28 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # `cargo test --workspace` picks up every per-phase smoke via
+      # each crate's [[test]] registration — including the Phase 17a
+      # red-team (`phase_17_security`) and the Phase 18 engine-level
+      # end-to-end (`phase_18_e2e`, 50 files + BLAKE3 verify + history
+      # round-trip + shred_tree; ~60 s on Windows, faster on
+      # Linux / macOS). Tauri-build coverage is in the tauri-build job
+      # below; install / uninstall round-trip runs against the tagged
+      # release artifacts per docs/RELEASE_CHECKLIST.md, not here.
       - name: Test
         run: cargo test --workspace
 
   tauri-build:
     name: Tauri debug build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # Tauri debug build typically completes in 2-10 minutes; cap at 30 to
-    # match the clippy-test cap and protect against the same runner-glitch
-    # mode that hung Phase 3+4 for 6 hours.
-    timeout-minutes: 30
+    # Tauri debug build typically completes in 2-10 minutes with a warm
+    # Swatinem/rust-cache. First-run / evicted-cache builds on ubuntu-latest
+    # routinely need 25-35 minutes (apt-get install + webkit2gtk headers
+    # + ~350 Rust crates + pnpm install + frontend bundling), which was
+    # enough to cancel the Phase 18 PR #3 CI run at the old 30-min cap.
+    # Raise to 45 to cover the cold path while still failing fast on a
+    # true runner glitch.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -123,6 +139,21 @@ jobs:
       - name: Install frontend deps
         working-directory: apps/copythat-ui
         run: pnpm install --frozen-lockfile
+      # Debug build skips the rpm target on ubuntu-latest — Tauri's
+      # `rpmbuild` shells out silently for ~25 min on hosted runners
+      # (no stdout during GPG/host-key resolution), which pushed the
+      # Phase 18 PR #3 CI run 24799604751 past the 45-min cap even
+      # though every other step finished in under 15 min. The
+      # tagged release.yml workflow still produces rpm artifacts
+      # with its own 60-min cap. The host-matched bundle list
+      # (msi+nsis on Windows, app+dmg on macOS, appimage+deb on
+      # Linux) keeps CI fast without losing smoke coverage — the
+      # Tauri bundler itself runs identically across targets.
+      - name: Tauri build (debug — Linux subset)
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: apps/copythat-ui
+        run: pnpm tauri build --debug --bundles deb,appimage
       - name: Tauri build (debug)
+        if: matrix.os != 'ubuntu-latest'
         working-directory: apps/copythat-ui
         run: pnpm tauri build --debug

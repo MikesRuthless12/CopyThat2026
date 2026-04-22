@@ -10,11 +10,102 @@ use tokio::sync::mpsc;
 use crate::control::CopyControl;
 use crate::error::CopyError;
 use crate::event::{CopyEvent, CopyReport};
+use crate::filter::FilterSet;
 use crate::verify::Verifier;
 
 pub const DEFAULT_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
 pub const MIN_BUFFER_SIZE: usize = 64 * 1024; // 64 KiB
 pub const MAX_BUFFER_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
+
+/// What the engine should do when a file can't be opened for read
+/// because another process holds an exclusive lock
+/// (`ERROR_SHARING_VIOLATION` on Windows, `EBUSY` on certain Linux FUSE
+/// mounts, `NSFileLockingError` on macOS).
+///
+/// Added in Phase 19b to let the user opt into filesystem-snapshot
+/// reads (VSS / ZFS / Btrfs / APFS). `Retry` preserves the Phase 14
+/// behaviour so older call sites see no change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LockedFilePolicy {
+    /// Short exponential-backoff retry (50 / 100 / 200 ms) inside
+    /// `copy_file` itself. Handles the common "Office has the .docx
+    /// open for write, saves in a few hundred ms" case without any
+    /// escalation. The default.
+    #[default]
+    Retry,
+    /// Skip the file after the retry loop is exhausted. The tree
+    /// engine records a `FileError` / `errored++` and moves on.
+    Skip,
+    /// After retry exhausts, ask
+    /// [`CopyOptions::snapshot_hook`](super::CopyOptions::snapshot_hook)
+    /// for a snapshot-side path and reopen the read against it. On
+    /// success, [`CopyEvent::SnapshotCreated`](super::CopyEvent::SnapshotCreated)
+    /// is emitted so the UI can render a "📷 Reading from VSS
+    /// snapshot of C:" badge. On failure falls through to a typed
+    /// error (respecting the tree-level `on_error` policy).
+    Snapshot,
+    /// Emit a one-time prompt to the UI asking which of the above to
+    /// apply (and whether to remember per-volume). The runner layer
+    /// translates the user's answer into one of the above and feeds
+    /// it back into the engine. Equivalent to `Retry` if no prompter
+    /// is attached.
+    Ask,
+}
+
+/// Opaque lease returned by a [`SnapshotHook`] — a snapshot-side path
+/// the engine opens in place of the locked live source, plus a Drop
+/// guard that releases the snapshot when the lease is dropped.
+///
+/// The engine holds the lease for the duration of the copy; dropping
+/// it after `copy_file` returns is what releases the underlying
+/// snapshot.
+#[derive(Debug)]
+pub struct SnapshotLease {
+    /// The path the engine should open for read in place of the
+    /// original locked source.
+    pub translated: PathBuf,
+    /// Stable wire string — `"vss"` / `"zfs"` / `"btrfs"` / `"apfs"`.
+    pub kind_wire: &'static str,
+    /// Live-source root the snapshot covers. The UI renders this
+    /// alongside the badge — "VSS snapshot of `C:\`".
+    pub original_root: PathBuf,
+    /// Root mount of the snapshot itself — used by the UI mostly for
+    /// debugging / verbose modes.
+    pub mount_root: PathBuf,
+    /// The lease's RAII guard. Dropping this calls the backend's
+    /// `zfs destroy` / `btrfs subvolume delete` / VSS `Delete()`.
+    pub guard: Box<dyn SnapshotGuard>,
+}
+
+/// Marker trait for a `SnapshotLease` drop guard.
+///
+/// Implementors hold whatever state the backend needs to tear the
+/// snapshot down; the engine never inspects it. The tearing-down
+/// logic runs in the impl's `Drop` — this trait exists purely so
+/// [`SnapshotLease::guard`] can hold a trait object.
+pub trait SnapshotGuard: Send + Sync + std::fmt::Debug {}
+
+/// Bridge contract for a filesystem-snapshot source.
+///
+/// Implemented by `copythat_snapshot::CopyThatSnapshotHook`. Kept in
+/// this crate so [`CopyOptions`] can hold a trait object without a
+/// dependency cycle between `copythat-core` and `copythat-snapshot`.
+///
+/// The hook is consulted exactly once per locked source file, after
+/// [`open_src_with_retry`]'s own sharing-violation backoff has
+/// exhausted. If the hook returns `Err`, the engine surfaces the
+/// error (as configured by the tree-level `on_error` policy). If the
+/// hook returns `Ok(lease)`, the engine opens `lease.translated` for
+/// read and carries on with the normal copy loop.
+pub trait SnapshotHook: Send + Sync + std::fmt::Debug {
+    /// Take a snapshot of the volume containing `src` and return a
+    /// [`SnapshotLease`] whose `translated` path the engine can open
+    /// for read.
+    fn open_for_read<'a>(
+        &'a self,
+        src: PathBuf,
+    ) -> Pin<Box<dyn Future<Output = Result<SnapshotLease, CopyError>> + Send + 'a>>;
+}
 
 /// Behaviour knobs for a single `copy_file` invocation.
 #[derive(Debug, Clone)]
@@ -79,6 +170,19 @@ pub struct CopyOptions {
     /// bytes, so verifying through them would require a third-pass
     /// re-read of both files and lose the integration's perf win.
     pub fast_copy_hook: Option<Arc<dyn FastCopyHook>>,
+    /// Phase 19b — what to do when the source is open for exclusive
+    /// write by another process. Defaults to `Retry` which preserves
+    /// the pre-Phase-19b 50/100/200 ms backoff. Set to `Snapshot` to
+    /// opt into the VSS / ZFS / Btrfs / APFS fallback when a
+    /// [`snapshot_hook`](Self::snapshot_hook) is installed.
+    pub on_locked: LockedFilePolicy,
+    /// Phase 19b — filesystem-snapshot bridge.
+    ///
+    /// Consulted by the engine when `on_locked` is `Snapshot` and the
+    /// short retry loop couldn't open the source. Only
+    /// `copythat-snapshot::CopyThatSnapshotHook` implements this in
+    /// tree; a custom hook can be wired for testing.
+    pub snapshot_hook: Option<Arc<dyn SnapshotHook>>,
 }
 
 /// User-selectable copy strategy.
@@ -158,6 +262,8 @@ impl Default for CopyOptions {
             fsync_before_verify: true,
             strategy: CopyStrategy::Auto,
             fast_copy_hook: None,
+            on_locked: LockedFilePolicy::default(),
+            snapshot_hook: None,
         }
     }
 }
@@ -165,6 +271,53 @@ impl Default for CopyOptions {
 impl CopyOptions {
     pub fn clamped_buffer_size(&self) -> usize {
         self.buffer_size.clamp(MIN_BUFFER_SIZE, MAX_BUFFER_SIZE)
+    }
+
+    /// Phase 13c — dynamic buffer sizing.
+    ///
+    /// Pick the buffer size the async-fallback loop should actually
+    /// use for a file of `file_size` bytes. Rules:
+    ///
+    /// - **File smaller than the configured buffer**: shrink to the
+    ///   next sector-aligned size above the file size (clamped to
+    ///   [`MIN_BUFFER_SIZE`]). A 50 KiB file doesn't need a 1 MiB
+    ///   allocation; shrinking cuts the per-file memory cost for
+    ///   many-small-file trees without hurting throughput.
+    /// - **File between 1 MiB and 4 GiB**: use the configured
+    ///   buffer verbatim. The Phase 13b buffer-sweep bench confirmed
+    ///   1 MiB is the optimum for this band on typical desktop
+    ///   hardware (the bench ran on Windows 11 / NTFS).
+    /// - **File larger than 4 GiB**: step up toward [`MAX_BUFFER_SIZE`]
+    ///   to give the memory subsystem bigger contiguous chunks to
+    ///   pipeline. The jump is capped at 4 MiB to stay well clear
+    ///   of `BufReader` / `BufWriter`'s internal allocation pain
+    ///   point.
+    ///
+    /// The returned value is always within `[MIN_BUFFER_SIZE,
+    /// MAX_BUFFER_SIZE]` and never larger than the caller-configured
+    /// `buffer_size` unless the file is > 4 GiB (where the caller's
+    /// configured value is treated as a floor rather than a cap).
+    pub fn buffer_size_for_file(&self, file_size: u64) -> usize {
+        let configured = self.clamped_buffer_size();
+        if file_size == 0 {
+            return MIN_BUFFER_SIZE;
+        }
+        // Step 1: cap to the file size (no point allocating more
+        // than the file can fill). Align up to the minimum buffer
+        // size so we never under-shoot the sector-alignment floor
+        // the engine assumes downstream.
+        let file_cap = ((file_size as usize).saturating_add(MIN_BUFFER_SIZE - 1))
+            .min(configured.max(MIN_BUFFER_SIZE));
+        let base = file_cap.max(MIN_BUFFER_SIZE);
+        // Step 2: for truly huge files, step up above the
+        // configured value — amortizes the per-syscall cost over
+        // more bytes at the expense of a larger steady-state RSS.
+        const HUGE_FILE_THRESHOLD: u64 = 4 * 1024 * 1024 * 1024; // 4 GiB
+        const HUGE_FILE_BUFFER: usize = 4 * 1024 * 1024; // 4 MiB
+        if file_size >= HUGE_FILE_THRESHOLD && base < HUGE_FILE_BUFFER {
+            return HUGE_FILE_BUFFER.clamp(MIN_BUFFER_SIZE, MAX_BUFFER_SIZE);
+        }
+        base.clamp(MIN_BUFFER_SIZE, MAX_BUFFER_SIZE)
     }
 }
 
@@ -205,6 +358,57 @@ impl Default for MoveOptions {
 /// detection.
 pub const DEFAULT_TREE_CONCURRENCY: usize = 4;
 
+/// What the tree engine should do when a per-file copy fails.
+///
+/// Separate from `CollisionPolicy` — that resolves "destination already
+/// exists" *before* the copy starts; this governs "the copy started
+/// and the filesystem said no" (permission denied, disk full,
+/// interrupted, …).
+///
+/// Added in Phase 8 so the UI can surface a retry / skip dialog. The
+/// default is `Abort` to preserve the pre-Phase-8 tree semantics
+/// (one failure aborts the whole tree); the Tauri runner opts into
+/// `Ask` when the user has not overridden the Settings policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ErrorPolicy {
+    /// Emit `CopyEvent::ErrorPrompt` and block the failing file's
+    /// task until the consumer replies via a one-shot. The consumer
+    /// picks `ErrorAction::Retry` / `Skip` / `Abort`.
+    Ask,
+    /// Record the error as a `CopyEvent::FileError` event + `errored`
+    /// counter increment, then continue the tree.
+    Skip,
+    /// Retry the failing copy up to `max_attempts` times with a
+    /// fixed backoff, then fall through to `Skip` on exhaustion.
+    RetryN {
+        /// Maximum re-tries (does NOT count the initial attempt).
+        /// Clamped to `[0, 10]` by the engine.
+        max_attempts: u8,
+        /// Sleep between retries, in milliseconds.
+        /// Clamped to `[0, 10_000]` by the engine.
+        backoff_ms: u64,
+    },
+    /// Cancel the whole tree on first per-file failure. Pre-Phase-8
+    /// behaviour; kept as the default so existing callers see no
+    /// behaviour change until they opt in.
+    #[default]
+    Abort,
+}
+
+/// Consumer response to a `CopyEvent::ErrorPrompt`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorAction {
+    /// Re-run `copy_file` for the failing entry. If the retry also
+    /// fails, the engine emits another `ErrorPrompt` (so a loop of
+    /// "keep retrying" is up to the consumer).
+    Retry,
+    /// Record the error as a `FileError` event + `errored` counter;
+    /// continue the rest of the tree.
+    Skip,
+    /// Cancel the tree. Same outcome as `ErrorPolicy::Abort`.
+    Abort,
+}
+
 /// Behaviour knobs for `copy_tree` / `move_tree`.
 #[derive(Debug, Clone)]
 pub struct TreeOptions {
@@ -213,6 +417,9 @@ pub struct TreeOptions {
     pub file: CopyOptions,
     /// How to resolve an existing destination. Default: `Skip`.
     pub collision: crate::collision::CollisionPolicy,
+    /// What to do when a per-file copy *fails* (as opposed to "dst
+    /// already exists"). Default: `Abort` — pre-Phase-8 behaviour.
+    pub on_error: ErrorPolicy,
     /// Maximum concurrent file copies. Clamped to `[1, 64]`.
     pub concurrency: usize,
     /// If true, follow symlinks found *inside* the source tree and
@@ -223,6 +430,28 @@ pub struct TreeOptions {
     /// If true, preserve mtime / atime on every *directory* in
     /// addition to every file. Defaults to true.
     pub preserve_directory_times: bool,
+    /// Phase 14 — destination free-space reserve, in bytes.
+    ///
+    /// When `> 0`, the tree engine re-probes the destination volume's
+    /// free bytes before each file and halts cleanly (emitting a
+    /// `TreeStopped` event + terminal state "succeeded_partial") if
+    /// writing the next file would push free space below this reserve.
+    /// `0` disables the guard; the Phase 1-13 behaviour (copy until
+    /// the volume is physically full) is preserved for opt-out
+    /// callers. The UI preflight check surfaces overflow before the
+    /// engine is even entered; this field is the safety net that
+    /// catches files that grow during the copy or partial-fit
+    /// selections that still happen to overflow.
+    pub reserve_dst_bytes: u64,
+    /// Phase 14a — enumeration-time include/exclude filters.
+    ///
+    /// When `Some(set)` and `set.is_empty() == false`, the walker
+    /// compiles the filter once and applies it per entry: files
+    /// failing the include / exclude / size / date / attribute checks
+    /// are omitted from the plan entirely, and directories matching
+    /// an exclude glob prune their whole subtree. See
+    /// [`crate::filter`] for the precise semantics.
+    pub filters: Option<FilterSet>,
 }
 
 impl Default for TreeOptions {
@@ -230,9 +459,12 @@ impl Default for TreeOptions {
         Self {
             file: CopyOptions::default(),
             collision: crate::collision::CollisionPolicy::Skip,
+            on_error: ErrorPolicy::default(),
             concurrency: DEFAULT_TREE_CONCURRENCY,
             follow_symlinks_in_tree: false,
             preserve_directory_times: true,
+            reserve_dst_bytes: 0,
+            filters: None,
         }
     }
 }
@@ -240,5 +472,94 @@ impl Default for TreeOptions {
 impl TreeOptions {
     pub(crate) fn clamped_concurrency(&self) -> usize {
         self.concurrency.clamp(1, 64)
+    }
+
+    /// Clamp the RetryN knobs so a pathological config (e.g.
+    /// `max_attempts: 255, backoff_ms: u64::MAX`) can't freeze the
+    /// tree. Non-`RetryN` policies pass through unchanged.
+    pub(crate) fn clamped_on_error(&self) -> ErrorPolicy {
+        match self.on_error {
+            ErrorPolicy::RetryN {
+                max_attempts,
+                backoff_ms,
+            } => ErrorPolicy::RetryN {
+                max_attempts: max_attempts.min(10),
+                backoff_ms: backoff_ms.min(10_000),
+            },
+            other => other,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn buffer_size_for_file_tiny_file_shrinks_below_configured() {
+        let opts = CopyOptions::default();
+        // 50 KiB file, 1 MiB configured → shrink but stay at/above MIN.
+        let buf = opts.buffer_size_for_file(50 * 1024);
+        assert!(buf >= MIN_BUFFER_SIZE);
+        assert!(
+            buf < DEFAULT_BUFFER_SIZE,
+            "tiny files should not allocate the full 1 MiB default"
+        );
+    }
+
+    #[test]
+    fn buffer_size_for_file_zero_file_returns_min() {
+        let opts = CopyOptions::default();
+        assert_eq!(opts.buffer_size_for_file(0), MIN_BUFFER_SIZE);
+    }
+
+    #[test]
+    fn buffer_size_for_file_medium_file_uses_configured() {
+        // 100 MiB file with default (1 MiB) buffer → use 1 MiB verbatim.
+        let opts = CopyOptions::default();
+        let buf = opts.buffer_size_for_file(100 * 1024 * 1024);
+        assert_eq!(buf, DEFAULT_BUFFER_SIZE);
+    }
+
+    #[test]
+    fn buffer_size_for_file_huge_file_bumps_up() {
+        // 10 GiB file should step up from 1 MiB default to 4 MiB.
+        let opts = CopyOptions::default();
+        let buf = opts.buffer_size_for_file(10 * 1024 * 1024 * 1024);
+        assert_eq!(buf, 4 * 1024 * 1024);
+    }
+
+    #[test]
+    fn buffer_size_for_file_respects_max_ceiling() {
+        // Even a 1 TiB file must not exceed MAX_BUFFER_SIZE.
+        let opts = CopyOptions {
+            buffer_size: MAX_BUFFER_SIZE * 2,
+            ..Default::default()
+        };
+        let buf = opts.buffer_size_for_file(1024u64.pow(4));
+        assert!(buf <= MAX_BUFFER_SIZE);
+    }
+
+    #[test]
+    fn buffer_size_for_file_small_file_caps_at_configured() {
+        // 10 KiB file, 64 KiB configured → return MIN (64 KiB), not 10 KiB.
+        let opts = CopyOptions {
+            buffer_size: MIN_BUFFER_SIZE,
+            ..Default::default()
+        };
+        let buf = opts.buffer_size_for_file(10 * 1024);
+        assert_eq!(buf, MIN_BUFFER_SIZE);
+    }
+
+    #[test]
+    fn buffer_size_for_file_does_not_exceed_configured_on_medium() {
+        // 2 GiB with a user-configured 2 MiB should stay at 2 MiB
+        // (not bump up to 4 MiB — HUGE_FILE_THRESHOLD guards that).
+        let opts = CopyOptions {
+            buffer_size: 2 * 1024 * 1024,
+            ..Default::default()
+        };
+        let buf = opts.buffer_size_for_file(2 * 1024 * 1024 * 1024);
+        assert_eq!(buf, 2 * 1024 * 1024);
     }
 }

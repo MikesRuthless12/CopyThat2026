@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Build / release / lint helper CLI for Copy That 2026."
+description = "Build / release / lint helper CLI for Copy That v1.0.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,3 +17,18 @@ name = "xtask"
 path = "src/main.rs"
 
 [dependencies]
+# `xtask bench-vs` writes its synthetic workload into a tempdir +
+# times our engine head-to-head against competitor copy tools, so
+# it needs the engine itself plus a tokio runtime to drive it.
+# `copythat-platform` adds the OS-native fast-path hook
+# (CopyFileExW / copyfile / copy_file_range) which is what the
+# shipped Tauri app uses — without it we're racing a pure-async
+# byte loop against a kernel-tuned CopyFileEx.
+copythat-core = { path = "../crates/copythat-core", version = "1" }
+copythat-platform = { path = "../crates/copythat-platform", version = "1" }
+# `xtask bench-vs --secure-cleanup` uses our own secure-delete crate
+# to wipe the bench destination files after a run, exercising the
+# same shredder the UI drives.
+copythat-secure-delete = { path = "../crates/copythat-secure-delete", version = "1" }
+tempfile = "3"
+tokio = { version = "1", features = ["fs", "macros", "rt", "rt-multi-thread", "sync"] }
