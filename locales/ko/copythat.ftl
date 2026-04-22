@@ -167,6 +167,8 @@ err-interrupted = 작업이 중단되었습니다
 # MT
 err-verify-failed = 복사 후 확인 실패
 # MT
+err-path-escape = 경로 거부됨 — 상위 디렉터리(..) 세그먼트 또는 잘못된 바이트 포함
+# MT
 err-io-other = 알 수 없는 I/O 오류
 
 # MT — Collision modal

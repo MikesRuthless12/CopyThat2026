@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use copythat_core::{CopyOptions, JobKind};
+use copythat_core::{CopyOptions, JobKind, validate_path_no_traversal};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::ipc::{CopyOptionsDto, FileIconDto, JobDto};
@@ -84,6 +84,15 @@ async fn enqueue(
     if dst_root.as_os_str().is_empty() {
         return Err("err-destination-empty".to_string());
     }
+    // Phase 17a — reject traversal (`..`) + NUL-byte paths at the
+    // IPC boundary, before a job is even allocated. The engine runs
+    // the same lexical check as a depth-2 guard; this one lets the
+    // UI surface a human-readable error without creating a history
+    // row for the rejected attempt.
+    if let Err(e) = validate_path_no_traversal(&dst_root) {
+        eprintln!("[start_{kind:?}] rejected destination: {e}");
+        return Err(e.localized_key().to_string());
+    }
 
     // Phase 12: per-enqueue `CopyOptionsDto` overrides come from the
     // frontend's drop-dialog and still win (highest precedence);
@@ -113,6 +122,16 @@ async fn enqueue(
         .collect();
     if srcs.is_empty() {
         return Err("err-source-empty".to_string());
+    }
+    // Phase 17a — same guard as the destination: any source path
+    // carrying `..` or NUL bytes is a crafted IPC payload, not a
+    // legitimate drag-drop. Reject the whole batch so the UI
+    // doesn't get half-queued, half-rejected state.
+    for s in &srcs {
+        if let Err(e) = validate_path_no_traversal(s) {
+            eprintln!("[start_{kind:?}] rejected source `{}`: {e}", s.display());
+            return Err(e.localized_key().to_string());
+        }
     }
     Ok(enqueue_jobs(
         &app,

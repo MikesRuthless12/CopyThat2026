@@ -31,6 +31,7 @@ use crate::error::{CopyError, CopyErrorKind};
 use crate::event::{CopyEvent, ErrorPrompt, TreeReport};
 use crate::filter::CompiledFilters;
 use crate::options::{ErrorAction, ErrorPolicy, MoveOptions, TreeOptions};
+use crate::safety::validate_path_no_traversal;
 
 /// Copy `src_dir` into `dst_dir`, preserving structure.
 ///
@@ -56,6 +57,15 @@ pub async fn move_file(
     ctrl: CopyControl,
     events: mpsc::Sender<CopyEvent>,
 ) -> Result<crate::event::CopyReport, CopyError> {
+    // Phase 17a — lexical path-safety guard. Rename is atomic, so
+    // there's no partial state to unwind on rejection; we just
+    // refuse up front.
+    if let Err(e) = validate_path_no_traversal(src) {
+        return Err(CopyError::path_escape(src, dst, e));
+    }
+    if let Err(e) = validate_path_no_traversal(dst) {
+        return Err(CopyError::path_escape(src, dst, e));
+    }
     // Fast path: atomic rename.
     match tokio::fs::rename(src, dst).await {
         Ok(()) => {
@@ -112,6 +122,13 @@ pub async fn move_tree(
     ctrl: CopyControl,
     events: mpsc::Sender<CopyEvent>,
 ) -> Result<TreeReport, CopyError> {
+    // Phase 17a — lexical path-safety guard; see `move_file` rationale.
+    if let Err(e) = validate_path_no_traversal(src_dir) {
+        return Err(CopyError::path_escape(src_dir, dst_dir, e));
+    }
+    if let Err(e) = validate_path_no_traversal(dst_dir) {
+        return Err(CopyError::path_escape(src_dir, dst_dir, e));
+    }
     match tokio::fs::rename(src_dir, dst_dir).await {
         Ok(()) => {
             let meta = tokio::fs::metadata(dst_dir).await.ok();
@@ -258,6 +275,17 @@ async fn copy_tree_inner(
 ) -> Result<TreeReport, CopyError> {
     let src_root = src_dir.to_path_buf();
     let dst_root = dst_dir.to_path_buf();
+
+    // Phase 17a — lexical path-safety guard. `copy_file` runs the
+    // same check per-file, but catching a traversal attempt at the
+    // tree root short-circuits the walker before it can emit any
+    // TreeStarted event on a rigged path.
+    if let Err(e) = validate_path_no_traversal(&src_root) {
+        return Err(CopyError::path_escape(&src_root, &dst_root, e));
+    }
+    if let Err(e) = validate_path_no_traversal(&dst_root) {
+        return Err(CopyError::path_escape(&src_root, &dst_root, e));
+    }
 
     // Validate source.
     let src_meta = tokio::fs::metadata(&src_root)

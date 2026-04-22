@@ -167,6 +167,8 @@ err-interrupted = Operacja przerwana
 # MT
 err-verify-failed = Weryfikacja po kopiowaniu nieudana
 # MT
+err-path-escape = Ścieżka odrzucona — zawiera segmenty katalogu nadrzędnego (..) lub niedozwolone bajty
+# MT
 err-io-other = Nieznany błąd we/wy
 
 # MT — Collision modal

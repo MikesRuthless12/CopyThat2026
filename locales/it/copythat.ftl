@@ -167,6 +167,8 @@ err-interrupted = Operazione interrotta
 # MT
 err-verify-failed = Verifica post-copia fallita
 # MT
+err-path-escape = Percorso rifiutato — contiene segmenti di cartella superiore (..) o byte non validi
+# MT
 err-io-other = Errore I/O sconosciuto
 
 # MT — Collision modal

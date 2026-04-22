@@ -167,6 +167,8 @@ err-interrupted = Thao tác bị gián đoạn
 # MT
 err-verify-failed = Xác minh sau khi sao chép thất bại
 # MT
+err-path-escape = Đường dẫn bị từ chối — chứa đoạn thư mục cha (..) hoặc byte không hợp lệ
+# MT
 err-io-other = Lỗi I/O không xác định
 
 # MT — Collision modal
