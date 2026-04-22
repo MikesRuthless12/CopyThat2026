@@ -47,15 +47,25 @@ impl ScanRegistry {
     }
 
     fn insert(&self, id: ScanId, handle: ScanHandle) {
-        self.inner.write().expect("scan registry poisoned").insert(id, handle);
+        self.inner
+            .write()
+            .expect("scan registry poisoned")
+            .insert(id, handle);
     }
 
     fn remove(&self, id: ScanId) {
-        self.inner.write().expect("scan registry poisoned").remove(&id);
+        self.inner
+            .write()
+            .expect("scan registry poisoned")
+            .remove(&id);
     }
 
     fn get(&self, id: ScanId) -> Option<ScanHandle> {
-        self.inner.read().expect("scan registry poisoned").get(&id).cloned()
+        self.inner
+            .read()
+            .expect("scan registry poisoned")
+            .get(&id)
+            .cloned()
     }
 }
 
@@ -223,11 +233,7 @@ fn parse_id(s: &str) -> Result<ScanId, String> {
     ScanId::parse(s).map_err(|e| format!("malformed scan id `{s}`: {e}"))
 }
 
-async fn forward_scan_events(
-    app: AppHandle,
-    scan_id: ScanId,
-    mut rx: mpsc::Receiver<ScanEvent>,
-) {
+async fn forward_scan_events(app: AppHandle, scan_id: ScanId, mut rx: mpsc::Receiver<ScanEvent>) {
     while let Some(evt) = rx.recv().await {
         match evt {
             ScanEvent::Started { .. } => {
@@ -290,9 +296,7 @@ async fn forward_scan_events(
             // richer totals than the `ScanEvent::Completed` carries
             // mid-stream; ignore the in-stream variants here. The
             // `_` catches future non-exhaustive additions.
-            ScanEvent::Completed { .. }
-            | ScanEvent::Cancelled
-            | ScanEvent::Failed { .. } => {}
+            ScanEvent::Completed { .. } | ScanEvent::Cancelled | ScanEvent::Failed { .. } => {}
             _ => {}
         }
     }

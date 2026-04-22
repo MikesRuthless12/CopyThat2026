@@ -264,6 +264,13 @@ pub struct TransferSettings {
     /// push the volume below this reserve. A preflight check in the
     /// UI surfaces the shortfall before the engine even starts.
     pub reserve_free_space_bytes: u64,
+    /// Phase 19b — what the engine does when a source file is
+    /// exclusively locked by another process.
+    ///
+    /// Mirrors `copythat_core::LockedFilePolicy`. Kept as a separate
+    /// enum here so this crate stays free of a `copythat-core`
+    /// dependency; the Tauri bridge translates at enqueue time.
+    pub on_locked: LockedFilePolicyChoice,
 }
 
 impl Default for TransferSettings {
@@ -278,6 +285,56 @@ impl Default for TransferSettings {
             preserve_permissions: true,
             preserve_acls: false,
             reserve_free_space_bytes: 0,
+            on_locked: LockedFilePolicyChoice::default(),
+        }
+    }
+}
+
+/// Phase 19b — mirror of `copythat_core::LockedFilePolicy`.
+///
+/// `Ask` is the default so first-run users see the prompt once and can
+/// opt into per-volume remember; subsequent runs honour the user's
+/// choice without re-asking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LockedFilePolicyChoice {
+    /// Ask the user the first time per volume. Remembered choice
+    /// (Skip / Retry / Snapshot) stored under
+    /// [`TransferSettings::volume_snapshot_prefs`] (added in the
+    /// per-volume remember follow-up).
+    #[default]
+    Ask,
+    /// Short exponential backoff inside the engine; on exhaustion,
+    /// surface the sharing-violation error. Pre-Phase-19b behaviour.
+    Retry,
+    /// Skip locked files after the retry loop exhausts.
+    Skip,
+    /// Fall through to a filesystem snapshot (VSS / ZFS / Btrfs / APFS).
+    Snapshot,
+}
+
+impl LockedFilePolicyChoice {
+    /// Stable wire string the Tauri bridge uses to round-trip the
+    /// setting across the IPC boundary.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Ask => "ask",
+            Self::Retry => "retry",
+            Self::Skip => "skip",
+            Self::Snapshot => "snapshot",
+        }
+    }
+
+    /// Parse the wire string. Unknown values fall back to `Ask` to
+    /// keep forward-compatibility: an older binary reading a settings
+    /// file written by a newer one won't panic on a variant it
+    /// doesn't know.
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "retry" => Self::Retry,
+            "skip" => Self::Skip,
+            "snapshot" => Self::Snapshot,
+            _ => Self::Ask,
         }
     }
 }

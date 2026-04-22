@@ -51,6 +51,7 @@ workloads.
 - **Global paste hotkey** — press Ctrl+Shift+V (Windows / Linux) or Cmd+Shift+V (macOS) anywhere on the system to paste files copied from Explorer / Finder / Files through Copy That's staging dialog. Combo is user-configurable; the shortcut can be toggled off entirely.
 - **Clipboard watcher** (opt-in) — surfaces a toast when file URLs land on the OS clipboard, hinting the paste hotkey is ready. Polls every 500 ms while enabled; silent when off.
 - **Secure delete** — single-pass zero / random, DoD 3-pass, DoD 7-pass, Gutmann 35-pass, NIST 800-88. SSD-aware (skips multi-pass overwrites on SSDs by default — use TRIM instead).
+- **Read-through-snapshot for locked files** — when another process holds the source open for exclusive write, Copy That can pull a read-only filesystem snapshot (VSS on Windows, ZFS / Btrfs on Linux, APFS local snapshot on macOS) and copy from there instead of surfacing the "file in use" error. Opt-in via Settings → Transfer → "When a file is locked". The Windows path spawns a sibling `copythat-helper-vss.exe` via UAC so the main app never needs elevation of its own.
 
 ### Internationalisation
 

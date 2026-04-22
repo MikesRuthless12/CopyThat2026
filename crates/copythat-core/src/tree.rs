@@ -94,11 +94,10 @@ pub async fn copy_tree_from_scan(
     // Read the precomputed totals (populated at Scanner::run exit) so
     // the UI gets a correct denominator immediately.
     let scan_db_for_meta = scan_db_buf.clone();
-    let (total_files, total_bytes) = tokio::task::spawn_blocking(move || {
-        read_scan_totals(&scan_db_for_meta).unwrap_or((0, 0))
-    })
-    .await
-    .unwrap_or((0, 0));
+    let (total_files, total_bytes) =
+        tokio::task::spawn_blocking(move || read_scan_totals(&scan_db_for_meta).unwrap_or((0, 0)))
+            .await
+            .unwrap_or((0, 0));
 
     let _ = events
         .send(CopyEvent::TreeStarted {
@@ -129,9 +128,7 @@ pub async fn copy_tree_from_scan(
     let scan_db_for_cursor = scan_db_buf.clone();
     let cursor_handle = tokio::task::spawn_blocking(move || -> std::io::Result<()> {
         let cursor = ScanCursor::open(&scan_db_for_cursor).map_err(|e| {
-            std::io::Error::other(format!(
-                "cannot open scan DB {scan_db_for_cursor:?}: {e}"
-            ))
+            std::io::Error::other(format!("cannot open scan DB {scan_db_for_cursor:?}: {e}"))
         })?;
         for item in cursor {
             let spawn_item = ScanSpawnItem {
@@ -331,10 +328,8 @@ struct ScanSpawnItem {
 }
 
 fn read_scan_totals(db_path: &Path) -> rusqlite::Result<(u64, u64)> {
-    let conn = rusqlite::Connection::open_with_flags(
-        db_path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )?;
+    let conn =
+        rusqlite::Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     let files: String = conn
         .query_row(
             "SELECT value FROM scan_meta WHERE key='total_files'",
