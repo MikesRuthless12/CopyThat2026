@@ -666,3 +666,29 @@ settings-updater-dismissed = Пропущено
 toast-update-available = Доступна нова версія
 # MT
 toast-update-up-to-date = У вас уже остання версія
+
+# Phase 19a — disk-backed file enumeration (TeraCopy-compatible scan DB)
+# MT
+scan-progress-title = Сканування…
+# MT
+scan-progress-stats = { $files } файлів · { $bytes } поки що
+# MT
+scan-pause-button = Призупинити сканування
+# MT
+scan-resume-button = Відновити сканування
+# MT
+scan-cancel-button = Скасувати сканування
+# MT
+scan-cancel-confirm = Скасувати сканування та відхилити поступ?
+# MT
+scan-db-header = База даних сканування
+# MT
+scan-db-hint = База даних сканування на диску для завдань з мільйонами файлів.
+# MT
+advanced-scan-hash-during = Обчислювати контрольні суми під час сканування
+# MT
+advanced-scan-db-path = Розташування бази даних сканування
+# MT
+advanced-scan-retention-days = Автоматично видаляти завершені сканування через (днів)
+# MT
+advanced-scan-max-keep = Максимальна кількість збережених баз даних сканування

@@ -15,6 +15,7 @@ use copythat_settings::{ProfileStore, Settings};
 use crate::clipboard_watcher::WatcherHandle;
 use crate::collisions::CollisionRegistry;
 use crate::errors::ErrorRegistry;
+use crate::scan_commands::ScanRegistry;
 
 /// Top-level shared state wired into Tauri.
 #[derive(Clone)]
@@ -59,6 +60,10 @@ pub struct AppState {
     /// interval. Wrapped in `Mutex` because `update_settings` needs
     /// a `&mut` view to start / stop without cloning `AppState`.
     pub clipboard_watcher: Arc<Mutex<Option<WatcherHandle>>>,
+    /// Phase 19a — active scan-control handles keyed by scan id.
+    /// Populated on `scan_start`, drained by the scanner task when
+    /// it exits (normal / cancelled / failed).
+    pub scans: ScanRegistry,
 }
 
 impl AppState {
@@ -95,6 +100,7 @@ impl AppState {
             settings_path: Arc::new(settings_path),
             profiles,
             clipboard_watcher: Arc::new(Mutex::new(None)),
+            scans: ScanRegistry::new(),
         }
     }
 

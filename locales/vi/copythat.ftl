@@ -666,3 +666,29 @@ settings-updater-dismissed = Đã bỏ qua
 toast-update-available = Có phiên bản mới hơn
 # MT
 toast-update-up-to-date = Bạn đã ở phiên bản mới nhất
+
+# Phase 19a — disk-backed file enumeration (TeraCopy-compatible scan DB)
+# MT
+scan-progress-title = Đang quét…
+# MT
+scan-progress-stats = { $files } tệp · { $bytes } đến nay
+# MT
+scan-pause-button = Tạm dừng quét
+# MT
+scan-resume-button = Tiếp tục quét
+# MT
+scan-cancel-button = Huỷ quét
+# MT
+scan-cancel-confirm = Huỷ quét và loại bỏ tiến độ?
+# MT
+scan-db-header = Cơ sở dữ liệu quét
+# MT
+scan-db-hint = Cơ sở dữ liệu quét trên đĩa cho các tác vụ có hàng triệu tệp.
+# MT
+advanced-scan-hash-during = Tính tổng kiểm tra trong khi quét
+# MT
+advanced-scan-db-path = Vị trí cơ sở dữ liệu quét
+# MT
+advanced-scan-retention-days = Tự động xoá các lượt quét đã hoàn tất sau (ngày)
+# MT
+advanced-scan-max-keep = Số cơ sở dữ liệu quét tối đa cần giữ

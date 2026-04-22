@@ -82,6 +82,12 @@ fn canned_args(key: &str) -> HashMap<&'static str, String> {
         "rate-unit-per-second" => {
             m.insert("size", "1.2 MiB".to_string());
         }
+        "scan-progress-stats" => {
+            // Phase 19a — live scan counter (files counted × bytes
+            // discovered so far). Matches `ScanProgressPanel.svelte`.
+            m.insert("files", "1,248,903".to_string());
+            m.insert("bytes", "47.3 GiB".to_string());
+        }
         _ => {}
     }
     m

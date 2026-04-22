@@ -666,3 +666,29 @@ settings-updater-dismissed = Dilewati
 toast-update-available = Versi yang lebih baru tersedia
 # MT
 toast-update-up-to-date = Anda sudah menggunakan versi terbaru
+
+# Phase 19a — disk-backed file enumeration (TeraCopy-compatible scan DB)
+# MT
+scan-progress-title = Memindai…
+# MT
+scan-progress-stats = { $files } file · { $bytes } sejauh ini
+# MT
+scan-pause-button = Jeda pemindaian
+# MT
+scan-resume-button = Lanjutkan pemindaian
+# MT
+scan-cancel-button = Batalkan pemindaian
+# MT
+scan-cancel-confirm = Batalkan pemindaian dan buang kemajuan?
+# MT
+scan-db-header = Basis data pemindaian
+# MT
+scan-db-hint = Basis data pemindaian di disk untuk tugas berukuran jutaan file.
+# MT
+advanced-scan-hash-during = Hitung checksum selama pemindaian
+# MT
+advanced-scan-db-path = Lokasi basis data pemindaian
+# MT
+advanced-scan-retention-days = Hapus pemindaian selesai otomatis setelah (hari)
+# MT
+advanced-scan-max-keep = Jumlah maksimum basis data pemindaian yang disimpan

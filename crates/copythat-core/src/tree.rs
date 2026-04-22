@@ -32,6 +32,7 @@ use crate::event::{CopyEvent, ErrorPrompt, TreeReport};
 use crate::filter::CompiledFilters;
 use crate::options::{ErrorAction, ErrorPolicy, MoveOptions, TreeOptions};
 use crate::safety::validate_path_no_traversal;
+use crate::scan::{EntryKind as ScanEntryKind, ScanCursor};
 
 /// Copy `src_dir` into `dst_dir`, preserving structure.
 ///
@@ -45,6 +46,310 @@ pub async fn copy_tree(
     events: mpsc::Sender<CopyEvent>,
 ) -> Result<TreeReport, CopyError> {
     copy_tree_inner(src_dir, dst_dir, opts, ctrl, events).await
+}
+
+/// Phase 19a — copy a tree using a previously-built scan DB as the
+/// file list instead of walking `src_root` live.
+///
+/// The cursor yields items in `rel_path ASC` order; directories are
+/// re-created at the destination inline, files and symlinks are
+/// dispatched to the same bounded-concurrency worker pool
+/// `copy_tree` uses. When the source-side row carries a
+/// `content_hash`, it is already a cryptographic receipt that the
+/// scan-time bytes matched — but the verify pipeline still re-hashes
+/// the destination during the write pass, so correctness does not
+/// rely on trusting the scan-time bytes being the same as the
+/// copy-time bytes.
+///
+/// Callers typically use this after running a [`crate::scan::Scanner`]
+/// to completion; the Tauri runner drives the pair so the user sees
+/// "Scanning…" and "Copying…" as two distinct phases.
+pub async fn copy_tree_from_scan(
+    scan_db_path: &Path,
+    src_root: &Path,
+    dst_dir: &Path,
+    opts: TreeOptions,
+    ctrl: CopyControl,
+    events: mpsc::Sender<CopyEvent>,
+) -> Result<TreeReport, CopyError> {
+    let src_root_buf = src_root.to_path_buf();
+    let dst_root = dst_dir.to_path_buf();
+    let scan_db_buf = scan_db_path.to_path_buf();
+
+    // Phase 17a — lexical safety at the trust boundary. The scan DB
+    // itself is covered only indirectly here; the Scanner already
+    // validated the root before it started enumerating, and every
+    // per-file copy_file call re-validates the concrete src/dst.
+    if let Err(e) = validate_path_no_traversal(&src_root_buf) {
+        return Err(CopyError::path_escape(&src_root_buf, &dst_root, e));
+    }
+    if let Err(e) = validate_path_no_traversal(&dst_root) {
+        return Err(CopyError::path_escape(&src_root_buf, &dst_root, e));
+    }
+
+    tokio::fs::create_dir_all(&dst_root)
+        .await
+        .map_err(|e| CopyError::from_io(&src_root_buf, &dst_root, e))?;
+
+    // Read the precomputed totals (populated at Scanner::run exit) so
+    // the UI gets a correct denominator immediately.
+    let scan_db_for_meta = scan_db_buf.clone();
+    let (total_files, total_bytes) = tokio::task::spawn_blocking(move || {
+        read_scan_totals(&scan_db_for_meta).unwrap_or((0, 0))
+    })
+    .await
+    .unwrap_or((0, 0));
+
+    let _ = events
+        .send(CopyEvent::TreeStarted {
+            root_src: src_root_buf.clone(),
+            root_dst: dst_root.clone(),
+            total_files,
+            total_bytes,
+        })
+        .await;
+
+    let started = Instant::now();
+    let bytes_done = Arc::new(AtomicU64::new(0));
+    let files_done = Arc::new(AtomicU64::new(0));
+    let skipped = Arc::new(AtomicU64::new(0));
+    let errored = Arc::new(AtomicU64::new(0));
+
+    let on_error = opts.clamped_on_error();
+    let semaphore = Arc::new(Semaphore::new(opts.clamped_concurrency()));
+    let mut set: JoinSet<Result<FileOutcome, CopyError>> = JoinSet::new();
+
+    let mut first_error: Option<CopyError> = None;
+    let mut aborted = false;
+
+    // Cursor → (rel_path, size, kind) item stream. The blocking
+    // walker pushes onto an mpsc so the dispatcher can `.await`
+    // cleanly; channel capacity 1024 matches the scan enumerator.
+    let (item_tx, mut item_rx) = mpsc::channel::<ScanSpawnItem>(1024);
+    let scan_db_for_cursor = scan_db_buf.clone();
+    let cursor_handle = tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+        let cursor = ScanCursor::open(&scan_db_for_cursor).map_err(|e| {
+            std::io::Error::other(format!(
+                "cannot open scan DB {scan_db_for_cursor:?}: {e}"
+            ))
+        })?;
+        for item in cursor {
+            let spawn_item = ScanSpawnItem {
+                rel_path: PathBuf::from(&item.rel_path),
+                kind: item.kind,
+            };
+            if item_tx.blocking_send(spawn_item).is_err() {
+                break;
+            }
+        }
+        Ok(())
+    });
+
+    while let Some(scan_item) = item_rx.recv().await {
+        if ctrl.is_cancelled() {
+            break;
+        }
+        let entry_src = src_root_buf.join(&scan_item.rel_path);
+        let entry_dst = dst_root.join(&scan_item.rel_path);
+
+        match scan_item.kind {
+            ScanEntryKind::Dir => {
+                if let Err(e) = tokio::fs::create_dir_all(&entry_dst).await {
+                    let err = CopyError::from_io(&entry_src, &entry_dst, e);
+                    if first_error.is_none() {
+                        first_error = Some(err);
+                    }
+                    ctrl.cancel();
+                    break;
+                }
+            }
+            ScanEntryKind::File | ScanEntryKind::Symlink | ScanEntryKind::Other => {
+                let permit_owner = semaphore.clone();
+                let ctrl_task = ctrl.clone();
+                let events_task = events.clone();
+                let opts_file = opts.file.clone();
+                let collision = opts.collision.clone();
+                let bytes_done_task = bytes_done.clone();
+                let files_done_task = files_done.clone();
+                let skipped_task = skipped.clone();
+                let errored_task = errored.clone();
+                let on_error_task = on_error;
+                let kind = scan_item.kind;
+                let entry_src_task = entry_src.clone();
+                let entry_dst_task = entry_dst.clone();
+                let total_files_denom = total_files;
+                let total_bytes_denom = total_bytes;
+
+                set.spawn(async move {
+                    let permit = permit_owner.acquire_owned().await.map_err(|_| CopyError {
+                        kind: CopyErrorKind::IoOther,
+                        src: entry_src_task.clone(),
+                        dst: entry_dst_task.clone(),
+                        raw_os_error: None,
+                        message: "scan tree copy semaphore closed".to_string(),
+                    })?;
+
+                    let decision = collision::resolve(
+                        &collision,
+                        &entry_src_task,
+                        &entry_dst_task,
+                        &events_task,
+                    )
+                    .await;
+
+                    let outcome: Result<FileOutcome, CopyError> = match decision {
+                        Decision::Skip => {
+                            skipped_task.fetch_add(1, Ordering::Relaxed);
+                            Ok(FileOutcome::Skipped)
+                        }
+                        Decision::Abort => Ok(FileOutcome::Aborted),
+                        Decision::Write(dst_final) => match kind {
+                            ScanEntryKind::Symlink => {
+                                match copy_symlink_entry(&entry_src_task, &dst_final).await {
+                                    Ok(()) => Ok(FileOutcome::Done(0)),
+                                    Err(err) => {
+                                        handle_per_file_error(
+                                            err,
+                                            on_error_task,
+                                            &events_task,
+                                            &errored_task,
+                                        )
+                                        .await
+                                    }
+                                }
+                            }
+                            ScanEntryKind::File | ScanEntryKind::Other => {
+                                attempt_copy_with_policy(
+                                    &entry_src_task,
+                                    &dst_final,
+                                    &opts_file,
+                                    &ctrl_task,
+                                    &events_task,
+                                    on_error_task,
+                                    &errored_task,
+                                )
+                                .await
+                            }
+                            ScanEntryKind::Dir => unreachable!("dirs filtered above"),
+                        },
+                    };
+
+                    let outcome = outcome?;
+                    if let FileOutcome::Done(bytes) = &outcome {
+                        let done_bytes =
+                            bytes_done_task.fetch_add(*bytes, Ordering::Relaxed) + *bytes;
+                        let done_files = files_done_task.fetch_add(1, Ordering::Relaxed) + 1;
+                        let elapsed = started.elapsed();
+                        let rate = rate_bps(done_bytes, elapsed);
+                        let _ = events_task
+                            .send(CopyEvent::TreeProgress {
+                                files_done: done_files,
+                                files_total: total_files_denom,
+                                bytes_done: done_bytes,
+                                bytes_total: total_bytes_denom,
+                                rate_bps: rate,
+                            })
+                            .await;
+                    }
+
+                    drop(permit);
+                    Ok(outcome)
+                });
+            }
+        }
+    }
+
+    while let Some(joined) = set.join_next().await {
+        match joined {
+            Ok(Ok(FileOutcome::Aborted)) => {
+                aborted = true;
+                ctrl.cancel();
+            }
+            Ok(Ok(_)) => {}
+            Ok(Err(err)) => {
+                if first_error.is_none() {
+                    first_error = Some(err);
+                }
+                ctrl.cancel();
+            }
+            Err(_join_err) => {
+                if first_error.is_none() {
+                    first_error = Some(CopyError {
+                        kind: CopyErrorKind::IoOther,
+                        src: src_root_buf.clone(),
+                        dst: dst_root.clone(),
+                        raw_os_error: None,
+                        message: "scan-copy task panicked".to_string(),
+                    });
+                }
+                ctrl.cancel();
+            }
+        }
+    }
+
+    // Drain the cursor task so its blocking thread exits cleanly.
+    let _ = cursor_handle.await;
+
+    if let Some(err) = first_error {
+        let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+        return Err(err);
+    }
+    if aborted || ctrl.is_cancelled() {
+        let err = CopyError::cancelled(&src_root_buf, &dst_root);
+        let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+        return Err(err);
+    }
+
+    let elapsed = started.elapsed();
+    let final_bytes = bytes_done.load(Ordering::Relaxed);
+    let final_files = files_done.load(Ordering::Relaxed);
+    let rate = rate_bps(final_bytes, elapsed);
+    let _ = events
+        .send(CopyEvent::TreeCompleted {
+            files: final_files,
+            bytes: final_bytes,
+            duration: elapsed,
+            rate_bps: rate,
+        })
+        .await;
+
+    Ok(TreeReport {
+        root_src: src_root_buf,
+        root_dst: dst_root,
+        files: final_files,
+        bytes: final_bytes,
+        duration: elapsed,
+        rate_bps: rate,
+        skipped: skipped.load(Ordering::Relaxed),
+        errored: errored.load(Ordering::Relaxed),
+    })
+}
+
+struct ScanSpawnItem {
+    rel_path: PathBuf,
+    kind: ScanEntryKind,
+}
+
+fn read_scan_totals(db_path: &Path) -> rusqlite::Result<(u64, u64)> {
+    let conn = rusqlite::Connection::open_with_flags(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    let files: String = conn
+        .query_row(
+            "SELECT value FROM scan_meta WHERE key='total_files'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or_default();
+    let bytes: String = conn
+        .query_row(
+            "SELECT value FROM scan_meta WHERE key='total_bytes'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or_default();
+    Ok((files.parse().unwrap_or(0), bytes.parse().unwrap_or(0)))
 }
 
 /// Move a single file. Tries `rename` first, falls back to

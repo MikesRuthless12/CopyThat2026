@@ -19,11 +19,22 @@ default = []
 slow-tests = []
 
 [dependencies]
+# Phase 19a — streaming BLAKE3 of file contents during on-disk scan.
+# Same crate `copythat-hash` re-exports, pulled in directly so the
+# scan module can run without routing through the hash crate's
+# `Hasher` trait indirection.
+blake3 = "1"
+# Phase 19a — per-job scan DB lives under the OS user-config dir.
+directories = "6"
 filetime = "0.2"
 # Phase 14a — compiled glob sets for include/exclude filters applied
 # at enumeration time. `globset` is what ripgrep uses; it compiles the
 # patterns once and matches without per-path allocation.
 globset = "0.4"
+# Phase 19a — SQLite-backed scan database. Bundled so the Tauri
+# bundle ships a single binary on every platform. `copythat-history`
+# already carries the same version/features combo.
+rusqlite = { version = "0.39", features = ["bundled"] }
 thiserror = "2"
 tokio = { version = "1", features = [
     "fs",
@@ -34,11 +45,16 @@ tokio = { version = "1", features = [
     "sync",
     "time",
 ] }
+# Phase 19a — per-scan UUID identifiers.
+uuid = { version = "1", features = ["v4"] }
 walkdir = "2"
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports"] }
 rand = "0.9"
+# Phase 19a — cross-platform RSS probe used by the scan smoke test to
+# assert the 5 M-file scan stays below 200 MiB peak.
+sysinfo = { version = "0.32", default-features = false, features = ["system"] }
 tempfile = "3"
 tokio = { version = "1", features = [
     "fs",
@@ -74,6 +90,12 @@ path = "../../tests/smoke/phase_14a_filters.rs"
 [[test]]
 name = "phase_17_security"
 path = "../../tests/smoke/phase_17_security.rs"
+
+# Phase 19a — disk-backed file enumeration (TeraCopy-style scan DB):
+# streaming inserts, pause+resume round-trip, cursor-driven copy.
+[[test]]
+name = "phase_19a_scan_db"
+path = "../../tests/smoke/phase_19a_scan_db.rs"
 
 # Phase 13 — Criterion benchmarks for the async copy engine.
 # `cargo bench -p copythat-core --bench copy_bench` runs the full

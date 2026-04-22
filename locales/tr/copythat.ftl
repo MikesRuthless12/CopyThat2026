@@ -666,3 +666,29 @@ settings-updater-dismissed = Atlandı
 toast-update-available = Yeni bir sürüm mevcut
 # MT
 toast-update-up-to-date = Zaten en son sürümdesiniz
+
+# Phase 19a — disk-backed file enumeration (TeraCopy-compatible scan DB)
+# MT
+scan-progress-title = Taranıyor…
+# MT
+scan-progress-stats = { $files } dosya · şu ana kadar { $bytes }
+# MT
+scan-pause-button = Taramayı duraklat
+# MT
+scan-resume-button = Taramaya devam et
+# MT
+scan-cancel-button = Taramayı iptal et
+# MT
+scan-cancel-confirm = Taramayı iptal etmek ve ilerlemeyi atmak ister misiniz?
+# MT
+scan-db-header = Tarama veritabanı
+# MT
+scan-db-hint = Milyonlarca dosya içeren işler için disk tabanlı tarama veritabanı.
+# MT
+advanced-scan-hash-during = Tarama sırasında sağlama toplamı hesapla
+# MT
+advanced-scan-db-path = Tarama veritabanı konumu
+# MT
+advanced-scan-retention-days = Tamamlanan taramaları otomatik sil (gün)
+# MT
+advanced-scan-max-keep = Saklanacak en fazla tarama veritabanı sayısı
