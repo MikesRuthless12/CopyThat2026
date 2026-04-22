@@ -132,6 +132,8 @@ toast-error-resolved = 错误已解决
 toast-collision-resolved = 冲突已解决
 # MT
 toast-elevated-unavailable = 以提升权限重试将在第 17 阶段提供 — 目前尚不可用
+toast-clipboard-files-detected = 剪贴板中有文件 — 按粘贴快捷键以通过 Copy That 复制
+toast-clipboard-no-files = 剪贴板中没有可粘贴的文件
 # MT
 toast-error-log-exported = 错误日志已导出
 
@@ -151,6 +153,8 @@ error-modal-abort = 全部中止
 error-modal-path-label = 路径
 # MT
 error-modal-code-label = 代码
+error-drawer-pending-count = 更多错误等待中
+error-drawer-toggle = 折叠或展开
 
 # MT — Error-kind labels
 err-not-found = 文件未找到
@@ -395,6 +399,15 @@ settings-start-with-os = 开机启动
 settings-single-instance = 单实例运行
 # MT
 settings-minimize-to-tray = 关闭时最小化到托盘
+settings-error-display-mode = 错误提示样式
+settings-error-display-modal = 模态(阻止应用)
+settings-error-display-drawer = 抽屉(非阻塞)
+settings-error-display-mode-hint = 模态会停止队列直到你决定。抽屉让队列继续运行,可在角落中分类处理错误。
+settings-paste-shortcut = 通过全局快捷键粘贴文件
+settings-paste-shortcut-combo = 快捷键组合
+settings-paste-shortcut-hint = 在系统任意位置按下此组合,可通过 Copy That 粘贴从资源管理器 / 访达 / 文件复制的文件。CmdOrCtrl 在 macOS 上解析为 Cmd,在 Windows / Linux 上解析为 Ctrl。
+settings-clipboard-watcher = 监视剪贴板中的复制文件
+settings-clipboard-watcher-hint = 当文件 URL 出现在剪贴板时显示通知,提示你可以通过 Copy That 粘贴。启用时每 500 毫秒轮询一次。
 
 # MT
 settings-buffer-size = 缓冲区大小

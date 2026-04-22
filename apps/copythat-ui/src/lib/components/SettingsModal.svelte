@@ -30,6 +30,7 @@
     closeSettings,
     pushToast,
     settingsOpen,
+    setErrorDisplayMode,
   } from "../stores";
   import {
     deleteProfile,
@@ -139,6 +140,11 @@
     try {
       const next = await updateSettings(settings);
       settings = next;
+      // Mirror persisted UI-render preferences into the live store
+      // so components outside this modal (ErrorModal / ErrorPromptDrawer
+      // in App.svelte) re-render against the new value without a
+      // follow-up IPC round-trip.
+      setErrorDisplayMode(next.general.errorDisplayMode);
     } catch (e) {
       pushToast("error", e instanceof Error ? e.message : String(e));
     }
@@ -160,6 +166,7 @@
     try {
       const next = await resetSettings();
       settings = next;
+      setErrorDisplayMode(next.general.errorDisplayMode);
       pushToast("success", "toast-settings-reset");
     } catch (e) {
       pushToast("error", e instanceof Error ? e.message : String(e));
@@ -185,6 +192,7 @@
     try {
       const next = await loadProfile(name);
       settings = next;
+      setErrorDisplayMode(next.general.errorDisplayMode);
       pushToast("info", "toast-profile-loaded");
     } catch (e) {
       pushToast("error", e instanceof Error ? e.message : String(e));
@@ -369,6 +377,49 @@
                 />
                 <span class="label">{t("settings-minimize-to-tray")}</span>
               </label>
+
+              <label class="row">
+                <span class="label">{t("settings-error-display-mode")}</span>
+                <select
+                  bind:value={settings.general.errorDisplayMode}
+                  onchange={pushSettings}
+                >
+                  <option value="modal">{t("settings-error-display-modal")}</option>
+                  <option value="drawer">{t("settings-error-display-drawer")}</option>
+                </select>
+              </label>
+              <p class="hint">{t("settings-error-display-mode-hint")}</p>
+
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.general.pasteShortcutEnabled}
+                  onchange={pushSettings}
+                />
+                <span class="label">{t("settings-paste-shortcut")}</span>
+              </label>
+              <label class="row">
+                <span class="label">{t("settings-paste-shortcut-combo")}</span>
+                <input
+                  type="text"
+                  bind:value={settings.general.pasteShortcut}
+                  onchange={pushSettings}
+                  disabled={!settings.general.pasteShortcutEnabled}
+                  placeholder="CmdOrCtrl+Shift+V"
+                  spellcheck={false}
+                />
+              </label>
+              <p class="hint">{t("settings-paste-shortcut-hint")}</p>
+
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.general.clipboardWatcherEnabled}
+                  onchange={pushSettings}
+                />
+                <span class="label">{t("settings-clipboard-watcher")}</span>
+              </label>
+              <p class="hint">{t("settings-clipboard-watcher-hint")}</p>
             {:else if activeTab === "transfer"}
               <label class="row">
                 <span class="label">{t("settings-buffer-size")}</span>

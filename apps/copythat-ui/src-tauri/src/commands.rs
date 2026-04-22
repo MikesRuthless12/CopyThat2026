@@ -776,6 +776,7 @@ pub fn get_settings(state: State<'_, AppState>) -> crate::ipc::SettingsDto {
 #[tauri::command]
 pub fn update_settings(
     dto: crate::ipc::SettingsDto,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<crate::ipc::SettingsDto, String> {
     let next = dto.into_settings();
@@ -785,12 +786,59 @@ pub fn update_settings(
     if !path.as_os_str().is_empty() {
         next.save_to(path).map_err(|e| e.to_string())?;
     }
+    // Snapshot the prior shortcut state *before* we swap — lets us
+    // decide whether to rebind without racing with the live lock.
+    let (prev_enabled, prev_combo, prev_watcher_enabled) = {
+        let prev = state
+            .settings
+            .read()
+            .map_err(|_| "settings-lock-poisoned".to_string())?;
+        (
+            prev.general.paste_shortcut_enabled,
+            prev.general.paste_shortcut.clone(),
+            prev.general.clipboard_watcher_enabled,
+        )
+    };
     {
         let mut live = state
             .settings
             .write()
             .map_err(|_| "settings-lock-poisoned".to_string())?;
         *live = next.clone();
+    }
+    // Rebind the paste hotkey only when its state actually changed —
+    // re-registering the same combo can fail on some platforms and
+    // we'd rather the whole `update_settings` call stay green if the
+    // user flipped an unrelated field.
+    let next_enabled = next.general.paste_shortcut_enabled;
+    let next_combo = next.general.paste_shortcut.clone();
+    if prev_enabled != next_enabled || prev_combo != next_combo {
+        if let Err(e) = crate::global_paste::rebind_paste_shortcut(
+            &app,
+            &prev_combo,
+            &next_combo,
+            next_enabled,
+        ) {
+            // Don't fail `update_settings` — the new combo is on disk;
+            // the user just can't use it until they fix the conflict.
+            // A toast through `toast-shortcut-rebind-failed` would be
+            // nice but the DTO doesn't carry toasts back.
+            eprintln!("[paste-hotkey] rebind failed: {e}");
+        }
+    }
+    // Start / stop the clipboard watcher to match the toggle. Drop
+    // semantics on `WatcherHandle` stop the prior task within one
+    // poll interval; storing a fresh handle leaves the old one
+    // owned by `slot` briefly, which is fine.
+    let next_watcher_enabled = next.general.clipboard_watcher_enabled;
+    if prev_watcher_enabled != next_watcher_enabled {
+        if let Ok(mut slot) = state.clipboard_watcher.lock() {
+            if next_watcher_enabled {
+                *slot = Some(crate::clipboard_watcher::spawn(app.clone()));
+            } else {
+                *slot = None;
+            }
+        }
     }
     Ok((&next).into())
 }

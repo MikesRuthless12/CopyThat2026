@@ -49,6 +49,10 @@ $RECYCLE.BIN/
 # --- Test artifacts ---
 coverage/
 *.profraw
+# Nautilus smoke test runs `python3 -m py_compile` against the
+# packaged extension, which drops a __pycache__/ next to the source.
+**/__pycache__/
+*.pyc
 
 # --- Generated tauri assets we don't want in git ---
 apps/copythat-ui/src-tauri/Cargo.lock

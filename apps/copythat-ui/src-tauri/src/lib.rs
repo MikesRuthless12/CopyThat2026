@@ -32,9 +32,12 @@
 //! into the `drop-received` IPC event for the Svelte layer.
 
 pub mod cli;
+pub mod clipboard;
+pub mod clipboard_watcher;
 pub mod collisions;
 pub mod commands;
 pub mod errors;
+pub mod global_paste;
 pub mod i18n;
 pub mod icon;
 pub mod ipc;
@@ -124,7 +127,30 @@ pub fn run() {
 
     let app_state = state::AppState::new_with(history, settings, settings_path, profiles);
 
+    // Post-Phase-12 — system-wide paste hotkey. The plugin registers
+    // no combos at build time; `global_paste::register_paste_shortcut`
+    // does that from the setup hook based on live settings. Handler
+    // dispatches to `handle_paste_press`, which reads the clipboard
+    // and funnels files through the existing shell-enqueue event.
+    let paste_handler = |app: &tauri::AppHandle,
+                         shortcut: &tauri_plugin_global_shortcut::Shortcut,
+                         event: tauri_plugin_global_shortcut::ShortcutEvent| {
+        // `shortcut.into_string()` renders the same canonical form we
+        // persist in settings, modulo case. Compare case-insensitive
+        // so "cmdorctrl+shift+v" and "CmdOrCtrl+Shift+V" both match.
+        let pressed = shortcut.into_string();
+        if !crate::global_paste::shortcut_matches(app, &pressed, event.state()) {
+            return;
+        }
+        crate::global_paste::handle_paste_press(app);
+    };
+
     builder
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(paste_handler)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .manage(app_state)
         .on_window_event(|window, event| {
@@ -253,6 +279,29 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // Register the configured paste hotkey if enabled. Live
+            // re-binding (user flips the setting) goes through the
+            // `update_paste_shortcut` IPC command; this path is the
+            // first-run / cold-start case only.
+            let handle = app.handle().clone();
+            if let Some(state) = handle.try_state::<AppState>() {
+                let snap = state.settings_snapshot();
+                if snap.general.paste_shortcut_enabled {
+                    if let Err(e) = global_paste::register_paste_shortcut(
+                        &handle,
+                        &snap.general.paste_shortcut,
+                    ) {
+                        eprintln!("[paste-hotkey] initial register failed: {e}");
+                    }
+                }
+                if snap.general.clipboard_watcher_enabled {
+                    let watcher = clipboard_watcher::spawn(handle.clone());
+                    if let Ok(mut slot) = state.clipboard_watcher.lock() {
+                        *slot = Some(watcher);
+                    }
+                }
+            }
 
             if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {
                 shell::dispatch_cli_action(&app.handle().clone(), action);

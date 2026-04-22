@@ -132,6 +132,8 @@ toast-error-resolved = Error resuelto
 toast-collision-resolved = Conflicto resuelto
 # MT
 toast-elevated-unavailable = Reintento con permisos elevados llegará en la fase 17 — aún no disponible
+toast-clipboard-files-detected = Archivos en el portapapeles — pulsa tu atajo de pegado para copiar con Copy That
+toast-clipboard-no-files = El portapapeles no tiene archivos para pegar
 # MT
 toast-error-log-exported = Registro de errores exportado
 
@@ -151,6 +153,8 @@ error-modal-abort = Cancelar todo
 error-modal-path-label = Ruta
 # MT
 error-modal-code-label = Código
+error-drawer-pending-count = Más errores en espera
+error-drawer-toggle = Contraer o expandir
 
 # MT — Error-kind labels
 err-not-found = Archivo no encontrado
@@ -395,6 +399,15 @@ settings-start-with-os = Iniciar con el sistema
 settings-single-instance = Instancia única en ejecución
 # MT
 settings-minimize-to-tray = Minimizar a bandeja al cerrar
+settings-error-display-mode = Estilo de aviso de error
+settings-error-display-modal = Modal (bloquea la app)
+settings-error-display-drawer = Panel lateral (no bloqueante)
+settings-error-display-mode-hint = El modal detiene la cola hasta que decidas. El panel lateral mantiene la cola en marcha y permite gestionar los errores en la esquina.
+settings-paste-shortcut = Pegar archivos con atajo global
+settings-paste-shortcut-combo = Combinación del atajo
+settings-paste-shortcut-hint = Pulsa esta combinación en cualquier parte del sistema para pegar archivos copiados desde el Explorador / Finder / Archivos con Copy That. CmdOrCtrl se resuelve como Cmd en macOS y Ctrl en Windows / Linux.
+settings-clipboard-watcher = Vigilar el portapapeles para archivos copiados
+settings-clipboard-watcher-hint = Muestra un aviso cuando aparecen URLs de archivos en el portapapeles, indicando que puedes pegar con Copy That. Sondea cada 500 ms mientras está activo.
 
 # MT
 settings-buffer-size = Tamaño del búfer

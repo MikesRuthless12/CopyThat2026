@@ -132,6 +132,8 @@ toast-error-resolved = تم حل الخطأ
 toast-collision-resolved = تم حل التعارض
 # MT
 toast-elevated-unavailable = إعادة المحاولة بصلاحيات مرتفعة ستصل في المرحلة 17 — غير متاحة بعد
+toast-clipboard-files-detected = ملفات في الحافظة — اضغط على اختصار اللصق للنسخ عبر Copy That
+toast-clipboard-no-files = لا توجد ملفات في الحافظة للصقها
 # MT
 toast-error-log-exported = تم تصدير سجل الأخطاء
 
@@ -151,6 +153,8 @@ error-modal-abort = إلغاء الكل
 error-modal-path-label = المسار
 # MT
 error-modal-code-label = الرمز
+error-drawer-pending-count = المزيد من الأخطاء في الانتظار
+error-drawer-toggle = طيّ أو توسيع
 
 # MT — Error-kind labels
 err-not-found = الملف غير موجود
@@ -395,6 +399,15 @@ settings-start-with-os = تشغيل عند بدء النظام
 settings-single-instance = مثيل واحد فقط قيد التشغيل
 # MT
 settings-minimize-to-tray = التصغير إلى صينية النظام عند الإغلاق
+settings-error-display-mode = نمط عرض الخطأ
+settings-error-display-modal = نافذة مشروطة (يحظر التطبيق)
+settings-error-display-drawer = لوحة جانبية (غير حاجبة)
+settings-error-display-mode-hint = النافذة المشروطة تُوقف قائمة الانتظار حتى تقرر. اللوحة الجانبية تُبقي القائمة تعمل وتسمح بمعالجة الأخطاء في الزاوية.
+settings-paste-shortcut = لصق الملفات عبر اختصار عام
+settings-paste-shortcut-combo = تركيبة الاختصار
+settings-paste-shortcut-hint = اضغط على هذه التركيبة في أي مكان في النظام للصق الملفات المنسوخة من Explorer / Finder / Files عبر Copy That. يتم حل CmdOrCtrl إلى Cmd على macOS و Ctrl على Windows / Linux.
+settings-clipboard-watcher = مراقبة الحافظة للملفات المنسوخة
+settings-clipboard-watcher-hint = يعرض إشعارًا عند ظهور عناوين URL للملفات في الحافظة، ملمحًا أنه يمكنك اللصق عبر Copy That. يستطلع كل 500 مللي ثانية عند التمكين.
 
 # MT
 settings-buffer-size = حجم المخزن المؤقت

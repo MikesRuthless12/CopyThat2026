@@ -151,6 +151,29 @@ pub struct GeneralSettings {
     /// Close to tray rather than exit. Stored flag; tray-icon wiring
     /// lands in Phase 14.
     pub minimize_to_tray: bool,
+    /// How the UI surfaces per-file errors raised by the engine.
+    /// `Modal` (default) is a blocking alert dialog — right for
+    /// single-file copies where one failure means "stop and tell me".
+    /// `Drawer` is a non-blocking corner panel — right for big trees
+    /// with many expected errors (permission issues on a profile
+    /// migration) where modal-every-error is punishing. The collision
+    /// prompt is always modal; only error prompts honour this toggle.
+    pub error_display_mode: ErrorDisplayMode,
+    /// Register a system-wide hotkey that reads files from the OS
+    /// clipboard and pipes them through Copy That's staging dialog.
+    /// Enabled by default because it costs nothing until the user
+    /// presses the combo — no pasteboard polling, no permission asks.
+    pub paste_shortcut_enabled: bool,
+    /// The hotkey combo for the paste-via-Copy-That feature. Tauri's
+    /// `global-shortcut` plugin parses this string directly — see
+    /// <https://v2.tauri.app/plugin/global-shortcut/> for the grammar.
+    /// `CmdOrCtrl` resolves to Cmd on macOS, Ctrl on Windows / Linux.
+    pub paste_shortcut: String,
+    /// Background task that polls the OS clipboard every ~500 ms and
+    /// surfaces a toast when files appear, hinting the user can press
+    /// the paste hotkey. Opt-in — polling is cheap but not free, and
+    /// users who prefer zero background work keep the default `false`.
+    pub clipboard_watcher_enabled: bool,
 }
 
 impl Default for GeneralSettings {
@@ -161,6 +184,10 @@ impl Default for GeneralSettings {
             start_with_os: false,
             single_instance: true,
             minimize_to_tray: false,
+            error_display_mode: ErrorDisplayMode::Modal,
+            paste_shortcut_enabled: true,
+            paste_shortcut: defaults::DEFAULT_PASTE_SHORTCUT.to_string(),
+            clipboard_watcher_enabled: false,
         }
     }
 }
@@ -172,6 +199,28 @@ pub enum ThemePreference {
     Auto,
     Light,
     Dark,
+}
+
+/// How error prompts appear. See `GeneralSettings::error_display_mode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ErrorDisplayMode {
+    /// Full-screen alert dialog with a dark backdrop; blocks the app
+    /// until the user picks an action.
+    #[default]
+    Modal,
+    /// Corner panel; non-blocking, no backdrop. The queue keeps
+    /// advancing while the user triages.
+    Drawer,
+}
+
+impl ErrorDisplayMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Modal => "modal",
+            Self::Drawer => "drawer",
+        }
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -605,6 +654,70 @@ log-level = "debug"
         assert_eq!(VerifyChoice::Off.as_algorithm(), None);
         assert_eq!(VerifyChoice::Sha256.as_algorithm(), Some("sha256"));
         assert_eq!(VerifyChoice::Blake3.as_algorithm(), Some("blake3"));
+    }
+
+    #[test]
+    fn error_display_mode_defaults_to_modal() {
+        // Default is Modal — safe conservative choice so an unpatched
+        // older binary that ignores this field still ships the
+        // blocking dialog shape every user is used to.
+        assert_eq!(
+            GeneralSettings::default().error_display_mode,
+            ErrorDisplayMode::Modal
+        );
+        assert_eq!(ErrorDisplayMode::default(), ErrorDisplayMode::Modal);
+        assert_eq!(ErrorDisplayMode::Modal.as_str(), "modal");
+        assert_eq!(ErrorDisplayMode::Drawer.as_str(), "drawer");
+    }
+
+    #[test]
+    fn error_display_mode_round_trips_via_toml() {
+        let d = tempdir().unwrap();
+        let path = d.path().join("settings.toml");
+        let mut s = Settings::default();
+        s.general.error_display_mode = ErrorDisplayMode::Drawer;
+        s.save_to(&path).unwrap();
+        let back = Settings::load_from(&path).unwrap();
+        assert_eq!(back.general.error_display_mode, ErrorDisplayMode::Drawer);
+    }
+
+    #[test]
+    fn error_display_mode_serialises_as_kebab_case() {
+        // On-disk TOML carries the wire string directly — verify so a
+        // future enum-name change can't silently break saved files.
+        let mut s = Settings::default();
+        s.general.error_display_mode = ErrorDisplayMode::Drawer;
+        let dumped = toml::to_string(&s).unwrap();
+        assert!(
+            dumped.contains(r#"error-display-mode = "drawer""#),
+            "TOML dump missing kebab-case field:\n{dumped}"
+        );
+    }
+
+    #[test]
+    fn paste_shortcut_defaults() {
+        let g = GeneralSettings::default();
+        assert!(g.paste_shortcut_enabled, "paste hotkey is on by default");
+        assert_eq!(g.paste_shortcut, "CmdOrCtrl+Shift+V");
+        assert!(
+            !g.clipboard_watcher_enabled,
+            "clipboard polling is opt-in"
+        );
+    }
+
+    #[test]
+    fn paste_shortcut_round_trips_via_toml() {
+        let d = tempdir().unwrap();
+        let path = d.path().join("settings.toml");
+        let mut s = Settings::default();
+        s.general.paste_shortcut_enabled = false;
+        s.general.paste_shortcut = "Alt+Shift+V".to_string();
+        s.general.clipboard_watcher_enabled = true;
+        s.save_to(&path).unwrap();
+        let back = Settings::load_from(&path).unwrap();
+        assert!(!back.general.paste_shortcut_enabled);
+        assert_eq!(back.general.paste_shortcut, "Alt+Shift+V");
+        assert!(back.general.clipboard_watcher_enabled);
     }
 
     #[test]

@@ -132,6 +132,8 @@ toast-error-resolved = Ошибка устранена
 toast-collision-resolved = Конфликт разрешён
 # MT
 toast-elevated-unavailable = Повтор с повышенными правами появится на этапе 17 — пока недоступно
+toast-clipboard-files-detected = Файлы в буфере обмена — нажмите ярлык вставки, чтобы копировать через Copy That
+toast-clipboard-no-files = В буфере обмена нет файлов для вставки
 # MT
 toast-error-log-exported = Журнал ошибок экспортирован
 
@@ -151,6 +153,8 @@ error-modal-abort = Прервать все
 error-modal-path-label = Путь
 # MT
 error-modal-code-label = Код
+error-drawer-pending-count = Ещё ошибки в ожидании
+error-drawer-toggle = Свернуть или развернуть
 
 # MT — Error-kind labels
 err-not-found = Файл не найден
@@ -395,6 +399,15 @@ settings-start-with-os = Запускать при старте системы
 settings-single-instance = Один запущенный экземпляр
 # MT
 settings-minimize-to-tray = Сворачивать в трей при закрытии
+settings-error-display-mode = Стиль уведомления об ошибке
+settings-error-display-modal = Модальное окно (блокирует приложение)
+settings-error-display-drawer = Выдвижная панель (не блокирует)
+settings-error-display-mode-hint = Модальное окно останавливает очередь, пока вы не решите. Выдвижная панель оставляет очередь работать и позволяет разбирать ошибки в углу.
+settings-paste-shortcut = Вставка файлов через глобальное сочетание
+settings-paste-shortcut-combo = Сочетание клавиш
+settings-paste-shortcut-hint = Нажмите эту комбинацию в любом месте системы, чтобы вставить файлы, скопированные из Проводника / Finder / Файлы через Copy That. CmdOrCtrl — это Cmd на macOS и Ctrl на Windows / Linux.
+settings-clipboard-watcher = Следить за буфером обмена для скопированных файлов
+settings-clipboard-watcher-hint = Показывает уведомление, когда в буфере обмена появляются URL файлов, подсказывая, что можно вставить через Copy That. Опрашивает каждые 500 мс при включении.
 
 # MT
 settings-buffer-size = Размер буфера
