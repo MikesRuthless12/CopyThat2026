@@ -327,6 +327,7 @@ settings-phase-12-hint = More settings (theme, transfer defaults, verify algorit
 
 settings-loading = Loading settings…
 settings-tab-transfer = Transfer
+settings-tab-filters = Filters
 settings-tab-shell = Shell
 settings-tab-secure-delete = Secure delete
 settings-tab-advanced = Advanced
@@ -415,3 +416,23 @@ toast-profile-saved = Profile saved
 toast-profile-loaded = Profile loaded
 toast-profile-exported = Profile exported
 toast-profile-imported = Profile imported
+
+# Phase 14a — enumeration-time filters
+settings-filters-hint = Skip files at enumeration time so the engine never even opens them. Includes apply to files only; excludes also prune matching directories.
+settings-filters-enabled = Enable filters for tree copies
+settings-filters-include-globs = Include globs
+settings-filters-include-globs-placeholder = **/*.txt
+settings-filters-include-globs-hint = One glob per line. When non-empty, a file must match at least one include to survive. Directories are always descended into.
+settings-filters-exclude-globs = Exclude globs
+settings-filters-exclude-globs-placeholder = **/node_modules
+settings-filters-exclude-globs-hint = One glob per line. Matches prune the whole subtree for directories; matching files are skipped.
+settings-filters-size-range = File size range
+settings-filters-min-size-bytes = Minimum size (bytes, blank = no floor)
+settings-filters-max-size-bytes = Maximum size (bytes, blank = no ceiling)
+settings-filters-date-range = Modification time range
+settings-filters-min-mtime = Modified on or after
+settings-filters-max-mtime = Modified on or before
+settings-filters-attributes = Attribute bits
+settings-filters-skip-hidden = Skip hidden files / folders
+settings-filters-skip-system = Skip system files (Windows only)
+settings-filters-skip-readonly = Skip read-only files

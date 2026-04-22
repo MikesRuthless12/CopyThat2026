@@ -97,6 +97,14 @@ async fn enqueue(
     let collision_policy = parse_collision_policy(options.collision.as_deref())?;
     let error_policy = parse_error_policy(options.on_error.as_ref(), &settings);
     let tree_concurrency = resolve_concurrency(&settings);
+    // Phase 14a: filters only make sense for Copy jobs (Move is
+    // rename-with-copy-fallback; filtering the fallback copy while
+    // the rename path ignored them would be a surprising split).
+    let filters = if matches!(kind, JobKind::Copy) {
+        resolve_filters(&settings)
+    } else {
+        None
+    };
 
     let srcs: Vec<PathBuf> = sources
         .into_iter()
@@ -117,6 +125,7 @@ async fn enqueue(
         collision_policy,
         error_policy,
         tree_concurrency,
+        filters,
     ))
 }
 
@@ -143,6 +152,37 @@ fn platform_auto_concurrency_hint() -> u8 {
     // Phase 13c measures whether bumping helps many-small-file
     // trees.
     4
+}
+
+/// Phase 14a — translate the persisted `FilterSettings` into the
+/// engine's `FilterSet`, or `None` when filtering is disabled or
+/// every field is at its default. Unix epoch seconds become
+/// `SystemTime` via `UNIX_EPOCH ± abs(secs)` so negative (pre-1970)
+/// values translate losslessly.
+fn resolve_filters(settings: &copythat_settings::Settings) -> Option<copythat_core::FilterSet> {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    let f = &settings.filters;
+    if f.is_effectively_empty() {
+        return None;
+    }
+    let to_system_time = |secs: i64| -> SystemTime {
+        if secs >= 0 {
+            UNIX_EPOCH + Duration::from_secs(secs as u64)
+        } else {
+            UNIX_EPOCH - Duration::from_secs(secs.unsigned_abs())
+        }
+    };
+    Some(copythat_core::FilterSet {
+        include_globs: f.include_globs.clone(),
+        exclude_globs: f.exclude_globs.clone(),
+        min_size_bytes: f.min_size_bytes,
+        max_size_bytes: f.max_size_bytes,
+        min_mtime: f.min_mtime_unix_secs.map(to_system_time),
+        max_mtime: f.max_mtime_unix_secs.map(to_system_time),
+        skip_hidden: f.skip_hidden,
+        skip_system: f.skip_system,
+        skip_readonly: f.skip_readonly,
+    })
 }
 
 fn parse_collision_policy(raw: Option<&str>) -> Result<copythat_core::CollisionPolicy, String> {
@@ -638,6 +678,14 @@ pub async fn history_rerun(
     // bumped the worker count sees it applied on rerun.
     let settings = state.settings_snapshot();
     let tree_concurrency = resolve_concurrency(&settings);
+    // Rerun inherits the live `Settings.filters` — if the user has
+    // configured a filter set since the original job ran, the rerun
+    // honours it. History rows don't carry the filter snapshot (yet).
+    let filters = if matches!(kind, JobKind::Copy) {
+        resolve_filters(&settings)
+    } else {
+        None
+    };
     Ok(crate::shell::enqueue_jobs(
         &app,
         state.inner(),
@@ -649,6 +697,7 @@ pub async fn history_rerun(
         copythat_core::CollisionPolicy::default(),
         copythat_core::ErrorPolicy::Ask,
         tree_concurrency,
+        filters,
     ))
 }
 
@@ -813,12 +862,9 @@ pub fn update_settings(
     let next_enabled = next.general.paste_shortcut_enabled;
     let next_combo = next.general.paste_shortcut.clone();
     if prev_enabled != next_enabled || prev_combo != next_combo {
-        if let Err(e) = crate::global_paste::rebind_paste_shortcut(
-            &app,
-            &prev_combo,
-            &next_combo,
-            next_enabled,
-        ) {
+        if let Err(e) =
+            crate::global_paste::rebind_paste_shortcut(&app, &prev_combo, &next_combo, next_enabled)
+        {
             // Don't fail `update_settings` — the new combo is on disk;
             // the user just can't use it until they fix the conflict.
             // A toast through `toast-shortcut-rebind-failed` would be
@@ -1150,7 +1196,13 @@ pub async fn path_metadata(paths: Vec<String>) -> Result<Vec<PathMetaDto>, Strin
                 } else if m.is_dir() {
                     let mut entries: u64 = 0;
                     let started = std::time::Instant::now();
-                    match walk_size_timed(&root, &mut entries, HARD_LIMIT_ENTRIES, started, HARD_LIMIT_MS) {
+                    match walk_size_timed(
+                        &root,
+                        &mut entries,
+                        HARD_LIMIT_ENTRIES,
+                        started,
+                        HARD_LIMIT_MS,
+                    ) {
                         Ok(n) => n,
                         Err(e) if e == "too-large" || e == "time-budget" => u64::MAX,
                         Err(_) => 0,

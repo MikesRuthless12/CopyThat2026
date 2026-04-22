@@ -289,8 +289,8 @@ mod linux_impl {
     /// by URIs. Both variants appear in the plain-text read; we
     /// tolerate both shapes.
     pub fn read_file_paths() -> Result<Vec<PathBuf>, ClipboardError> {
-        let mut board = arboard::Clipboard::new()
-            .map_err(|e| ClipboardError::Unavailable(e.to_string()))?;
+        let mut board =
+            arboard::Clipboard::new().map_err(|e| ClipboardError::Unavailable(e.to_string()))?;
         let text = match board.get_text() {
             Ok(t) => t,
             Err(arboard::Error::ContentNotAvailable) => return Ok(Vec::new()),
@@ -326,11 +326,7 @@ mod linux_impl {
         for raw in text.lines() {
             let line = raw.trim();
             // Skip GNOME's verb prefix, blank lines, and comments.
-            if line.is_empty()
-                || line == "copy"
-                || line == "cut"
-                || line.starts_with('#')
-            {
+            if line.is_empty() || line == "copy" || line == "cut" || line.starts_with('#') {
                 continue;
             }
             if let Some(rest) = line.strip_prefix("file://") {

@@ -54,7 +54,9 @@ pub fn run(ci: bool) -> Result<(), String> {
             .arg("10")
             .arg("--noplot");
     }
-    let status = cmd.status().map_err(|e| format!("spawn cargo bench: {e}"))?;
+    let status = cmd
+        .status()
+        .map_err(|e| format!("spawn cargo bench: {e}"))?;
     if !status.success() {
         return Err(format!("cargo bench exited with {status}"));
     }
@@ -95,8 +97,7 @@ pub fn run_vs_with(secure_cleanup: bool) -> Result<(), String> {
     // actually move bytes even on the same-volume case.
     let tmp = tempfile::tempdir().map_err(|e| format!("tempdir: {e}"))?;
     let src_dir = tmp.path().join("src");
-    std::fs::create_dir_all(&src_dir)
-        .map_err(|e| format!("create {}: {e}", src_dir.display()))?;
+    std::fs::create_dir_all(&src_dir).map_err(|e| format!("create {}: {e}", src_dir.display()))?;
     let src = src_dir.join("bench-source.bin");
 
     // Destination override — lets us benchmark a cross-volume copy
@@ -106,16 +107,14 @@ pub fn run_vs_with(secure_cleanup: bool) -> Result<(), String> {
     let (_dst_tmp, dst_dir) = match std::env::var("COPYTHAT_BENCH_DST") {
         Ok(raw) => {
             let dir = PathBuf::from(raw).join("copythat-bench-vs");
-            std::fs::create_dir_all(&dir)
-                .map_err(|e| format!("create {}: {e}", dir.display()))?;
+            std::fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
             // No TempDir guard — the user-chosen location is their
             // responsibility to clean up.
             (None, dir)
         }
         Err(_) => {
             let dir = tmp.path().join("dst");
-            std::fs::create_dir_all(&dir)
-                .map_err(|e| format!("create {}: {e}", dir.display()))?;
+            std::fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
             (Some(&tmp), dir)
         }
     };
@@ -246,7 +245,8 @@ fn purge_bench_residue() {
 fn write_synthetic(path: &Path, size: usize) -> Result<(), String> {
     use std::io::Write;
     let pattern: [u8; 256] = std::array::from_fn(|i| i as u8);
-    let mut f = std::fs::File::create(path).map_err(|e| format!("create {}: {e}", path.display()))?;
+    let mut f =
+        std::fs::File::create(path).map_err(|e| format!("create {}: {e}", path.display()))?;
     let mut remaining = size;
     while remaining > 0 {
         let n = remaining.min(pattern.len());
@@ -279,7 +279,16 @@ fn competitors() -> Vec<Competitor> {
         // filename separately; we wrap it to match our src/dst shape.
         Competitor {
             label: "Robocopy",
-            argv: &["robocopy", "{SRC_DIR}", "{DST_DIR}", "{SRC_NAME}", "/NFL", "/NDL", "/NJH", "/NJS"],
+            argv: &[
+                "robocopy",
+                "{SRC_DIR}",
+                "{DST_DIR}",
+                "{SRC_NAME}",
+                "/NFL",
+                "/NDL",
+                "/NJH",
+                "/NJS",
+            ],
             fallback_paths: &[],
         },
         // TeraCopy.exe — GUI-first, but runs a foreground copy when
@@ -291,7 +300,14 @@ fn competitors() -> Vec<Competitor> {
         // iteration, but TeraCopy still prompts on some releases).
         Competitor {
             label: "TeraCopy",
-            argv: &["teracopy", "Copy", "{SRC}", "{DST_DIR}", "/Close", "/SkipAll"],
+            argv: &[
+                "teracopy",
+                "Copy",
+                "{SRC}",
+                "{DST_DIR}",
+                "/Close",
+                "/SkipAll",
+            ],
             fallback_paths: &[
                 r"C:\Program Files\TeraCopy\TeraCopy.exe",
                 r"C:\Program Files (x86)\TeraCopy\TeraCopy.exe",
@@ -300,7 +316,13 @@ fn competitors() -> Vec<Competitor> {
         // FastCopy CLI.
         Competitor {
             label: "FastCopy",
-            argv: &["fastcopy", "/cmd=diff", "/auto_close", "{SRC}", "/to={DST_DIR}"],
+            argv: &[
+                "fastcopy",
+                "/cmd=diff",
+                "/auto_close",
+                "{SRC}",
+                "/to={DST_DIR}",
+            ],
             fallback_paths: &[
                 r"C:\Program Files\FastCopy\FastCopy.exe",
                 r"C:\Program Files (x86)\FastCopy\FastCopy.exe",
@@ -318,17 +340,37 @@ fn competitors() -> Vec<Competitor> {
 #[cfg(all(unix, not(target_os = "macos")))]
 fn competitors() -> Vec<Competitor> {
     vec![
-        Competitor { label: "cp",    argv: &["cp", "{SRC}", "{DST}"], fallback_paths: &[] },
-        Competitor { label: "rsync", argv: &["rsync", "--inplace", "{SRC}", "{DST}"], fallback_paths: &[] },
+        Competitor {
+            label: "cp",
+            argv: &["cp", "{SRC}", "{DST}"],
+            fallback_paths: &[],
+        },
+        Competitor {
+            label: "rsync",
+            argv: &["rsync", "--inplace", "{SRC}", "{DST}"],
+            fallback_paths: &[],
+        },
     ]
 }
 
 #[cfg(target_os = "macos")]
 fn competitors() -> Vec<Competitor> {
     vec![
-        Competitor { label: "cp",    argv: &["cp", "{SRC}", "{DST}"], fallback_paths: &[] },
-        Competitor { label: "ditto", argv: &["ditto", "{SRC}", "{DST}"], fallback_paths: &[] },
-        Competitor { label: "rsync", argv: &["rsync", "--inplace", "{SRC}", "{DST}"], fallback_paths: &[] },
+        Competitor {
+            label: "cp",
+            argv: &["cp", "{SRC}", "{DST}"],
+            fallback_paths: &[],
+        },
+        Competitor {
+            label: "ditto",
+            argv: &["ditto", "{SRC}", "{DST}"],
+            fallback_paths: &[],
+        },
+        Competitor {
+            label: "rsync",
+            argv: &["rsync", "--inplace", "{SRC}", "{DST}"],
+            fallback_paths: &[],
+        },
     ]
 }
 
@@ -608,7 +650,9 @@ fn cargo_bin() -> String {
 fn format_markdown(rows: &[Row], size_bytes: usize) -> String {
     let size_mb = size_bytes / (1024 * 1024);
     let mut out = String::new();
-    out.push_str(&format!("### `xtask bench-vs` ({size_mb} MiB workload)\n\n"));
+    out.push_str(&format!(
+        "### `xtask bench-vs` ({size_mb} MiB workload)\n\n"
+    ));
     out.push_str("| Tool | Median (s) | Throughput | Note |\n");
     out.push_str("| --- | ---: | ---: | --- |\n");
     for r in rows {
@@ -620,7 +664,10 @@ fn format_markdown(rows: &[Row], size_bytes: usize) -> String {
             .median
             .map(|d| format!("{:.0} MiB/s", mb_per_sec(size_bytes, d)))
             .unwrap_or_else(|| "—".into());
-        out.push_str(&format!("| {} | {} | {} | {} |\n", r.label, secs, tput, r.note));
+        out.push_str(&format!(
+            "| {} | {} | {} | {} |\n",
+            r.label, secs, tput, r.note
+        ));
     }
     out.push('\n');
     out
@@ -640,7 +687,14 @@ mod tests {
         let src = PathBuf::from("/tmp/foo/bar.bin");
         let dst = PathBuf::from("/other/baz.bin");
         let out = substitute_argv(
-            &["tool", "{SRC_DIR}", "{SRC_NAME}", "{SRC}", "{DST_DIR}", "{DST}"],
+            &[
+                "tool",
+                "{SRC_DIR}",
+                "{SRC_NAME}",
+                "{SRC}",
+                "{DST_DIR}",
+                "{DST}",
+            ],
             &src,
             &dst,
         );

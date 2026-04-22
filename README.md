@@ -32,6 +32,7 @@ workloads.
 - **Error prompt style** — blocking modal or non-blocking corner drawer; user-configurable in Settings → General.
 - **Pause / resume / cancel** on every job, plus pause-all / resume-all / cancel-all.
 - **Reserve free space on destination** — optional minimum, preflight-warned before the first byte moves.
+- **Enumeration-time filters** — include / exclude globs (`**/*.txt`, `**/node_modules`), size range, modification-time range, and attribute bits (hidden, system, read-only) are applied inside the walker so the engine never even opens the files you didn't want. Exclude globs that match a directory prune the whole subtree; include globs gate files only, so a `**/*.txt` filter still descends every folder to find the text files inside. Configured per-install under Settings → Filters.
 
 ### Interface
 

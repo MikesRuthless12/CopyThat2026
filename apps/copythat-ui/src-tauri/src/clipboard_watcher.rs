@@ -99,8 +99,10 @@ pub fn spawn(app: AppHandle) -> WatcherHandle {
                 Ok(p) if !p.is_empty() => p,
                 _ => continue,
             };
-            let paths_str: Vec<String> =
-                paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+            let paths_str: Vec<String> = paths
+                .iter()
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect();
 
             // Dedupe by path list within the window.
             let now_ms = now_ms();

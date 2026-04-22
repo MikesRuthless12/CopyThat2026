@@ -48,6 +48,7 @@
   type TabId =
     | "general"
     | "transfer"
+    | "filters"
     | "shell"
     | "secure-delete"
     | "advanced"
@@ -92,6 +93,31 @@
       // Fallback to endonym below.
     }
     return ENDONYMS[code] ?? code;
+  }
+
+  // Phase 14a — HTML `<input type="date">` yields "yyyy-mm-dd" in the
+  // user's local calendar; we store and compare against mtime in UTC
+  // seconds so "everything before 2026-01-01" means midnight UTC
+  // regardless of where the user lives. `null` on either side of the
+  // boundary means "unbounded on that end".
+  function secsToDateInput(secs: number | null): string {
+    if (secs === null) return "";
+    const d = new Date(secs * 1000);
+    const y = d.getUTCFullYear().toString().padStart(4, "0");
+    const m = (d.getUTCMonth() + 1).toString().padStart(2, "0");
+    const day = d.getUTCDate().toString().padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function dateInputToSecs(input: string): number | null {
+    if (!input) return null;
+    const parts = input.split("-");
+    if (parts.length !== 3) return null;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const d = parseInt(parts[2], 10);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+    return Math.floor(Date.UTC(y, m - 1, d) / 1000);
   }
 
   // English pinned first; rest sorted by localised display name with
@@ -314,7 +340,7 @@
       {:else}
         <div class="body">
           <div class="tabs" role="tablist" aria-label={t("settings-title")}>
-            {#each [["general", "settings-tab-general"], ["transfer", "settings-tab-transfer"], ["shell", "settings-tab-shell"], ["secure-delete", "settings-tab-secure-delete"], ["advanced", "settings-tab-advanced"], ["profiles", "settings-tab-profiles"]] as const as [id, key] (id)}
+            {#each [["general", "settings-tab-general"], ["transfer", "settings-tab-transfer"], ["filters", "settings-tab-filters"], ["shell", "settings-tab-shell"], ["secure-delete", "settings-tab-secure-delete"], ["advanced", "settings-tab-advanced"], ["profiles", "settings-tab-profiles"]] as const as [id, key] (id)}
               <button
                 type="button"
                 role="tab"
@@ -518,6 +544,147 @@
                   onchange={pushSettings}
                 />
                 <span class="label">{t("settings-preserve-acls")}</span>
+              </label>
+            {:else if activeTab === "filters"}
+              <p class="hint">{t("settings-filters-hint")}</p>
+
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.filters.enabled}
+                  onchange={pushSettings}
+                />
+                <span class="label">{t("settings-filters-enabled")}</span>
+              </label>
+
+              <label class="row stacked">
+                <span class="label">{t("settings-filters-include-globs")}</span>
+                <textarea
+                  rows="3"
+                  placeholder={t("settings-filters-include-globs-placeholder")}
+                  value={settings.filters.includeGlobs.join("\n")}
+                  onchange={(e) => {
+                    if (!settings) return;
+                    const lines = (e.currentTarget as HTMLTextAreaElement).value
+                      .split(/\r?\n/)
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    settings = { ...settings, filters: { ...settings.filters, includeGlobs: lines } };
+                    void pushSettings();
+                  }}
+                ></textarea>
+              </label>
+              <p class="hint">{t("settings-filters-include-globs-hint")}</p>
+
+              <label class="row stacked">
+                <span class="label">{t("settings-filters-exclude-globs")}</span>
+                <textarea
+                  rows="3"
+                  placeholder={t("settings-filters-exclude-globs-placeholder")}
+                  value={settings.filters.excludeGlobs.join("\n")}
+                  onchange={(e) => {
+                    if (!settings) return;
+                    const lines = (e.currentTarget as HTMLTextAreaElement).value
+                      .split(/\r?\n/)
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    settings = { ...settings, filters: { ...settings.filters, excludeGlobs: lines } };
+                    void pushSettings();
+                  }}
+                ></textarea>
+              </label>
+              <p class="hint">{t("settings-filters-exclude-globs-hint")}</p>
+
+              <div class="row">
+                <span class="label">{t("settings-filters-size-range")}</span>
+              </div>
+              <label class="row">
+                <span class="label">{t("settings-filters-min-size-bytes")}</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={settings.filters.minSizeBytes ?? ""}
+                  onchange={(e) => {
+                    if (!settings) return;
+                    const v = (e.currentTarget as HTMLInputElement).value.trim();
+                    const n = v === "" ? null : Math.max(0, parseInt(v, 10) || 0);
+                    settings = { ...settings, filters: { ...settings.filters, minSizeBytes: n } };
+                    void pushSettings();
+                  }}
+                />
+              </label>
+              <label class="row">
+                <span class="label">{t("settings-filters-max-size-bytes")}</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={settings.filters.maxSizeBytes ?? ""}
+                  onchange={(e) => {
+                    if (!settings) return;
+                    const v = (e.currentTarget as HTMLInputElement).value.trim();
+                    const n = v === "" ? null : Math.max(0, parseInt(v, 10) || 0);
+                    settings = { ...settings, filters: { ...settings.filters, maxSizeBytes: n } };
+                    void pushSettings();
+                  }}
+                />
+              </label>
+
+              <div class="row">
+                <span class="label">{t("settings-filters-date-range")}</span>
+              </div>
+              <label class="row">
+                <span class="label">{t("settings-filters-min-mtime")}</span>
+                <input
+                  type="date"
+                  value={secsToDateInput(settings.filters.minMtimeUnixSecs)}
+                  onchange={(e) => {
+                    if (!settings) return;
+                    const secs = dateInputToSecs((e.currentTarget as HTMLInputElement).value);
+                    settings = { ...settings, filters: { ...settings.filters, minMtimeUnixSecs: secs } };
+                    void pushSettings();
+                  }}
+                />
+              </label>
+              <label class="row">
+                <span class="label">{t("settings-filters-max-mtime")}</span>
+                <input
+                  type="date"
+                  value={secsToDateInput(settings.filters.maxMtimeUnixSecs)}
+                  onchange={(e) => {
+                    if (!settings) return;
+                    const secs = dateInputToSecs((e.currentTarget as HTMLInputElement).value);
+                    settings = { ...settings, filters: { ...settings.filters, maxMtimeUnixSecs: secs } };
+                    void pushSettings();
+                  }}
+                />
+              </label>
+
+              <div class="row">
+                <span class="label">{t("settings-filters-attributes")}</span>
+              </div>
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.filters.skipHidden}
+                  onchange={pushSettings}
+                />
+                <span class="label">{t("settings-filters-skip-hidden")}</span>
+              </label>
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.filters.skipSystem}
+                  onchange={pushSettings}
+                />
+                <span class="label">{t("settings-filters-skip-system")}</span>
+              </label>
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.filters.skipReadonly}
+                  onchange={pushSettings}
+                />
+                <span class="label">{t("settings-filters-skip-readonly")}</span>
               </label>
             {:else if activeTab === "shell"}
               <label class="row check">

@@ -84,6 +84,7 @@ mod control;
 mod engine;
 mod error;
 mod event;
+pub mod filter;
 mod options;
 pub mod queue;
 mod tree;
@@ -94,6 +95,7 @@ pub use control::CopyControl;
 pub use engine::copy_file;
 pub use error::{CopyError, CopyErrorKind};
 pub use event::{Collision, CollisionResolution, CopyEvent, CopyReport, ErrorPrompt, TreeReport};
+pub use filter::{CompiledFilters, FilterError, FilterSet};
 pub use options::{
     CopyOptions, CopyStrategy, DEFAULT_BUFFER_SIZE, DEFAULT_TREE_CONCURRENCY, ErrorAction,
     ErrorPolicy, FastCopyHook, FastCopyHookOutcome, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, MoveOptions,

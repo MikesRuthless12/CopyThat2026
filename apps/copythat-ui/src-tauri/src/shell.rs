@@ -12,7 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
-use copythat_core::{CollisionPolicy, CopyOptions, ErrorPolicy, JobKind, Verifier};
+use copythat_core::{CollisionPolicy, CopyOptions, ErrorPolicy, FilterSet, JobKind, Verifier};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::cli::{CliAction, EnqueueArgs, EnqueueVerb};
@@ -39,6 +39,7 @@ pub fn enqueue_jobs(
     collision_policy: CollisionPolicy,
     error_policy: ErrorPolicy,
     tree_concurrency: Option<usize>,
+    filters: Option<FilterSet>,
 ) -> Vec<u64> {
     let mut ids = Vec::with_capacity(sources.len());
     for src in sources {
@@ -67,6 +68,7 @@ pub fn enqueue_jobs(
             collision_policy: collision_policy.clone(),
             error_policy,
             tree_concurrency,
+            filters: filters.clone(),
         };
         // `tauri::async_runtime::spawn` uses the runtime Tauri itself
         // manages, so this call site works from both the #[tauri::command]
@@ -127,7 +129,11 @@ fn drive_letter_folder(src: &Path) -> Option<String> {
     {
         let raw = prefix.as_os_str().to_string_lossy();
         let cleaned = raw.trim_end_matches(':').to_string();
-        if cleaned.is_empty() { None } else { Some(cleaned) }
+        if cleaned.is_empty() {
+            None
+        } else {
+            Some(cleaned)
+        }
     }
 }
 
@@ -184,6 +190,13 @@ fn dispatch_enqueue(app: &AppHandle, args: EnqueueArgs) {
             // Phase 13c — scripted enqueue uses the engine default
             // concurrency; the interactive commands layer threads in
             // `Settings.transfer.concurrency` via `resolve_concurrency`.
+            None,
+            // Phase 14a — scripted / CLI enqueue does NOT apply the
+            // persisted filter set. The CLI is meant for "copy this
+            // exact list of paths" and a surprise `skip-hidden`
+            // leaking from Settings would silently drop files the
+            // user explicitly requested. The interactive commands
+            // layer applies filters instead.
             None,
         );
     } else {

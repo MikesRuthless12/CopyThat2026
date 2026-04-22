@@ -590,3 +590,43 @@ drop-dialog-busy-checking = 여유 공간 확인 중…
 drop-dialog-busy-enumerating = 파일 수 계산 중…
 drop-dialog-busy-starting = 복사 시작 중…
 toast-enumeration-deferred = 원본 트리가 큽니다 — 사전 목록을 생략합니다. 엔진이 처리하는 대로 행이 나타납니다.
+
+# Phase 14a — enumeration-time filters
+# MT
+settings-tab-filters = 필터
+# MT
+settings-filters-hint = 열거 시점에서 파일을 건너뛰어 엔진이 아예 열지 않게 합니다. 포함은 파일에만 적용되고, 제외는 디렉터리도 가지치기합니다.
+# MT
+settings-filters-enabled = 트리 복사에 필터 사용
+# MT
+settings-filters-include-globs = 포함 글롭
+# MT
+settings-filters-include-globs-placeholder = **/*.txt
+# MT
+settings-filters-include-globs-hint = 한 줄에 하나. 비어 있지 않으면 파일은 최소 하나와 일치해야 합니다. 디렉터리는 항상 내려갑니다.
+# MT
+settings-filters-exclude-globs = 제외 글롭
+# MT
+settings-filters-exclude-globs-placeholder = **/node_modules
+# MT
+settings-filters-exclude-globs-hint = 한 줄에 하나. 디렉터리에 일치하면 서브트리 전체를 가지치기하고, 파일에 일치하면 건너뜁니다.
+# MT
+settings-filters-size-range = 파일 크기 범위
+# MT
+settings-filters-min-size-bytes = 최소 크기(바이트, 빈 값 = 하한 없음)
+# MT
+settings-filters-max-size-bytes = 최대 크기(바이트, 빈 값 = 상한 없음)
+# MT
+settings-filters-date-range = 수정 시간 범위
+# MT
+settings-filters-min-mtime = 이 날짜 이후 수정됨
+# MT
+settings-filters-max-mtime = 이 날짜 이전 수정됨
+# MT
+settings-filters-attributes = 속성 비트
+# MT
+settings-filters-skip-hidden = 숨김 파일 / 폴더 건너뛰기
+# MT
+settings-filters-skip-system = 시스템 파일 건너뛰기(Windows 전용)
+# MT
+settings-filters-skip-readonly = 읽기 전용 파일 건너뛰기

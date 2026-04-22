@@ -399,12 +399,29 @@ export interface AdvancedSettingsDto {
   databasePath: string | null;
 }
 
+/** Phase 14a — enumeration-time filters. Sizes are byte counts;
+ *  dates are signed Unix epoch seconds so pre-1970 mtimes don't wrap.
+ *  `null` on a bound means "unbounded on that end". */
+export interface FiltersDto {
+  enabled: boolean;
+  includeGlobs: string[];
+  excludeGlobs: string[];
+  minSizeBytes: number | null;
+  maxSizeBytes: number | null;
+  minMtimeUnixSecs: number | null;
+  maxMtimeUnixSecs: number | null;
+  skipHidden: boolean;
+  skipSystem: boolean;
+  skipReadonly: boolean;
+}
+
 export interface SettingsDto {
   general: GeneralSettingsDto;
   transfer: TransferSettingsDto;
   shell: ShellSettingsDto;
   secureDelete: SecureDeleteSettingsDto;
   advanced: AdvancedSettingsDto;
+  filters: FiltersDto;
 }
 
 export interface ProfileInfoDto {

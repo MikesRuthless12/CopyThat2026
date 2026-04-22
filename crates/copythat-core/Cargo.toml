@@ -20,6 +20,10 @@ slow-tests = []
 
 [dependencies]
 filetime = "0.2"
+# Phase 14a — compiled glob sets for include/exclude filters applied
+# at enumeration time. `globset` is what ripgrep uses; it compiles the
+# patterns once and matches without per-path allocation.
+globset = "0.4"
 thiserror = "2"
 tokio = { version = "1", features = [
     "fs",
@@ -57,6 +61,11 @@ path = "../../tests/smoke/phase_01_core_copy.rs"
 [[test]]
 name = "phase_02_tree_queue"
 path = "../../tests/smoke/phase_02_tree_queue.rs"
+
+# Phase 14a — enumeration-time filters (glob / size / date / attribute).
+[[test]]
+name = "phase_14a_filters"
+path = "../../tests/smoke/phase_14a_filters.rs"
 
 # Phase 13 — Criterion benchmarks for the async copy engine.
 # `cargo bench -p copythat-core --bench copy_bench` runs the full

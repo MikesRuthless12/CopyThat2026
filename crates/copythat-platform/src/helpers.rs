@@ -92,11 +92,7 @@ fn free_space_impl(path: &Path) -> Option<u64> {
     use std::os::windows::ffi::OsStrExt;
     // GetDiskFreeSpaceExW wants a directory path. If the caller hands
     // us a file, probe the parent.
-    let target: &Path = if path.is_file() {
-        path.parent()?
-    } else {
-        path
-    };
+    let target: &Path = if path.is_file() { path.parent()? } else { path };
     let mut wide: Vec<u16> = OsStr::new(target).encode_wide().collect();
     wide.push(0);
     let mut free_to_caller: u64 = 0;
@@ -119,11 +115,7 @@ fn free_space_impl(path: &Path) -> Option<u64> {
 fn free_space_impl(path: &Path) -> Option<u64> {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
-    let target: &Path = if path.is_file() {
-        path.parent()?
-    } else {
-        path
-    };
+    let target: &Path = if path.is_file() { path.parent()? } else { path };
     let cstr = CString::new(target.as_os_str().as_bytes()).ok()?;
     let mut sv: libc::statvfs = unsafe { std::mem::zeroed() };
     // SAFETY: cstr is NUL-terminated and sv is a zero-init statvfs.
