@@ -81,6 +81,9 @@ pub struct Settings {
     /// same-job dedup + the moonshot phases that layer on top. See
     /// [`ChunkStoreSettings`].
     pub chunk_store: ChunkStoreSettings,
+    /// Phase 28 — tray-resident Drop Stack. See
+    /// [`DropStackSettings`].
+    pub drop_stack: DropStackSettings,
 }
 
 impl Settings {
@@ -1041,6 +1044,79 @@ impl Default for ChunkStoreSettings {
             // 20 GiB.
             max_size_bytes: 20 * 1024 * 1024 * 1024,
             prune_older_than_days: 60,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+// Phase 28 — tray-resident Drop Stack
+// ---------------------------------------------------------------------
+
+/// Drop Stack preferences.
+///
+/// The Drop Stack itself (the list of staged paths) is persisted in
+/// a separate `dropstack.json` file under the same config dir —
+/// this struct holds only the UI knobs that govern the tray icon +
+/// window behaviour, which belong with every other Settings
+/// category.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct DropStackSettings {
+    /// Show the tray icon on app start. Default `true` — Copy That
+    /// has had a tray icon since Phase 16; the Drop Stack-specific
+    /// menu items extend the existing tray surface.
+    pub show_tray_icon: bool,
+    /// Pin the Drop Stack window always-on-top. Default `false`;
+    /// power users flip this on so the window floats over their
+    /// source applications while they drag.
+    pub always_on_top: bool,
+    /// Open the Drop Stack window automatically on app start.
+    /// Default `false` — the window is lazy until the user clicks
+    /// the tray icon or the "Drop Stack" menu entry.
+    pub open_on_start: bool,
+    /// Last-known window geometry. `None` = "let Tauri pick"
+    /// (720×480 default). Phase 28 persists whatever Tauri reports
+    /// on `CloseRequested` so the user's preferred size + position
+    /// survive restarts.
+    pub window_bounds: Option<DropStackBounds>,
+}
+
+impl Default for DropStackSettings {
+    fn default() -> Self {
+        Self {
+            show_tray_icon: true,
+            always_on_top: false,
+            open_on_start: false,
+            window_bounds: None,
+        }
+    }
+}
+
+/// Drop Stack window geometry. Coordinates are logical (Tauri's
+/// default). The `monitor` field is a stable identifier so moving
+/// the window across monitors doesn't make the next open show up
+/// off-screen.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct DropStackBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    /// Monitor label (OS-provided) the window was last positioned
+    /// on. Empty string = "unknown"; the app falls back to the
+    /// primary monitor.
+    pub monitor: String,
+}
+
+impl Default for DropStackBounds {
+    fn default() -> Self {
+        Self {
+            x: 100,
+            y: 100,
+            width: 380,
+            height: 520,
+            monitor: String::new(),
         }
     }
 }

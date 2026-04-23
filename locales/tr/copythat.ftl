@@ -933,3 +933,20 @@ chunk-store-max-size = Maksimum parça deposu boyutu  # MT
 chunk-store-prune = Şundan eski parçaları temizle (gün)  # MT
 chunk-store-savings = Parça tekilleştirme ile { $gib } GiB tasarruf edildi  # MT
 chunk-store-disk-usage = { $chunks } parçada { $size } kullanılıyor  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Drop Stack  # MT
+dropstack-tray-open = Drop Stack  # MT
+dropstack-empty-title = Drop Stack boş  # MT
+dropstack-empty-hint = Dosyaları Gezgin'den buraya sürükleyin veya bir iş satırına sağ tıklayarak ekleyin.  # MT
+dropstack-add-to-stack = Drop Stack'e ekle  # MT
+dropstack-copy-all-to = Hepsini kopyala…  # MT
+dropstack-move-all-to = Hepsini taşı…  # MT
+dropstack-clear = Yığını temizle  # MT
+dropstack-remove-row = Yığından çıkar  # MT
+dropstack-path-missing-toast = { $path } kaldırıldı — dosya artık yok.  # MT
+dropstack-always-on-top = Drop Stack'i her zaman en üstte tut  # MT
+dropstack-show-tray-icon = Copy That tepsi simgesini göster  # MT
+dropstack-open-on-start = Uygulama başlangıcında Drop Stack'i otomatik aç  # MT
+dropstack-count = { $count } yol  # MT

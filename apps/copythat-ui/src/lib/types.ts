@@ -663,3 +663,16 @@ export interface SyncFailedDto {
   pairId: string;
   message: string;
 }
+
+// ---------------------------------------------------------------------
+// Phase 28 — tray-resident Drop Stack
+// ---------------------------------------------------------------------
+
+export interface DropStackEntryDto {
+  path: string;
+  addedAtMs: number;
+}
+
+export interface DropStackPathMissingDto {
+  path: string;
+}
