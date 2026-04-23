@@ -1998,3 +1998,136 @@ pub fn discard_all_resumes(state: State<'_, AppState>) -> Vec<String> {
         .clear();
     errors
 }
+
+// ---------------------------------------------------------------------
+// Phase 29 — destination picker support: list immediate children of a
+// directory so the Svelte picker can render one level at a time and
+// spring-load its way deeper. Returns only directory entries; files
+// are not relevant for a *destination* picker. Hidden entries are
+// included — the UI decides whether to filter them.
+// ---------------------------------------------------------------------
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DirChildDto {
+    pub name: String,
+    pub path: String,
+    /// Readable + writable = valid destination. Surfaces as the
+    /// `invalid` flag on the DropTarget so the UI can paint the error
+    /// border + tooltip without a second round-trip.
+    pub writable: bool,
+}
+
+#[tauri::command]
+pub async fn list_directory(path: String) -> Result<Vec<DirChildDto>, String> {
+    tokio::task::spawn_blocking(move || {
+        let root = std::path::PathBuf::from(&path);
+        if !root.is_dir() {
+            return Err(format!("not a directory: {path}"));
+        }
+        let mut out: Vec<DirChildDto> = Vec::new();
+        let rd = std::fs::read_dir(&root).map_err(|e| e.to_string())?;
+        for entry in rd.flatten() {
+            let ft = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+            if !ft.is_dir() {
+                continue;
+            }
+            let child_path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            // "Writable" probe: on Unix check the mode; on Windows we
+            // can't cheaply know without attempting a create, so fall
+            // back to `true` and let the actual copy surface the
+            // permission error. Read-only dir detection on Windows
+            // uses the FILE_ATTRIBUTE_READONLY bit, which is advisory
+            // anyway.
+            let writable = is_dir_writable(&child_path);
+            out.push(DirChildDto {
+                name,
+                path: child_path.to_string_lossy().into_owned(),
+                writable,
+            });
+        }
+        out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn is_dir_writable(p: &std::path::Path) -> bool {
+    // Cheap advisory probe. Real permission is only knowable by a
+    // create attempt; we defer that to the actual enqueue so the
+    // picker stays snappy.
+    match std::fs::metadata(p) {
+        Ok(md) => !md.permissions().readonly(),
+        Err(_) => false,
+    }
+}
+
+/// Phase 29 — root list for the destination picker. On Windows the
+/// "root" is the list of drive letters; on Unix it's just `/`. The
+/// picker calls this once on open and then walks children via
+/// `list_directory`.
+#[tauri::command]
+pub async fn list_roots() -> Result<Vec<DirChildDto>, String> {
+    tokio::task::spawn_blocking(|| {
+        #[cfg(windows)]
+        {
+            let mut out = Vec::new();
+            for letter in b'A'..=b'Z' {
+                let p = format!("{}:\\", letter as char);
+                let path = std::path::PathBuf::from(&p);
+                if path.exists() {
+                    out.push(DirChildDto {
+                        name: p.clone(),
+                        path: p,
+                        writable: is_dir_writable(&path),
+                    });
+                }
+            }
+            Ok(out)
+        }
+        #[cfg(not(windows))]
+        {
+            Ok(vec![DirChildDto {
+                name: "/".to_string(),
+                path: "/".to_string(),
+                writable: is_dir_writable(std::path::Path::new("/")),
+            }])
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ---------------------------------------------------------------------
+// Phase 29 — drag-out stub. Given a list of paths already staged
+// elsewhere (e.g. Drop Stack entries), emit an IPC event the frontend
+// can bridge into the OS drag-source. Cross-platform native OLE /
+// NSPasteboardItem wiring is tracked as Phase 29b and requires a
+// third-party crate add; the stub lets the Svelte layer set up the
+// drag-image + HTML5 fallback today so in-app drop targets work.
+// ---------------------------------------------------------------------
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DragOutStagedDto {
+    pub paths: Vec<String>,
+    pub count: usize,
+}
+
+#[tauri::command]
+pub async fn drag_out_stage(paths: Vec<String>) -> Result<DragOutStagedDto, String> {
+    // Validate that each path still exists; drop missing entries.
+    let kept: Vec<String> = paths
+        .into_iter()
+        .filter(|p| std::path::Path::new(p).exists())
+        .collect();
+    Ok(DragOutStagedDto {
+        count: kept.len(),
+        paths: kept,
+    })
+}

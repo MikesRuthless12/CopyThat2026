@@ -675,3 +675,21 @@ dropstack-always-on-top = Keep Drop Stack always on top
 dropstack-show-tray-icon = Show the Copy That tray icon
 dropstack-open-on-start = Open Drop Stack automatically on app start
 dropstack-count = { $count } path
+
+# Phase 29 — spring-loaded folders + native DnD polish. The Settings
+# → General tab carries the knobs; DropTarget / DestinationPicker
+# Svelte components use the dropzone-* keys at runtime.
+settings-dnd-heading = Drag and drop
+settings-dnd-spring-load = Spring-load folders while dragging
+settings-dnd-spring-delay = Spring-load delay (ms)
+settings-dnd-thumbnails = Show drag thumbnails
+settings-dnd-invalid-highlight = Highlight invalid drop targets
+dropzone-invalid-title = Not a valid drop target
+dropzone-invalid-readonly = Destination is read-only
+dropzone-picker-title = Choose a destination
+dropzone-picker-up = Up
+dropzone-picker-path = Current path
+dropzone-picker-root = Roots
+dropzone-picker-use-this = Use this folder
+dropzone-picker-empty = No subfolders
+dropzone-picker-cancel = Cancel

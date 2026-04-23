@@ -22,12 +22,31 @@
 //!   [`dropstack_clear`], [`dropstack_list`], [`dropstack_toggle_window`],
 //!   [`dropstack_copy_all_to`], [`dropstack_move_all_to`].
 //!
-//! The drag-out-to-another-app story (OS-native drag source) lands
-//! in Phase 29 alongside the rest of the native DnD polish. For
-//! Phase 28 the dispatch verbs are the "Copy all to…" / "Move all
-//! to…" buttons plus drop-onto-folder inside the main window, which
-//! both route through the existing `start_copy` / `start_move`
-//! commands.
+//! **Phase 29 native DnD polish:**
+//!
+//! - In-app drag source: Drop Stack rows are HTML5 draggable; the
+//!   browser-level `dragstart` → `dataTransfer.setDragImage` path
+//!   paints a themed thumbnail via `applyDragThumbnail`, and the
+//!   payload lists the staged paths so any in-app `DropTarget`
+//!   component receives them.
+//! - Drop targets (both main window and Drop Stack window) rely on
+//!   Tauri 2's built-in OS-native drop handling:
+//!     - **Windows** — `IDropTarget` via the `dragDropEnabled` flag
+//!       in `tauri.conf.json` / `.drag_and_drop(true)` on the
+//!       `WebviewWindowBuilder`. Win11's OS-composited drag preview
+//!       comes for free when the source app is Win11-aware.
+//!     - **macOS** — `NSDraggingDestination` via the same flag; file
+//!       URLs arrive rich (with previews) because WebKit bridges the
+//!       pasteboard contents directly.
+//!     - **Linux** — GTK DnD source/target. No platform-specific
+//!       flag needed.
+//! - **OS-native drag source to external apps** (dragging a Drop
+//!   Stack row into Explorer / Finder / Nautilus) still requires a
+//!   native IDataObject / NSPasteboardItem / GTK drag-source bridge.
+//!   Tracked as Phase 29b behind the `tauri-plugin-drag` crate; Phase
+//!   29 ships the HTML5 drag source so in-window drop targets work
+//!   today and the external-app path stays forwards-compatible with
+//!   a future plugin attach.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
@@ -490,9 +509,11 @@ async fn dispatch_all(
     // a drag-drop from the main window. No per-enqueue overrides
     // — the user already gathered the files deliberately.
     let settings = state.settings_snapshot();
-    let mut copy_opts = copythat_core::CopyOptions::default();
-    copy_opts.buffer_size = settings.transfer.effective_buffer_size();
-    copy_opts.verify = None;
+    let copy_opts = copythat_core::CopyOptions {
+        buffer_size: settings.transfer.effective_buffer_size(),
+        verify: None,
+        ..Default::default()
+    };
     let verifier = None;
     let collision_policy = copythat_core::CollisionPolicy::Prompt;
     let error_policy = copythat_core::ErrorPolicy::default();

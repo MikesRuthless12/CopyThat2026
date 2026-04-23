@@ -84,6 +84,9 @@ pub struct Settings {
     /// Phase 28 — tray-resident Drop Stack. See
     /// [`DropStackSettings`].
     pub drop_stack: DropStackSettings,
+    /// Phase 29 — drag-and-drop polish (spring-load, drag thumbnails,
+    /// invalid-target highlight). See [`DndSettings`].
+    pub dnd: DndSettings,
 }
 
 impl Settings {
@@ -1118,6 +1121,71 @@ impl Default for DropStackBounds {
             height: 520,
             monitor: String::new(),
         }
+    }
+}
+
+// ---------------------------------------------------------------------
+// Phase 29 — drag-and-drop polish
+// ---------------------------------------------------------------------
+
+/// Drag-and-drop UX preferences.
+///
+/// Governs Phase 29's spring-loaded folders, drag thumbnails, and the
+/// error-border treatment on invalid drop targets. Changes take effect
+/// the next time the DestinationPicker or DropTarget component is
+/// mounted — no restart required.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct DndSettings {
+    /// Master toggle for spring-loaded folders. Default `true`.
+    pub spring_load_enabled: bool,
+    /// Spring-load delay in milliseconds. Clamped to
+    /// [`DND_MIN_SPRING_MS`] .. [`DND_MAX_SPRING_MS`] on both read and
+    /// write so a hand-edited TOML file can't push the value outside
+    /// the spec'd 200..2000 ms band. Default `650` — matches macOS
+    /// Finder's well-known figure.
+    pub spring_load_delay_ms: u32,
+    /// Render a drag thumbnail (canvas composited via `setDragImage`)
+    /// when dragging rows out of in-app surfaces like the Drop Stack.
+    /// Default `true`; users on low-end GPUs or with prefers-reduced-
+    /// motion can turn it off.
+    pub show_drag_thumbnails: bool,
+    /// Paint the red error border + tooltip on drop targets that
+    /// aren't writable (read-only FS, insufficient permission).
+    /// Default `true`. Off falls back to the plain hover border so
+    /// the target visually looks droppable; the actual copy will
+    /// still fail with the underlying permission error.
+    pub highlight_invalid_targets: bool,
+}
+
+/// Minimum spring-load delay (50 ms). Anything shorter opens folders
+/// the moment the cursor nicks the edge, which defeats the "deliberate
+/// hover" intent.
+pub const DND_MIN_SPRING_MS: u32 = 50;
+
+/// Maximum spring-load delay (5 000 ms). Guard against accidental huge
+/// values in hand-edited TOML — the UI caps its slider at 2 000 ms but
+/// the clamp gives us one more safety net.
+pub const DND_MAX_SPRING_MS: u32 = 5_000;
+
+impl Default for DndSettings {
+    fn default() -> Self {
+        Self {
+            spring_load_enabled: true,
+            spring_load_delay_ms: 650,
+            show_drag_thumbnails: true,
+            highlight_invalid_targets: true,
+        }
+    }
+}
+
+impl DndSettings {
+    /// Returns the effective spring-load delay, clamped into the
+    /// valid band. Callers should prefer this over raw field access
+    /// so out-of-range TOML can't reach the UI.
+    pub fn effective_spring_ms(&self) -> u32 {
+        self.spring_load_delay_ms
+            .clamp(DND_MIN_SPRING_MS, DND_MAX_SPRING_MS)
     }
 }
 

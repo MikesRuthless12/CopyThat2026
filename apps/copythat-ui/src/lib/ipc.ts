@@ -409,3 +409,28 @@ export async function setActiveConflictProfile(
 ): Promise<string | null> {
   return invoke<string | null>("set_active_conflict_profile", { name });
 }
+
+// -------------------------------------------------------------------
+// Phase 29 — destination picker + drag-out staging.
+// -------------------------------------------------------------------
+
+import type { DirChildDto, DragOutStagedDto } from "./types";
+
+/** List the immediate subdirectories of `path`. */
+export async function listDirectory(path: string): Promise<DirChildDto[]> {
+  return invoke<DirChildDto[]>("list_directory", { path });
+}
+
+/** List the filesystem roots (drive letters on Windows; `/` on Unix). */
+export async function listRoots(): Promise<DirChildDto[]> {
+  return invoke<DirChildDto[]>("list_roots");
+}
+
+/** Drag-out staging stub — validates paths still exist on disk so the
+ *  frontend can decide whether to emit an OS-native drag or fall back
+ *  to the in-app drop target. */
+export async function dragOutStage(
+  paths: string[],
+): Promise<DragOutStagedDto> {
+  return invoke<DragOutStagedDto>("drag_out_stage", { paths });
+}

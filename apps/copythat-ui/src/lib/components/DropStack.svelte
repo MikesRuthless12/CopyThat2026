@@ -28,6 +28,7 @@
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { t } from "../i18n";
   import type { DropStackEntryDto, DropStackPathMissingDto } from "../types";
+  import { applyDragThumbnail } from "../dragThumbnail";
 
   let entries: DropStackEntryDto[] = $state([]);
   let toasts: string[] = $state([]);
@@ -166,7 +167,25 @@
   {:else}
     <ul class="entries">
       {#each entries as e (e.path)}
-        <li>
+        <li
+          draggable="true"
+          ondragstart={(ev) => {
+            // Phase 29 — in-app drag source. HTML5 DataTransfer can't
+            // create real OS file drags (that's `tauri-plugin-drag`,
+            // deferred to Phase 29b); this lets in-window DropTarget
+            // components receive the row and renders a themed preview
+            // while the user drags. External apps will show the
+            // fallback "text" preview until the plugin attaches.
+            if (!ev.dataTransfer) return;
+            ev.dataTransfer.effectAllowed = "copy";
+            ev.dataTransfer.setData("text/plain", e.path);
+            ev.dataTransfer.setData(
+              "application/x-copythat-paths",
+              JSON.stringify([e.path]),
+            );
+            applyDragThumbnail(ev, [{ label: e.path }]);
+          }}
+        >
           <div class="row">
             <span class="name" title={e.path}>{basename(e.path)}</span>
             <span class="parent" title={e.path}>{parentOf(e.path)}</span>
@@ -175,7 +194,7 @@
             class="remove"
             type="button"
             aria-label={t("dropstack-remove-row")}
-            on:click={() => removePath(e.path)}>×</button
+            onclick={() => removePath(e.path)}>×</button
           >
         </li>
       {/each}
@@ -186,20 +205,20 @@
     <button
       type="button"
       disabled={busy || entries.length === 0}
-      on:click={() => pickDestinationAnd("copy")}
+      onclick={() => pickDestinationAnd("copy")}
       >{t("dropstack-copy-all-to")}</button
     >
     <button
       type="button"
       disabled={busy || entries.length === 0}
-      on:click={() => pickDestinationAnd("move")}
+      onclick={() => pickDestinationAnd("move")}
       >{t("dropstack-move-all-to")}</button
     >
     <button
       type="button"
       class="secondary"
       disabled={busy || entries.length === 0}
-      on:click={clearAll}>{t("dropstack-clear")}</button
+      onclick={clearAll}>{t("dropstack-clear")}</button
     >
   </footer>
 
