@@ -1,6 +1,6 @@
 [package]
 name = "copythat-snapshot"
-description = "Filesystem snapshot source (VSS / ZFS / Btrfs / APFS) for locked-file read in Copy That v1.0.0."
+description = "Filesystem snapshot source (VSS / ZFS / Btrfs / APFS) for locked-file read in Copy That v1.25.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

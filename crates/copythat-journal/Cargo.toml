@@ -1,6 +1,6 @@
 [package]
 name = "copythat-journal"
-description = "Crash/reboot resume journal (redb-backed WAL) for Copy That v1.0.0."
+description = "Crash/reboot resume journal (redb-backed WAL) for Copy That v1.25.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Build / release / lint helper CLI for Copy That v1.0.0."
+description = "Build / release / lint helper CLI for Copy That v1.25.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
