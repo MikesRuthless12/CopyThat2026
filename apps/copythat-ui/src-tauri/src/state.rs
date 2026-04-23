@@ -96,6 +96,13 @@ pub struct AppState {
     /// staged paths + persists JSON to
     /// `<config-dir>/dropstack.json` on every mutation.
     pub dropstack: crate::dropstack::DropStackRegistry,
+    /// Phase 31 — power-aware copying broadcast bus. The runner's
+    /// subscriber task consumes PowerEvents, maps them through
+    /// `PowerPoliciesSettings`, and drives pause_all / resume_all /
+    /// shape cap. Test-only `inject_power_event` IPC shares this
+    /// same bus so the smoke test can fire synthetic events through
+    /// the real end-to-end path without the OS probes.
+    pub power_bus: copythat_power::PowerBus,
 }
 
 impl AppState {
@@ -147,6 +154,11 @@ impl AppState {
                 crate::dropstack::default_dropstack_path()
                     .unwrap_or_else(|| std::path::PathBuf::from("dropstack.json")),
             ),
+            // Idle bus — the runner attaches the real probes in
+            // `lib.rs::run` once the Tauri runtime is up. Tests and
+            // the smoke leave the bus idle and drive it via
+            // `inject_power_event`.
+            power_bus: copythat_power::PowerBus::new(),
         }
     }
 

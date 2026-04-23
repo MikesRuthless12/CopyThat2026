@@ -980,3 +980,23 @@ reserved-name-suffix = Append "_" (CON.txt → CON_.txt)  # MT
 reserved-name-reject = Reject and warn  # MT
 long-path-label = Use Windows long-path prefix (\?\) when over 260 chars  # MT
 long-path-hint = Some network shares and legacy tools don't honor the \?\ namespace.  # MT
+
+# Phase 31 — power-aware copying.
+power-heading = Power & State  # MT
+power-enabled = Enable power-aware rules  # MT
+power-battery-label = On battery  # MT
+power-metered-label = On metered Wi-Fi  # MT
+power-cellular-label = On cellular  # MT
+power-presentation-label = When presenting (Zoom / Teams / Keynote)  # MT
+power-fullscreen-label = When an app is fullscreen  # MT
+power-thermal-label = When CPU is thermal-throttling  # MT
+power-rule-continue = Continue at full speed  # MT
+power-rule-pause = Pause all jobs  # MT
+power-rule-cap = Cap bandwidth  # MT
+power-rule-cap-percent = Cap to a percent of current rate  # MT
+power-reason-on-battery = on battery  # MT
+power-reason-metered-network = metered network  # MT
+power-reason-cellular-network = cellular network  # MT
+power-reason-presenting = presentation mode  # MT
+power-reason-fullscreen = fullscreen app  # MT
+power-reason-thermal-throttling = CPU is throttling  # MT

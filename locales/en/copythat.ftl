@@ -708,3 +708,25 @@ reserved-name-suffix = Append "_" (CON.txt → CON_.txt)
 reserved-name-reject = Reject and warn
 long-path-label = Use Windows long-path prefix (\\?\) when over 260 chars
 long-path-hint = Some network shares and legacy tools don't honor the \\?\ namespace.
+
+# Phase 31 — power-aware copying. Settings → Power & State tab + the
+# header badge that renders "⏸ Paused — Zoom call detected" when the
+# runner's power subscriber has paused or capped due to a policy match.
+power-heading = Power & State
+power-enabled = Enable power-aware rules
+power-battery-label = On battery
+power-metered-label = On metered Wi-Fi
+power-cellular-label = On cellular
+power-presentation-label = When presenting (Zoom / Teams / Keynote)
+power-fullscreen-label = When an app is fullscreen
+power-thermal-label = When CPU is thermal-throttling
+power-rule-continue = Continue at full speed
+power-rule-pause = Pause all jobs
+power-rule-cap = Cap bandwidth
+power-rule-cap-percent = Cap to a percent of current rate
+power-reason-on-battery = on battery
+power-reason-metered-network = metered network
+power-reason-cellular-network = cellular network
+power-reason-presenting = presentation mode
+power-reason-fullscreen = fullscreen app
+power-reason-thermal-throttling = CPU is throttling
