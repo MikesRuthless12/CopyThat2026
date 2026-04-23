@@ -464,6 +464,55 @@ export interface SettingsDto {
   advanced: AdvancedSettingsDto;
   filters: FiltersDto;
   updater: UpdaterSettingsDto;
+  /// Phase 19a — disk-backed scan database. The settings field is
+  /// always present in the wire payload; the modal exposes the knobs
+  /// inside the Advanced tab.
+  scan?: ScanSettingsDto;
+  /// Phase 21 — bandwidth shaping (global cap + schedule + auto-throttle).
+  network: NetworkSettingsDto;
+}
+
+/** Phase 19a — disk-backed scan database settings. Optional in TS
+ *  because the Svelte UI mostly ignores this struct (the Advanced
+ *  tab edits a few fields directly through `pushSettings`). */
+export interface ScanSettingsDto {
+  hashDuringScan: boolean;
+  databasePath: string | null;
+  autoDeleteAfterDays: number;
+  maxScansToKeep: number;
+}
+
+/** Phase 21 — wire form of `copythat_settings::NetworkSettings`. */
+export type BandwidthModeWire = "off" | "fixed" | "schedule";
+
+/** Phase 21 — `unchanged` keeps the global mode authoritative;
+ *  `pause` blocks the copy entirely; `cap` overrides at N bytes/s. */
+export type AutoThrottleRuleDto =
+  | { kind: "unchanged" }
+  | { kind: "pause" }
+  | { kind: "cap"; value: number };
+
+export interface NetworkSettingsDto {
+  mode: BandwidthModeWire;
+  fixedBytesPerSecond: number;
+  scheduleSpec: string;
+  autoOnMetered: AutoThrottleRuleDto;
+  autoOnBattery: AutoThrottleRuleDto;
+  autoOnCellular: AutoThrottleRuleDto;
+}
+
+/** Phase 21 — payload of `shape-rate-changed`. `bytesPerSecond` is
+ *  null when the shape is unlimited, 0 when paused, otherwise the
+ *  cap. `source` drives the badge's secondary label. */
+export interface ShapeRateDto {
+  bytesPerSecond: number | null;
+  source:
+    | "settings"
+    | "schedule"
+    | "auto-metered"
+    | "auto-battery"
+    | "auto-cellular"
+    | "off";
 }
 
 /** Phase 15 — return shape of `updater_check_now`. */

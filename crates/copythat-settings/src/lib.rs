@@ -60,6 +60,9 @@ pub struct Settings {
     /// Phase 19a — disk-backed scan database configuration. See
     /// [`ScanSettings`].
     pub scan: ScanSettings,
+    /// Phase 21 — bandwidth shaping (global cap + schedule +
+    /// auto-throttle rules). See [`NetworkSettings`].
+    pub network: NetworkSettings,
 }
 
 impl Settings {
@@ -726,6 +729,107 @@ impl Default for ScanSettings {
     }
 }
 
+/// Phase 21 — bandwidth shaping preferences.
+///
+/// `mode` decides the shape's source of truth:
+/// - `Off` → unlimited (engine runs at storage native speed).
+/// - `Fixed { bytes_per_second }` → static cap.
+/// - `Schedule` → time-of-day rules in `schedule_spec` drive
+///   `Shape::set_rate` once per minute.
+///
+/// `auto_*` rules layer on top of the chosen mode: when the OS
+/// reports the matching state, `Shape::set_rate` is called with the
+/// rule's value (overriding the schedule for that minute). Phase
+/// 21's `current_network_class` / `current_power_state` are stubbed
+/// to "Unmetered / PluggedIn", so the auto rules persist but do
+/// nothing on disk yet — the per-OS bridges land in Phase 31.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct NetworkSettings {
+    pub mode: BandwidthMode,
+    /// Used when `mode == Fixed`. Bytes per second; `0` is rejected
+    /// upstream (the wire boundary) so it can't degrade silently
+    /// into "off".
+    pub fixed_bytes_per_second: u64,
+    /// rclone-style schedule string, used when `mode == Schedule`.
+    /// Empty = "no rules" (effectively unlimited).
+    pub schedule_spec: String,
+    pub auto_on_metered: AutoThrottleRule,
+    pub auto_on_battery: AutoThrottleRule,
+    pub auto_on_cellular: AutoThrottleRule,
+}
+
+impl Default for NetworkSettings {
+    fn default() -> Self {
+        Self {
+            mode: BandwidthMode::Off,
+            fixed_bytes_per_second: 0,
+            schedule_spec: String::new(),
+            auto_on_metered: AutoThrottleRule::Unchanged,
+            auto_on_battery: AutoThrottleRule::Unchanged,
+            auto_on_cellular: AutoThrottleRule::Unchanged,
+        }
+    }
+}
+
+/// `BandwidthMode` mirrors the three-way Settings-tab selector
+/// "Off / fixed value / use schedule". Stored as a kebab-case
+/// string in TOML so an older binary (no idea what `Schedule` is)
+/// silently falls back to `Off`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BandwidthMode {
+    /// Unlimited (engine ignores `Shape`). Default.
+    #[default]
+    Off,
+    /// Fixed cap from `fixed_bytes_per_second`.
+    Fixed,
+    /// Time-of-day schedule from `schedule_spec`.
+    Schedule,
+}
+
+impl BandwidthMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Fixed => "fixed",
+            Self::Schedule => "schedule",
+        }
+    }
+}
+
+/// One row of the auto-throttle table — what the engine should do
+/// when the OS reports the matching condition. `Unchanged` lets the
+/// schedule / fixed cap apply unmodified; `Pause` makes Shape
+/// effectively block (rate = 0); `Cap` overrides with a fixed cap.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "kind", content = "value")]
+pub enum AutoThrottleRule {
+    /// Don't override — the global mode (`Off` / `Fixed` / `Schedule`)
+    /// stays authoritative for this condition. Default.
+    #[default]
+    Unchanged,
+    /// Block the copy entirely while the condition holds. Translates
+    /// to `Shape::set_rate(Some(ByteRate(0)))`.
+    Pause,
+    /// Cap to N bytes/s while the condition holds. Translates to
+    /// `Shape::set_rate(Some(ByteRate(value)))`.
+    Cap { bytes_per_second: u64 },
+}
+
+impl AutoThrottleRule {
+    /// Stable wire string — `unchanged` / `pause` / `cap-NN`. The
+    /// IPC layer uses a tagged DTO so cap values round-trip cleanly;
+    /// this short form is the user-visible label.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Unchanged => "unchanged",
+            Self::Pause => "pause",
+            Self::Cap { .. } => "cap",
+        }
+    }
+}
+
 // ---------------------------------------------------------------------
 // Convenience surface
 // ---------------------------------------------------------------------
@@ -1093,6 +1197,54 @@ log-level = "debug"
             "{dumped}"
         );
         assert!(dumped.contains("check-interval-secs = 86400"), "{dumped}");
+    }
+
+    #[test]
+    fn network_defaults_off() {
+        let n = NetworkSettings::default();
+        assert_eq!(n.mode, BandwidthMode::Off);
+        assert_eq!(n.fixed_bytes_per_second, 0);
+        assert_eq!(n.schedule_spec, "");
+        assert_eq!(n.auto_on_metered, AutoThrottleRule::Unchanged);
+        assert_eq!(n.auto_on_battery, AutoThrottleRule::Unchanged);
+        assert_eq!(n.auto_on_cellular, AutoThrottleRule::Unchanged);
+    }
+
+    #[test]
+    fn network_round_trips_via_toml() {
+        let d = tempdir().unwrap();
+        let path = d.path().join("settings.toml");
+        let s = Settings {
+            network: NetworkSettings {
+                mode: BandwidthMode::Schedule,
+                fixed_bytes_per_second: 5 * 1024 * 1024,
+                schedule_spec: "08:00,512k 18:00,10M Sat-Sun,unlimited".to_string(),
+                auto_on_metered: AutoThrottleRule::Cap {
+                    bytes_per_second: 1024 * 1024,
+                },
+                auto_on_battery: AutoThrottleRule::Pause,
+                auto_on_cellular: AutoThrottleRule::Cap {
+                    bytes_per_second: 100 * 1024,
+                },
+            },
+            ..Settings::default()
+        };
+        s.save_to(&path).unwrap();
+        let back = Settings::load_from(&path).unwrap();
+        assert_eq!(back.network, s.network);
+    }
+
+    #[test]
+    fn network_toml_uses_kebab_case_keys() {
+        let mut s = Settings::default();
+        s.network.mode = BandwidthMode::Fixed;
+        s.network.fixed_bytes_per_second = 4 * 1024 * 1024;
+        let dumped = toml::to_string(&s).unwrap();
+        assert!(dumped.contains(r#"mode = "fixed""#), "{dumped}");
+        assert!(
+            dumped.contains("fixed-bytes-per-second = 4194304"),
+            "{dumped}"
+        );
     }
 
     #[test]

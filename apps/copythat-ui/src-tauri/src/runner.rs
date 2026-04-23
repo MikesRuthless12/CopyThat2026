@@ -161,6 +161,16 @@ pub(crate) async fn run_job(job: RunJob) {
     // engine itself only ever calls per-file methods.
     let journal_sink_for_terminator = copy_opts_with_verify.journal.clone();
 
+    // Phase 21 — attach the AppState's shared bandwidth-shaping
+    // bucket. Always wired (even when the rate is unlimited) so a
+    // runtime `set_rate` call from the Settings IPC handler takes
+    // effect on every in-flight job without re-enqueuing. The sink
+    // is cheap to clone and short-circuits when the shape's current
+    // rate is `None`.
+    copy_opts_with_verify.shape = Some(std::sync::Arc::new(
+        copythat_shape::CopyThatShapeSink::new(state.shape.clone()),
+    ));
+
     let result: Result<(), CopyError> = match kind {
         JobKind::Copy => {
             let Some(dst_path) = dst.clone() else {

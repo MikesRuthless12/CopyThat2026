@@ -9,7 +9,13 @@
   import Icon from "../icons/Icon.svelte";
   import StateBadge from "./StateBadge.svelte";
   import { i18nVersion, t } from "../i18n";
-  import { globals, liveRateBps, pushToast, setDropped } from "../stores";
+  import {
+    globals,
+    liveRateBps,
+    openSettings,
+    pushToast,
+    setDropped,
+  } from "../stores";
 
   // Bind `$locale.code` to the root's `data-locale` attribute below
   // so the template re-evaluates every `t(...)` call on language
@@ -18,16 +24,70 @@
     pauseAll,
     resumeAll,
     cancelAll,
+    currentShapeRate,
+    onEvent,
     pickFiles,
     pickFolders,
   } from "../ipc";
   import { formatEta, formatRate } from "../format";
+  import type { ShapeRateDto } from "../types";
 
   let g = $derived($globals);
   let rate = $derived($liveRateBps);
   let hasWork = $derived(
     g.state !== "idle" && g.activeJobs + g.queuedJobs + g.pausedJobs > 0,
   );
+
+  // Phase 21 — bandwidth shape badge. `null` rate = unlimited (no
+  // badge); 0 = paused; positive = active cap. Initial value pulled
+  // on mount; subsequent changes ride on the `shape-rate-changed`
+  // event from the runner / Settings update / minute-tick poller.
+  let shapeRate = $state<ShapeRateDto | null>(null);
+  let badgeLabel = $derived.by(() => {
+    if (!shapeRate || shapeRate.bytesPerSecond === null) return "";
+    if (shapeRate.bytesPerSecond === 0) return t("shape-badge-paused");
+    return formatRate(shapeRate.bytesPerSecond);
+  });
+  let badgeSourceLabel = $derived.by(() => {
+    if (!shapeRate || shapeRate.bytesPerSecond === null) return "";
+    switch (shapeRate.source) {
+      case "schedule":
+        return t("shape-badge-source-schedule");
+      case "auto-metered":
+        return t("shape-badge-source-metered");
+      case "auto-battery":
+        return t("shape-badge-source-battery");
+      case "auto-cellular":
+        return t("shape-badge-source-cellular");
+      default:
+        return t("shape-badge-source-settings");
+    }
+  });
+
+  $effect(() => {
+    let unlistenFn: (() => void) | undefined;
+    void (async () => {
+      try {
+        shapeRate = await currentShapeRate();
+      } catch {
+        shapeRate = null;
+      }
+      try {
+        unlistenFn = await onEvent<ShapeRateDto>(
+          "shape-rate-changed",
+          (payload) => {
+            shapeRate = payload;
+          },
+        );
+      } catch {
+        // Listener registration is best-effort; the badge stays on the
+        // last-known value if the event bus rejects us.
+      }
+    })();
+    return () => {
+      if (unlistenFn) unlistenFn();
+    };
+  });
   // Only show a live ETA when there's real work in flight. When the
   // app is idle (no queued / running / paused job) we hide the ETA
   // entirely — otherwise the header sits on a permanent
@@ -72,6 +132,21 @@
           <span class="metric eta" aria-label={t("header-eta-label")}>
             {etaDisplay}
           </span>
+        {/if}
+        {#if badgeLabel}
+          <button
+            type="button"
+            class="shape-badge"
+            title={t("shape-badge-tooltip")}
+            aria-label={t("shape-badge-tooltip")}
+            onclick={() => openSettings()}
+          >
+            <span class="shape-icon" aria-hidden="true">▼</span>
+            <span class="shape-rate">{badgeLabel}</span>
+            {#if badgeSourceLabel}
+              <span class="shape-source">· {badgeSourceLabel}</span>
+            {/if}
+          </button>
         {/if}
       </div>
     </div>
@@ -252,5 +327,47 @@
     height: 20px;
     background: var(--border, rgba(128, 128, 128, 0.3));
     margin: 0 4px;
+  }
+
+  .shape-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: var(--row-selected, rgba(79, 140, 255, 0.14));
+    border: 1px solid var(--accent, #4f8cff);
+    border-radius: 999px;
+    color: var(--fg, #1f1f1f);
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+
+  .shape-badge:hover {
+    background: var(--accent, #4f8cff);
+    color: #ffffff;
+  }
+
+  .shape-icon {
+    font-size: 10px;
+    color: var(--accent, #4f8cff);
+  }
+
+  .shape-badge:hover .shape-icon {
+    color: #ffffff;
+  }
+
+  .shape-rate {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .shape-source {
+    color: var(--fg-dim, #5f5f5f);
+  }
+
+  .shape-badge:hover .shape-source {
+    color: rgba(255, 255, 255, 0.85);
   }
 </style>

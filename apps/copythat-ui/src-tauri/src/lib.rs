@@ -277,6 +277,9 @@ pub fn run() {
             commands::pending_resumes,
             commands::discard_resume,
             commands::discard_all_resumes,
+            // Phase 21 — bandwidth shape introspection + schedule lint.
+            commands::current_shape_rate,
+            commands::validate_schedule_spec,
         ])
         .setup(move |app| {
             // Phase 16 — tray icon + menu. Visible regardless of the
@@ -334,6 +337,40 @@ pub fn run() {
                         *slot = Some(watcher);
                     }
                 }
+
+                // Phase 21 — apply persisted NetworkSettings on cold
+                // start, then spawn the minute-tick schedule poller.
+                // The poller re-evaluates `effective_shape_rate`
+                // every 60 seconds; if the value changed, it emits
+                // `shape-rate-changed` so the header badge updates
+                // without a UI poll.
+                state::apply_network_settings_to_shape(&state.shape, &snap.network);
+                let poll_handle = handle.clone();
+                tokio::spawn(async move {
+                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+                    // Skip the immediate first tick — startup already
+                    // applied the rate above.
+                    interval.tick().await;
+                    let mut last_rate: Option<u64> = poll_handle
+                        .try_state::<AppState>()
+                        .and_then(|s| s.shape.current_rate().map(|r| r.bytes_per_second()));
+                    loop {
+                        interval.tick().await;
+                        let Some(state) = poll_handle.try_state::<AppState>() else {
+                            break;
+                        };
+                        let snap = state.settings_snapshot();
+                        state::apply_network_settings_to_shape(&state.shape, &snap.network);
+                        let new_rate = state.shape.current_rate().map(|r| r.bytes_per_second());
+                        if new_rate != last_rate {
+                            let _ = poll_handle.emit(
+                                ipc::EVENT_SHAPE_RATE_CHANGED,
+                                commands::build_shape_rate_dto(state.inner()),
+                            );
+                            last_rate = new_rate;
+                        }
+                    }
+                });
             }
 
             if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {

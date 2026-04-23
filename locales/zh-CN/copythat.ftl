@@ -738,3 +738,53 @@ resume-aborted-hash-mismatch = The destination's first { $offset } bytes don't m
 settings-auto-resume = Auto-resume interrupted jobs without prompting
 # MT
 settings-auto-resume-hint = Skip the resume prompt at startup and silently re-enqueue every unfinished job. Off by default.
+
+# Phase 21 — bandwidth shaping (GCRA token bucket + schedule + auto-throttle).
+# MT
+settings-tab-network = Network
+# MT
+settings-network-hint = Cap your transfer rate to keep the rest of the network usable. Apply globally, follow a daily schedule, or react automatically to metered Wi-Fi / battery / cellular connections.
+# MT
+settings-network-mode = Bandwidth limit
+# MT
+settings-network-mode-off = Off (no limit)
+# MT
+settings-network-mode-fixed = Fixed value
+# MT
+settings-network-mode-schedule = Use schedule
+# MT
+settings-network-cap-mbps = Cap (MB/s)
+# MT
+settings-network-schedule = Schedule (rclone format)
+# MT
+settings-network-schedule-hint = Whitespace-separated HH:MM,rate boundaries plus optional Mon-Fri,rate day rules. Rates: 512k, 10M, 2G, off, unlimited. Example: 08:00,512k 18:00,10M Sat-Sun,unlimited.
+# MT
+settings-network-auto-header = Auto-throttle
+# MT
+settings-network-auto-metered = On metered Wi-Fi
+# MT
+settings-network-auto-battery = On battery
+# MT
+settings-network-auto-cellular = On cellular
+# MT
+settings-network-auto-unchanged = Don't override
+# MT
+settings-network-auto-pause = Pause transfers
+# MT
+settings-network-auto-cap = Cap to fixed value
+# MT
+shape-badge-paused = paused
+# MT
+shape-badge-tooltip = Bandwidth limit active — click to open Settings → Network
+# MT
+shape-badge-source-schedule = scheduled
+# MT
+shape-badge-source-metered = metered
+# MT
+shape-badge-source-battery = on battery
+# MT
+shape-badge-source-cellular = cellular
+# MT
+shape-badge-source-settings = active
+# MT
+shape-error-schedule-invalid = Schedule format is not valid: { $message }

@@ -175,6 +175,26 @@ pub trait SnapshotHook: Send + Sync + std::fmt::Debug {
     ) -> Pin<Box<dyn Future<Output = Result<SnapshotLease, CopyError>> + Send + 'a>>;
 }
 
+/// Phase 21 — bridge contract for the bandwidth-shaping token bucket.
+///
+/// Implemented by `copythat_shape::CopyThatShapeSink`. Kept in this
+/// crate so [`CopyOptions`] can hold a trait object without a
+/// dependency cycle between `copythat-core` and `copythat-shape`.
+///
+/// The engine calls [`ShapeSink::permit`] after every buffered read,
+/// passing the byte count it just consumed. Implementations are
+/// expected to be best-effort: a sink that swallows scheduler glitches
+/// or a `set_rate` race is preferable to one that panics from the hot
+/// path. The future returned must be `Send` so it can be awaited from
+/// inside the tree's per-file tasks.
+pub trait ShapeSink: Send + Sync + std::fmt::Debug {
+    /// Wait until `bytes` worth of cells are available, then return.
+    /// A sink with no active cap returns an immediately-ready future
+    /// (the engine still pays one `Box::pin` allocation per read; the
+    /// `shape: None` fast path on `CopyOptions` avoids even that).
+    fn permit<'a>(&'a self, bytes: u64) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
+}
+
 /// Behaviour knobs for a single `copy_file` invocation.
 #[derive(Debug, Clone)]
 pub struct CopyOptions {
@@ -271,6 +291,19 @@ pub struct CopyOptions {
     /// Defaults to `0`. Tree wrappers pass through `file_idx` from
     /// the walker.
     pub journal_file_idx: u64,
+    /// Phase 21 — bandwidth-shaping sink.
+    ///
+    /// When `Some`, the engine calls `shape.permit(read_len).await`
+    /// after every buffered read. The sink is responsible for the
+    /// GCRA token bucket, the schedule-driven rate updates, and the
+    /// auto-throttle rules. `None` (the default) preserves the
+    /// pre-Phase-21 behaviour: the copy loop runs at the storage
+    /// device's native ceiling.
+    ///
+    /// Implemented by `copythat_shape::CopyThatShapeSink`. The sink
+    /// is cheap to clone, so a single shared `Shape` can drive
+    /// every concurrent copy in the runner without contention.
+    pub shape: Option<Arc<dyn ShapeSink>>,
 }
 
 /// User-selectable copy strategy.
@@ -354,6 +387,7 @@ impl Default for CopyOptions {
             snapshot_hook: None,
             journal: None,
             journal_file_idx: 0,
+            shape: None,
         }
     }
 }
