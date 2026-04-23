@@ -34,6 +34,11 @@ copythat-snapshot = { path = "../../../crates/copythat-snapshot", version = "1" 
 # attaches a per-job CopyThatJournalSink to every CopyOptions so a
 # crash mid-copy can resume from the last 50 ms checkpoint.
 copythat-journal = { path = "../../../crates/copythat-journal", version = "1" }
+# Phase 21 — bandwidth shaping. AppState owns a shared `Shape` whose
+# rate is updated once a minute by a tokio interval task driven by
+# the user's NetworkSettings.
+copythat-shape = { path = "../../../crates/copythat-shape", version = "1" }
+chrono = { version = "0.4", default-features = false, features = ["clock", "alloc"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon"] }

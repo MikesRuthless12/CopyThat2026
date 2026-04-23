@@ -323,6 +323,24 @@ export async function updaterCheckNow(
   });
 }
 
+// ---------- Phase 21 bandwidth shape ----------
+
+import type { ShapeRateDto } from "./types";
+
+/** Snapshot the bandwidth-shaping rate for the header badge.
+ *  `bytesPerSecond` is `null` when the shape is unlimited. */
+export async function currentShapeRate(): Promise<ShapeRateDto> {
+  return invoke<ShapeRateDto>("current_shape_rate");
+}
+
+/** Validate an rclone-style schedule spec without persisting it.
+ *  Returns the rule count on success, throws with the parser error
+ *  message on failure. The Settings textarea uses this for inline
+ *  feedback as the user types. */
+export async function validateScheduleSpec(spec: string): Promise<number> {
+  return invoke<number>("validate_schedule_spec", { spec });
+}
+
 /** Persist that the user dismissed the named version. Empty string
  *  clears the dismissal. */
 export async function updaterDismissVersion(version: string): Promise<void> {

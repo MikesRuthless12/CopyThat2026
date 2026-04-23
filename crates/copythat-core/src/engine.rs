@@ -300,6 +300,16 @@ pub async fn copy_file(
         reader.consume(n);
         copied += n as u64;
 
+        // Phase 21 — bandwidth shaping. Awaiting after the consume +
+        // copied increment means a SIGKILL between the write and the
+        // permit can leave the journal slightly behind durable bytes
+        // (which is the safer direction — the next checkpoint
+        // catches up). The sink itself decides how long to block;
+        // an unlimited shape returns instantly.
+        if let Some(shape) = opts.shape.as_ref() {
+            shape.permit(n as u64).await;
+        }
+
         let now = Instant::now();
         if copied.saturating_sub(last_emit_bytes) >= PROGRESS_MIN_BYTES
             && (!first_progress_emitted

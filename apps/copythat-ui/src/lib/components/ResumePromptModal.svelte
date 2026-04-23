@@ -20,8 +20,8 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
 
-  import type { PendingResumeDto } from "$lib/types";
-  import { t } from "$lib/i18n";
+  import type { PendingResumeDto } from "../types";
+  import { t } from "../i18n";
 
   let { rows, autoResume = false, onClose }: {
     rows: PendingResumeDto[];

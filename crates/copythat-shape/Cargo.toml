@@ -1,0 +1,69 @@
+[package]
+name = "copythat-shape"
+description = "Bandwidth shaping (GCRA token bucket + time-of-day schedule + auto-throttle) for Copy That v1.0.0."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# 256 MiB shaping stress test. The smoke test reads `COPYTHAT_PHASE21_FULL`
+# at runtime rather than cfg'ing the test in/out, but the feature gate
+# gives a future bench something to branch on.
+slow-tests = []
+
+[dependencies]
+# Phase 21 — engine `ShapeSink` trait + CopyError live in core.
+# Direction matches `copythat-journal` and `copythat-snapshot` so core
+# stays free of any runtime-adjacent concern (scheduling, clocks,
+# OS-specific metered/battery probes).
+copythat-core = { path = "../copythat-core", version = "1" }
+# GCRA rate limiter. MIT. Accurate-to-a-quantum token bucket; the
+# standard Rust crate for "rate-limit this many ops per unit time".
+governor = "0.10"
+# Local wall-clock + weekday-of-year for Schedule::current_limit.
+# MIT / Apache-2.0. Already in the tree transitively (time-zone
+# helpers pulled in by windows-link via iana-time-zone); carrying an
+# explicit dep here makes the chrono-facing surface visible in this
+# crate's Cargo.toml rather than hidden in the lockfile.
+chrono = { version = "0.4", default-features = false, features = ["clock", "alloc"] }
+# Lock-free Arc swap so `Shape::set_rate` can hot-update the live
+# limiter without stalling the copy loop on a contended mutex.
+# Apache-2.0 / MIT.
+arc-swap = "1"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+tokio = { version = "1", features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+
+[dev-dependencies]
+blake3 = "1"
+rand = "0.9"
+tempfile = "3"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "test-util",
+    "time",
+] }
+
+# Phase 21 smoke test lives at the workspace root.
+[[test]]
+name = "phase_21_shape"
+path = "../../tests/smoke/phase_21_shape.rs"

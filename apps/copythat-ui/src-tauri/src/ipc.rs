@@ -68,6 +68,11 @@ pub const EVENT_CLIPBOARD_FILES_DETECTED: &str = "clipboard-files-detected";
 // the active row until the file completes.
 pub const EVENT_SNAPSHOT_CREATED: &str = "snapshot-created";
 
+// Phase 21 — shape rate changed (settings update OR schedule poll
+// minute tick). The header badge subscribes so the "🔻 30 MB/s · scheduled"
+// pill re-renders without polling.
+pub const EVENT_SHAPE_RATE_CHANGED: &str = "shape-rate-changed";
+
 // Phase 19a — disk-backed scan lifecycle bus.
 pub const EVENT_SCAN_STARTED: &str = "scan-started";
 pub const EVENT_SCAN_PROGRESS: &str = "scan-progress";
@@ -515,6 +520,8 @@ pub struct SettingsDto {
     pub updater: UpdaterDto,
     /// Phase 19a — scan database configuration.
     pub scan: ScanDto,
+    /// Phase 21 — bandwidth shaping (global cap + schedule + auto-throttle).
+    pub network: NetworkDto,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -644,6 +651,54 @@ pub struct FiltersDto {
     pub skip_hidden: bool,
     pub skip_system: bool,
     pub skip_readonly: bool,
+}
+
+/// Phase 21 — wire form of `copythat_settings::NetworkSettings`.
+///
+/// `mode` is the discriminator string (`"off" | "fixed" | "schedule"`).
+/// `fixedBytesPerSecond` only matters when `mode == "fixed"`;
+/// `scheduleSpec` only matters when `mode == "schedule"`. Auto rules
+/// are always honoured if the OS reports the matching state — the
+/// per-OS bridges land in Phase 31, so today they're effectively
+/// no-ops.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkDto {
+    pub mode: String,
+    pub fixed_bytes_per_second: u64,
+    pub schedule_spec: String,
+    pub auto_on_metered: AutoThrottleRuleDto,
+    pub auto_on_battery: AutoThrottleRuleDto,
+    pub auto_on_cellular: AutoThrottleRuleDto,
+}
+
+/// Phase 21 — wire form of `copythat_settings::AutoThrottleRule`.
+/// Tagged so the `Cap` variant's value round-trips via JSON.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind", content = "value")]
+pub enum AutoThrottleRuleDto {
+    /// No override.
+    Unchanged,
+    /// Block the copy entirely (Shape's rate goes to 0).
+    Pause,
+    /// Cap to N bytes/s.
+    Cap(u64),
+}
+
+/// Phase 21 — payload for `shape-rate-changed`. Lets the header
+/// badge re-render without polling. `bytesPerSecond = 0` for the
+/// "Off / paused" rendering, `null` when the shape transitioned
+/// back to unlimited.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShapeRateDto {
+    /// `None` (JSON `null`) = unlimited, `Some(0)` = paused,
+    /// `Some(n)` = cap.
+    pub bytes_per_second: Option<u64>,
+    /// `"settings" | "schedule" | "auto-metered" | "auto-battery"
+    /// | "auto-cellular" | "off"` — short label the header badge
+    /// renders alongside the rate.
+    pub source: &'static str,
 }
 
 /// Phase 19a — wire form of `copythat_settings::ScanSettings`.
@@ -857,7 +912,42 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 auto_delete_after_days: s.scan.auto_delete_after_days,
                 max_scans_to_keep: s.scan.max_scans_to_keep,
             },
+            network: NetworkDto {
+                mode: s.network.mode.as_str().to_string(),
+                fixed_bytes_per_second: s.network.fixed_bytes_per_second,
+                schedule_spec: s.network.schedule_spec.clone(),
+                auto_on_metered: auto_throttle_to_dto(s.network.auto_on_metered),
+                auto_on_battery: auto_throttle_to_dto(s.network.auto_on_battery),
+                auto_on_cellular: auto_throttle_to_dto(s.network.auto_on_cellular),
+            },
         }
+    }
+}
+
+fn auto_throttle_to_dto(r: copythat_settings::AutoThrottleRule) -> AutoThrottleRuleDto {
+    use copythat_settings::AutoThrottleRule;
+    match r {
+        AutoThrottleRule::Unchanged => AutoThrottleRuleDto::Unchanged,
+        AutoThrottleRule::Pause => AutoThrottleRuleDto::Pause,
+        AutoThrottleRule::Cap { bytes_per_second } => AutoThrottleRuleDto::Cap(bytes_per_second),
+    }
+}
+
+fn auto_throttle_from_dto(r: AutoThrottleRuleDto) -> copythat_settings::AutoThrottleRule {
+    use copythat_settings::AutoThrottleRule;
+    match r {
+        AutoThrottleRuleDto::Unchanged => AutoThrottleRule::Unchanged,
+        AutoThrottleRuleDto::Pause => AutoThrottleRule::Pause,
+        AutoThrottleRuleDto::Cap(bytes_per_second) => AutoThrottleRule::Cap { bytes_per_second },
+    }
+}
+
+fn parse_bandwidth_mode(s: &str) -> copythat_settings::BandwidthMode {
+    use copythat_settings::BandwidthMode;
+    match s {
+        "fixed" => BandwidthMode::Fixed,
+        "schedule" => BandwidthMode::Schedule,
+        _ => BandwidthMode::Off,
     }
 }
 
@@ -964,6 +1054,15 @@ impl SettingsDto {
             database_path: self.scan.database_path.map(std::path::PathBuf::from),
             auto_delete_after_days: self.scan.auto_delete_after_days,
             max_scans_to_keep: self.scan.max_scans_to_keep,
+        };
+
+        s.network = copythat_settings::NetworkSettings {
+            mode: parse_bandwidth_mode(&self.network.mode),
+            fixed_bytes_per_second: self.network.fixed_bytes_per_second,
+            schedule_spec: self.network.schedule_spec,
+            auto_on_metered: auto_throttle_from_dto(self.network.auto_on_metered),
+            auto_on_battery: auto_throttle_from_dto(self.network.auto_on_battery),
+            auto_on_cellular: auto_throttle_from_dto(self.network.auto_on_cellular),
         };
 
         s

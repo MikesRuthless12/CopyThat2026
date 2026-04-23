@@ -12,6 +12,7 @@ use copythat_core::Queue;
 use copythat_history::History;
 use copythat_journal::{Journal, UnfinishedJob};
 use copythat_settings::{ProfileStore, Settings};
+use copythat_shape::Shape;
 
 use crate::clipboard_watcher::WatcherHandle;
 use crate::collisions::CollisionRegistry;
@@ -77,6 +78,12 @@ pub struct AppState {
     /// Mutex<Vec<...>> so resolution can drain without cloning the
     /// whole AppState.
     pub startup_unfinished: Arc<Mutex<Vec<UnfinishedJob>>>,
+    /// Phase 21 — shared bandwidth-shaping bucket. Always present
+    /// (rate `None` = unlimited); the runner attaches a sink
+    /// pointing at this Shape to every queued job's CopyOptions.
+    /// Hot-updated via `Shape::set_rate` from the schedule poller
+    /// task spawned in `lib.rs::run`.
+    pub shape: Arc<Shape>,
 }
 
 impl AppState {
@@ -115,6 +122,10 @@ impl AppState {
             scans: ScanRegistry::new(),
             journal: None,
             startup_unfinished: Arc::new(Mutex::new(Vec::new())),
+            // Default-unlimited Shape; the lib.rs startup hook calls
+            // `apply_network_settings_to_shape` to honour the persisted
+            // NetworkSettings on the first tick.
+            shape: Arc::new(Shape::new(None)),
         }
     }
 
@@ -153,4 +164,83 @@ impl Default for AppState {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// ---------------------------------------------------------------------
+// Phase 21 — translate NetworkSettings -> the live Shape rate.
+// ---------------------------------------------------------------------
+
+/// Compute the effective rate the [`Shape`] should be set to right
+/// now, given the user's persisted NetworkSettings + the live
+/// network/power state from `copythat-shape::auto`.
+///
+/// Auto-throttle rules win over the configured mode (Off / Fixed /
+/// Schedule) because their entire purpose is "override when the
+/// matching condition holds". Within the auto rules, the order is
+/// `cellular > metered > battery` — most restrictive first, so a
+/// laptop on cellular battery doesn't accidentally honour the
+/// looser metered cap.
+///
+/// Returns `None` for unlimited, `Some(ByteRate(0))` for paused,
+/// `Some(ByteRate(n))` for cap.
+pub fn effective_shape_rate(
+    settings: &copythat_settings::NetworkSettings,
+) -> Option<copythat_shape::ByteRate> {
+    use copythat_settings::{AutoThrottleRule, BandwidthMode};
+    use copythat_shape::{ByteRate, NetworkClass, PowerState};
+
+    // Auto rules — Phase 21 stubs always return Unmetered /
+    // PluggedIn so these branches don't fire in practice. Wire is
+    // ready for the per-OS bridges that Phase 31 lands.
+    let net = copythat_shape::current_network_class();
+    let power = copythat_shape::current_power_state();
+
+    let candidate_overrides = [
+        (net == NetworkClass::Cellular, settings.auto_on_cellular),
+        (net == NetworkClass::Metered, settings.auto_on_metered),
+        (power == PowerState::OnBattery, settings.auto_on_battery),
+    ];
+    for (active, rule) in candidate_overrides {
+        if !active {
+            continue;
+        }
+        match rule {
+            AutoThrottleRule::Unchanged => {}
+            AutoThrottleRule::Pause => return Some(ByteRate::new(0)),
+            AutoThrottleRule::Cap { bytes_per_second } => {
+                return Some(ByteRate::new(bytes_per_second));
+            }
+        }
+    }
+
+    // Fall through to the configured mode.
+    match settings.mode {
+        BandwidthMode::Off => None,
+        BandwidthMode::Fixed => {
+            if settings.fixed_bytes_per_second == 0 {
+                None
+            } else {
+                Some(ByteRate::new(settings.fixed_bytes_per_second))
+            }
+        }
+        BandwidthMode::Schedule => {
+            // Empty / unparseable schedules degrade to "no rule
+            // applies" which is unlimited. Surfacing a parse error
+            // is the Settings UI's job; the runner just runs.
+            let parsed = copythat_shape::Schedule::parse(&settings.schedule_spec).ok();
+            parsed
+                .as_ref()
+                .and_then(|s| s.current_limit(chrono::Local::now()))
+        }
+    }
+}
+
+/// Recompute + apply the effective rate to the AppState's shared
+/// Shape. Called once at startup, on every settings update, and on
+/// the schedule poller's minute tick.
+pub fn apply_network_settings_to_shape(
+    shape: &Shape,
+    settings: &copythat_settings::NetworkSettings,
+) {
+    shape.set_rate(effective_shape_rate(settings));
 }

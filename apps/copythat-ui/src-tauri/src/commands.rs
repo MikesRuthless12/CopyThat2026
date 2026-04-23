@@ -931,6 +931,15 @@ pub fn update_settings(
             }
         }
     }
+    // Phase 21 — re-apply the network settings to the live Shape and
+    // emit `shape-rate-changed` so the header badge re-renders. The
+    // schedule poller in `lib.rs` covers the minute-tick path; this
+    // covers the "user dragged a slider in Settings" path.
+    crate::state::apply_network_settings_to_shape(&state.shape, &next.network);
+    let _ = app.emit(
+        crate::ipc::EVENT_SHAPE_RATE_CHANGED,
+        build_shape_rate_dto(state.inner()),
+    );
     Ok((&next).into())
 }
 
@@ -1716,6 +1725,70 @@ pub fn discard_resume(row_id: u64, state: State<'_, AppState>) -> Result<(), Str
         .expect("lock poisoned")
         .retain(|u| u.row_id.as_u64() != row_id);
     Ok(())
+}
+
+// ---------------------------------------------------------------------
+// Phase 21 — bandwidth shape introspection
+// ---------------------------------------------------------------------
+
+/// Snapshot the active bandwidth-shaping rate for the header badge.
+///
+/// Returns the live `Shape::current_rate` plus a short `source`
+/// label so the UI can render "🔻 30 MB/s · scheduled" vs.
+/// "🔻 paused · battery". The source is derived from the persisted
+/// NetworkSettings, not the OS probes (Phase 21 stubs them); when the
+/// per-OS bridges land in Phase 31 the runner-side schedule poller
+/// can stamp the live source onto the EVENT_SHAPE_RATE_CHANGED
+/// payload directly.
+#[tauri::command]
+pub fn current_shape_rate(state: State<'_, AppState>) -> crate::ipc::ShapeRateDto {
+    build_shape_rate_dto(state.inner())
+}
+
+/// Helper used by both the IPC command and the post-`update_settings`
+/// emit path. Takes `&AppState` so it doesn't need the `State<'_>`
+/// wrapper from Tauri's command surface.
+pub(crate) fn build_shape_rate_dto(state: &AppState) -> crate::ipc::ShapeRateDto {
+    use copythat_settings::{AutoThrottleRule, BandwidthMode};
+    let snap = state.settings_snapshot();
+    let live_rate = state.shape.current_rate().map(|r| r.bytes_per_second());
+    let source: &'static str = if matches!(
+        snap.network.auto_on_cellular,
+        AutoThrottleRule::Cap { .. } | AutoThrottleRule::Pause
+    ) {
+        "auto-cellular"
+    } else if matches!(
+        snap.network.auto_on_metered,
+        AutoThrottleRule::Cap { .. } | AutoThrottleRule::Pause
+    ) {
+        "auto-metered"
+    } else if matches!(
+        snap.network.auto_on_battery,
+        AutoThrottleRule::Cap { .. } | AutoThrottleRule::Pause
+    ) {
+        "auto-battery"
+    } else {
+        match snap.network.mode {
+            BandwidthMode::Off => "off",
+            BandwidthMode::Fixed => "settings",
+            BandwidthMode::Schedule => "schedule",
+        }
+    };
+    crate::ipc::ShapeRateDto {
+        bytes_per_second: live_rate,
+        source,
+    }
+}
+
+/// Validate a schedule string from the Settings UI without saving
+/// it. Returns the parsed rule count on success, an error message
+/// on failure. Lets the textarea show inline feedback as the user
+/// types.
+#[tauri::command]
+pub fn validate_schedule_spec(spec: String) -> Result<usize, String> {
+    copythat_shape::Schedule::parse(&spec)
+        .map(|s| s.rules().len())
+        .map_err(|e| e.to_string())
 }
 
 /// "Discard all" header button. Clears every unfinished journal row
