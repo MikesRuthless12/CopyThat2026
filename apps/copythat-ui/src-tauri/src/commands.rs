@@ -1791,6 +1791,160 @@ pub fn validate_schedule_spec(spec: String) -> Result<usize, String> {
         .map_err(|e| e.to_string())
 }
 
+// ---------------------------------------------------------------------
+// Phase 22 — aggregate conflict dialog v2
+// ---------------------------------------------------------------------
+
+/// Render a thumbnail for `path` — a 240×240-ish PNG data URL for
+/// images, a file-kind icon descriptor for everything else. Result
+/// is cached under `<cache-dir>/thumb-cache/` keyed on
+/// `(path, mtime, size, max_dim)` so repeat-opens of the same
+/// conflict don't re-decode.
+#[tauri::command]
+pub async fn thumbnail_for(
+    path: String,
+    max_dim: Option<u32>,
+) -> Result<crate::ipc::ThumbnailDto, String> {
+    let p = PathBuf::from(path);
+    let dim = max_dim.unwrap_or(crate::thumbnail::DEFAULT_MAX_DIM);
+    tokio::task::spawn_blocking(move || crate::thumbnail::thumbnail_for(&p, dim))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Append one rule to a running job's live conflict-resolution
+/// set. Returns the current rule count after the append. The UI
+/// calls this from the aggregate dialog's bulk-action bar (`Apply
+/// to all of this extension`, `Apply to glob…`, `Apply to all
+/// remaining`); the runner consults the list before raising any
+/// further collision prompts for this job.
+#[tauri::command]
+pub fn add_conflict_rule(
+    job_id: u64,
+    pattern: String,
+    resolution: String,
+    state: State<'_, AppState>,
+) -> Result<usize, String> {
+    if pattern.trim().is_empty() {
+        return Err("err-conflict-rule-empty-pattern".to_string());
+    }
+    // Compile-check the glob up-front so a malformed pattern can't
+    // wedge the running job. The match helper on `ConflictProfile`
+    // also refuses malformed patterns silently, but we'd rather
+    // surface the error at insertion time.
+    globset::Glob::new(&pattern).map_err(|e| format!("err-conflict-rule-invalid-glob: {e}"))?;
+    let rule = copythat_settings::ConflictRule {
+        pattern,
+        resolution: copythat_settings::ConflictRuleResolution::from_wire(&resolution),
+    };
+    state.collisions.append_rule(job_id, rule);
+    Ok(state
+        .collisions
+        .rules_for(job_id)
+        .map(|p| p.rules.len())
+        .unwrap_or(0))
+}
+
+/// Snapshot of a running job's live rule list. The profile-save
+/// dialog renders this so the user sees what's about to be
+/// persisted before clicking Save. Returns an empty
+/// `ConflictProfile` when the job has no rules (not an error).
+#[tauri::command]
+pub fn current_conflict_rules(
+    job_id: u64,
+    state: State<'_, AppState>,
+) -> copythat_settings::ConflictProfile {
+    state
+        .collisions
+        .rules_for(job_id)
+        .unwrap_or_default()
+}
+
+/// List saved conflict-profile names (alphabetical). Reads from the
+/// live settings — same source of truth the runner consults at job
+/// start.
+#[tauri::command]
+pub fn list_conflict_profiles(state: State<'_, AppState>) -> Vec<String> {
+    let live = state.settings_snapshot();
+    live.conflict_profiles.profiles.keys().cloned().collect()
+}
+
+/// Save `profile` under `name`. Overwrites an existing entry — the
+/// UI's save dialog surfaces a "replace existing?" confirmation
+/// up-front, so this handler is the force-path. Returns the
+/// updated list of profile names.
+#[tauri::command]
+pub fn save_conflict_profile(
+    name: String,
+    profile: copythat_settings::ConflictProfile,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("err-conflict-profile-empty-name".to_string());
+    }
+    let path = state.settings_path.as_ref().clone();
+    let mut live = state
+        .settings
+        .write()
+        .map_err(|_| "settings-lock-poisoned".to_string())?;
+    live.conflict_profiles
+        .profiles
+        .insert(trimmed.to_string(), profile);
+    if !path.as_os_str().is_empty() {
+        live.save_to(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(live.conflict_profiles.profiles.keys().cloned().collect())
+}
+
+/// Delete a saved conflict profile. Clears the `active` pointer if
+/// it happened to name the profile being deleted.
+#[tauri::command]
+pub fn delete_conflict_profile(
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let path = state.settings_path.as_ref().clone();
+    let mut live = state
+        .settings
+        .write()
+        .map_err(|_| "settings-lock-poisoned".to_string())?;
+    live.conflict_profiles.profiles.remove(&name);
+    if live.conflict_profiles.active.as_deref() == Some(&name) {
+        live.conflict_profiles.active = None;
+    }
+    if !path.as_os_str().is_empty() {
+        live.save_to(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(live.conflict_profiles.profiles.keys().cloned().collect())
+}
+
+/// Set the currently-active profile. Pass an empty string to clear
+/// the active selection (revert to "always prompt").
+#[tauri::command]
+pub fn set_active_conflict_profile(
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    let path = state.settings_path.as_ref().clone();
+    let mut live = state
+        .settings
+        .write()
+        .map_err(|_| "settings-lock-poisoned".to_string())?;
+    let active = if name.trim().is_empty() {
+        None
+    } else if live.conflict_profiles.profiles.contains_key(&name) {
+        Some(name.clone())
+    } else {
+        return Err("err-conflict-profile-not-found".to_string());
+    };
+    live.conflict_profiles.active = active.clone();
+    if !path.as_os_str().is_empty() {
+        live.save_to(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(active)
+}
+
 /// "Discard all" header button. Clears every unfinished journal row
 /// + the in-memory list. Best-effort: a per-row delete failure is
 /// surfaced via the returned `Vec<String>` of error messages so the

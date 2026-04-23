@@ -52,6 +52,16 @@ pub fn enqueue_jobs(
         let dst = destination_for(&src, dst_root);
 
         let (id, ctrl) = state.queue.add(kind, src.clone(), Some(dst.clone()));
+        // Phase 22 — seed per-job collision rules from the user's
+        // currently-active ConflictProfile. Later appends (via the
+        // `add_conflict_rule` IPC) extend this list; the runner
+        // consults it before raising any collision prompt.
+        {
+            let live = state.settings_snapshot();
+            if let Some(profile) = live.conflict_profiles.active_profile() {
+                state.collisions.seed_rules(id.as_u64(), profile.clone());
+            }
+        }
         let snapshot = state
             .queue
             .get(id)

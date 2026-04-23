@@ -1,11 +1,16 @@
 <!--
-  Phase 8 — collision prompt modal.
+  Phase 8 — collision prompt modal (SUPERSEDED by Phase 22's
+  `ConflictBatchModal.svelte`).
 
-  Rendered when `$collisionQueue` is non-empty. Shows the source and
-  destination previews (name / size / mtime) side-by-side; the user
-  picks Overwrite / Skip / Keep both / Rename. "Apply to all" caches
-  the resolution per job_id in the Rust registry so a tree with many
-  collisions doesn't nag every time.
+  Left in place as a working fallback: reading `$collisionQueue` is
+  harmless while the new aggregate dialog is the one mounted in
+  App.svelte. A later phase can delete this file once the aggregate
+  dialog has shipped in a release and no known flow still imports
+  it. Rendered when `$collisionQueue` is non-empty. Shows the source
+  and destination previews (name / size / mtime) side-by-side; the
+  user picks Overwrite / Skip / Keep both / Rename. "Apply to all"
+  caches the resolution per job_id in the Rust registry so a tree
+  with many collisions doesn't nag every time.
 -->
 <script lang="ts">
   import Icon from "../icons/Icon.svelte";

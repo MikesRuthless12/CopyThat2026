@@ -88,6 +88,38 @@ fn canned_args(key: &str) -> HashMap<&'static str, String> {
             m.insert("files", "1,248,903".to_string());
             m.insert("bytes", "47.3 GiB".to_string());
         }
+        "conflict-batch-title" => {
+            // Phase 22 — aggregate conflict dialog header.
+            // Mirrors `ConflictBatchModal.svelte`'s invocation.
+            m.insert("count", "50".to_string());
+            m.insert("jobname", "2025-photos".to_string());
+        }
+        "conflict-batch-matched-rule" => {
+            // Phase 22 — rule-resolution hint under each
+            // auto-resolved row.
+            m.insert("rule", "*.docx".to_string());
+            m.insert("action", "overwrite".to_string());
+        }
+        // Phase 19b / 20 / 21 — pre-existing placeables that
+        // had drifted out of sync with this table. Backfilled so
+        // the substitution round-trip stays green; keep in sync
+        // when adding placeables in future phases.
+        "resume-aborted-hash-mismatch" => {
+            m.insert("offset", "1048576".to_string());
+        }
+        "resume-prompt-body" => {
+            m.insert("count", "3".to_string());
+        }
+        "shape-error-schedule-invalid" => {
+            m.insert("message", "unexpected token 'xyz'".to_string());
+        }
+        "snapshot-prompt-body" => {
+            m.insert("path", "C:/work/project.dat".to_string());
+        }
+        "snapshot-source-active" => {
+            m.insert("kind", "vss".to_string());
+            m.insert("volume", "C:".to_string());
+        }
         _ => {}
     }
     m
