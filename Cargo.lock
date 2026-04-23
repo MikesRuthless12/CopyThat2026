@@ -821,6 +821,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "copythat-sync"
+version = "1.0.0"
+dependencies = [
+ "blake3",
+ "chrono",
+ "copythat-core",
+ "redb",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
 name = "copythat-ui"
 version = "1.0.0"
 dependencies = [
@@ -836,6 +853,7 @@ dependencies = [
  "copythat-settings",
  "copythat-shape",
  "copythat-snapshot",
+ "copythat-sync",
  "directories",
  "filetime",
  "globset",
@@ -854,6 +872,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "uuid",
  "walkdir",
  "windows 0.61.3",
 ]

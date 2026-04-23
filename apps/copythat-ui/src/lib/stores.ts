@@ -109,6 +109,8 @@ const totalsDrawerOpenStore = writable<boolean>(false);
 // tab with Language only — Phase 12 extends to Transfer, Shell,
 // Secure-delete, Advanced tabs.
 const settingsOpenStore = writable<boolean>(false);
+// Phase 25: Sync drawer open flag.
+const syncDrawerOpenStore = writable<boolean>(false);
 // How error prompts render — mirrors
 // `general.error_display_mode` from the settings crate. Seeded by
 // `initStores` via `getSettings()`; re-written whenever the user
@@ -260,6 +262,17 @@ export function openSettings(): void {
 }
 export function closeSettings(): void {
   settingsOpenStore.set(false);
+}
+
+// Phase 25 — Sync drawer.
+export const syncDrawerOpen: Readable<boolean> = {
+  subscribe: syncDrawerOpenStore.subscribe,
+};
+export function openSyncDrawer(): void {
+  syncDrawerOpenStore.set(true);
+}
+export function closeSyncDrawer(): void {
+  syncDrawerOpenStore.set(false);
 }
 
 // Error display mode — readable + write-through setter. SettingsModal

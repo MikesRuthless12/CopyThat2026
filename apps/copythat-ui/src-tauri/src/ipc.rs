@@ -99,6 +99,18 @@ pub const EVENT_SCAN_COMPLETED: &str = "scan-completed";
 pub const EVENT_SCAN_CANCELLED: &str = "scan-cancelled";
 pub const EVENT_SCAN_FAILED: &str = "scan-failed";
 
+// ---------------------------------------------------------------------
+// Phase 25 — two-way sync lifecycle events.
+// ---------------------------------------------------------------------
+pub const EVENT_SYNC_STARTED: &str = "sync-started";
+pub const EVENT_SYNC_WALK_STARTED: &str = "sync-walk-started";
+pub const EVENT_SYNC_WALK_COMPLETED: &str = "sync-walk-completed";
+pub const EVENT_SYNC_ACTION: &str = "sync-action";
+pub const EVENT_SYNC_CONFLICT: &str = "sync-conflict";
+pub const EVENT_SYNC_COMPLETED: &str = "sync-completed";
+pub const EVENT_SYNC_CANCELLED: &str = "sync-cancelled";
+pub const EVENT_SYNC_FAILED: &str = "sync-failed";
+
 /// Single entry in the live activity list.
 ///
 /// `phase`:
@@ -943,6 +955,106 @@ pub struct ActiveScanDto {
     pub created_at_ms: i64,
     /// `"Running" | "Paused" | "Complete" | "Cancelled" | "Failed"`.
     pub status: String,
+}
+
+// ---------------------------------------------------------------------
+// Phase 25 — two-way sync DTOs.
+// ---------------------------------------------------------------------
+
+/// One configured sync pair, suitable for rendering a row in the
+/// Sync tab's pair list.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncPairDto {
+    pub id: String,
+    pub label: String,
+    pub left: String,
+    pub right: String,
+    /// `"two-way" | "mirror-left-to-right" | "mirror-right-to-left" |
+    /// "contribute-left-to-right"`.
+    pub mode: String,
+    /// ISO-8601 UTC timestamp of the last run. Empty when never run.
+    pub last_run_at: String,
+    /// Short summary line — `"+3 / −1 / !2"`. Empty when never run.
+    pub last_run_summary: String,
+    /// `true` while a sync is actively running for this pair.
+    pub running: bool,
+}
+
+/// Fired once per `start_sync` call just before the runner spawns
+/// the engine task. Gives the UI enough info to instantiate a
+/// running-state row without round-tripping for the pair list.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncStartedDto {
+    pub pair_id: String,
+    pub label: String,
+    pub left: String,
+    pub right: String,
+    pub mode: String,
+}
+
+/// Fired at the boundary of each walk pass (one for each side).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncWalkDto {
+    pub pair_id: String,
+    /// `"left-to-right"` = walking left; `"right-to-left"` = walking right.
+    pub side: &'static str,
+    /// Populated only on `sync-walk-completed`; `None` on started.
+    pub files_total: Option<u64>,
+}
+
+/// Fired after every action the engine finishes executing
+/// (`Noop` / `Copy*` / `Delete*` / `KeepConflict`).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncActionDto {
+    pub pair_id: String,
+    pub relpath: String,
+    /// `"noop" | "copy-left-to-right" | "copy-right-to-left" |
+    /// "delete-left-to-right" | "delete-right-to-left" | "keep-conflict"`.
+    pub kind: String,
+}
+
+/// Fired once per conflict preserved during the run.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncConflictDto {
+    pub pair_id: String,
+    pub relpath: String,
+    /// `"concurrent-write" | "delete-edit" | "add-add" | "corrupt-equal"`.
+    pub kind: String,
+    /// `"left-to-right" | "right-to-left"`.
+    pub winner_side: String,
+    /// `"left-to-right" | "right-to-left"`.
+    pub loser_side: String,
+    /// Absolute path of the `name.sync-conflict-*-<host>.ext` file
+    /// the engine wrote on the losing side. The UI surfaces this so
+    /// the user can click through to inspect and resolve.
+    pub loser_preservation_path: String,
+}
+
+/// Final report after a sync run ends normally.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncCompletedDto {
+    pub pair_id: String,
+    pub applied_left: u64,
+    pub applied_right: u64,
+    pub deleted_left: u64,
+    pub deleted_right: u64,
+    pub conflicts: u64,
+    pub cancelled: bool,
+    pub duration_ms: u64,
+}
+
+/// Payload for both `sync-cancelled` and `sync-failed`.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncFailedDto {
+    pub pair_id: String,
+    pub message: String,
 }
 
 // --- Settings ⇄ DTO conversions ---------------------------------------
