@@ -520,3 +520,31 @@ shape-badge-source-battery = on battery
 shape-badge-source-cellular = cellular
 shape-badge-source-settings = active
 shape-error-schedule-invalid = Schedule format is not valid: { $message }
+
+# Phase 22 — aggregate conflict dialog v2 (thumbnails, per-pattern
+# rules, and reusable conflict profiles). Every key below is user-
+# visible text in the `ConflictBatchModal.svelte` component.
+conflict-batch-title = { $count } file conflicts in { $jobname }
+conflict-batch-state-pending = Pending
+conflict-batch-state-resolved = Resolved
+conflict-batch-action-overwrite = Overwrite
+conflict-batch-action-skip = Skip
+conflict-batch-action-keep-both = Keep both
+conflict-batch-action-newer-wins = Newer wins
+conflict-batch-action-larger-wins = Larger wins
+conflict-batch-bulk-apply-selected = Apply to selected
+conflict-batch-bulk-apply-extension = Apply to all of this extension
+conflict-batch-bulk-apply-glob = Apply to matching glob…
+conflict-batch-bulk-apply-remaining = Apply to all remaining
+conflict-batch-bulk-glob-placeholder = e.g. **/*.tmp
+conflict-batch-save-profile = Save these rules as profile…
+conflict-batch-profile-placeholder = Profile name
+conflict-batch-matched-rule = via rule '{ $rule }' → { $action }
+conflict-batch-empty = All conflicts resolved
+conflict-batch-source-vs-destination = Source vs. destination
+conflict-batch-source-label = Source
+conflict-batch-destination-label = Destination
+conflict-batch-size-label = Size
+conflict-batch-modified-label = Modified
+conflict-batch-close = Close
+conflict-batch-profile-saved = Conflict profile saved

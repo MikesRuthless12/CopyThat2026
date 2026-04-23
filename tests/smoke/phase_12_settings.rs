@@ -89,6 +89,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
         updater: copythat_settings::UpdaterSettings::default(),
         scan: copythat_settings::ScanSettings::default(),
         network: copythat_settings::NetworkSettings::default(),
+        conflict_profiles: copythat_settings::ConflictProfileSettings::default(),
     };
 
     before.save_to(&path).expect("save_to");
@@ -145,6 +146,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
         updater: copythat_settings::UpdaterSettings::default(),
         scan: copythat_settings::ScanSettings::default(),
         network: copythat_settings::NetworkSettings::default(),
+        conflict_profiles: copythat_settings::ConflictProfileSettings::default(),
     };
     assert_eq!(after, expected);
 }

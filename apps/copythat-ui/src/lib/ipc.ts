@@ -346,3 +346,66 @@ export async function validateScheduleSpec(spec: string): Promise<number> {
 export async function updaterDismissVersion(version: string): Promise<void> {
   await invoke("updater_dismiss_version", { version });
 }
+
+// ---------- Phase 22 aggregate conflict dialog ----------
+
+import type {
+  ConflictProfileDto,
+  ConflictRuleResolution,
+  ThumbnailDto,
+} from "./types";
+
+/** Fetch a thumbnail for `path`. Images return a `data:image/png;base64,…`
+ *  URL the caller drops into `<img>`; other types return a file-kind
+ *  icon descriptor. Result is cached on disk by `(path, mtime, size,
+ *  maxDim)`. */
+export async function thumbnailFor(
+  path: string,
+  maxDim: number = 240,
+): Promise<ThumbnailDto> {
+  return invoke<ThumbnailDto>("thumbnail_for", { path, maxDim });
+}
+
+/** Append one pattern → resolution rule to a running job's live
+ *  rule set. Subsequent collisions matching `pattern` auto-resolve
+ *  without surfacing another prompt. Returns the new rule count. */
+export async function addConflictRule(
+  jobId: number,
+  pattern: string,
+  resolution: ConflictRuleResolution,
+): Promise<number> {
+  return invoke<number>("add_conflict_rule", { jobId, pattern, resolution });
+}
+
+/** Snapshot the live rule list for a running job — populates the
+ *  "Save these rules as profile…" dialog. */
+export async function currentConflictRules(
+  jobId: number,
+): Promise<ConflictProfileDto> {
+  return invoke<ConflictProfileDto>("current_conflict_rules", { jobId });
+}
+
+/** List saved conflict-profile names (alphabetical). */
+export async function listConflictProfiles(): Promise<string[]> {
+  return invoke<string[]>("list_conflict_profiles");
+}
+
+/** Save `profile` under `name`, replacing any existing entry. */
+export async function saveConflictProfile(
+  name: string,
+  profile: ConflictProfileDto,
+): Promise<string[]> {
+  return invoke<string[]>("save_conflict_profile", { name, profile });
+}
+
+/** Delete a saved conflict profile. */
+export async function deleteConflictProfile(name: string): Promise<string[]> {
+  return invoke<string[]>("delete_conflict_profile", { name });
+}
+
+/** Activate a saved profile (empty string clears). */
+export async function setActiveConflictProfile(
+  name: string,
+): Promise<string | null> {
+  return invoke<string | null>("set_active_conflict_profile", { name });
+}

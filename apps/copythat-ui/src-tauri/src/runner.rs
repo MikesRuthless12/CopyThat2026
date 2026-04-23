@@ -362,6 +362,11 @@ pub(crate) async fn run_job(job: RunJob) {
         }
     }
 
+    // Phase 22 — drop per-job collision state (apply-all cache +
+    // accumulated rules) so a later job with the same id (not
+    // possible today but defensive) doesn't inherit stale choices.
+    state.collisions.clear_job(id.as_u64());
+
     // Phase 9 — stamp the terminal status + final totals into the
     // history row.
     if let Some(row) = history_row {
@@ -768,6 +773,45 @@ async fn forward_events(
                     coll.resolve(cached);
                     continue;
                 }
+                // Phase 22 — consult the job's accumulated conflict
+                // rules (seeded from the active ConflictProfile,
+                // appended to by "Apply to all of this extension"
+                // bulk actions). First match wins; fallback applies
+                // if nothing matched.
+                let src_path = coll.src.clone();
+                let dst_path = coll.dst.clone();
+                let (src_size, src_modified_ms) = peek_meta(&src_path).await;
+                let (dst_size, dst_modified_ms) = peek_meta(&dst_path).await;
+                if let Some((rule_res, matched_pattern)) =
+                    state.collisions.consult_rules(job_id, &src_path, None)
+                {
+                    if let Some(resolved) = crate::collisions::apply_rule_resolution(
+                        rule_res,
+                        src_size,
+                        dst_size,
+                        src_modified_ms.map(|m| m as i64),
+                        dst_modified_ms.map(|m| m as i64),
+                        &dst_path,
+                    ) {
+                        let engine_wire =
+                            crate::collisions::resolution_name(&resolved);
+                        let _ = app.emit(
+                            crate::ipc::EVENT_COLLISION_AUTO_RESOLVED,
+                            crate::ipc::CollisionAutoResolvedDto {
+                                job_id,
+                                src: src_path.to_string_lossy().into_owned(),
+                                dst: dst_path.to_string_lossy().into_owned(),
+                                resolution: engine_wire,
+                                rule_resolution: rule_res.as_str(),
+                                matched_rule_pattern: matched_pattern,
+                            },
+                        );
+                        coll.resolve(resolved);
+                        continue;
+                    }
+                    // KeepBoth with a 10 000-name search miss — fall
+                    // through to the interactive prompt below.
+                }
                 // Extract the oneshot before we reach for the paths
                 // (taking moves the Sender out of the Option).
                 let Some(tx) = coll.resolver.take() else {
@@ -775,10 +819,6 @@ async fn forward_events(
                     // nothing to drive here.
                     continue;
                 };
-                let src_path = coll.src.clone();
-                let dst_path = coll.dst.clone();
-                let (src_size, src_modified_ms) = peek_meta(&src_path).await;
-                let (dst_size, dst_modified_ms) = peek_meta(&dst_path).await;
                 let new_id =
                     state
                         .collisions
