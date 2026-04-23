@@ -83,7 +83,7 @@ pub enum CliError {
 /// Short CLI help text printed by `--help` / `-h`. Not localised; see
 /// [`CliError`] note above.
 pub const HELP: &str = "\
-Copy That v1.0.0 — shell-integration CLI
+Copy That v1.25.0 — shell-integration CLI
 
 Usage:
     copythat                                  Launch the GUI

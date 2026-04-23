@@ -1,6 +1,6 @@
-app-name = Copy That v1.0.0
+app-name = Copy That v1.25.0
 # MT
-window-title = Copy That v1.0.0
+window-title = Copy That v1.25.0
 # MT
 shred-ssd-advisory = 警告: この対象は SSD 上にあります。ウェアレベリングとオーバープロビジョニングにより論理ブロックアドレスの下からデータが移動されるため、多重上書きはフラッシュメモリを確実にサニタイズできません。ソリッドステートメディアには、ATA SECURE ERASE、NVMe Format（セキュア消去付き）、または鍵を破棄したフルディスク暗号化を優先してください。
 

@@ -429,7 +429,7 @@ mod tests {
 
     #[test]
     fn parses_simple_messages() {
-        let src = "app-name = Copy That v1.0.0\n# a comment\nfoo-bar = hi\n";
+        let src = "app-name = Copy That v1.25.0\n# a comment\nfoo-bar = hi\n";
         let keys = parse_ftl_keys_unique(src).unwrap();
         assert!(keys.contains("app-name"));
         assert!(keys.contains("foo-bar"));

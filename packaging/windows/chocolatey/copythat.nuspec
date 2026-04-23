@@ -6,8 +6,8 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
     <id>copythat</id>
-    <version>1.0.0</version>
-    <title>Copy That v1.0.0</title>
+    <version>1.25.0</version>
+    <title>Copy That v1.25.0</title>
     <authors>Copy That Contributors</authors>
     <projectUrl>https://github.com/MikesRuthless12/CopyThat2026</projectUrl>
     <licenseUrl>https://github.com/MikesRuthless12/CopyThat2026/blob/main/LICENSE</licenseUrl>
@@ -19,7 +19,7 @@
     <tags>copy file-copy teracopy verify rust tauri admin</tags>
     <summary>Byte-exact cross-platform file copier (Rust + Tauri 2).</summary>
     <description><![CDATA[
-Copy That v1.0.0 is a lightweight, cross-platform, async, byte-exact
+Copy That v1.25.0 is a lightweight, cross-platform, async, byte-exact
 file and folder copier. Matches every TeraCopy feature while staying
 as fast as — or faster than — Explorer, Finder, cp, and rsync for
 typical desktop workloads.
@@ -35,7 +35,7 @@ Features include:
 Ships unsigned; SmartScreen reputation clears the binary after
 roughly 100 downloads.
 ]]></description>
-    <releaseNotes>https://github.com/MikesRuthless12/CopyThat2026/releases/tag/v1.0.0</releaseNotes>
+    <releaseNotes>https://github.com/MikesRuthless12/CopyThat2026/releases/tag/v1.25.0</releaseNotes>
     <iconUrl>https://raw.githubusercontent.com/MikesRuthless12/CopyThat2026/main/apps/copythat-ui/src-tauri/icons/128x128.png</iconUrl>
   </metadata>
   <files>

@@ -1,6 +1,6 @@
 [package]
 name = "copythat-watch"
-description = "Real-time mirror watcher with edge-case handling (atomic saves, vim/Office lock files, debounce, macOS FSEvents recovery, Windows ReadDirectoryChangesW overflow) for Copy That v1.0.0."
+description = "Real-time mirror watcher with edge-case handling (atomic saves, vim/Office lock files, debounce, macOS FSEvents recovery, Windows ReadDirectoryChangesW overflow) for Copy That v1.25.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

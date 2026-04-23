@@ -1,6 +1,6 @@
 # Packaging manifests
 
-Per-channel manifests for Copy That v1.0.0's free-first distribution path.
+Per-channel manifests for Copy That v1.25.0's free-first distribution path.
 Every channel here costs $0 to publish.
 
 | Folder                           | Channel                   | Target                       |

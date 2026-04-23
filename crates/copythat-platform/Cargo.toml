@@ -1,6 +1,6 @@
 [package]
 name = "copythat-platform"
-description = "OS-specific fast paths (CopyFileExW / copyfile / copy_file_range / reflink) and shell hooks for Copy That v1.0.0."
+description = "OS-specific fast paths (CopyFileExW / copyfile / copy_file_range / reflink) and shell hooks for Copy That v1.25.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

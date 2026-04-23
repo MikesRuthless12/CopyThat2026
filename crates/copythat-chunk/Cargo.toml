@@ -1,6 +1,6 @@
 [package]
 name = "copythat-chunk"
-description = "Content-defined chunk store (FastCDC + BLAKE3 + redb index + pack files) for delta-resume and same-job dedup. Foundation for the Copy That v1.0.0 Phase 49–51 moonshots."
+description = "Content-defined chunk store (FastCDC + BLAKE3 + redb index + pack files) for delta-resume and same-job dedup. Foundation for the Copy That v1.25.0 Phase 49–51 moonshots."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

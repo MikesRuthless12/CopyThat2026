@@ -1,4 +1,4 @@
-# Copy That v1.0.0 — competitor head-to-head (Phase 13b)
+# Copy That v1.25.0 — competitor head-to-head (Phase 13b)
 
 ## TL;DR
 
