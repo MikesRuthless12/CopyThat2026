@@ -913,3 +913,12 @@ sync-resolve-keep-both = 保留两者  # MT
 sync-resolve-three-way = 通过 3-way 合并解决  # MT
 sync-resolve-phase-53-tooltip = 非文本文件的交互式 3-way 合并将在第 53 阶段提供。  # MT
 sync-error-prefix = 同步错误  # MT
+
+# Phase 26 — real-time mirror watcher. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+live-mirror-start = 启动实时镜像  # MT
+live-mirror-stop = 停止实时镜像  # MT
+live-mirror-watching = 监视中  # MT
+live-mirror-toggle-hint = 在每次检测到文件系统更改时自动重新同步。每个活动对一个后台线程。  # MT
+watch-event-prefix = 文件更改  # MT
+watch-overflow-recovered = 监视器缓冲区溢出;正在重新枚举以恢复  # MT

@@ -41,6 +41,7 @@ pub mod global_paste;
 pub mod i18n;
 pub mod icon;
 pub mod ipc;
+pub mod live_mirror;
 pub mod reveal;
 pub mod runner;
 pub mod scan_commands;
@@ -298,6 +299,10 @@ pub fn run() {
             sync_commands::start_sync,
             sync_commands::pause_sync,
             sync_commands::cancel_sync,
+            // Phase 26 — live-mirror loop lifecycle.
+            live_mirror::start_live_mirror,
+            live_mirror::stop_live_mirror,
+            live_mirror::list_live_mirrors,
         ])
         .setup(move |app| {
             // Phase 16 — tray icon + menu. Visible regardless of the

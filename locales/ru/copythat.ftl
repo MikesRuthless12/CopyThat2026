@@ -913,3 +913,12 @@ sync-resolve-keep-both = Оставить оба  # MT
 sync-resolve-three-way = Разрешить через 3-стороннее слияние  # MT
 sync-resolve-phase-53-tooltip = Интерактивное 3-стороннее слияние для нетекстовых файлов появится в фазе 53.  # MT
 sync-error-prefix = Ошибка синхронизации  # MT
+
+# Phase 26 — real-time mirror watcher. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+live-mirror-start = Запустить живое зеркало  # MT
+live-mirror-stop = Остановить живое зеркало  # MT
+live-mirror-watching = Наблюдение  # MT
+live-mirror-toggle-hint = Автоматическая повторная синхронизация при каждом обнаруженном изменении файловой системы. Один фоновый поток на активную пару.  # MT
+watch-event-prefix = Изменение файла  # MT
+watch-overflow-recovered = Буфер наблюдателя переполнен; повторное перечисление для восстановления  # MT

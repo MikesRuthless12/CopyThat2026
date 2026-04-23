@@ -946,6 +946,11 @@ pub struct SyncPairConfig {
     /// Summary of the last run, for the pair row in the UI:
     /// `"+3 / −1 / !2"` = 3 copies, 1 delete, 2 conflicts.
     pub last_run_summary: String,
+    /// Phase 26 — when `true`, enabling this pair starts a live
+    /// filesystem watcher on `left` and re-syncs on every debounced
+    /// change. Default `false` — live mirror is an explicit opt-in
+    /// because it runs a background thread per watched pair.
+    pub live_mirror: bool,
 }
 
 /// Mirror of `copythat_sync::SyncMode`. Kept as a separate enum so

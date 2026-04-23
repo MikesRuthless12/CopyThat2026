@@ -1,0 +1,48 @@
+[package]
+name = "copythat-watch"
+description = "Real-time mirror watcher with edge-case handling (atomic saves, vim/Office lock files, debounce, macOS FSEvents recovery, Windows ReadDirectoryChangesW overflow) for Copy That v1.0.0."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Cross-platform FS watcher. CC0-1.0 (already in deny.toml allowlist
+# from Phase 0). Uses ReadDirectoryChangesW on Windows, FSEvents on
+# macOS, and inotify on Linux under the hood.
+notify = "8"
+thiserror = "2"
+tokio = { version = "1", features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "process",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "test-util",
+    "time",
+] }
+
+# Phase 26 smoke test lives at the workspace root alongside every
+# other phase's smoke.
+[[test]]
+name = "phase_26_watch"
+path = "../../tests/smoke/phase_26_watch.rs"

@@ -913,3 +913,12 @@ sync-resolve-keep-both = Beide behouden  # MT
 sync-resolve-three-way = Oplossen via 3-wegs samenvoegen  # MT
 sync-resolve-phase-53-tooltip = Interactieve 3-wegs samenvoeging voor niet-tekstbestanden komt in fase 53.  # MT
 sync-error-prefix = Synchronisatiefout  # MT
+
+# Phase 26 — real-time mirror watcher. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+live-mirror-start = Live mirror starten  # MT
+live-mirror-stop = Live mirror stoppen  # MT
+live-mirror-watching = Kijken  # MT
+live-mirror-toggle-hint = Synchroniseer automatisch opnieuw bij elke gedetecteerde wijziging in het bestandssysteem. Eén achtergrondthread per actief paar.  # MT
+watch-event-prefix = Bestandswijziging  # MT
+watch-overflow-recovered = Buffer van waarnemer liep over; opnieuw opsommen om te herstellen  # MT

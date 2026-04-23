@@ -913,3 +913,12 @@ sync-resolve-keep-both = Pertahankan keduanya  # MT
 sync-resolve-three-way = Selesaikan melalui penggabungan 3-arah  # MT
 sync-resolve-phase-53-tooltip = Penggabungan 3-arah interaktif untuk berkas non-teks hadir di Fase 53.  # MT
 sync-error-prefix = Kesalahan sinkron  # MT
+
+# Phase 26 — real-time mirror watcher. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+live-mirror-start = Mulai cermin langsung  # MT
+live-mirror-stop = Hentikan cermin langsung  # MT
+live-mirror-watching = Mengawasi  # MT
+live-mirror-toggle-hint = Sinkronisasi ulang secara otomatis pada setiap perubahan sistem berkas yang terdeteksi. Satu thread latar per pasangan aktif.  # MT
+watch-event-prefix = Perubahan berkas  # MT
+watch-overflow-recovered = Buffer pengawas meluap; mengenumerasi ulang untuk memulihkan  # MT

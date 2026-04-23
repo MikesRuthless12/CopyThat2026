@@ -624,6 +624,11 @@ export interface SyncPairDto {
   lastRunAt: string;
   lastRunSummary: string;
   running: boolean;
+  /** Phase 26 — true when the pair is in live-mirror mode (a
+   *  watcher on the left side triggers a re-sync on each debounced
+   *  change). The UI renders a green pulsing dot + "Watching"
+   *  label when this flag is set. */
+  liveMirror: boolean;
 }
 
 export interface SyncStartedDto {

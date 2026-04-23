@@ -913,3 +913,12 @@ sync-resolve-keep-both = Giữ cả hai  # MT
 sync-resolve-three-way = Giải quyết qua hợp nhất 3 chiều  # MT
 sync-resolve-phase-53-tooltip = Hợp nhất 3 chiều tương tác cho các tệp không phải văn bản sẽ có trong Giai đoạn 53.  # MT
 sync-error-prefix = Lỗi đồng bộ  # MT
+
+# Phase 26 — real-time mirror watcher. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+live-mirror-start = Bắt đầu gương trực tiếp  # MT
+live-mirror-stop = Dừng gương trực tiếp  # MT
+live-mirror-watching = Đang theo dõi  # MT
+live-mirror-toggle-hint = Tự động đồng bộ lại trên mọi thay đổi hệ thống tệp được phát hiện. Một luồng nền cho mỗi cặp hoạt động.  # MT
+watch-event-prefix = Thay đổi tệp  # MT
+watch-overflow-recovered = Bộ đệm theo dõi bị tràn; liệt kê lại để khôi phục  # MT

@@ -913,3 +913,12 @@ sync-resolve-keep-both = 둘 다 유지  # MT
 sync-resolve-three-way = 3-way 병합으로 해결  # MT
 sync-resolve-phase-53-tooltip = 비텍스트 파일을 위한 대화형 3-way 병합은 53단계에 제공됩니다.  # MT
 sync-error-prefix = 동기화 오류  # MT
+
+# Phase 26 — real-time mirror watcher. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+live-mirror-start = 실시간 미러 시작  # MT
+live-mirror-stop = 실시간 미러 중지  # MT
+live-mirror-watching = 감시 중  # MT
+live-mirror-toggle-hint = 감지된 모든 파일 시스템 변경 시 자동으로 다시 동기화합니다. 활성 쌍당 하나의 백그라운드 스레드.  # MT
+watch-event-prefix = 파일 변경  # MT
+watch-overflow-recovered = 감시자 버퍼 오버플로; 복구를 위해 재열거 중  # MT

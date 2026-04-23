@@ -913,3 +913,12 @@ sync-resolve-keep-both = 両方を保持  # MT
 sync-resolve-three-way = 3方向マージで解決  # MT
 sync-resolve-phase-53-tooltip = テキスト以外のファイル用のインタラクティブ3方向マージはフェーズ53で提供されます。  # MT
 sync-error-prefix = 同期エラー  # MT
+
+# Phase 26 — real-time mirror watcher. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+live-mirror-start = ライブミラーを開始  # MT
+live-mirror-stop = ライブミラーを停止  # MT
+live-mirror-watching = 監視中  # MT
+live-mirror-toggle-hint = 検出されたすべてのファイルシステム変更で自動的に再同期します。アクティブなペアごとに 1 つのバックグラウンド スレッド。  # MT
+watch-event-prefix = ファイルの変更  # MT
+watch-overflow-recovered = ウォッチャー バッファがオーバーフローしました; 回復のために再列挙中  # MT

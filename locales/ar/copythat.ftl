@@ -913,3 +913,12 @@ sync-resolve-keep-both = الاحتفاظ بكليهما  # MT
 sync-resolve-three-way = حل عبر الدمج الثلاثي  # MT
 sync-resolve-phase-53-tooltip = الدمج الثلاثي التفاعلي للملفات غير النصية يأتي في المرحلة 53.  # MT
 sync-error-prefix = خطأ في المزامنة  # MT
+
+# Phase 26 — real-time mirror watcher. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+live-mirror-start = بدء المرآة الحية  # MT
+live-mirror-stop = إيقاف المرآة الحية  # MT
+live-mirror-watching = مراقبة  # MT
+live-mirror-toggle-hint = إعادة المزامنة تلقائيًا عند كل تغيير في نظام الملفات تم اكتشافه. يستخدم خيطًا واحدًا في الخلفية لكل زوج نشط.  # MT
+watch-event-prefix = تغيير ملف  # MT
+watch-overflow-recovered = تجاوز مخزن المراقب المؤقت؛ إعادة التعداد للاسترداد  # MT

@@ -913,3 +913,12 @@ sync-resolve-keep-both = दोनों रखें  # MT
 sync-resolve-three-way = 3-तरफ़ा मर्ज के माध्यम से हल करें  # MT
 sync-resolve-phase-53-tooltip = गैर-पाठ फ़ाइलों के लिए इंटरैक्टिव 3-तरफ़ा मर्ज चरण 53 में आता है।  # MT
 sync-error-prefix = सिंक त्रुटि  # MT
+
+# Phase 26 — real-time mirror watcher. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+live-mirror-start = लाइव मिरर प्रारंभ करें  # MT
+live-mirror-stop = लाइव मिरर बंद करें  # MT
+live-mirror-watching = निगरानी  # MT
+live-mirror-toggle-hint = हर पहचाने गए फ़ाइल सिस्टम परिवर्तन पर स्वचालित रूप से पुनः-सिंक करें। प्रति सक्रिय जोड़ी एक पृष्ठभूमि थ्रेड।  # MT
+watch-event-prefix = फ़ाइल परिवर्तन  # MT
+watch-overflow-recovered = मॉनिटर बफ़र अतिप्रवाहित हुआ; पुनर्प्राप्ति के लिए पुनः-सूचीकरण  # MT

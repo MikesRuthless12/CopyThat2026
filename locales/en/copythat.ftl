@@ -630,3 +630,15 @@ sync-resolve-keep-both = Keep both
 sync-resolve-three-way = Resolve via 3-way merge
 sync-resolve-phase-53-tooltip = Interactive 3-way merge for non-text files lands in Phase 53.
 sync-error-prefix = Sync error
+
+# Phase 26 — real-time mirror watcher. "Live mirror" starts a
+# filesystem watcher on the pair's left side; every debounced event
+# triggers a re-sync. The watcher filters vim swap files / Office
+# lock files / atomic-save temp names so one logical save becomes
+# exactly one sync round.
+live-mirror-start = Start live mirror
+live-mirror-stop = Stop live mirror
+live-mirror-watching = Watching
+live-mirror-toggle-hint = Re-sync automatically on every detected filesystem change. One background thread per active pair.
+watch-event-prefix = File change
+watch-overflow-recovered = Watcher buffer overflowed; re-enumerating to recover

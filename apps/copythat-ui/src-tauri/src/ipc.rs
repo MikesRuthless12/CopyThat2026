@@ -111,6 +111,13 @@ pub const EVENT_SYNC_COMPLETED: &str = "sync-completed";
 pub const EVENT_SYNC_CANCELLED: &str = "sync-cancelled";
 pub const EVENT_SYNC_FAILED: &str = "sync-failed";
 
+// ---------------------------------------------------------------------
+// Phase 26 — live-mirror lifecycle events.
+// ---------------------------------------------------------------------
+pub const EVENT_LIVE_MIRROR_STARTED: &str = "live-mirror-started";
+pub const EVENT_LIVE_MIRROR_STOPPED: &str = "live-mirror-stopped";
+pub const EVENT_LIVE_MIRROR_EVENT: &str = "live-mirror-event";
+
 /// Single entry in the live activity list.
 ///
 /// `phase`:
@@ -979,6 +986,10 @@ pub struct SyncPairDto {
     pub last_run_summary: String,
     /// `true` while a sync is actively running for this pair.
     pub running: bool,
+    /// Phase 26 — `true` while the live-mirror watcher loop is
+    /// active for this pair. The UI renders a green pulsing dot +
+    /// "Watching" label when this flag is set.
+    pub live_mirror: bool,
 }
 
 /// Fired once per `start_sync` call just before the runner spawns
@@ -1055,6 +1066,32 @@ pub struct SyncCompletedDto {
 pub struct SyncFailedDto {
     pub pair_id: String,
     pub message: String,
+}
+
+// ---------------------------------------------------------------------
+// Phase 26 — live-mirror DTOs.
+// ---------------------------------------------------------------------
+
+/// Payload for `live-mirror-started` / `live-mirror-stopped`.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveMirrorDto {
+    pub pair_id: String,
+    /// Left-side absolute path the watcher is rooted at. Empty on
+    /// the stopped event.
+    pub left: String,
+}
+
+/// Payload for `live-mirror-event` — one emission per debounced
+/// filesystem event picked up by the watcher.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveMirrorEventDto {
+    pub pair_id: String,
+    /// Canonical subject path of the event. For a `Renamed` the
+    /// destination side is reported (the sync engine reconciles
+    /// against that).
+    pub subject: String,
 }
 
 // --- Settings ⇄ DTO conversions ---------------------------------------

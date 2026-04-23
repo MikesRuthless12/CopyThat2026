@@ -90,10 +90,11 @@ impl SyncRegistry {
 pub fn list_sync_pairs(state: tauri::State<'_, AppState>) -> Vec<SyncPairDto> {
     let snap = state.settings_snapshot();
     let active = state.syncs.active_ids();
+    let live = state.live_mirrors.active_ids();
     snap.sync
         .pairs
         .iter()
-        .map(|c| pair_config_to_dto(c, active.contains(&c.id)))
+        .map(|c| pair_config_to_dto(c, active.contains(&c.id), live.contains(&c.id)))
         .collect()
 }
 
@@ -124,6 +125,7 @@ pub fn add_sync_pair(
         db_path_override: String::new(),
         last_run_at: String::new(),
         last_run_summary: String::new(),
+        live_mirror: false,
     };
     guard.sync.pairs.push(cfg.clone());
     let path = state.settings_path.as_ref().clone();
@@ -132,7 +134,7 @@ pub fn add_sync_pair(
     if !path.as_os_str().is_empty() {
         snapshot.save_to(&path).map_err(|e| e.to_string())?;
     }
-    Ok(pair_config_to_dto(&cfg, false))
+    Ok(pair_config_to_dto(&cfg, false, false))
 }
 
 /// Remove a pair by id. The `.copythat-sync.db` on disk is preserved
@@ -395,7 +397,7 @@ fn action_kind_wire(a: &copythat_sync::SyncAction) -> String {
     }
 }
 
-fn pair_config_to_dto(c: &SyncPairConfig, running: bool) -> SyncPairDto {
+fn pair_config_to_dto(c: &SyncPairConfig, running: bool, live_mirror: bool) -> SyncPairDto {
     SyncPairDto {
         id: c.id.clone(),
         label: c.label.clone(),
@@ -405,6 +407,7 @@ fn pair_config_to_dto(c: &SyncPairConfig, running: bool) -> SyncPairDto {
         last_run_at: c.last_run_at.clone(),
         last_run_summary: c.last_run_summary.clone(),
         running,
+        live_mirror,
     }
 }
 

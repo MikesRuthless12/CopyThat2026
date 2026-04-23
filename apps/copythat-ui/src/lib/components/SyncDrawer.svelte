@@ -103,6 +103,18 @@
           pairs = pairs.map((p) => (p.id === id ? { ...p, running: false } : p));
         }),
       );
+      unlistenFns.push(
+        await listen<{ pairId: string }>("live-mirror-started", (evt) => {
+          const id = evt.payload.pairId;
+          pairs = pairs.map((p) => (p.id === id ? { ...p, liveMirror: true } : p));
+        }),
+      );
+      unlistenFns.push(
+        await listen<{ pairId: string }>("live-mirror-stopped", (evt) => {
+          const id = evt.payload.pairId;
+          pairs = pairs.map((p) => (p.id === id ? { ...p, liveMirror: false } : p));
+        }),
+      );
     })().catch((e) => {
       console.error("[sync-listen]", e);
     });
@@ -192,6 +204,20 @@
   async function cancelPair(id: string) {
     try {
       await invoke("cancel_sync", { pairId: id });
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function toggleLiveMirror(id: string, active: boolean) {
+    error = null;
+    try {
+      if (active) {
+        await invoke("stop_live_mirror", { pairId: id });
+      } else {
+        await invoke<string>("start_live_mirror", { pairId: id });
+      }
+      await refresh();
     } catch (e) {
       error = String(e);
     }
@@ -388,7 +414,11 @@
             <div class="pair-head">
               <strong>{p.label}</strong>
               <span class="mode">{t(`sync-mode-${p.mode}`)}</span>
-              {#if p.running}
+              {#if p.liveMirror}
+                <span class="pulse live" aria-label={t("live-mirror-watching")}
+                ></span>
+                <span class="live-label">{t("live-mirror-watching")}</span>
+              {:else if p.running}
                 <span class="pulse" aria-label={t("sync-running")}></span>
               {/if}
             </div>
@@ -427,6 +457,16 @@
                   {t("sync-run-now")}
                 </button>
               {/if}
+              <button
+                type="button"
+                class={p.liveMirror ? "live-on" : "live-off"}
+                onclick={() => void toggleLiveMirror(p.id, p.liveMirror)}
+                title={t("live-mirror-toggle-hint")}
+              >
+                {p.liveMirror
+                  ? t("live-mirror-stop")
+                  : t("live-mirror-start")}
+              </button>
               <button
                 type="button"
                 class="danger"
@@ -561,6 +601,17 @@
     border-radius: 50%;
     animation: pulse 1.2s ease-in-out infinite;
   }
+  .pulse.live {
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
+  }
+  .live-label {
+    color: #22c55e;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
   @keyframes pulse {
     0%,
     100% {
@@ -672,6 +723,16 @@
   }
   button.primary:hover {
     background: var(--accent-hover, #2563eb);
+  }
+  button.live-on {
+    border-color: #22c55e;
+    color: #22c55e;
+  }
+  button.live-on:hover {
+    background: rgba(34, 197, 94, 0.12);
+  }
+  button.live-off {
+    border-color: var(--border, #444);
   }
   button.danger {
     border-color: var(--danger, #c33);

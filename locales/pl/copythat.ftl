@@ -913,3 +913,12 @@ sync-resolve-keep-both = Zachowaj oba  # MT
 sync-resolve-three-way = Rozwiąż przez scalanie trójdrożne  # MT
 sync-resolve-phase-53-tooltip = Interaktywne scalanie trójdrożne dla plików nietekstowych pojawi się w fazie 53.  # MT
 sync-error-prefix = Błąd synchronizacji  # MT
+
+# Phase 26 — real-time mirror watcher. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+live-mirror-start = Uruchom lustro na żywo  # MT
+live-mirror-stop = Zatrzymaj lustro na żywo  # MT
+live-mirror-watching = Obserwowanie  # MT
+live-mirror-toggle-hint = Automatyczne ponowne zsynchronizowanie przy każdej wykrytej zmianie w systemie plików. Jeden wątek w tle na aktywną parę.  # MT
+watch-event-prefix = Zmiana pliku  # MT
+watch-overflow-recovered = Bufor obserwatora przepełniony; ponowne wyliczanie w celu odzyskania  # MT

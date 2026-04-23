@@ -913,3 +913,12 @@ sync-resolve-keep-both = İkisini de tut  # MT
 sync-resolve-three-way = 3-yönlü birleştirme ile çöz  # MT
 sync-resolve-phase-53-tooltip = Metin dışı dosyalar için etkileşimli 3-yönlü birleştirme Faz 53'te gelir.  # MT
 sync-error-prefix = Eşitleme hatası  # MT
+
+# Phase 26 — real-time mirror watcher. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+live-mirror-start = Canlı yansıtmayı başlat  # MT
+live-mirror-stop = Canlı yansıtmayı durdur  # MT
+live-mirror-watching = İzleniyor  # MT
+live-mirror-toggle-hint = Algılanan her dosya sistemi değişikliğinde otomatik olarak yeniden eşitleme. Etkin çift başına bir arka plan iş parçacığı.  # MT
+watch-event-prefix = Dosya değişikliği  # MT
+watch-overflow-recovered = İzleyici arabelleği taştı; kurtarmak için yeniden numaralandırılıyor  # MT

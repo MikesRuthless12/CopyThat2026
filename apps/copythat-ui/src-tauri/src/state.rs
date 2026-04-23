@@ -88,6 +88,10 @@ pub struct AppState {
     /// to their `SyncControl`. Pause / cancel IPC commands look up
     /// the handle here; absent entries mean the pair is idle.
     pub syncs: crate::sync_commands::SyncRegistry,
+    /// Phase 26 — registry of pairs running in live-mirror mode.
+    /// Each entry owns a stop flag the watcher loop checks between
+    /// iterations.
+    pub live_mirrors: crate::live_mirror::LiveMirrorRegistry,
 }
 
 impl AppState {
@@ -131,6 +135,7 @@ impl AppState {
             // NetworkSettings on the first tick.
             shape: Arc::new(Shape::new(None)),
             syncs: crate::sync_commands::SyncRegistry::new(),
+            live_mirrors: crate::live_mirror::LiveMirrorRegistry::new(),
         }
     }
 
