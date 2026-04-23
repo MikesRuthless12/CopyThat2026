@@ -438,6 +438,8 @@ export interface TransferSettingsDto {
   preserveAcls: boolean;
   /// Phase 19b — filesystem-snapshot fallback for locked sources.
   onLocked: LockedFilePolicyWire;
+  /// Phase 23 — preserve source sparseness on the destination.
+  preserveSparseness: boolean;
 }
 
 export interface ShellSettingsDto {

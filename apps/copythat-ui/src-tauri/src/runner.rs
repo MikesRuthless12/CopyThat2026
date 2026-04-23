@@ -29,7 +29,8 @@ use crate::ipc::{
     CollisionPromptDto, EVENT_COLLISION_RAISED, EVENT_ERROR_RAISED, EVENT_GLOBALS_TICK,
     EVENT_JOB_ADDED, EVENT_JOB_CANCELLED, EVENT_JOB_COMPLETED, EVENT_JOB_FAILED, EVENT_JOB_PAUSED,
     EVENT_JOB_PROGRESS, EVENT_JOB_RESUMED, EVENT_JOB_STARTED, EVENT_SNAPSHOT_CREATED,
-    ErrorPromptDto, GlobalsDto, JobDto, JobFailedDto, JobIdDto, JobProgressDto, SnapshotCreatedDto,
+    EVENT_SPARSENESS_NOT_SUPPORTED, ErrorPromptDto, GlobalsDto, JobDto, JobFailedDto, JobIdDto,
+    JobProgressDto, SnapshotCreatedDto, SparsenessNotSupportedDto,
 };
 use crate::state::AppState;
 
@@ -793,8 +794,7 @@ async fn forward_events(
                         dst_modified_ms.map(|m| m as i64),
                         &dst_path,
                     ) {
-                        let engine_wire =
-                            crate::collisions::resolution_name(&resolved);
+                        let engine_wire = crate::collisions::resolution_name(&resolved);
                         let _ = app.emit(
                             crate::ipc::EVENT_COLLISION_AUTO_RESOLVED,
                             crate::ipc::CollisionAutoResolvedDto {
@@ -876,6 +876,15 @@ async fn forward_events(
                         kind,
                         original: original.to_string_lossy().into_owned(),
                         snap_mount: snap_mount.to_string_lossy().into_owned(),
+                    },
+                );
+            }
+            CopyEvent::SparsenessNotSupported { dst_fs } => {
+                let _ = app.emit(
+                    EVENT_SPARSENESS_NOT_SUPPORTED,
+                    SparsenessNotSupportedDto {
+                        job_id: id.as_u64(),
+                        dst_fs: dst_fs.to_string(),
                     },
                 );
             }

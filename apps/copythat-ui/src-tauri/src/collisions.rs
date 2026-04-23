@@ -176,15 +176,16 @@ impl CollisionRegistry {
         src_path: &Path,
         rel_path: Option<&str>,
     ) -> Option<(ConflictRuleResolution, String)> {
-        let rules = self.inner.rules.lock().expect("collision registry poisoned");
+        let rules = self
+            .inner
+            .rules
+            .lock()
+            .expect("collision registry poisoned");
         let profile = rules.get(&job_id)?;
         if profile.is_empty() {
             return None;
         }
-        let basename = src_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let basename = src_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let rel = rel_path.unwrap_or(basename);
         let hit = profile.match_basename_or_path(basename, rel)?;
         Some((hit.resolution, hit.pattern.to_string()))
@@ -501,7 +502,8 @@ mod tests {
         // entry by registering + resolving with apply-to-all.
         let (tx, _rx) = oneshot::channel();
         let id = reg.register(7, PathBuf::from("/s"), PathBuf::from("/d"), tx);
-        reg.resolve(id, CollisionResolution::Overwrite, true).unwrap();
+        reg.resolve(id, CollisionResolution::Overwrite, true)
+            .unwrap();
         assert!(reg.cached_resolution(7).is_some());
         assert!(reg.rules_for(7).is_some());
 

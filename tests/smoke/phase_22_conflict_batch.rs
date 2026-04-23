@@ -149,11 +149,7 @@ async fn drive(
 /// Mirror of `crate::collisions::apply_rule_resolution` — kept
 /// inline so the smoke test doesn't depend on the UI crate's
 /// internals.
-fn translate(
-    resolution: ConflictRuleResolution,
-    src: &Path,
-    dst: &Path,
-) -> CollisionResolution {
+fn translate(resolution: ConflictRuleResolution, src: &Path, dst: &Path) -> CollisionResolution {
     match resolution {
         ConflictRuleResolution::Skip => CollisionResolution::Skip,
         ConflictRuleResolution::Overwrite => CollisionResolution::Overwrite,
@@ -173,12 +169,10 @@ fn translate(
                 CollisionResolution::Skip
             }
         }
-        ConflictRuleResolution::KeepBoth => {
-            match next_keep_both_name(dst) {
-                Some(n) => CollisionResolution::Rename(n),
-                None => CollisionResolution::Skip,
-            }
-        }
+        ConflictRuleResolution::KeepBoth => match next_keep_both_name(dst) {
+            Some(n) => CollisionResolution::Rename(n),
+            None => CollisionResolution::Skip,
+        },
     }
 }
 
@@ -285,7 +279,8 @@ async fn phase_22_rules_auto_resolve_all_50_collisions_and_roundtrip_profile() {
     // actually written — 15 docx overwrites + 15 keep-both
     // renames (10 jpg + 5 misc) = 30.
     assert_eq!(
-        report.files, (DOCX_COUNT + JPG_COUNT + MISC_COUNT) as u64,
+        report.files,
+        (DOCX_COUNT + JPG_COUNT + MISC_COUNT) as u64,
         "30 writes expected (15 overwrite + 15 keep-both)"
     );
     assert_eq!(
@@ -334,20 +329,30 @@ async fn phase_22_rules_auto_resolve_all_50_collisions_and_roundtrip_profile() {
         let dst_2 = dst_root.join(format!("misc-{i:02}_2.dat"));
         let orig = std::fs::read(&dst).expect("orig present");
         let fresh = std::fs::read(&dst_2).expect("_2 sibling present");
-        assert_eq!(orig, format!("OLD-{name}").as_bytes(), "misc orig preserved");
-        assert_eq!(fresh, format!("NEW-{name}").as_bytes(), "misc _2 carries new");
+        assert_eq!(
+            orig,
+            format!("OLD-{name}").as_bytes(),
+            "misc orig preserved"
+        );
+        assert_eq!(
+            fresh,
+            format!("NEW-{name}").as_bytes(),
+            "misc _2 carries new"
+        );
     }
 
     // --- Profile persistence round-trip (ProfileStore + Settings) ---
     let cfg_dir = tmp.path().join("config");
     std::fs::create_dir_all(&cfg_dir).unwrap();
 
-    let mut settings = Settings::default();
-    settings.conflict_profiles = ConflictProfileSettings {
-        active: Some("Imports".to_string()),
-        profiles: [("Imports".to_string(), profile.clone())]
-            .into_iter()
-            .collect(),
+    let settings = Settings {
+        conflict_profiles: ConflictProfileSettings {
+            active: Some("Imports".to_string()),
+            profiles: [("Imports".to_string(), profile.clone())]
+                .into_iter()
+                .collect(),
+        },
+        ..Settings::default()
     };
 
     // TOML round-trip — `settings.toml` carries everything including

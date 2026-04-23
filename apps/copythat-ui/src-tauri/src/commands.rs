@@ -265,6 +265,7 @@ fn apply_options(
         fsync_on_close: settings.transfer.fsync_on_close,
         preserve_times: settings.transfer.preserve_timestamps,
         preserve_permissions: settings.transfer.preserve_permissions,
+        preserve_sparseness: settings.transfer.preserve_sparseness,
         strategy: match settings.transfer.reflink {
             copythat_settings::ReflinkPreference::Prefer => copythat_core::CopyStrategy::Auto,
             copythat_settings::ReflinkPreference::Avoid => copythat_core::CopyStrategy::NoReflink,
@@ -286,6 +287,15 @@ fn apply_options(
         },
         ..Default::default()
     };
+
+    // Phase 23 — attach the platform extent-introspection hook whenever
+    // sparseness preservation is enabled. The hook is stateless (a
+    // unit struct) so the Arc is effectively free; the engine skips
+    // the sparse pathway at runtime if `detect_extents` reports a
+    // fully-dense source.
+    if opts.preserve_sparseness {
+        opts.sparse_ops = Some(std::sync::Arc::new(copythat_platform::PlatformSparseOps));
+    }
 
     // Phase 19b — attach the snapshot bridge whenever the user opted
     // into `Snapshot` (and also eagerly when `Ask` is in effect, so
@@ -1854,10 +1864,7 @@ pub fn current_conflict_rules(
     job_id: u64,
     state: State<'_, AppState>,
 ) -> copythat_settings::ConflictProfile {
-    state
-        .collisions
-        .rules_for(job_id)
-        .unwrap_or_default()
+    state.collisions.rules_for(job_id).unwrap_or_default()
 }
 
 /// List saved conflict-profile names (alphabetical). Reads from the

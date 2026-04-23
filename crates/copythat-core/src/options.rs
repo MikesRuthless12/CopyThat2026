@@ -304,6 +304,32 @@ pub struct CopyOptions {
     /// is cheap to clone, so a single shared `Shape` can drive
     /// every concurrent copy in the runner without contention.
     pub shape: Option<Arc<dyn ShapeSink>>,
+    /// Phase 23 — preserve source sparseness on the destination.
+    ///
+    /// When `true` (the default) and a
+    /// [`sparse_ops`](Self::sparse_ops) hook is installed, the engine
+    /// asks the hook for the source's extent layout, marks the
+    /// destination sparse (NTFS `FSCTL_SET_SPARSE`, no-op on
+    /// Linux/macOS), pre-sizes it via `set_len`, and writes only the
+    /// allocated extents. The post-copy verify pass re-scans the
+    /// destination and fails with `CopyErrorKind::SparsenessMismatch`
+    /// if the layouts don't agree.
+    ///
+    /// `false` forces the engine's classic dense copy even when the
+    /// source has holes (destination will be larger on disk than the
+    /// source). `true` with `sparse_ops = None` silently falls back
+    /// to the dense path — there is no way to honour the request
+    /// without a hook.
+    pub preserve_sparseness: bool,
+    /// Phase 23 — extent-introspection bridge.
+    ///
+    /// Implemented by `copythat_platform::PlatformSparseOps`.
+    /// `None` disables the sparse pathway even when
+    /// [`preserve_sparseness`](Self::preserve_sparseness) is `true`.
+    /// Kept here as a trait object so callers (the Tauri shell, CLI,
+    /// test harnesses) can plug in alternate backends without pulling
+    /// in the platform crate's unsafe FFI.
+    pub sparse_ops: Option<Arc<dyn crate::sparse::SparseOps>>,
 }
 
 /// User-selectable copy strategy.
@@ -388,6 +414,8 @@ impl Default for CopyOptions {
             journal: None,
             journal_file_idx: 0,
             shape: None,
+            preserve_sparseness: true,
+            sparse_ops: None,
         }
     }
 }

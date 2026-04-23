@@ -170,6 +170,7 @@ err-verify-failed = Verifica post-copia fallita
 err-path-escape = Percorso rifiutato — contiene segmenti di cartella superiore (..) o byte non validi
 # MT
 err-io-other = Errore I/O sconosciuto
+err-sparseness-mismatch = Layout sparso non preservato sulla destinazione  # MT
 
 # MT — Collision modal
 collision-modal-title = Il file esiste già
@@ -437,6 +438,8 @@ settings-preserve-timestamps = Conserva i timestamp
 settings-preserve-permissions = Conserva i permessi
 # MT
 settings-preserve-acls = Conserva gli ACL (fase 14)
+settings-preserve-sparseness = Preserva i file sparsi  # MT
+settings-preserve-sparseness-hint = Copia solo le estensioni allocate dei file sparsi (dischi VM, file di database) in modo che la destinazione mantenga la stessa dimensione su disco dell'origine.  # MT
 
 # MT
 settings-context-menu = Abilita le voci del menu contestuale
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = La destinazione riempie i file sparsi  # MT
+sparse-not-supported-body = { $dst_fs } non supporta i file sparsi. I buchi nell'origine sono stati scritti come zeri, quindi la destinazione è più grande su disco.  # MT
+sparse-warning-densified = Layout sparso preservato: sono state copiate solo le estensioni allocate.  # MT
+sparse-warning-mismatch = Discordanza layout sparso — la destinazione potrebbe essere più grande del previsto.  # MT

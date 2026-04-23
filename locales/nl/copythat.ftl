@@ -170,6 +170,7 @@ err-verify-failed = Controle na kopiëren mislukt
 err-path-escape = Pad geweigerd — bevat bovenliggende map-segmenten (..) of ongeldige bytes
 # MT
 err-io-other = Onbekende I/O-fout
+err-sparseness-mismatch = Sparse-indeling kon niet behouden blijven op bestemming  # MT
 
 # MT — Collision modal
 collision-modal-title = Bestand bestaat al
@@ -437,6 +438,8 @@ settings-preserve-timestamps = Tijdstempels behouden
 settings-preserve-permissions = Rechten behouden
 # MT
 settings-preserve-acls = ACL's behouden (fase 14)
+settings-preserve-sparseness = Sparse-bestanden behouden  # MT
+settings-preserve-sparseness-hint = Kopieer alleen de toegewezen gebieden van sparse-bestanden (VM-schijven, databasebestanden) zodat de bestemming dezelfde grootte op schijf behoudt als de bron.  # MT
 
 # MT
 settings-context-menu = Contextmenu-items inschakelen
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = Bestemming vult sparse-bestanden  # MT
+sparse-not-supported-body = { $dst_fs } ondersteunt geen sparse-bestanden. Gaten in de bron zijn als nullen geschreven, dus de bestemming is groter op schijf.  # MT
+sparse-warning-densified = Sparse-indeling behouden: alleen toegewezen gebieden zijn gekopieerd.  # MT
+sparse-warning-mismatch = Sparse-indeling komt niet overeen — bestemming kan groter zijn dan verwacht.  # MT

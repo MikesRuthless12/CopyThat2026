@@ -170,6 +170,7 @@ err-verify-failed = Verificación posterior a la copia fallida
 err-path-escape = Ruta rechazada — contiene segmentos de directorio padre (..) o bytes no válidos
 # MT
 err-io-other = Error de E/S desconocido
+err-sparseness-mismatch = No se pudo preservar el diseño disperso en el destino  # MT
 
 # MT — Collision modal
 collision-modal-title = El archivo ya existe
@@ -437,6 +438,8 @@ settings-preserve-timestamps = Conservar marcas de tiempo
 settings-preserve-permissions = Conservar permisos
 # MT
 settings-preserve-acls = Conservar ACL (Fase 14)
+settings-preserve-sparseness = Preservar archivos dispersos  # MT
+settings-preserve-sparseness-hint = Copie solo las extensiones asignadas de los archivos dispersos (discos de VM, archivos de base de datos) para que el tamaño en disco del destino sea igual al origen.  # MT
 
 # MT
 settings-context-menu = Activar entradas del menú contextual
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = El destino rellena los archivos dispersos  # MT
+sparse-not-supported-body = { $dst_fs } no admite archivos dispersos. Los huecos del origen se escribieron como ceros, por lo que el destino ocupa más espacio en disco.  # MT
+sparse-warning-densified = Diseño disperso preservado: solo se copiaron las extensiones asignadas.  # MT
+sparse-warning-mismatch = Desajuste de diseño disperso — el destino puede ser mayor de lo esperado.  # MT

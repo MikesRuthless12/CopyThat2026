@@ -50,6 +50,7 @@ windows-sys = { version = "0.59", features = [
 ] }
 
 [dev-dependencies]
+blake3 = "1"
 tempfile = "3"
 tokio = { version = "1", features = [
     "fs",
@@ -66,3 +67,8 @@ tokio = { version = "1", features = [
 [[test]]
 name = "phase_06_fast_paths"
 path = "../../tests/smoke/phase_06_fast_paths.rs"
+
+# Phase 23 smoke test lives at the workspace root.
+[[test]]
+name = "phase_23_sparse"
+path = "../../tests/smoke/phase_23_sparse.rs"

@@ -742,6 +742,7 @@ dependencies = [
 name = "copythat-platform"
 version = "1.0.0"
 dependencies = [
+ "blake3",
  "copythat-core",
  "libc",
  "reflink-copy",

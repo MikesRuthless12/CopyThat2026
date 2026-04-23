@@ -170,6 +170,7 @@ err-verify-failed = Verificação pós-cópia falhou
 err-path-escape = Caminho rejeitado — contém segmentos de diretório pai (..) ou bytes ilegais
 # MT
 err-io-other = Erro de E/S desconhecido
+err-sparseness-mismatch = Não foi possível preservar layout esparso no destino  # MT
 
 # MT — Collision modal
 collision-modal-title = O arquivo já existe
@@ -437,6 +438,8 @@ settings-preserve-timestamps = Preservar carimbos de data/hora
 settings-preserve-permissions = Preservar permissões
 # MT
 settings-preserve-acls = Preservar ACLs (Fase 14)
+settings-preserve-sparseness = Preservar arquivos esparsos  # MT
+settings-preserve-sparseness-hint = Copie apenas as extensões alocadas de arquivos esparsos (discos de VM, arquivos de banco de dados) para que o tamanho em disco do destino permaneça igual ao da origem.  # MT
 
 # MT
 settings-context-menu = Habilitar entradas do menu de contexto
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = Destino preenche arquivos esparsos  # MT
+sparse-not-supported-body = { $dst_fs } não suporta arquivos esparsos. Buracos na origem foram gravados como zeros, portanto o destino ocupa mais espaço em disco.  # MT
+sparse-warning-densified = Layout esparso preservado: apenas as extensões alocadas foram copiadas.  # MT
+sparse-warning-mismatch = Incompatibilidade de layout esparso — destino pode ser maior que o esperado.  # MT

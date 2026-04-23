@@ -272,19 +272,13 @@ mod tests {
     fn empty_profile_with_no_fallback_returns_none() {
         let profile = ConflictProfile::default();
         assert!(profile.is_empty());
-        assert!(
-            profile
-                .match_basename_or_path("x.txt", "x.txt")
-                .is_none()
-        );
+        assert!(profile.match_basename_or_path("x.txt", "x.txt").is_none());
     }
 
     #[test]
     fn path_shaped_glob_matches_rel_path_when_basename_misses() {
-        let profile = ConflictProfile::with_rules(vec![rule(
-            "cache/**",
-            ConflictRuleResolution::Skip,
-        )]);
+        let profile =
+            ConflictProfile::with_rules(vec![rule("cache/**", ConflictRuleResolution::Skip)]);
         // Basename alone doesn't carry the path prefix, but rel_path does.
         let m = profile
             .match_basename_or_path("thumb.png", "cache/thumb.png")

@@ -25,6 +25,13 @@ pub enum CopyErrorKind {
     /// refused before opening anything, so no partial destination
     /// exists. See `copythat_core::safety`.
     PathEscape,
+    /// Phase 23 — the post-copy extent re-scan of the destination did
+    /// not agree with the source's extent layout. A partial
+    /// destination is removed unless `CopyOptions::keep_partial` is
+    /// set. The full `SparsenessMismatch` detail (both extent lists)
+    /// is available via `CopyError::sparseness_mismatch()` on the
+    /// returned error — the kind itself is the stable classifier.
+    SparsenessMismatch,
     IoOther,
 }
 
@@ -59,6 +66,7 @@ impl CopyErrorKind {
             Self::Interrupted => "err-interrupted",
             Self::VerifyFailed => "err-verify-failed",
             Self::PathEscape => "err-path-escape",
+            Self::SparsenessMismatch => "err-sparseness-mismatch",
             Self::IoOther => "err-io-other",
         }
     }
@@ -160,6 +168,27 @@ impl CopyError {
             dst: dst.to_path_buf(),
             raw_os_error: None,
             message: format!("verify mismatch ({algorithm}): src={src_hex} dst={dst_hex}"),
+        }
+    }
+
+    /// Phase 23 — construct a `SparsenessMismatch` error from the pair
+    /// of extent layouts the verify pass observed.
+    pub(crate) fn sparseness_mismatch(
+        src: &Path,
+        dst: &Path,
+        src_extents: &[crate::sparse::ByteRange],
+        dst_extents: &[crate::sparse::ByteRange],
+    ) -> Self {
+        Self {
+            kind: CopyErrorKind::SparsenessMismatch,
+            src: src.to_path_buf(),
+            dst: dst.to_path_buf(),
+            raw_os_error: None,
+            message: format!(
+                "sparse layout mismatch: src={} extents, dst={} extents",
+                src_extents.len(),
+                dst_extents.len()
+            ),
         }
     }
 

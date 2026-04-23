@@ -73,6 +73,11 @@ pub const EVENT_CLIPBOARD_FILES_DETECTED: &str = "clipboard-files-detected";
 // the active row until the file completes.
 pub const EVENT_SNAPSHOT_CREATED: &str = "snapshot-created";
 
+// Phase 23 — the destination filesystem doesn't support sparse files.
+// The frontend shows a one-shot toast so the user knows the destination
+// will be larger on disk than the source.
+pub const EVENT_SPARSENESS_NOT_SUPPORTED: &str = "sparseness-not-supported";
+
 // Phase 21 — shape rate changed (settings update OR schedule poll
 // minute tick). The header badge subscribes so the "🔻 30 MB/s · scheduled"
 // pill re-renders without polling.
@@ -617,6 +622,15 @@ pub struct TransferDto {
     /// a short string so older frontends silently ignore unknown
     /// values (falls back to `"ask"` via `LockedFilePolicyChoice::from_wire`).
     pub on_locked: String,
+    /// Phase 23 — preserve source sparseness on the destination.
+    /// `true` is the default; frontends that ship without this key
+    /// (older builds) fall through serde-default to `true`.
+    #[serde(default = "default_true")]
+    pub preserve_sparseness: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -810,6 +824,17 @@ pub struct SnapshotCreatedDto {
     pub snap_mount: String,
 }
 
+/// Phase 23 — `sparseness-not-supported` payload. Emitted when the
+/// destination filesystem can't preserve a sparse source, so the
+/// copy densified. `dst_fs` is a short lowercase filesystem name
+/// (`"exfat"`, `"fat32"`, `"hfs+"`, `"unknown"`).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SparsenessNotSupportedDto {
+    pub job_id: u64,
+    pub dst_fs: String,
+}
+
 /// Phase 19a — `scan-started` payload.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -906,6 +931,7 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 preserve_permissions: s.transfer.preserve_permissions,
                 preserve_acls: s.transfer.preserve_acls,
                 on_locked: s.transfer.on_locked.as_str().to_string(),
+                preserve_sparseness: s.transfer.preserve_sparseness,
             },
             shell: ShellDto {
                 context_menu_enabled: s.shell.context_menu_enabled,
@@ -1052,6 +1078,7 @@ impl SettingsDto {
         s.transfer.preserve_permissions = self.transfer.preserve_permissions;
         s.transfer.preserve_acls = self.transfer.preserve_acls;
         s.transfer.on_locked = LockedFilePolicyChoice::from_wire(&self.transfer.on_locked);
+        s.transfer.preserve_sparseness = self.transfer.preserve_sparseness;
 
         s.shell.context_menu_enabled = self.shell.context_menu_enabled;
         s.shell.intercept_default_copy = self.shell.intercept_default_copy;

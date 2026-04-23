@@ -170,6 +170,7 @@ err-verify-failed = Prüfung nach Kopie fehlgeschlagen
 err-path-escape = Pfad abgelehnt — enthält übergeordnete Verzeichnissegmente (..) oder ungültige Bytes
 # MT
 err-io-other = Unbekannter E/A-Fehler
+err-sparseness-mismatch = Sparse-Layout konnte am Ziel nicht beibehalten werden  # MT
 
 # MT — Collision modal
 collision-modal-title = Datei existiert bereits
@@ -437,6 +438,8 @@ settings-preserve-timestamps = Zeitstempel beibehalten
 settings-preserve-permissions = Berechtigungen beibehalten
 # MT
 settings-preserve-acls = ACLs beibehalten (Phase 14)
+settings-preserve-sparseness = Sparse-Dateien bewahren  # MT
+settings-preserve-sparseness-hint = Bei Sparse-Dateien (VM-Disks, Datenbankdateien) werden nur die zugewiesenen Bereiche kopiert, sodass das Ziel dieselbe Größe auf dem Datenträger wie die Quelle behält.  # MT
 
 # MT
 settings-context-menu = Shell-Kontextmenü-Einträge aktivieren
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = Ziel füllt Sparse-Dateien aus  # MT
+sparse-not-supported-body = { $dst_fs } unterstützt keine Sparse-Dateien. Löcher in der Quelle wurden als Nullen geschrieben, daher ist das Ziel auf dem Datenträger größer.  # MT
+sparse-warning-densified = Sparse-Layout beibehalten: nur zugewiesene Bereiche wurden kopiert.  # MT
+sparse-warning-mismatch = Sparse-Layout stimmt nicht überein — Ziel könnte größer als erwartet sein.  # MT

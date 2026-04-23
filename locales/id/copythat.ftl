@@ -170,6 +170,7 @@ err-verify-failed = Verifikasi pasca-salin gagal
 err-path-escape = Jalur ditolak — berisi segmen direktori induk (..) atau byte ilegal
 # MT
 err-io-other = Kesalahan I/O tidak dikenal
+err-sparseness-mismatch = Tata letak sparse tidak dapat dipertahankan di tujuan  # MT
 
 # MT — Collision modal
 collision-modal-title = File sudah ada
@@ -437,6 +438,8 @@ settings-preserve-timestamps = Pertahankan stempel waktu
 settings-preserve-permissions = Pertahankan izin
 # MT
 settings-preserve-acls = Pertahankan ACL (Fase 14)
+settings-preserve-sparseness = Pertahankan file sparse  # MT
+settings-preserve-sparseness-hint = Salin hanya rentang yang dialokasikan dari file sparse (disk VM, file database) sehingga ukuran tujuan di disk tetap sama dengan sumber.  # MT
 
 # MT
 settings-context-menu = Aktifkan entri menu konteks shell
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = Tujuan mengisi file sparse  # MT
+sparse-not-supported-body = { $dst_fs } tidak mendukung file sparse. Lubang di sumber ditulis sebagai nol, sehingga tujuan lebih besar di disk.  # MT
+sparse-warning-densified = Tata letak sparse dipertahankan: hanya rentang yang dialokasikan yang disalin.  # MT
+sparse-warning-mismatch = Ketidakcocokan tata letak sparse — tujuan mungkin lebih besar dari yang diharapkan.  # MT

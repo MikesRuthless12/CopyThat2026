@@ -170,6 +170,7 @@ err-verify-failed = فشل التحقق بعد النسخ
 err-path-escape = تم رفض المسار — يحتوي على مقاطع الدليل الأصلي (..) أو بايتات غير مسموح بها
 # MT
 err-io-other = خطأ إدخال/إخراج غير معروف
+err-sparseness-mismatch = لا يمكن الحفاظ على تخطيط الملف المتناثر في الوجهة  # MT
 
 # MT — Collision modal
 collision-modal-title = الملف موجود بالفعل
@@ -437,6 +438,8 @@ settings-preserve-timestamps = الاحتفاظ بطوابع الوقت
 settings-preserve-permissions = الاحتفاظ بالأذونات
 # MT
 settings-preserve-acls = الاحتفاظ بقوائم التحكم في الوصول (المرحلة 14)
+settings-preserve-sparseness = الاحتفاظ بالملفات المتناثرة  # MT
+settings-preserve-sparseness-hint = انسخ فقط النطاقات المخصصة للملفات المتناثرة (أقراص الجهاز الظاهري، ملفات قاعدة البيانات) حتى يظل حجم الوجهة على القرص هو نفسه حجم المصدر.  # MT
 
 # MT
 settings-context-menu = تفعيل عناصر قائمة السياق
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = الوجهة تملأ الملفات المتناثرة  # MT
+sparse-not-supported-body = { $dst_fs } لا يدعم الملفات المتناثرة. تمت كتابة الثقوب الموجودة في المصدر كأصفار، لذا فإن حجم الوجهة على القرص أكبر.  # MT
+sparse-warning-densified = تم الحفاظ على تخطيط الملف المتناثر: تم نسخ النطاقات المخصصة فقط.  # MT
+sparse-warning-mismatch = عدم تطابق تخطيط الملف المتناثر — قد تكون الوجهة أكبر من المتوقع.  # MT

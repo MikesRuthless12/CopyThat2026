@@ -170,6 +170,7 @@ err-verify-failed = Перевірка після копіювання не вд
 err-path-escape = Шлях відхилено — містить сегменти батьківського каталогу (..) або заборонені байти
 # MT
 err-io-other = Невідома помилка вводу/виводу
+err-sparseness-mismatch = Не вдалося зберегти розріджений макет у цільовому  # MT
 
 # MT — Collision modal
 collision-modal-title = Файл уже існує
@@ -437,6 +438,8 @@ settings-preserve-timestamps = Зберігати мітки часу
 settings-preserve-permissions = Зберігати права доступу
 # MT
 settings-preserve-acls = Зберігати ACL (етап 14)
+settings-preserve-sparseness = Зберігати розріджені файли  # MT
+settings-preserve-sparseness-hint = Копіювати лише виділені діапазони розріджених файлів (диски віртуальних машин, файли баз даних), щоб розмір на диску в цільовому залишався таким самим, як у джерелі.  # MT
 
 # MT
 settings-context-menu = Увімкнути пункти контекстного меню оболонки
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = Цільове місце заповнює розріджені файли  # MT
+sparse-not-supported-body = { $dst_fs } не підтримує розріджені файли. Отвори в джерелі були записані як нулі, тому цільове місце більше на диску.  # MT
+sparse-warning-densified = Розріджений макет збережено: скопійовано лише виділені діапазони.  # MT
+sparse-warning-mismatch = Невідповідність розрідженого макета — цільове місце може бути більшим за очікуване.  # MT

@@ -170,6 +170,7 @@ err-verify-failed = Vérification après copie échouée
 err-path-escape = Chemin rejeté — contient des segments de répertoire parent (..) ou des octets illégaux
 # MT
 err-io-other = Erreur d'E/S inconnue
+err-sparseness-mismatch = La disposition clairsemée n'a pas pu être préservée sur la destination  # MT
 
 # MT — Collision modal
 collision-modal-title = Le fichier existe déjà
@@ -437,6 +438,8 @@ settings-preserve-timestamps = Conserver les horodatages
 settings-preserve-permissions = Conserver les permissions
 # MT
 settings-preserve-acls = Conserver les ACL (phase 14)
+settings-preserve-sparseness = Préserver les fichiers clairsemés  # MT
+settings-preserve-sparseness-hint = Copier uniquement les étendues allouées des fichiers clairsemés (disques de VM, fichiers de base de données) pour que la destination conserve la même taille sur disque que la source.  # MT
 
 # MT
 settings-context-menu = Activer les entrées du menu contextuel
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = La destination remplit les fichiers clairsemés  # MT
+sparse-not-supported-body = { $dst_fs } ne prend pas en charge les fichiers clairsemés. Les trous de la source ont été écrits sous forme de zéros, donc la destination est plus grande sur disque.  # MT
+sparse-warning-densified = Disposition clairsemée préservée : seules les étendues allouées ont été copiées.  # MT
+sparse-warning-mismatch = Incompatibilité de disposition clairsemée — la destination peut être plus grande que prévu.  # MT

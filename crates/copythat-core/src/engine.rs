@@ -63,6 +63,75 @@ pub async fn copy_file(
         return copy_symlink(&src_path, &dst_path, &opts, &events).await;
     }
 
+    // Phase 23 — sparse-file pre-flight. When the caller has wired a
+    // `sparse_ops` hook and `preserve_sparseness` is on, detect the
+    // source's extent layout up front. If the source actually contains
+    // holes (allocated_bytes < logical_len), divert into the sparse
+    // copy path, which preserves the hole layout on the destination.
+    // If the destination filesystem doesn't support sparse files, emit
+    // `SparsenessNotSupported` once and fall through to the dense
+    // path. Bypassing `fast_copy_hook` is intentional: the sparse
+    // path owns its own read/write strategy.
+    if opts.preserve_sparseness
+        && let Some(sparse_ops) = opts.sparse_ops.clone()
+    {
+        let total_len = src_metadata.len();
+        let src_for_detect = src_path.clone();
+        let detect_ops = sparse_ops.clone();
+        let extents_result =
+            tokio::task::spawn_blocking(move || detect_ops.detect_extents(&src_for_detect))
+                .await
+                .map_err(|e| {
+                    CopyError::from_io(
+                        &src_path,
+                        &dst_path,
+                        std::io::Error::other(format!("sparse detect join: {e}")),
+                    )
+                })?;
+
+        if let Ok(extents) = extents_result {
+            let allocated = crate::sparse::allocated_bytes(&extents);
+            let is_sparse = allocated < total_len && !extents.is_empty()
+                || (total_len > 0 && extents.is_empty());
+            if is_sparse {
+                // Probe the *destination parent* for FS support — the
+                // dst doesn't exist yet so `supports_sparse(dst)` would
+                // walk up to the parent anyway.
+                let dst_probe = dst_path.parent().unwrap_or(&dst_path).to_path_buf();
+                let probe_ops = sparse_ops.clone();
+                let dst_supports =
+                    tokio::task::spawn_blocking(move || probe_ops.supports_sparse(&dst_probe))
+                        .await
+                        .unwrap_or(false);
+
+                if !dst_supports {
+                    let _ = events
+                        .send(CopyEvent::SparsenessNotSupported {
+                            dst_fs: detect_dst_fs_label(&dst_path),
+                        })
+                        .await;
+                    // Fall through to the classic dense path below.
+                } else {
+                    return copy_file_sparse_aware(
+                        src_path,
+                        dst_path,
+                        opts,
+                        ctrl,
+                        events,
+                        src_metadata,
+                        total_len,
+                        extents,
+                        sparse_ops,
+                    )
+                    .await;
+                }
+            }
+        }
+        // `detect_extents` errored — fall through to the dense path.
+        // The extent hook is an optimisation; a failure shouldn't
+        // abort the copy.
+    }
+
     // Phase 6: consult the fast-copy hook before opening files for the
     // standard async loop. Bypassed entirely when verify is enabled —
     // the verify pipeline relies on hashing source bytes during the
@@ -656,6 +725,318 @@ async fn preserve_metadata(
         }
     }
     Ok(())
+}
+
+/// Phase 23 — sparse-preserving copy loop.
+///
+/// Called from `copy_file` after the pre-flight detected a sparse
+/// source and a sparse-capable destination FS. Owns its own
+/// read/write strategy: iterate the source's allocated extents,
+/// seek-copy each one into the destination, and leave the gaps
+/// untouched so the filesystem naturally preserves the hole layout.
+///
+/// Interactions:
+/// - Honours `opts.shape` and `CopyControl` exactly like the dense
+///   loop (pause / cancel / bandwidth permit per buffered read).
+/// - Honours `opts.verify` via the standard byte-for-byte post-pass —
+///   holes read back as zeros on both sides, so the hashes agree when
+///   the layout was preserved.
+/// - Bypasses `opts.fast_copy_hook`: the sparse path is the fast
+///   path, and reflink preservation is a Phase 6 concern.
+/// - Bypasses `opts.journal`: no sparse-aware resume in Phase 23.
+/// - Enforces `allocated_bytes(dst) <= total_len` after the copy; a
+///   fully-densified dst raises `CopyErrorKind::SparsenessMismatch`.
+#[allow(clippy::too_many_arguments)]
+async fn copy_file_sparse_aware(
+    src_path: std::path::PathBuf,
+    dst_path: std::path::PathBuf,
+    opts: CopyOptions,
+    ctrl: CopyControl,
+    events: mpsc::Sender<CopyEvent>,
+    src_metadata: std::fs::Metadata,
+    total: u64,
+    src_extents: Vec<crate::sparse::ByteRange>,
+    sparse_ops: std::sync::Arc<dyn crate::sparse::SparseOps>,
+) -> Result<CopyReport, CopyError> {
+    // Open an empty destination: honour fail_if_exists, but always
+    // truncate on success (the sparse path never resumes).
+    let mut open = OpenOptions::new();
+    open.write(true).truncate(true);
+    if opts.fail_if_exists {
+        open.create_new(true);
+    } else {
+        open.create(true);
+    }
+    let dst_file = open
+        .open(&dst_path)
+        .await
+        .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
+
+    // Mark the destination sparse *before* any data write. On Windows
+    // NTFS this is `FSCTL_SET_SPARSE`; on Linux/macOS it's a no-op.
+    // Failure falls through with the event already emitted — a
+    // best-effort sparse mark is the right policy (e.g. ReFS may
+    // refuse on some builds).
+    {
+        let ops = sparse_ops.clone();
+        let dst_clone = dst_path.clone();
+        let _ = tokio::task::spawn_blocking(move || ops.make_destination_sparse(&dst_clone)).await;
+    }
+
+    // Pre-size the destination so writes at offsets > current EOF
+    // don't fault the OS into allocating the intervening bytes.
+    {
+        let dst_clone = dst_path.clone();
+        let set_len_result = tokio::task::spawn_blocking(move || {
+            let std_file = std::fs::OpenOptions::new().write(true).open(&dst_clone)?;
+            std_file.set_len(total)?;
+            Ok::<(), std::io::Error>(())
+        })
+        .await
+        .map_err(|e| {
+            CopyError::from_io(
+                &src_path,
+                &dst_path,
+                std::io::Error::other(format!("set_len join: {e}")),
+            )
+        })?;
+        if let Err(e) = set_len_result {
+            return Err(CopyError::from_io(&src_path, &dst_path, e));
+        }
+    }
+
+    // Source open with the same snapshot fallback the dense path uses.
+    let (mut src_file, _snapshot_lease) =
+        open_src_with_snapshot_fallback(&src_path, &dst_path, &opts, &events).await?;
+    let mut dst_file = dst_file;
+
+    let _ = events
+        .send(CopyEvent::Started {
+            src: src_path.clone(),
+            dst: dst_path.clone(),
+            total_bytes: total,
+        })
+        .await;
+
+    let buf_size = opts.buffer_size_for_file(total);
+    let mut buf = vec![0u8; buf_size];
+    let started_at = Instant::now();
+    let mut copied: u64 = 0;
+    let mut last_emit_at = started_at;
+    let mut last_emit_bytes: u64 = 0;
+    let mut was_paused = false;
+
+    let loop_result: Result<(), CopyError> = async {
+        for extent in src_extents.iter() {
+            if extent.is_empty() {
+                continue;
+            }
+            // Seek both sides to the extent's offset. Holes between
+            // extents are left unwritten on the destination.
+            src_file
+                .seek(std::io::SeekFrom::Start(extent.offset))
+                .await
+                .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
+            dst_file
+                .seek(std::io::SeekFrom::Start(extent.offset))
+                .await
+                .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
+
+            let mut remaining = extent.len;
+            while remaining > 0 {
+                if ctrl.is_cancelled() {
+                    return Err(CopyError::cancelled(&src_path, &dst_path));
+                }
+                if ctrl.is_paused() {
+                    if !was_paused {
+                        let _ = events.send(CopyEvent::Paused).await;
+                        was_paused = true;
+                    }
+                    ctrl.wait_while_paused().await;
+                    if ctrl.is_cancelled() {
+                        return Err(CopyError::cancelled(&src_path, &dst_path));
+                    }
+                    if was_paused {
+                        let _ = events.send(CopyEvent::Resumed).await;
+                        was_paused = false;
+                    }
+                }
+
+                let want = remaining.min(buf.len() as u64) as usize;
+                let slice = &mut buf[..want];
+                src_file
+                    .read_exact(slice)
+                    .await
+                    .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
+                dst_file
+                    .write_all(slice)
+                    .await
+                    .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
+
+                if let Some(shape) = opts.shape.as_ref() {
+                    shape.permit(want as u64).await;
+                }
+
+                copied += want as u64;
+                remaining -= want as u64;
+
+                let now = Instant::now();
+                if copied.saturating_sub(last_emit_bytes) >= PROGRESS_MIN_BYTES
+                    && now.duration_since(last_emit_at) >= PROGRESS_MIN_INTERVAL
+                {
+                    let elapsed = now.duration_since(started_at);
+                    let rate = rate_bps(copied, elapsed);
+                    let _ = events
+                        .send(CopyEvent::Progress {
+                            bytes: copied,
+                            total,
+                            rate_bps: rate,
+                        })
+                        .await;
+                    last_emit_at = now;
+                    last_emit_bytes = copied;
+                }
+            }
+        }
+        Ok(())
+    }
+    .await;
+
+    if let Err(err) = loop_result {
+        let _ = dst_file.flush().await;
+        drop(dst_file);
+        drop(src_file);
+        if !opts.keep_partial {
+            let _ = tokio::fs::remove_file(&dst_path).await;
+        }
+        let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+        return Err(err);
+    }
+
+    // Flush + optional fsync so the verify pass (or the post-copy
+    // extent scan) reads bytes that are actually durable.
+    dst_file
+        .flush()
+        .await
+        .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
+    let should_fsync = opts.fsync_on_close || (opts.verify.is_some() && opts.fsync_before_verify);
+    if should_fsync && let Err(e) = dst_file.sync_all().await {
+        return Err(CopyError::from_io(&src_path, &dst_path, e));
+    }
+    drop(dst_file);
+    drop(src_file);
+
+    preserve_metadata(src_path.clone(), dst_path.clone(), &src_metadata, &opts).await?;
+
+    // Verify pass — full-file byte-for-byte hash. Holes read back as
+    // zeros on both sides, so a successful hash compare confirms the
+    // hole layout was preserved *and* the data matches. On top of
+    // that we check the destination's allocated-byte count didn't
+    // balloon (which would indicate the FS silently densified).
+    if let Some(verifier) = opts.verify.as_ref() {
+        // Rebuild a source-side hash by reading the full file
+        // sequentially — simpler than weaving hole bytes into the
+        // extent loop. This is still only one extra pass over the
+        // source, matching the dense verify path's cost.
+        let src_full = {
+            let path = src_path.clone();
+            let algo = verifier.clone();
+            tokio::task::spawn_blocking(move || {
+                let mut h = algo.make();
+                let mut f = std::fs::File::open(&path)?;
+                let mut buffer = vec![0u8; 1 << 20];
+                use std::io::Read as _;
+                loop {
+                    let n = f.read(&mut buffer)?;
+                    if n == 0 {
+                        break;
+                    }
+                    h.update(&buffer[..n]);
+                }
+                Ok::<Box<dyn Hasher>, std::io::Error>(h)
+            })
+            .await
+            .map_err(|e| {
+                CopyError::from_io(
+                    &src_path,
+                    &dst_path,
+                    std::io::Error::other(format!("verify-src join: {e}")),
+                )
+            })?
+            .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?
+        };
+        run_verify_pass(
+            &src_path, &dst_path, &opts, verifier, src_full, &ctrl, &events,
+        )
+        .await?;
+    }
+
+    // Phase 23 — post-copy extent scan. Allocated bytes on the
+    // destination must not exceed the source's allocated footprint
+    // plus one filesystem cluster of slop. Past that and we densified.
+    let src_allocated: u64 = crate::sparse::allocated_bytes(&src_extents);
+    let dst_extents_result = {
+        let ops = sparse_ops.clone();
+        let dst_clone = dst_path.clone();
+        tokio::task::spawn_blocking(move || ops.detect_extents(&dst_clone))
+            .await
+            .unwrap_or_else(|_| Ok(Vec::new()))
+    };
+    let dst_allocated: u64 = match &dst_extents_result {
+        Ok(ex) => crate::sparse::allocated_bytes(ex),
+        Err(_) => total, // if we can't probe, assume worst-case dense
+    };
+    // Cluster slop: 1 MiB covers the common NTFS/ext4/APFS allocation
+    // units and leaves headroom for a 4 KiB cluster FS with up to 256
+    // extents of rounding slop. A well-behaved FS reports equal or
+    // smaller.
+    const SPARSE_SLOP_BYTES: u64 = 1 << 20;
+    if dst_allocated > src_allocated + SPARSE_SLOP_BYTES && dst_allocated >= total {
+        let empty: Vec<crate::sparse::ByteRange> = Vec::new();
+        let dst_ex = dst_extents_result.as_ref().unwrap_or(&empty);
+        let err = CopyError::sparseness_mismatch(&src_path, &dst_path, &src_extents, dst_ex);
+        if !opts.keep_partial {
+            let _ = tokio::fs::remove_file(&dst_path).await;
+        }
+        let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+        return Err(err);
+    }
+
+    let elapsed = started_at.elapsed();
+    let rate = rate_bps(copied, elapsed);
+    let _ = events
+        .send(CopyEvent::Progress {
+            bytes: copied,
+            total,
+            rate_bps: rate,
+        })
+        .await;
+    let _ = events
+        .send(CopyEvent::Completed {
+            bytes: copied,
+            duration: elapsed,
+            rate_bps: rate,
+        })
+        .await;
+    Ok(CopyReport {
+        src: src_path,
+        dst: dst_path,
+        bytes: copied,
+        duration: elapsed,
+        rate_bps: rate,
+    })
+}
+
+/// Phase 23 — lookup for the short-name filesystem label the
+/// `SparsenessNotSupported` event reports. Returns a stable wire
+/// string even when the probe fails (`"unknown"`).
+fn detect_dst_fs_label(_dst: &Path) -> &'static str {
+    // copythat-core deliberately avoids the OS FFI; the platform
+    // crate's `filesystem_name` gives the real answer. From core we
+    // can only return "unknown" — the caller in Tauri can enrich the
+    // event with the platform-probed label before forwarding it to
+    // the UI.
+    "unknown"
 }
 
 /// Clone a symlink source as a symlink at `dst` (i.e. `opts.follow_symlinks

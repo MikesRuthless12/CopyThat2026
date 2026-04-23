@@ -170,6 +170,7 @@ err-verify-failed = 复制后校验失败
 err-path-escape = 路径被拒绝 — 包含父目录（..）段或非法字节
 # MT
 err-io-other = 未知 I/O 错误
+err-sparseness-mismatch = 无法在目标保留稀疏布局  # MT
 
 # MT — Collision modal
 collision-modal-title = 文件已存在
@@ -437,6 +438,8 @@ settings-preserve-timestamps = 保留时间戳
 settings-preserve-permissions = 保留权限
 # MT
 settings-preserve-acls = 保留 ACL(第 14 阶段)
+settings-preserve-sparseness = 保留稀疏文件  # MT
+settings-preserve-sparseness-hint = 仅复制稀疏文件(VM 磁盘、数据库文件)的已分配区段,以便目标在磁盘上的大小与源相同。  # MT
 
 # MT
 settings-context-menu = 启用外壳上下文菜单项
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = 目标填充稀疏文件  # MT
+sparse-not-supported-body = { $dst_fs } 不支持稀疏文件。源中的空洞被写入为零,因此目标在磁盘上更大。  # MT
+sparse-warning-densified = 已保留稀疏布局:仅复制了已分配的区段。  # MT
+sparse-warning-mismatch = 稀疏布局不匹配——目标可能比预期更大。  # MT

@@ -170,6 +170,7 @@ err-verify-failed = Kopya sonrası doğrulama başarısız
 err-path-escape = Yol reddedildi — üst dizin (..) parçaları veya geçersiz baytlar içeriyor
 # MT
 err-io-other = Bilinmeyen G/Ç hatası
+err-sparseness-mismatch = Hedefte seyrek düzen korunamadı  # MT
 
 # MT — Collision modal
 collision-modal-title = Dosya zaten var
@@ -437,6 +438,8 @@ settings-preserve-timestamps = Zaman damgalarını koru
 settings-preserve-permissions = İzinleri koru
 # MT
 settings-preserve-acls = ACL'leri koru (14. aşama)
+settings-preserve-sparseness = Seyrek dosyaları koru  # MT
+settings-preserve-sparseness-hint = Seyrek dosyaların (VM diskleri, veritabanı dosyaları) yalnızca ayrılmış kapsamlarını kopyalayın; böylece hedefin diskteki boyutu kaynakla aynı kalır.  # MT
 
 # MT
 settings-context-menu = Bağlam menüsü girdilerini etkinleştir
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = Hedef seyrek dosyaları dolduruyor  # MT
+sparse-not-supported-body = { $dst_fs } seyrek dosyaları desteklemiyor. Kaynaktaki boşluklar sıfır olarak yazıldı, bu nedenle hedef diskte daha büyük.  # MT
+sparse-warning-densified = Seyrek düzen korundu: yalnızca ayrılmış kapsamlar kopyalandı.  # MT
+sparse-warning-mismatch = Seyrek düzen uyuşmazlığı — hedef beklenenden büyük olabilir.  # MT

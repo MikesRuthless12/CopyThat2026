@@ -617,6 +617,15 @@
                 <span class="label">{t("settings-preserve-acls")}</span>
               </label>
 
+              <label class="row check" title={t("settings-preserve-sparseness-hint")}>
+                <input
+                  type="checkbox"
+                  bind:checked={settings.transfer.preserveSparseness}
+                  onchange={pushSettings}
+                />
+                <span class="label">{t("settings-preserve-sparseness")}</span>
+              </label>
+
               <label class="row">
                 <span class="label">{t("settings-on-locked")}</span>
                 <select

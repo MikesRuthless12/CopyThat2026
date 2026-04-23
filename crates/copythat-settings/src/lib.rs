@@ -292,6 +292,15 @@ pub struct TransferSettings {
     /// enum here so this crate stays free of a `copythat-core`
     /// dependency; the Tauri bridge translates at enqueue time.
     pub on_locked: LockedFilePolicyChoice,
+    /// Phase 23 — preserve source sparseness on the destination.
+    ///
+    /// When `true` (the default), `CopyOptions::preserve_sparseness`
+    /// is set at enqueue time and the engine's sparse pathway copies
+    /// only the allocated extents. `false` forces a dense copy even
+    /// when the source has holes — useful when the user needs the
+    /// destination to be fully allocated (e.g. latency-sensitive VM
+    /// disks where on-demand allocation hurts first-write cost).
+    pub preserve_sparseness: bool,
 }
 
 impl Default for TransferSettings {
@@ -307,6 +316,7 @@ impl Default for TransferSettings {
             preserve_acls: false,
             reserve_free_space_bytes: 0,
             on_locked: LockedFilePolicyChoice::default(),
+            preserve_sparseness: true,
         }
     }
 }

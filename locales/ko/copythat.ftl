@@ -170,6 +170,7 @@ err-verify-failed = 복사 후 확인 실패
 err-path-escape = 경로 거부됨 — 상위 디렉터리(..) 세그먼트 또는 잘못된 바이트 포함
 # MT
 err-io-other = 알 수 없는 I/O 오류
+err-sparseness-mismatch = 대상에서 스파스 레이아웃을 보존할 수 없습니다  # MT
 
 # MT — Collision modal
 collision-modal-title = 파일이 이미 있습니다
@@ -437,6 +438,8 @@ settings-preserve-timestamps = 타임스탬프 유지
 settings-preserve-permissions = 권한 유지
 # MT
 settings-preserve-acls = ACL 유지 (14단계)
+settings-preserve-sparseness = 스파스 파일 보존  # MT
+settings-preserve-sparseness-hint = 스파스 파일(VM 디스크, 데이터베이스 파일)의 할당된 범위만 복사하여 대상이 원본과 동일한 디스크 크기를 유지합니다.  # MT
 
 # MT
 settings-context-menu = 셸 컨텍스트 메뉴 항목 사용
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = 대상이 스파스 파일을 채움  # MT
+sparse-not-supported-body = { $dst_fs }는 스파스 파일을 지원하지 않습니다. 원본의 구멍이 0으로 기록되어 대상이 디스크에서 더 큽니다.  # MT
+sparse-warning-densified = 스파스 레이아웃 보존: 할당된 범위만 복사되었습니다.  # MT
+sparse-warning-mismatch = 스파스 레이아웃 불일치 — 대상이 예상보다 클 수 있습니다.  # MT

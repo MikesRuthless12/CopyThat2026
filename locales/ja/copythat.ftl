@@ -170,6 +170,7 @@ err-verify-failed = コピー後の検証に失敗しました
 err-path-escape = パスは拒否されました — 親ディレクトリ（..）セグメントまたは無効なバイトが含まれています
 # MT
 err-io-other = 不明な I/O エラー
+err-sparseness-mismatch = 宛先でスパースレイアウトを保持できませんでした  # MT
 
 # MT — Collision modal
 collision-modal-title = ファイルが既に存在します
@@ -437,6 +438,8 @@ settings-preserve-timestamps = タイムスタンプを保持
 settings-preserve-permissions = パーミッションを保持
 # MT
 settings-preserve-acls = ACL を保持 (Phase 14)
+settings-preserve-sparseness = スパースファイルを保持  # MT
+settings-preserve-sparseness-hint = スパースファイル (VM ディスク、データベースファイル) の割り当て済み範囲のみをコピーし、宛先がソースと同じディスク上のサイズを維持します。  # MT
 
 # MT
 settings-context-menu = シェルのコンテキストメニュー項目を有効化
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = 宛先がスパースファイルを埋めます  # MT
+sparse-not-supported-body = { $dst_fs } はスパースファイルをサポートしていません。ソースの穴はゼロとして書き込まれ、宛先はディスク上で大きくなります。  # MT
+sparse-warning-densified = スパースレイアウトを保持: 割り当て済み範囲のみコピーされました。  # MT
+sparse-warning-mismatch = スパースレイアウトの不一致 — 宛先が予想より大きくなる可能性があります。  # MT

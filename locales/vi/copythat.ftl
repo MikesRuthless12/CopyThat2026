@@ -170,6 +170,7 @@ err-verify-failed = Xác minh sau khi sao chép thất bại
 err-path-escape = Đường dẫn bị từ chối — chứa đoạn thư mục cha (..) hoặc byte không hợp lệ
 # MT
 err-io-other = Lỗi I/O không xác định
+err-sparseness-mismatch = Không thể duy trì bố cục thưa tại đích  # MT
 
 # MT — Collision modal
 collision-modal-title = Tệp đã tồn tại
@@ -437,6 +438,8 @@ settings-preserve-timestamps = Giữ dấu thời gian
 settings-preserve-permissions = Giữ quyền
 # MT
 settings-preserve-acls = Giữ ACL (Giai đoạn 14)
+settings-preserve-sparseness = Bảo toàn tệp thưa  # MT
+settings-preserve-sparseness-hint = Chỉ sao chép các phạm vi được cấp phát của tệp thưa (đĩa VM, tệp cơ sở dữ liệu) để kích thước trên đĩa tại đích giữ nguyên bằng với nguồn.  # MT
 
 # MT
 settings-context-menu = Bật các mục menu ngữ cảnh shell
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = Đích lấp đầy tệp thưa  # MT
+sparse-not-supported-body = { $dst_fs } không hỗ trợ tệp thưa. Các lỗ trong nguồn đã được ghi dưới dạng số 0, do đó đích lớn hơn trên đĩa.  # MT
+sparse-warning-densified = Bố cục thưa được bảo toàn: chỉ các phạm vi được cấp phát đã được sao chép.  # MT
+sparse-warning-mismatch = Không khớp bố cục thưa — đích có thể lớn hơn mong đợi.  # MT

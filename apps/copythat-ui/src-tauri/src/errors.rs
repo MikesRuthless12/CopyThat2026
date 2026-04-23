@@ -237,6 +237,7 @@ pub fn kind_name(kind: CopyErrorKind) -> &'static str {
         CopyErrorKind::Interrupted => "interrupted",
         CopyErrorKind::VerifyFailed => "verify-failed",
         CopyErrorKind::PathEscape => "path-escape",
+        CopyErrorKind::SparsenessMismatch => "sparseness-mismatch",
         CopyErrorKind::IoOther => "io-other",
     }
 }

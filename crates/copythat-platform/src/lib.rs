@@ -75,6 +75,7 @@ mod hook;
 mod native;
 mod outcome;
 mod reflink_path;
+pub mod sparse;
 
 pub use dispatcher::fast_copy;
 pub use helpers::{
@@ -83,3 +84,4 @@ pub use helpers::{
 };
 pub use hook::PlatformFastCopyHook;
 pub use outcome::{ChosenStrategy, FastCopyOutcome};
+pub use sparse::PlatformSparseOps;

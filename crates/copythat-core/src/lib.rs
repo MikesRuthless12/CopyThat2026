@@ -32,6 +32,20 @@
 //!   `Hasher` abstraction lives in `copythat_core::verify`;
 //!   `copythat-hash` plugs in the concrete algorithms.
 //!
+//! Added in Phase 23:
+//! - `copythat_core::sparse` — `ByteRange`, `SparseOps` trait,
+//!   `DenseOnlySparseOps` fallback stub, `SparsenessMismatch`
+//!   detail, `allocated_bytes` helper. `CopyOptions::preserve_
+//!   sparseness: bool` + `CopyOptions::sparse_ops: Option<Arc<dyn
+//!   SparseOps>>` drive a dedicated sparse-aware copy path that
+//!   preserves hole layouts across the copy. The unsafe OS calls
+//!   (`SEEK_HOLE` / `SEEK_DATA`, `FSCTL_QUERY_ALLOCATED_RANGES` /
+//!   `FSCTL_SET_SPARSE`) live in `copythat_platform::sparse` so
+//!   this crate stays `#![forbid(unsafe_code)]`-clean. Regression
+//!   surfaces via `CopyEvent::SparsenessNotSupported { dst_fs }`
+//!   on densifying filesystems and `CopyErrorKind::SparsenessMismatch`
+//!   when the dst's allocated footprint balloons past the source's.
+//!
 //! Not yet implemented (deferred by design):
 //! - Platform fast paths (CopyFileExW, copyfile, copy_file_range,
 //!   reflink) — Phase 6.
@@ -89,6 +103,7 @@ mod options;
 pub mod queue;
 pub mod safety;
 pub mod scan;
+pub mod sparse;
 mod tree;
 pub mod verify;
 
@@ -106,5 +121,6 @@ pub use options::{
 };
 pub use queue::{Job, JobId, JobKind, JobState, Queue, QueueEvent};
 pub use safety::{PathSafetyError, validate_all, validate_path_no_traversal};
+pub use sparse::{ByteRange, DenseOnlySparseOps, SparseOps, SparsenessMismatch, allocated_bytes};
 pub use tree::{copy_tree, copy_tree_from_scan, move_file, move_tree};
 pub use verify::{Hasher, Verifier};

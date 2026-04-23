@@ -65,6 +65,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
             preserve_acls: true,
             reserve_free_space_bytes: 0,
             on_locked: copythat_settings::LockedFilePolicyChoice::Snapshot,
+            preserve_sparseness: true,
         },
         shell: copythat_settings::ShellSettings {
             context_menu_enabled: false,
@@ -122,6 +123,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
             preserve_acls: true,
             reserve_free_space_bytes: 0,
             on_locked: copythat_settings::LockedFilePolicyChoice::Snapshot,
+            preserve_sparseness: true,
         },
         shell: copythat_settings::ShellSettings {
             context_menu_enabled: false,

@@ -170,6 +170,7 @@ err-verify-failed = Weryfikacja po kopiowaniu nieudana
 err-path-escape = Ścieżka odrzucona — zawiera segmenty katalogu nadrzędnego (..) lub niedozwolone bajty
 # MT
 err-io-other = Nieznany błąd we/wy
+err-sparseness-mismatch = Nie udało się zachować układu rozrzedzonego w miejscu docelowym  # MT
 
 # MT — Collision modal
 collision-modal-title = Plik już istnieje
@@ -437,6 +438,8 @@ settings-preserve-timestamps = Zachowaj znaczniki czasu
 settings-preserve-permissions = Zachowaj uprawnienia
 # MT
 settings-preserve-acls = Zachowaj ACL (faza 14)
+settings-preserve-sparseness = Zachowaj pliki rozrzedzone  # MT
+settings-preserve-sparseness-hint = Kopiuj tylko przydzielone zakresy plików rozrzedzonych (dyski VM, pliki baz danych), aby rozmiar na dysku w miejscu docelowym był taki sam jak w źródle.  # MT
 
 # MT
 settings-context-menu = Włącz wpisy menu kontekstowego
@@ -840,3 +843,10 @@ conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 # MT
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. MT-flagged drafts; the
+# authoritative English source lives in locales/en/copythat.ftl.
+sparse-not-supported-title = Miejsce docelowe wypełnia pliki rozrzedzone  # MT
+sparse-not-supported-body = { $dst_fs } nie obsługuje plików rozrzedzonych. Dziury w źródle zostały zapisane jako zera, więc miejsce docelowe jest większe na dysku.  # MT
+sparse-warning-densified = Zachowano układ rozrzedzony: skopiowano tylko przydzielone zakresy.  # MT
+sparse-warning-mismatch = Niezgodność układu rozrzedzonego — miejsce docelowe może być większe niż oczekiwano.  # MT

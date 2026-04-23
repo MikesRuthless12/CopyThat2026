@@ -182,6 +182,7 @@ err-disk-full = Destination disk is full
 err-interrupted = Operation interrupted
 err-verify-failed = Post-copy verification failed
 err-path-escape = Path rejected — contains parent-directory (..) segments or illegal bytes
+err-sparseness-mismatch = Sparse layout could not be preserved on destination
 err-io-other = Unknown I/O error
 
 # Collision modal (Phase 8)
@@ -367,6 +368,8 @@ settings-fsync-on-close = Sync to disk on close (slower, safer)
 settings-preserve-timestamps = Preserve timestamps
 settings-preserve-permissions = Preserve permissions
 settings-preserve-acls = Preserve ACLs (Phase 14)
+settings-preserve-sparseness = Preserve sparse files
+settings-preserve-sparseness-hint = Copy only the allocated extents of sparse files (VM disks, database files) so the destination stays the same on-disk size as the source.
 
 # Shell tab
 settings-context-menu = Enable shell context menu entries
@@ -548,3 +551,12 @@ conflict-batch-size-label = Size
 conflict-batch-modified-label = Modified
 conflict-batch-close = Close
 conflict-batch-profile-saved = Conflict profile saved
+
+# Phase 23 — sparse-file preservation. The toast fires once per
+# destination volume when the filesystem can't preserve holes; the
+# warning line is surfaced in the job detail drawer so the user knows
+# the dst is larger on disk than the source was.
+sparse-not-supported-title = Destination fills sparse files
+sparse-not-supported-body = { $dst_fs } does not support sparse files. Holes in the source were written out as zeros, so the destination is larger on disk.
+sparse-warning-densified = Sparse layout preserved: only allocated extents were copied.
+sparse-warning-mismatch = Sparse layout mismatch — destination may be larger than expected.

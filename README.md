@@ -54,6 +54,7 @@ workloads.
 - **Read-through-snapshot for locked files** — when another process holds the source open for exclusive write, Copy That can pull a read-only filesystem snapshot (VSS on Windows, ZFS / Btrfs on Linux, APFS local snapshot on macOS) and copy from there instead of surfacing the "file in use" error. Opt-in via Settings → Transfer → "When a file is locked". The Windows path spawns a sibling `copythat-helper-vss.exe` via UAC so the main app never needs elevation of its own.
 - **Crash / reboot resume** — every 50 ms the copy engine fsync's the destination and writes a checkpoint to a redb-backed journal at `<data-dir>/copythat-journal.redb` (carrying the running BLAKE3 of consumed source bytes). On the next launch Copy That detects unfinished jobs, BLAKE3-verifies the partial destination's prefix, and seeks both source and destination past the verified offset — power-cut at 96 % of a 2 TB transfer no longer means starting over. Toggle "Auto-resume interrupted jobs without prompting" in Settings → General to skip the resume modal.
 - **Bandwidth shaping** — Settings → Network lets you cap transfers at a fixed MB/s, follow a daily rclone-style schedule (`08:00,512k 18:00,10M Sat-Sun,unlimited`), or react automatically to metered Wi-Fi / battery / cellular. Cap applies globally across every in-flight job; a minute-tick poller re-evaluates the schedule so a 09:00 boundary change hot-swaps the live rate without touching running jobs. Header badge (🔻 30 MB/s · scheduled) shows the active cap — click it to open the Network tab. GCRA token bucket via the `governor` crate is accurate to a handful of milliseconds across the full range (1 KB/s → storage-native ceiling).
+- **Sparse file preservation** — a 100 GB VM disk with 1 MB of real data stays 1 MB on disk at the destination. Copy That detects allocated extents via `SEEK_HOLE` / `SEEK_DATA` on Linux / macOS and `FSCTL_QUERY_ALLOCATED_RANGES` on Windows, marks the destination sparse (NTFS `FSCTL_SET_SPARSE`; automatic on APFS / ext4 / Btrfs / XFS / ZFS / ReFS), and seeks-copies only the allocated ranges so holes are preserved by omission. Toggle in Settings → Transfer → *Preserve sparse files* (default on); destinations that can't preserve sparseness (exFAT / FAT32 / HFS+) raise a one-shot "destination fills sparse files" toast and densify.
 
 ### Internationalisation
 
@@ -201,6 +202,9 @@ cargo test -p copythat-core --test phase_17_security -- --nocapture
 cargo test -p copythat-ui --test phase_18_e2e -- --nocapture
 # Scale up the phase 18 run to the literal Phase 18 brief (10 000 files):
 COPYTHAT_PHASE18_FULL=1 cargo test -p copythat-ui --test phase_18_e2e --release
+
+# Phase 23 — 100 MiB sparse copy: byte-exact + dst allocated <= 8 MiB
+cargo test -p copythat-platform --test phase_23_sparse -- --nocapture
 ```
 
 ## Installing

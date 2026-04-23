@@ -149,6 +149,16 @@ pub enum CopyEvent {
         /// expected).
         offset: u64,
     },
+    /// Phase 23 — the destination filesystem doesn't support sparse
+    /// files. Engine emits this once per sparse source and falls back
+    /// to a dense copy (every hole is written out as zeros). `dst_fs`
+    /// is the short name returned by
+    /// `copythat-platform::filesystem_name` (`"exFAT"`, `"FAT32"`,
+    /// `"HFS+"`, `"unknown"`). The UI surfaces a one-shot toast so
+    /// the user knows the destination will be larger than the source.
+    SparsenessNotSupported {
+        dst_fs: &'static str,
+    },
 }
 
 impl Clone for CopyEvent {
@@ -284,6 +294,9 @@ impl Clone for CopyEvent {
                 reason,
                 offset: *offset,
             },
+            CopyEvent::SparsenessNotSupported { dst_fs } => {
+                CopyEvent::SparsenessNotSupported { dst_fs }
+            }
         }
     }
 }

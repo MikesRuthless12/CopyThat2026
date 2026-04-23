@@ -120,6 +120,10 @@ fn canned_args(key: &str) -> HashMap<&'static str, String> {
             m.insert("kind", "vss".to_string());
             m.insert("volume", "C:".to_string());
         }
+        // Phase 23 — sparse-file toast with the destination FS label.
+        "sparse-not-supported-body" => {
+            m.insert("dst_fs", "exFAT".to_string());
+        }
         _ => {}
     }
     m
