@@ -966,3 +966,17 @@ dropzone-picker-root = Roots  # MT
 dropzone-picker-use-this = Use this folder  # MT
 dropzone-picker-empty = No subfolders  # MT
 dropzone-picker-cancel = Cancel  # MT
+
+# Phase 30 — cross-platform path translation.
+translate-heading = Cross-platform compatibility  # MT
+translate-unicode-label = Unicode normalization  # MT
+translate-unicode-auto = Auto-detect destination  # MT
+translate-unicode-windows = NFC (Windows / Linux)  # MT
+translate-unicode-macos = Leave as-is (macOS / APFS)  # MT
+translate-line-endings-label = Translate line endings for text files  # MT
+translate-line-endings-allowlist = Text file extensions  # MT
+reserved-name-label = Windows reserved-name handling  # MT
+reserved-name-suffix = Append "_" (CON.txt → CON_.txt)  # MT
+reserved-name-reject = Reject and warn  # MT
+long-path-label = Use Windows long-path prefix (\?\) when over 260 chars  # MT
+long-path-hint = Some network shares and legacy tools don't honor the \?\ namespace.  # MT
