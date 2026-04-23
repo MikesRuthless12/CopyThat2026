@@ -123,6 +123,7 @@ pub mod queue;
 pub mod safety;
 pub mod scan;
 pub mod sparse;
+pub mod translate;
 mod tree;
 pub mod verify;
 
@@ -145,5 +146,12 @@ pub use options::{
 pub use queue::{Job, JobId, JobKind, JobState, Queue, QueueEvent};
 pub use safety::{PathSafetyError, validate_all, validate_path_no_traversal};
 pub use sparse::{ByteRange, DenseOnlySparseOps, SparseOps, SparsenessMismatch, allocated_bytes};
+pub use translate::{
+    LineEnding, LineEndingMode, LongPathStrategy, NormalizationMode, PathPolicy,
+    ReservedNameStrategy, TargetOs, TranslateError, WINDOWS_MAX_PATH, WINDOWS_RESERVED_STEMS,
+    apply_long_path_prefix, apply_reserved_suffix, default_text_extensions, detect_line_ending,
+    detect_line_ending_in, is_reserved_windows_name, normalize_name, path_utf16_len,
+    resolve_target_os, should_translate_extension, translate_content_line_endings, translate_path,
+};
 pub use tree::{copy_tree, copy_tree_from_scan, move_file, move_tree};
 pub use verify::{Hasher, Verifier};

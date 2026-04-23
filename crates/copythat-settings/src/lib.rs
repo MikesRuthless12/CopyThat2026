@@ -87,6 +87,11 @@ pub struct Settings {
     /// Phase 29 — drag-and-drop polish (spring-load, drag thumbnails,
     /// invalid-target highlight). See [`DndSettings`].
     pub dnd: DndSettings,
+    /// Phase 30 — cross-platform path translation (Unicode NFC/NFD,
+    /// opt-in line-ending rewrite for text files, Windows reserved-
+    /// name handling, `\\?\` long-path prefix). See
+    /// [`PathTranslationSettings`].
+    pub path_translation: PathTranslationSettings,
 }
 
 impl Settings {
@@ -1187,6 +1192,234 @@ impl DndSettings {
         self.spring_load_delay_ms
             .clamp(DND_MIN_SPRING_MS, DND_MAX_SPRING_MS)
     }
+}
+
+// ---------------------------------------------------------------------
+// Phase 30 — cross-platform path translation
+// ---------------------------------------------------------------------
+
+/// Destination platform selection for path translation. Mirrors
+/// `copythat_core::translate::TargetOs` but kept local so this crate
+/// stays independent of `copythat-core`; the Tauri bridge translates
+/// at enqueue time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TargetOsChoice {
+    /// Resolve to the host OS at enqueue time. Right default for the
+    /// common "copy from one local drive to another" case; only flip
+    /// when the destination is a networked / mounted filesystem from
+    /// a different platform.
+    #[default]
+    Auto,
+    Windows,
+    MacOs,
+    Linux,
+}
+
+impl TargetOsChoice {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Windows => "windows",
+            Self::MacOs => "macos",
+            Self::Linux => "linux",
+        }
+    }
+
+    /// Parse the wire string. Unknown values fall back to `Auto` so
+    /// an older binary reading a settings file written by a newer
+    /// one never panics on a variant it doesn't know.
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "windows" => Self::Windows,
+            "macos" => Self::MacOs,
+            "linux" => Self::Linux,
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// Unicode normalization mode selector. Mirrors
+/// `copythat_core::translate::NormalizationMode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NormalizationModeChoice {
+    /// NFC for Windows + Linux destinations; leave macOS alone.
+    /// Default because it's the "do the right thing" answer for
+    /// cross-platform sync.
+    #[default]
+    Auto,
+    /// Force composed form (NFC).
+    Nfc,
+    /// Force decomposed form (NFD).
+    Nfd,
+    /// Don't renormalize — copy the source name unchanged.
+    AsIs,
+}
+
+impl NormalizationModeChoice {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Nfc => "nfc",
+            Self::Nfd => "nfd",
+            Self::AsIs => "as-is",
+        }
+    }
+
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "nfc" => Self::Nfc,
+            "nfd" => Self::Nfd,
+            "as-is" => Self::AsIs,
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// Line-ending rewrite mode selector. Mirrors
+/// `copythat_core::translate::LineEndingMode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LineEndingModeChoice {
+    /// Preserve whatever the source has. Default.
+    #[default]
+    AsIs,
+    /// Force CRLF (`\r\n`).
+    Crlf,
+    /// Force LF (`\n`).
+    Lf,
+}
+
+impl LineEndingModeChoice {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::AsIs => "as-is",
+            Self::Crlf => "crlf",
+            Self::Lf => "lf",
+        }
+    }
+
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "crlf" => Self::Crlf,
+            "lf" => Self::Lf,
+            _ => Self::AsIs,
+        }
+    }
+}
+
+/// Reserved-Windows-name strategy selector. Mirrors
+/// `copythat_core::translate::ReservedNameStrategy`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReservedNameChoice {
+    /// Append `_` between the stem and extension. Default — keeps
+    /// the copy moving without a user prompt.
+    #[default]
+    Suffix,
+    /// Reject with a typed error so the UI can surface it in the
+    /// aggregate conflict dialog.
+    Reject,
+}
+
+impl ReservedNameChoice {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Suffix => "suffix",
+            Self::Reject => "reject",
+        }
+    }
+
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "reject" => Self::Reject,
+            _ => Self::Suffix,
+        }
+    }
+}
+
+/// Long-path strategy selector. Mirrors
+/// `copythat_core::translate::LongPathStrategy`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LongPathChoice {
+    /// Prefix with `\\?\` (or `\\?\UNC\`). Default — Windows 10
+    /// 1607+ handles both transparently, and legacy tools can still
+    /// round-trip the long-path form through the Win32 API.
+    #[default]
+    Win32LongPath,
+    /// Shrink the filename stem to fit inside MAX_PATH.
+    Truncate,
+    /// Reject with a typed error.
+    Reject,
+}
+
+impl LongPathChoice {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Win32LongPath => "win32-long-path",
+            Self::Truncate => "truncate",
+            Self::Reject => "reject",
+        }
+    }
+
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "truncate" => Self::Truncate,
+            "reject" => Self::Reject,
+            _ => Self::Win32LongPath,
+        }
+    }
+}
+
+/// Persistent cross-platform translation preferences. TOML-round-
+/// trippable; the Tauri bridge builds
+/// `copythat_core::translate::PathPolicy` at enqueue time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct PathTranslationSettings {
+    /// Master toggle. When `false`, the runner skips the translator
+    /// entirely and the engine sees the source path unchanged —
+    /// matching pre-Phase-30 behaviour. Default `true`.
+    pub enabled: bool,
+    pub target_os: TargetOsChoice,
+    pub unicode_normalization: NormalizationModeChoice,
+    pub line_endings: LineEndingModeChoice,
+    pub reserved_name_strategy: ReservedNameChoice,
+    pub long_path_strategy: LongPathChoice,
+    /// Lowercase extensions (no leading dot) eligible for
+    /// line-ending conversion. Default matches
+    /// `copythat_core::translate::default_text_extensions()`.
+    pub line_ending_allowlist: Vec<String>,
+}
+
+impl Default for PathTranslationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            target_os: TargetOsChoice::Auto,
+            unicode_normalization: NormalizationModeChoice::Auto,
+            line_endings: LineEndingModeChoice::AsIs,
+            reserved_name_strategy: ReservedNameChoice::Suffix,
+            long_path_strategy: LongPathChoice::Win32LongPath,
+            line_ending_allowlist: default_text_extensions_for_settings(),
+        }
+    }
+}
+
+/// Mirror of `copythat_core::translate::default_text_extensions()`
+/// kept inline so this crate doesn't pull in `copythat-core`. Sync
+/// by hand if the engine's allowlist changes — the Phase-30 smoke
+/// test asserts parity between the two lists.
+pub fn default_text_extensions_for_settings() -> Vec<String> {
+    [
+        "txt", "md", "csv", "json", "xml", "yaml", "yml", "ini", "conf", "sh", "py", "rs", "ts",
+        "js", "css", "html",
+    ]
+    .iter()
+    .map(|s| (*s).to_string())
+    .collect()
 }
 
 // ---------------------------------------------------------------------

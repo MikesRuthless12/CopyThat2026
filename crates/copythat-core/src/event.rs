@@ -182,6 +182,18 @@ pub enum CopyEvent {
     ChunkStoreSavings {
         savings_bytes: u64,
     },
+    /// Phase 30 — the cross-platform path translator applied Unicode
+    /// NFC/NFD normalization and the destination filename byte
+    /// sequence differs from the source's. `from` is the
+    /// pre-normalization filename (as an absolute path with the
+    /// source root intact); `to` is the post-normalization
+    /// destination path. UI surfaces a one-shot toast so the user
+    /// understands why a round-trip re-copy may show a different
+    /// byte sequence.
+    UnicodeRenormalized {
+        from: PathBuf,
+        to: PathBuf,
+    },
 }
 
 impl Clone for CopyEvent {
@@ -325,6 +337,10 @@ impl Clone for CopyEvent {
             }
             CopyEvent::ChunkStoreSavings { savings_bytes } => CopyEvent::ChunkStoreSavings {
                 savings_bytes: *savings_bytes,
+            },
+            CopyEvent::UnicodeRenormalized { from, to } => CopyEvent::UnicodeRenormalized {
+                from: from.clone(),
+                to: to.clone(),
             },
         }
     }
