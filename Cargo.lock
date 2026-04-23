@@ -671,7 +671,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-chunk"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "blake3",
  "copythat-core",
@@ -689,11 +689,13 @@ dependencies = [
 
 [[package]]
 name = "copythat-core"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "blake3",
+ "copythat-settings",
  "criterion",
  "directories",
+ "dunce",
  "filetime",
  "globset",
  "rand 0.9.4",
@@ -702,13 +704,14 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "unicode-normalization",
  "uuid",
  "walkdir",
 ]
 
 [[package]]
 name = "copythat-hash"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "blake3",
  "copythat-core",
@@ -727,7 +730,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-history"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "directories",
  "rusqlite",
@@ -738,11 +741,11 @@ dependencies = [
 
 [[package]]
 name = "copythat-i18n"
-version = "1.0.0"
+version = "1.25.0"
 
 [[package]]
 name = "copythat-journal"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "blake3",
  "copythat-core",
@@ -758,7 +761,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-platform"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "blake3",
  "copythat-core",
@@ -773,7 +776,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-secure-delete"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "copythat-core",
  "rand 0.9.4",
@@ -785,7 +788,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-settings"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "directories",
  "globset",
@@ -798,7 +801,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-shape"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "arc-swap",
  "blake3",
@@ -814,7 +817,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-shellext"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "tempfile",
  "windows 0.61.3",
@@ -824,7 +827,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-snapshot"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "copythat-core",
  "libc",
@@ -840,7 +843,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-sync"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "blake3",
  "chrono",
@@ -857,7 +860,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-ui"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "arboard",
  "base64 0.22.1",
@@ -898,7 +901,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-watch"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "notify",
  "tempfile",
@@ -5485,6 +5488,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "tinyvec"
+version = "1.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e61e67053d25a4e82c844e8424039d9745781b3fc4f32b8d55ed50f5f667ef3"
+dependencies = [
+ "tinyvec_macros",
+]
+
+[[package]]
+name = "tinyvec_macros"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
 name = "tokio"
 version = "1.52.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5823,6 +5841,15 @@ name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+
+[[package]]
+name = "unicode-normalization"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
+dependencies = [
+ "tinyvec",
+]
 
 [[package]]
 name = "unicode-segmentation"
@@ -7013,7 +7040,7 @@ checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
 
 [[package]]
 name = "xtask"
-version = "1.0.0"
+version = "1.25.0"
 dependencies = [
  "copythat-core",
  "copythat-platform",

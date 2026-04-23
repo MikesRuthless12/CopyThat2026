@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $packageName = 'copythat'
-$softwareName = 'Copy That v1.0.0*'
+$softwareName = 'Copy That v1.25.0*'
 $args = @{
     PackageName    = $packageName
     FileType       = 'msi'

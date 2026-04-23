@@ -1,6 +1,6 @@
-app-name = Copy That v1.0.0
+app-name = Copy That v1.25.0
 # MT
-window-title = Copy That v1.0.0
+window-title = Copy That v1.25.0
 # MT
 shred-ssd-advisory = Avertissement : cette cible se trouve sur un SSD. La réécriture en plusieurs passes ne nettoie pas fiablement la mémoire flash, car le nivellement de l'usure et le sur-provisionnement déplacent les données hors de l'adresse de bloc logique. Pour les supports SSD, préférez ATA SECURE ERASE, NVMe Format avec effacement sécurisé, ou le chiffrement intégral du disque avec destruction de la clé.
 
@@ -933,3 +933,50 @@ chunk-store-max-size = Taille maximale du magasin de blocs  # MT
 chunk-store-prune = Élaguer les blocs plus anciens que (jours)  # MT
 chunk-store-savings = Économisé { $gib } Gio via la déduplication de blocs  # MT
 chunk-store-disk-usage = Utilise { $size } sur { $chunks } blocs  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Pile de glisser  # MT
+dropstack-tray-open = Pile de glisser  # MT
+dropstack-empty-title = La pile de glisser est vide  # MT
+dropstack-empty-hint = Faites glisser des fichiers ici depuis l'Explorateur ou cliquez-droit sur une ligne de tâche pour l'ajouter.  # MT
+dropstack-add-to-stack = Ajouter à la pile de glisser  # MT
+dropstack-copy-all-to = Tout copier vers…  # MT
+dropstack-move-all-to = Tout déplacer vers…  # MT
+dropstack-clear = Vider la pile  # MT
+dropstack-remove-row = Retirer de la pile  # MT
+dropstack-path-missing-toast = { $path } retiré — le fichier n'existe plus.  # MT
+dropstack-always-on-top = Garder la pile de glisser toujours au premier plan  # MT
+dropstack-show-tray-icon = Afficher l'icône Copy That dans la barre des tâches  # MT
+dropstack-open-on-start = Ouvrir la pile de glisser au démarrage  # MT
+dropstack-count = { $count } chemin  # MT
+
+# Phase 29 — spring-loaded folders + native DnD polish.
+settings-dnd-heading = Drag and drop  # MT
+settings-dnd-spring-load = Spring-load folders while dragging  # MT
+settings-dnd-spring-delay = Spring-load delay (ms)  # MT
+settings-dnd-thumbnails = Show drag thumbnails  # MT
+settings-dnd-invalid-highlight = Highlight invalid drop targets  # MT
+dropzone-invalid-title = Not a valid drop target  # MT
+dropzone-invalid-readonly = Destination is read-only  # MT
+dropzone-picker-title = Choose a destination  # MT
+dropzone-picker-up = Up  # MT
+dropzone-picker-path = Current path  # MT
+dropzone-picker-root = Roots  # MT
+dropzone-picker-use-this = Use this folder  # MT
+dropzone-picker-empty = No subfolders  # MT
+dropzone-picker-cancel = Cancel  # MT
+
+# Phase 30 — cross-platform path translation.
+translate-heading = Cross-platform compatibility  # MT
+translate-unicode-label = Unicode normalization  # MT
+translate-unicode-auto = Auto-detect destination  # MT
+translate-unicode-windows = NFC (Windows / Linux)  # MT
+translate-unicode-macos = Leave as-is (macOS / APFS)  # MT
+translate-line-endings-label = Translate line endings for text files  # MT
+translate-line-endings-allowlist = Text file extensions  # MT
+reserved-name-label = Windows reserved-name handling  # MT
+reserved-name-suffix = Append "_" (CON.txt → CON_.txt)  # MT
+reserved-name-reject = Reject and warn  # MT
+long-path-label = Use Windows long-path prefix (\?\) when over 260 chars  # MT
+long-path-hint = Some network shares and legacy tools don't honor the \?\ namespace.  # MT

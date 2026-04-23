@@ -1,6 +1,6 @@
 [package]
 name = "copythat-ui"
-description = "Copy That v1.0.0 — Tauri 2.x application shell."
+description = "Copy That v1.25.0 — Tauri 2.x application shell."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -247,3 +247,22 @@ path = "../../../tests/smoke/phase_18_e2e.rs"
 [[test]]
 name = "phase_22_conflict_batch"
 path = "../../../tests/smoke/phase_22_conflict_batch.rs"
+
+# Phase 28 smoke test — tray-resident Drop Stack. Exercises the
+# `DropStackRegistry` through the same code path the Tauri IPC
+# commands call: add / save / reload / revalidate-missing /
+# clear. Shell-script wrappers named in the brief can't be driven
+# headlessly in CI; this Rust smoke covers the four invariants
+# identically.
+[[test]]
+name = "phase_28_dropstack"
+path = "../../../tests/smoke/phase_28_dropstack.rs"
+
+# Phase 29 smoke test — spring-loaded folders + native DnD polish.
+# The brief's Playwright + tauri-driver harness is deferred; this
+# Rust smoke exercises the DndSettings round-trip, the
+# `effective_spring_ms` clamp, and the Fluent key presence + parity
+# across all 18 locales. See the smoke file header for the rationale.
+[[test]]
+name = "phase_29_dnd"
+path = "../../../tests/smoke/phase_29_dnd.rs"

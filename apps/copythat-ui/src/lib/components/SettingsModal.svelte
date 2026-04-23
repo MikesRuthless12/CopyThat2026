@@ -517,6 +517,50 @@
                 <span class="label">{t("settings-auto-resume")}</span>
               </label>
               <p class="hint">{t("settings-auto-resume-hint")}</p>
+
+              {#if settings.dnd}
+                <h4 class="subheading">{t("settings-dnd-heading")}</h4>
+
+                <label class="row check">
+                  <input
+                    type="checkbox"
+                    bind:checked={settings.dnd.springLoadEnabled}
+                    onchange={pushSettings}
+                  />
+                  <span class="label">{t("settings-dnd-spring-load")}</span>
+                </label>
+
+                <label class="row">
+                  <span class="label">{t("settings-dnd-spring-delay")}</span>
+                  <input
+                    type="number"
+                    min="200"
+                    max="2000"
+                    step="50"
+                    bind:value={settings.dnd.springLoadDelayMs}
+                    onchange={pushSettings}
+                    disabled={!settings.dnd.springLoadEnabled}
+                  />
+                </label>
+
+                <label class="row check">
+                  <input
+                    type="checkbox"
+                    bind:checked={settings.dnd.showDragThumbnails}
+                    onchange={pushSettings}
+                  />
+                  <span class="label">{t("settings-dnd-thumbnails")}</span>
+                </label>
+
+                <label class="row check">
+                  <input
+                    type="checkbox"
+                    bind:checked={settings.dnd.highlightInvalidTargets}
+                    onchange={pushSettings}
+                  />
+                  <span class="label">{t("settings-dnd-invalid-highlight")}</span>
+                </label>
+              {/if}
             {:else if activeTab === "transfer"}
               <label class="row">
                 <span class="label">{t("settings-buffer-size")}</span>
@@ -1348,6 +1392,15 @@
     margin: 0;
     font-size: 11px;
     color: var(--fg-dim, #6a6a6a);
+  }
+
+  .subheading {
+    margin: 10px 0 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fg-dim, #6a6a6a);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   .empty {

@@ -1,5 +1,5 @@
-app-name = Copy That v1.0.0
-window-title = Copy That v1.0.0
+app-name = Copy That v1.25.0
+window-title = Copy That v1.25.0
 shred-ssd-advisory = Warning: this target lives on an SSD. Multi-pass overwrites do not reliably sanitize flash memory because wear-leveling and over-provisioning move data out from under the logical block address. For solid-state media, prefer ATA SECURE ERASE, NVMe Format with Secure Erase, or full-disk encryption with a discarded key.
 
 # Global aggregate states (header pill)
@@ -656,3 +656,55 @@ chunk-store-max-size = Maximum chunk store size
 chunk-store-prune = Prune chunks older than (days)
 chunk-store-savings = Saved { $gib } GiB via chunk dedup
 chunk-store-disk-usage = Using { $size } across { $chunks } chunks
+
+# Phase 28 — tray-resident Drop Stack. The stack is a persistent list
+# of paths gathered from multiple sources (Explorer drag, main-window
+# context menu, CLI, drag onto the Drop Stack window) that the user
+# can dispatch to a destination in one go.
+dropstack-window-title = Drop Stack
+dropstack-tray-open = Drop Stack
+dropstack-empty-title = Drop Stack is empty
+dropstack-empty-hint = Drag files here from Explorer or right-click a job row to add it.
+dropstack-add-to-stack = Add to Drop Stack
+dropstack-copy-all-to = Copy all to…
+dropstack-move-all-to = Move all to…
+dropstack-clear = Clear stack
+dropstack-remove-row = Remove from stack
+dropstack-path-missing-toast = Dropped { $path } — the file no longer exists.
+dropstack-always-on-top = Keep Drop Stack always on top
+dropstack-show-tray-icon = Show the Copy That tray icon
+dropstack-open-on-start = Open Drop Stack automatically on app start
+dropstack-count = { $count } path
+
+# Phase 29 — spring-loaded folders + native DnD polish. The Settings
+# → General tab carries the knobs; DropTarget / DestinationPicker
+# Svelte components use the dropzone-* keys at runtime.
+settings-dnd-heading = Drag and drop
+settings-dnd-spring-load = Spring-load folders while dragging
+settings-dnd-spring-delay = Spring-load delay (ms)
+settings-dnd-thumbnails = Show drag thumbnails
+settings-dnd-invalid-highlight = Highlight invalid drop targets
+dropzone-invalid-title = Not a valid drop target
+dropzone-invalid-readonly = Destination is read-only
+dropzone-picker-title = Choose a destination
+dropzone-picker-up = Up
+dropzone-picker-path = Current path
+dropzone-picker-root = Roots
+dropzone-picker-use-this = Use this folder
+dropzone-picker-empty = No subfolders
+dropzone-picker-cancel = Cancel
+
+# Phase 30 — cross-platform path translation. Settings → Transfer
+# exposes these under a "Cross-platform compatibility" subsection.
+translate-heading = Cross-platform compatibility
+translate-unicode-label = Unicode normalization
+translate-unicode-auto = Auto-detect destination
+translate-unicode-windows = NFC (Windows / Linux)
+translate-unicode-macos = Leave as-is (macOS / APFS)
+translate-line-endings-label = Translate line endings for text files
+translate-line-endings-allowlist = Text file extensions
+reserved-name-label = Windows reserved-name handling
+reserved-name-suffix = Append "_" (CON.txt → CON_.txt)
+reserved-name-reject = Reject and warn
+long-path-label = Use Windows long-path prefix (\\?\) when over 260 chars
+long-path-hint = Some network shares and legacy tools don't honor the \\?\ namespace.

@@ -1,6 +1,6 @@
-app-name = Copy That v1.0.0
+app-name = Copy That v1.25.0
 # MT
-window-title = Copy That v1.0.0
+window-title = Copy That v1.25.0
 # MT
 shred-ssd-advisory = Waarschuwing: dit doel staat op een SSD. Meervoudig overschrijven saneert flashgeheugen niet betrouwbaar, omdat wear-leveling en overprovisioning gegevens buiten het logische blokadres verplaatsen. Gebruik bij solid-state media bij voorkeur ATA SECURE ERASE, NVMe Format met Secure Erase of volledige schijfversleuteling waarbij de sleutel wordt vernietigd.
 
@@ -933,3 +933,50 @@ chunk-store-max-size = Maximale grootte van chunk-opslag  # MT
 chunk-store-prune = Chunks ouder dan (dagen) opruimen  # MT
 chunk-store-savings = { $gib } GiB bespaard via chunk-deduplicatie  # MT
 chunk-store-disk-usage = Gebruikt { $size } over { $chunks } chunks  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Drop Stack  # MT
+dropstack-tray-open = Drop Stack  # MT
+dropstack-empty-title = Drop Stack is leeg  # MT
+dropstack-empty-hint = Sleep bestanden hier vanuit Verkenner of klik met de rechtermuisknop op een taakrij om deze toe te voegen.  # MT
+dropstack-add-to-stack = Toevoegen aan Drop Stack  # MT
+dropstack-copy-all-to = Alles kopiëren naar…  # MT
+dropstack-move-all-to = Alles verplaatsen naar…  # MT
+dropstack-clear = Stack wissen  # MT
+dropstack-remove-row = Uit stack verwijderen  # MT
+dropstack-path-missing-toast = { $path } verwijderd — het bestand bestaat niet meer.  # MT
+dropstack-always-on-top = Drop Stack altijd op voorgrond houden  # MT
+dropstack-show-tray-icon = Copy That-systeemvakpictogram weergeven  # MT
+dropstack-open-on-start = Drop Stack automatisch openen bij app-start  # MT
+dropstack-count = { $count } pad  # MT
+
+# Phase 29 — spring-loaded folders + native DnD polish.
+settings-dnd-heading = Drag and drop  # MT
+settings-dnd-spring-load = Spring-load folders while dragging  # MT
+settings-dnd-spring-delay = Spring-load delay (ms)  # MT
+settings-dnd-thumbnails = Show drag thumbnails  # MT
+settings-dnd-invalid-highlight = Highlight invalid drop targets  # MT
+dropzone-invalid-title = Not a valid drop target  # MT
+dropzone-invalid-readonly = Destination is read-only  # MT
+dropzone-picker-title = Choose a destination  # MT
+dropzone-picker-up = Up  # MT
+dropzone-picker-path = Current path  # MT
+dropzone-picker-root = Roots  # MT
+dropzone-picker-use-this = Use this folder  # MT
+dropzone-picker-empty = No subfolders  # MT
+dropzone-picker-cancel = Cancel  # MT
+
+# Phase 30 — cross-platform path translation.
+translate-heading = Cross-platform compatibility  # MT
+translate-unicode-label = Unicode normalization  # MT
+translate-unicode-auto = Auto-detect destination  # MT
+translate-unicode-windows = NFC (Windows / Linux)  # MT
+translate-unicode-macos = Leave as-is (macOS / APFS)  # MT
+translate-line-endings-label = Translate line endings for text files  # MT
+translate-line-endings-allowlist = Text file extensions  # MT
+reserved-name-label = Windows reserved-name handling  # MT
+reserved-name-suffix = Append "_" (CON.txt → CON_.txt)  # MT
+reserved-name-reject = Reject and warn  # MT
+long-path-label = Use Windows long-path prefix (\?\) when over 260 chars  # MT
+long-path-hint = Some network shares and legacy tools don't honor the \?\ namespace.  # MT
