@@ -718,3 +718,23 @@ snapshot-create-failed = Could not create a snapshot of the source volume
 snapshot-vss-needs-elevation = Reading from a VSS snapshot requires Administrator permission. Copy That will ask you to allow it.
 # MT
 snapshot-cleanup-failed = The snapshot helper reported a cleanup failure — a leftover shadow copy may remain on the volume.
+
+# Phase 20 — durable resume journal.
+# MT
+resume-prompt-title = Resume previous transfers?
+# MT
+resume-prompt-body = Copy That detected { $count } unfinished transfer(s) from a previous session. Choose what to do with each.
+# MT
+resume-prompt-resume = Resume
+# MT
+resume-prompt-resume-all = Resume all
+# MT
+resume-discard-one = Don't resume
+# MT
+resume-discard-all = Discard all
+# MT
+resume-aborted-hash-mismatch = The destination's first { $offset } bytes don't match the source — restarting from the beginning.
+# MT
+settings-auto-resume = Auto-resume interrupted jobs without prompting
+# MT
+settings-auto-resume-hint = Skip the resume prompt at startup and silently re-enqueue every unfinished job. Off by default.

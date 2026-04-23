@@ -129,6 +129,23 @@ pub fn run() {
 
     let app_state = state::AppState::new_with(history, settings, settings_path, profiles);
 
+    // Phase 20 — open the resume journal alongside history. Failure
+    // is non-fatal: the runner skips checkpointing and the resume
+    // modal stays empty, but the app still launches.
+    let app_state = match copythat_journal::Journal::open_default() {
+        Ok(j) => {
+            let unfinished = j.unfinished().unwrap_or_else(|e| {
+                eprintln!("copythat: journal scan at startup failed: {e}");
+                Vec::new()
+            });
+            app_state.with_journal(j, unfinished)
+        }
+        Err(e) => {
+            eprintln!("copythat: journal open failed: {e}");
+            app_state
+        }
+    };
+
     // Post-Phase-12 — system-wide paste hotkey. The plugin registers
     // no combos at build time; `global_paste::register_paste_shortcut`
     // does that from the setup hook based on live settings. Handler
@@ -256,6 +273,10 @@ pub fn run() {
             scan_commands::scan_resume,
             scan_commands::scan_cancel,
             scan_commands::scan_list_unfinished,
+            // Phase 20 — durable resume journal surface.
+            commands::pending_resumes,
+            commands::discard_resume,
+            commands::discard_all_resumes,
         ])
         .setup(move |app| {
             // Phase 16 — tray icon + menu. Visible regardless of the

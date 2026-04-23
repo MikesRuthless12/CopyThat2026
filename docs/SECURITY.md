@@ -136,6 +136,47 @@ trait requires `Send + Sync`, and the lease holds the RAII guard for
 the full copy. A future phase that relaxes these invariants must
 revisit this threat-model entry.
 
+## Phase 20 — resume journal (shipped)
+
+Phase 20 adds a redb-backed durable journal at
+`<data-dir>/copythat-journal.redb`. Threat-model deltas:
+
+- **No new network surface.** redb is a single-file embedded KV
+  store; the journal never phones home. It sits next to the
+  Phase 9 history DB and inherits the same per-OS data-dir
+  permissions (`%LOCALAPPDATA%` on Windows, `~/.local/share` on
+  Linux, `~/Library/Application Support` on macOS).
+- **No new privilege escalation.** Both writes (during a copy) and
+  reads (at app start) run in the unprivileged main process. The
+  journal does not need elevated rights at any point — including
+  the resume-time prefix re-hash, which only reads the destination
+  the engine was already authorised to write.
+- **Resume forgery is bounded by BLAKE3.** A malicious actor with
+  write access to the destination could *replace* the partial dst
+  bytes between the crash and the next launch. The engine's
+  `decide_resume` re-hashes the dst's first `offset` bytes and
+  compares against the `src_hash_at_offset` stored in the journal
+  (which is fsync'd at the time of the original checkpoint). On
+  mismatch the engine emits `CopyEvent::ResumeAborted
+  { reason: "prefix-hash-mismatch" }` and falls back to a full
+  restart from byte 0 — the corrupt prefix is never silently
+  trusted. BLAKE3 is the same primitive used by Phase 3's verify
+  pipeline.
+- **No journal data leaks file contents.** The journal stores
+  paths (already user-visible in the queue and history),
+  monotonic sequence numbers, and 32-byte BLAKE3 digests of
+  prefix bytes — never the bytes themselves. A stolen
+  `copythat-journal.redb` reveals what was being copied where, on
+  the same scale as the existing `history.db`. No additional
+  classification is needed.
+- **Journal corruption falls through cleanly.** Codec errors,
+  redb commit failures, or I/O at app start surface as a typed
+  `JournalError` and the runner skips checkpointing for that
+  session (the engine's `journal: None` path is the same as the
+  pre-Phase-20 behaviour). The user sees no resume modal; the
+  copy still works. A follow-up phase will add a "journal
+  unhealthy" toast so the user can manually recover.
+
 ## Build hardening (target, post-Phase 17)
 
 - Stack probes enabled.

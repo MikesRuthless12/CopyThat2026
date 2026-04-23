@@ -85,6 +85,74 @@ pub struct SnapshotLease {
 /// [`SnapshotLease::guard`] can hold a trait object.
 pub trait SnapshotGuard: Send + Sync + std::fmt::Debug {}
 
+/// Phase 20 — what the engine should do with an existing partial
+/// destination.
+///
+/// Returned by [`JournalSink::resume_plan`] when the engine sees
+/// `dst.exists() && dst.metadata().len() < expected_total`. Mirrors
+/// the same enum in `copythat_journal::types`; kept in core so the
+/// engine doesn't need a journal dep.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResumePlan {
+    /// Re-hash the destination's first `offset` bytes via BLAKE3
+    /// and compare against `src_hash_at_offset`. On match, seek both
+    /// files to `offset` and continue. On mismatch, the engine emits
+    /// [`CopyEvent::ResumeAborted`](super::CopyEvent::ResumeAborted)
+    /// and falls back to a full restart.
+    Resume {
+        offset: u64,
+        src_hash_at_offset: [u8; 32],
+    },
+    /// Nothing reusable — start over from byte 0.
+    Restart,
+    /// The destination is already the right size and the
+    /// checkpoint's `final_hash` matches a re-hash of the existing
+    /// destination. Skip the copy entirely.
+    AlreadyComplete { final_hash: [u8; 32] },
+}
+
+/// Bridge contract for the durable resume journal.
+///
+/// Implemented by `copythat_journal::CopyThatJournalSink`. The
+/// engine calls `checkpoint` every `PROGRESS_MIN_INTERVAL` (50 ms)
+/// with the running BLAKE3 of the source bytes already read; on
+/// finish it calls `finish_file` with the final hash, and at job
+/// teardown the runner calls one of the three `finish_job_*`
+/// terminators.
+///
+/// All methods are infallible by design: a journal failure is never
+/// allowed to abort a copy. Implementations swallow internal errors
+/// (and may log them) so the engine treats the journal as
+/// best-effort.
+pub trait JournalSink: Send + Sync + std::fmt::Debug {
+    /// Persist the running progress for `(file_idx, dst)`. Called
+    /// from the engine's progress-throttle path so the on-disk row
+    /// updates at most once per `PROGRESS_MIN_INTERVAL`.
+    fn checkpoint(
+        &self,
+        file_idx: u64,
+        dst: &std::path::Path,
+        bytes_done: u64,
+        expected_total: u64,
+        hash_so_far: [u8; 32],
+    );
+
+    /// Mark the file as finished; capture the final BLAKE3 digest.
+    fn finish_file(&self, file_idx: u64, final_hash: [u8; 32]);
+
+    /// Decide what the engine should do with the existing partial
+    /// destination at `(file_idx)`. Called once per file, before
+    /// the first byte is written.
+    fn resume_plan(&self, file_idx: u64) -> ResumePlan;
+
+    /// Job-level terminators. Exactly one of the three fires per
+    /// job lifecycle; the runner picks based on the engine's
+    /// outcome.
+    fn finish_job_succeeded(&self);
+    fn finish_job_failed(&self);
+    fn finish_job_cancelled(&self);
+}
+
 /// Bridge contract for a filesystem-snapshot source.
 ///
 /// Implemented by `copythat_snapshot::CopyThatSnapshotHook`. Kept in
@@ -183,6 +251,26 @@ pub struct CopyOptions {
     /// `copythat-snapshot::CopyThatSnapshotHook` implements this in
     /// tree; a custom hook can be wired for testing.
     pub snapshot_hook: Option<Arc<dyn SnapshotHook>>,
+    /// Phase 20 — durable resume journal sink.
+    ///
+    /// When `Some`, the engine checkpoints the running BLAKE3 + byte
+    /// offset every `PROGRESS_MIN_INTERVAL` (50 ms) so a power-cut
+    /// mid-copy can resume from the last checkpoint without losing
+    /// the prefix that already made it to disk. The engine probes
+    /// `journal.resume_plan(file_idx)` once per file, before opening
+    /// the source, and either resumes from a verified offset or
+    /// starts over.
+    ///
+    /// Implemented by `copythat_journal::CopyThatJournalSink`. The
+    /// `file_idx` the sink sees is engine-assigned: 0 for a
+    /// single-file `copy_file`, monotonic across the streaming tree
+    /// walker for `copy_tree`.
+    pub journal: Option<Arc<dyn JournalSink>>,
+    /// Phase 20 — when `journal` is `Some`, the engine reports its
+    /// own file index here so the journal sink can correlate.
+    /// Defaults to `0`. Tree wrappers pass through `file_idx` from
+    /// the walker.
+    pub journal_file_idx: u64,
 }
 
 /// User-selectable copy strategy.
@@ -264,6 +352,8 @@ impl Default for CopyOptions {
             fast_copy_hook: None,
             on_locked: LockedFilePolicy::default(),
             snapshot_hook: None,
+            journal: None,
+            journal_file_idx: 0,
         }
     }
 }

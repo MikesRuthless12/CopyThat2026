@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use copythat_core::Queue;
 use copythat_history::History;
+use copythat_journal::{Journal, UnfinishedJob};
 use copythat_settings::{ProfileStore, Settings};
 
 use crate::clipboard_watcher::WatcherHandle;
@@ -64,6 +65,18 @@ pub struct AppState {
     /// Populated on `scan_start`, drained by the scanner task when
     /// it exits (normal / cancelled / failed).
     pub scans: ScanRegistry,
+    /// Phase 20 — durable resume journal. `None` when the redb file
+    /// open failed at startup (read-only profile, locked DB, etc.);
+    /// the runner skips checkpointing in that case but otherwise
+    /// works unchanged.
+    pub journal: Option<Journal>,
+    /// Phase 20 — unfinished jobs detected at app start. The
+    /// frontend's `ResumePromptModal` reads this once via
+    /// `pending_resumes()`, then this slot stays as the canonical
+    /// list until the user resumes/discards each row. Wrapped in a
+    /// Mutex<Vec<...>> so resolution can drain without cloning the
+    /// whole AppState.
+    pub startup_unfinished: Arc<Mutex<Vec<UnfinishedJob>>>,
 }
 
 impl AppState {
@@ -80,10 +93,9 @@ impl AppState {
     }
 
     /// Construct with a ready `History` handle, pre-loaded settings,
-    /// and a profile store. All four paths (`history`, `settings`,
-    ///   `settings_path`, `profiles`) are resolved in `lib.rs` at
-    ///   startup so a failing config-dir resolution bubbles up there
-    ///   rather than at every `State<'_, AppState>` access.
+    /// and a profile store. Phase 20 callers also wire the resume
+    /// journal via [`AppState::with_journal`] right after
+    /// construction. Production startup (`lib.rs`) does both.
     pub fn new_with(
         history: Option<History>,
         settings: Settings,
@@ -101,7 +113,18 @@ impl AppState {
             profiles,
             clipboard_watcher: Arc::new(Mutex::new(None)),
             scans: ScanRegistry::new(),
+            journal: None,
+            startup_unfinished: Arc::new(Mutex::new(Vec::new())),
         }
+    }
+
+    /// Phase 20 — attach an opened `Journal` and the
+    /// `Vec<UnfinishedJob>` the boot-time sweep produced. Builder-
+    /// shaped so `lib.rs::run` can chain it after `new_with`.
+    pub fn with_journal(mut self, journal: Journal, unfinished: Vec<UnfinishedJob>) -> Self {
+        self.journal = Some(journal);
+        self.startup_unfinished = Arc::new(Mutex::new(unfinished));
+        self
     }
 
     /// Convenience wrapper preserved for callers that predate

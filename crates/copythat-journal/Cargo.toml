@@ -1,0 +1,66 @@
+[package]
+name = "copythat-journal"
+description = "Crash/reboot resume journal (redb-backed WAL) for Copy That v1.0.0."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# 2 GiB resume + 50 ms checkpoint stress test. Off by default so the
+# default `cargo test --workspace` stays under a minute. The CI matrix
+# opts in via `COPYTHAT_PHASE20_FULL=1`; the smoke test reads the env
+# var rather than depending on this feature, but the gate is here so a
+# future bench can branch on it.
+slow-tests = []
+
+[dependencies]
+# Phase 20 — engine `JournalSink` trait + CopyError live in core.
+# Direction matches `copythat-snapshot`'s dep so core stays free of
+# any persistence concern.
+copythat-core = { path = "../copythat-core", version = "1" }
+# Phase 20 — co-located alongside the Phase 9 history DB. We reuse
+# the same `ProjectDirs` helper to pick the OS user-data dir.
+directories = "6"
+# Single-file embedded ACID KV store. MIT/Apache-2.0. Append-only
+# writes; smaller resident set than rusqlite for the journal's
+# checkpoint shape (one row per file × per 50 ms tick).
+redb = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+
+[dev-dependencies]
+blake3 = "1"
+rand = "0.9"
+tempfile = "3"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "process",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "test-util",
+    "time",
+] }
+
+# Phase 20 smoke test lives at the workspace root.
+[[test]]
+name = "phase_20_resume"
+path = "../../tests/smoke/phase_20_resume.rs"

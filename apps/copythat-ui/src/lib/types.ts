@@ -322,6 +322,8 @@ export interface GeneralSettingsDto {
   /** Tauri global-shortcut combo (e.g. "CmdOrCtrl+Shift+V"). */
   pasteShortcut: string;
   clipboardWatcherEnabled: boolean;
+  /** Phase 20 — silent re-enqueue of unfinished jobs at startup. */
+  autoResumeInterrupted: boolean;
 }
 
 /** Phase-post-12 — fired when the clipboard watcher sees new files land
@@ -351,6 +353,26 @@ export type ReflinkWire = "prefer" | "avoid" | "disabled";
  * Mirrors `copythat_core::LockedFilePolicy`.
  */
 export type LockedFilePolicyWire = "ask" | "retry" | "skip" | "snapshot";
+
+/**
+ * Phase 20 — one row of the resume modal. Mirrors
+ * `crate::ipc::PendingResumeDto`.
+ */
+export interface PendingResumeDto {
+  rowId: number;
+  /** "copy" | "move" | "delete" | "secure-delete" | "verify" */
+  kind: string;
+  srcRoot: string;
+  dstRoot: string | null;
+  /** "running" | "paused" — terminal statuses are filtered out */
+  status: string;
+  startedAtMs: number;
+  bytesDone: number;
+  bytesTotal: number;
+  filesDone: number;
+  filesTotal: number;
+  lastCheckpointAtMs: number;
+}
 
 export interface TransferSettingsDto {
   bufferSizeBytes: number;

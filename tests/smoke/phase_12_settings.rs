@@ -52,6 +52,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
             paste_shortcut_enabled: false,
             paste_shortcut: "Alt+Shift+V".into(),
             clipboard_watcher_enabled: true,
+            auto_resume_interrupted: true,
         },
         transfer: copythat_settings::TransferSettings {
             buffer_size_bytes: 4 * 1024 * 1024,
@@ -106,6 +107,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
             paste_shortcut_enabled: false,
             paste_shortcut: "Alt+Shift+V".into(),
             clipboard_watcher_enabled: true,
+            auto_resume_interrupted: true,
         },
         transfer: copythat_settings::TransferSettings {
             buffer_size_bytes: 4 * 1024 * 1024,

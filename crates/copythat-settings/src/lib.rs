@@ -183,6 +183,12 @@ pub struct GeneralSettings {
     /// the paste hotkey. Opt-in — polling is cheap but not free, and
     /// users who prefer zero background work keep the default `false`.
     pub clipboard_watcher_enabled: bool,
+    /// Phase 20 — when `true`, the resume modal is skipped and any
+    /// unfinished jobs detected at startup are silently re-enqueued.
+    /// Default `false`: the first launch with unfinished work shows
+    /// the prompt; the user's choice on the prompt can flip this on
+    /// per-volume in a follow-up phase. For now it's a global flag.
+    pub auto_resume_interrupted: bool,
 }
 
 impl Default for GeneralSettings {
@@ -197,6 +203,7 @@ impl Default for GeneralSettings {
             paste_shortcut_enabled: true,
             paste_shortcut: defaults::DEFAULT_PASTE_SHORTCUT.to_string(),
             clipboard_watcher_enabled: false,
+            auto_resume_interrupted: false,
         }
     }
 }
