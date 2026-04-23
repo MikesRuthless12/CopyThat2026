@@ -25,5 +25,14 @@ export default defineConfig(async () => ({
       process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "safari13",
     minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
+    // Phase 28 — the Drop Stack lives in its own Tauri window.
+    // Multi-page entry so Vite emits both `index.html` (main) and
+    // `dropstack.html` (stack) into `dist/`.
+    rollupOptions: {
+      input: {
+        main: "index.html",
+        dropstack: "dropstack.html",
+      },
+    },
   },
 }));
