@@ -1,5 +1,5 @@
-app-name = Copy That v1.0.0
-window-title = Copy That v1.0.0
+app-name = Copy That v1.25.0
+window-title = Copy That v1.25.0
 shred-ssd-advisory = Warning: this target lives on an SSD. Multi-pass overwrites do not reliably sanitize flash memory because wear-leveling and over-provisioning move data out from under the logical block address. For solid-state media, prefer ATA SECURE ERASE, NVMe Format with Secure Erase, or full-disk encryption with a discarded key.
 
 # Global aggregate states (header pill)

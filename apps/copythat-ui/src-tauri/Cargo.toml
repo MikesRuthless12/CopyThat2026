@@ -1,6 +1,6 @@
 [package]
 name = "copythat-ui"
-description = "Copy That v1.0.0 — Tauri 2.x application shell."
+description = "Copy That v1.25.0 — Tauri 2.x application shell."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

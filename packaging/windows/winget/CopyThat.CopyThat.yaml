@@ -9,7 +9,7 @@
 #
 # Spec: https://github.com/microsoft/winget-cli/blob/master/doc/ManifestSpecv1.6.md
 PackageIdentifier: CopyThat.CopyThat
-PackageVersion: 1.0.0
+PackageVersion: 1.25.0
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.6.0
