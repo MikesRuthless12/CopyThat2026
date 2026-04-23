@@ -933,3 +933,36 @@ chunk-store-max-size = Tamaño máximo del almacén de fragmentos  # MT
 chunk-store-prune = Eliminar fragmentos más antiguos que (días)  # MT
 chunk-store-savings = Ahorrados { $gib } GiB mediante deduplicación de fragmentos  # MT
 chunk-store-disk-usage = Usando { $size } en { $chunks } fragmentos  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Pila de arrastre  # MT
+dropstack-tray-open = Pila de arrastre  # MT
+dropstack-empty-title = La pila de arrastre está vacía  # MT
+dropstack-empty-hint = Arrastra archivos aquí desde el Explorador o haz clic derecho en una fila de trabajo para añadirla.  # MT
+dropstack-add-to-stack = Añadir a la pila de arrastre  # MT
+dropstack-copy-all-to = Copiar todo a…  # MT
+dropstack-move-all-to = Mover todo a…  # MT
+dropstack-clear = Vaciar pila  # MT
+dropstack-remove-row = Quitar de la pila  # MT
+dropstack-path-missing-toast = Se quitó { $path } — el archivo ya no existe.  # MT
+dropstack-always-on-top = Mantener la pila de arrastre siempre en primer plano  # MT
+dropstack-show-tray-icon = Mostrar el icono de Copy That en la bandeja  # MT
+dropstack-open-on-start = Abrir la pila de arrastre al iniciar la aplicación  # MT
+dropstack-count = { $count } ruta  # MT
+
+# Phase 29 — spring-loaded folders + native DnD polish.
+settings-dnd-heading = Drag and drop  # MT
+settings-dnd-spring-load = Spring-load folders while dragging  # MT
+settings-dnd-spring-delay = Spring-load delay (ms)  # MT
+settings-dnd-thumbnails = Show drag thumbnails  # MT
+settings-dnd-invalid-highlight = Highlight invalid drop targets  # MT
+dropzone-invalid-title = Not a valid drop target  # MT
+dropzone-invalid-readonly = Destination is read-only  # MT
+dropzone-picker-title = Choose a destination  # MT
+dropzone-picker-up = Up  # MT
+dropzone-picker-path = Current path  # MT
+dropzone-picker-root = Roots  # MT
+dropzone-picker-use-this = Use this folder  # MT
+dropzone-picker-empty = No subfolders  # MT
+dropzone-picker-cancel = Cancel  # MT

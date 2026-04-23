@@ -933,3 +933,36 @@ chunk-store-max-size = Максимальний розмір сховища фр
 chunk-store-prune = Видаляти фрагменти, старші за (дні)  # MT
 chunk-store-savings = Заощаджено { $gib } ГіБ завдяки дедуплікації фрагментів  # MT
 chunk-store-disk-usage = Використовується { $size } у { $chunks } фрагментах  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Drop Stack  # MT
+dropstack-tray-open = Drop Stack  # MT
+dropstack-empty-title = Drop Stack порожній  # MT
+dropstack-empty-hint = Перетягніть файли сюди з Провідника або клацніть правою кнопкою миші по рядку завдання, щоб додати його.  # MT
+dropstack-add-to-stack = Додати до Drop Stack  # MT
+dropstack-copy-all-to = Копіювати все в…  # MT
+dropstack-move-all-to = Перемістити все в…  # MT
+dropstack-clear = Очистити стек  # MT
+dropstack-remove-row = Видалити зі стеку  # MT
+dropstack-path-missing-toast = { $path } видалено — файл більше не існує.  # MT
+dropstack-always-on-top = Завжди тримати Drop Stack зверху  # MT
+dropstack-show-tray-icon = Показувати значок Copy That в області сповіщень  # MT
+dropstack-open-on-start = Автоматично відкривати Drop Stack під час запуску програми  # MT
+dropstack-count = { $count } шлях  # MT
+
+# Phase 29 — spring-loaded folders + native DnD polish.
+settings-dnd-heading = Drag and drop  # MT
+settings-dnd-spring-load = Spring-load folders while dragging  # MT
+settings-dnd-spring-delay = Spring-load delay (ms)  # MT
+settings-dnd-thumbnails = Show drag thumbnails  # MT
+settings-dnd-invalid-highlight = Highlight invalid drop targets  # MT
+dropzone-invalid-title = Not a valid drop target  # MT
+dropzone-invalid-readonly = Destination is read-only  # MT
+dropzone-picker-title = Choose a destination  # MT
+dropzone-picker-up = Up  # MT
+dropzone-picker-path = Current path  # MT
+dropzone-picker-root = Roots  # MT
+dropzone-picker-use-this = Use this folder  # MT
+dropzone-picker-empty = No subfolders  # MT
+dropzone-picker-cancel = Cancel  # MT

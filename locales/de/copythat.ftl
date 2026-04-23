@@ -933,3 +933,36 @@ chunk-store-max-size = Maximale Chunk-Speichergröße  # MT
 chunk-store-prune = Chunks bereinigen älter als (Tage)  # MT
 chunk-store-savings = { $gib } GiB durch Chunk-Deduplizierung gespart  # MT
 chunk-store-disk-usage = Belegt { $size } in { $chunks } Chunks  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Drop Stack  # MT
+dropstack-tray-open = Drop Stack  # MT
+dropstack-empty-title = Drop Stack ist leer  # MT
+dropstack-empty-hint = Ziehen Sie Dateien hierher aus dem Explorer oder klicken Sie mit der rechten Maustaste auf eine Auftragszeile, um sie hinzuzufügen.  # MT
+dropstack-add-to-stack = Zum Drop Stack hinzufügen  # MT
+dropstack-copy-all-to = Alles kopieren nach…  # MT
+dropstack-move-all-to = Alles verschieben nach…  # MT
+dropstack-clear = Stapel leeren  # MT
+dropstack-remove-row = Aus dem Stapel entfernen  # MT
+dropstack-path-missing-toast = { $path } entfernt — die Datei existiert nicht mehr.  # MT
+dropstack-always-on-top = Drop Stack immer im Vordergrund halten  # MT
+dropstack-show-tray-icon = Copy That-Symbol im Infobereich anzeigen  # MT
+dropstack-open-on-start = Drop Stack beim App-Start automatisch öffnen  # MT
+dropstack-count = { $count } Pfad  # MT
+
+# Phase 29 — spring-loaded folders + native DnD polish.
+settings-dnd-heading = Drag and drop  # MT
+settings-dnd-spring-load = Spring-load folders while dragging  # MT
+settings-dnd-spring-delay = Spring-load delay (ms)  # MT
+settings-dnd-thumbnails = Show drag thumbnails  # MT
+settings-dnd-invalid-highlight = Highlight invalid drop targets  # MT
+dropzone-invalid-title = Not a valid drop target  # MT
+dropzone-invalid-readonly = Destination is read-only  # MT
+dropzone-picker-title = Choose a destination  # MT
+dropzone-picker-up = Up  # MT
+dropzone-picker-path = Current path  # MT
+dropzone-picker-root = Roots  # MT
+dropzone-picker-use-this = Use this folder  # MT
+dropzone-picker-empty = No subfolders  # MT
+dropzone-picker-cancel = Cancel  # MT

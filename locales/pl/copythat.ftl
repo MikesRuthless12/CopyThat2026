@@ -933,3 +933,36 @@ chunk-store-max-size = Maksymalny rozmiar magazynu fragmentów  # MT
 chunk-store-prune = Usuń fragmenty starsze niż (dni)  # MT
 chunk-store-savings = Zaoszczędzono { $gib } GiB dzięki deduplikacji fragmentów  # MT
 chunk-store-disk-usage = Używa { $size } w { $chunks } fragmentach  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Drop Stack  # MT
+dropstack-tray-open = Drop Stack  # MT
+dropstack-empty-title = Drop Stack jest pusty  # MT
+dropstack-empty-hint = Przeciągnij pliki tutaj z Eksploratora lub kliknij prawym przyciskiem myszy wiersz zadania, aby go dodać.  # MT
+dropstack-add-to-stack = Dodaj do Drop Stack  # MT
+dropstack-copy-all-to = Skopiuj wszystko do…  # MT
+dropstack-move-all-to = Przenieś wszystko do…  # MT
+dropstack-clear = Wyczyść stos  # MT
+dropstack-remove-row = Usuń ze stosu  # MT
+dropstack-path-missing-toast = Usunięto { $path } — plik już nie istnieje.  # MT
+dropstack-always-on-top = Trzymaj Drop Stack zawsze na wierzchu  # MT
+dropstack-show-tray-icon = Pokaż ikonę Copy That w obszarze powiadomień  # MT
+dropstack-open-on-start = Otwórz Drop Stack automatycznie przy starcie aplikacji  # MT
+dropstack-count = { $count } ścieżka  # MT
+
+# Phase 29 — spring-loaded folders + native DnD polish.
+settings-dnd-heading = Drag and drop  # MT
+settings-dnd-spring-load = Spring-load folders while dragging  # MT
+settings-dnd-spring-delay = Spring-load delay (ms)  # MT
+settings-dnd-thumbnails = Show drag thumbnails  # MT
+settings-dnd-invalid-highlight = Highlight invalid drop targets  # MT
+dropzone-invalid-title = Not a valid drop target  # MT
+dropzone-invalid-readonly = Destination is read-only  # MT
+dropzone-picker-title = Choose a destination  # MT
+dropzone-picker-up = Up  # MT
+dropzone-picker-path = Current path  # MT
+dropzone-picker-root = Roots  # MT
+dropzone-picker-use-this = Use this folder  # MT
+dropzone-picker-empty = No subfolders  # MT
+dropzone-picker-cancel = Cancel  # MT
