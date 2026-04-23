@@ -21,6 +21,10 @@ workspace = true
 # Phase 12 spec — portable + hand-readable).
 # `thiserror` for typed error surface; same pattern as copythat-history.
 directories = "6"
+# Phase 22 — `globset` compiles the per-pattern rules carried by
+# `ConflictProfile`. Already a workspace dep via `copythat-core`
+# (Phase 14a filters), so this adds no new entry to the dep tree.
+globset = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

@@ -20,7 +20,7 @@
   import DropStagingDialog from "./lib/components/DropStagingDialog.svelte";
   import ErrorModal from "./lib/components/ErrorModal.svelte";
   import ErrorPromptDrawer from "./lib/components/ErrorPromptDrawer.svelte";
-  import CollisionModal from "./lib/components/CollisionModal.svelte";
+  import ConflictBatchModal from "./lib/components/ConflictBatchModal.svelte";
   import ErrorLogDrawer from "./lib/components/ErrorLogDrawer.svelte";
   import HistoryDrawer from "./lib/components/HistoryDrawer.svelte";
   import TotalsDrawer from "./lib/components/TotalsDrawer.svelte";
@@ -191,14 +191,18 @@
     <DropStagingDialog paths={$dropped} />
   {/if}
 
-  <!-- Phase 8: error prompt (modal or drawer, user-configurable),
-       collision modal, + historical error-log drawer. -->
+  <!-- Phase 8 error prompt (modal or drawer) + Phase 22 aggregate
+       conflict dialog + historical error-log drawer. The aggregate
+       conflict dialog supersedes the per-file modal: it opens once
+       per job and stays open as collisions stream in, auto-resolves
+       rows that match the active ConflictProfile, and persists the
+       user's pattern rules as reusable profiles. -->
   {#if $errorDisplayMode === "drawer"}
     <ErrorPromptDrawer />
   {:else}
     <ErrorModal />
   {/if}
-  <CollisionModal />
+  <ConflictBatchModal />
   <ErrorLogDrawer />
 
   <!-- Phase 9: SQLite history drawer -->

@@ -46,6 +46,7 @@ pub mod runner;
 pub mod scan_commands;
 pub mod shell;
 pub mod state;
+pub mod thumbnail;
 pub mod updater;
 
 use std::sync::Mutex;
@@ -280,6 +281,15 @@ pub fn run() {
             // Phase 21 — bandwidth shape introspection + schedule lint.
             commands::current_shape_rate,
             commands::validate_schedule_spec,
+            // Phase 22 — aggregate conflict dialog (thumbnails +
+            // per-pattern rules + conflict profiles).
+            commands::thumbnail_for,
+            commands::add_conflict_rule,
+            commands::current_conflict_rules,
+            commands::list_conflict_profiles,
+            commands::save_conflict_profile,
+            commands::delete_conflict_profile,
+            commands::set_active_conflict_profile,
         ])
         .setup(move |app| {
             // Phase 16 — tray icon + menu. Visible regardless of the

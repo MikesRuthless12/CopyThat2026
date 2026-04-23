@@ -29,10 +29,14 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+pub mod conflict_profile;
 pub mod defaults;
 pub mod error;
 pub mod profiles;
 
+pub use conflict_profile::{
+    ConflictMatch, ConflictProfile, ConflictProfileSettings, ConflictRule, ConflictRuleResolution,
+};
 pub use error::{Result, SettingsError};
 pub use profiles::{ProfileInfo, ProfileStore};
 
@@ -63,6 +67,13 @@ pub struct Settings {
     /// Phase 21 — bandwidth shaping (global cap + schedule +
     /// auto-throttle rules). See [`NetworkSettings`].
     pub network: NetworkSettings,
+    /// Phase 22 — named conflict profiles + the currently-active
+    /// selection. Each profile is an ordered list of
+    /// `(glob → resolution)` rules + an optional fallback. The
+    /// runner consults the active profile before raising a
+    /// collision prompt so that previously-answered patterns
+    /// auto-resolve. See [`ConflictProfileSettings`].
+    pub conflict_profiles: ConflictProfileSettings,
 }
 
 impl Settings {
