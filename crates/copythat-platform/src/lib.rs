@@ -72,6 +72,7 @@
 mod dispatcher;
 mod helpers;
 mod hook;
+pub mod meta;
 mod native;
 mod outcome;
 mod reflink_path;
@@ -83,5 +84,6 @@ pub use helpers::{
     supports_reflink, volume_id,
 };
 pub use hook::PlatformFastCopyHook;
+pub use meta::PlatformMetaOps;
 pub use outcome::{ChosenStrategy, FastCopyOutcome};
 pub use sparse::PlatformSparseOps;

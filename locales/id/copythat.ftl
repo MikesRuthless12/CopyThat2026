@@ -850,3 +850,18 @@ sparse-not-supported-title = Tujuan mengisi file sparse  # MT
 sparse-not-supported-body = { $dst_fs } tidak mendukung file sparse. Lubang di sumber ditulis sebagai nol, sehingga tujuan lebih besar di disk.  # MT
 sparse-warning-densified = Tata letak sparse dipertahankan: hanya rentang yang dialokasikan yang disalin.  # MT
 sparse-warning-mismatch = Ketidakcocokan tata letak sparse — tujuan mungkin lebih besar dari yang diharapkan.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = Pertahankan metadata keamanan  # MT
+settings-preserve-security-metadata-hint = Tangkap dan terapkan ulang aliran metadata di luar pita (NTFS ADS / xattrs / ACL POSIX / konteks SELinux / kapabilitas file Linux / fork sumber daya macOS) pada setiap salinan.  # MT
+settings-preserve-motw = Pertahankan Mark-of-the-Web (penanda diunduh-dari-internet)  # MT
+settings-preserve-motw-hint = Penting untuk keamanan. SmartScreen dan Office Protected View menggunakan aliran ini untuk memperingatkan tentang file yang diunduh dari internet. Menonaktifkannya memungkinkan executable yang diunduh kehilangan penanda asalnya saat disalin dan melewati pengamanan sistem operasi.  # MT
+settings-preserve-posix-acls = Pertahankan ACL POSIX dan atribut yang diperluas  # MT
+settings-preserve-posix-acls-hint = Bawa xattrs user.* / system.* / trusted.* dan daftar kontrol akses POSIX selama penyalinan.  # MT
+settings-preserve-selinux = Pertahankan konteks SELinux  # MT
+settings-preserve-selinux-hint = Bawa label security.selinux selama penyalinan agar daemon yang berjalan di bawah kebijakan MAC tetap dapat mengakses file.  # MT
+settings-preserve-resource-forks = Pertahankan fork sumber daya macOS dan info Finder  # MT
+settings-preserve-resource-forks-hint = Bawa fork sumber daya warisan dan FinderInfo (tag warna, metadata Carbon) selama penyalinan.  # MT
+settings-appledouble-fallback = Gunakan sidecar AppleDouble pada sistem file yang tidak kompatibel  # MT
+meta-translated-to-appledouble = Metadata asing disimpan di sidecar AppleDouble (._{ $ext })  # MT

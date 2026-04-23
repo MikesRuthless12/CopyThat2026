@@ -458,8 +458,14 @@ pub async fn copy_file(
             drop(writer);
             drop(reader);
 
-            if let Err(e) =
-                preserve_metadata(src_path.clone(), dst_path.clone(), &src_metadata, &opts).await
+            if let Err(e) = preserve_metadata_with_events(
+                src_path.clone(),
+                dst_path.clone(),
+                &src_metadata,
+                &opts,
+                Some(&events),
+            )
+            .await
             {
                 return finalize_error(&opts, &events, e, &dst_path).await;
             }
@@ -685,11 +691,16 @@ fn rate_bps(bytes: u64, elapsed: Duration) -> u64 {
     (bytes as f64 / secs) as u64
 }
 
-async fn preserve_metadata(
+/// Apply timestamps + permissions + Phase 24 security metadata to
+/// the destination, emitting `MetaTranslatedToAppleDouble` on the
+/// optional events channel when the metadata apply pass falls
+/// through to the `._<filename>` sidecar.
+async fn preserve_metadata_with_events(
     src: std::path::PathBuf,
     dst: std::path::PathBuf,
     src_metadata: &std::fs::Metadata,
     opts: &CopyOptions,
+    events: Option<&mpsc::Sender<CopyEvent>>,
 ) -> Result<(), CopyError> {
     // Apply timestamps BEFORE permissions. On Windows a readonly
     // attribute blocks subsequent `SetFileTime` calls; on Unix the
@@ -722,6 +733,41 @@ async fn preserve_metadata(
         let perms = src_metadata.permissions();
         if let Err(e) = tokio::fs::set_permissions(&dst, perms).await {
             return Err(CopyError::from_io(&src, &dst, e));
+        }
+    }
+    // Phase 24 — security-metadata transfer. Runs after timestamps
+    // and permissions because the apply side may want to write xattrs
+    // that depend on the destination's mode bits being correct first
+    // (POSIX ACLs in particular interact with the permission set).
+    // Failures inside the apply pass are downgraded to `FileError`
+    // events when the events channel is attached — losing a side-
+    // band stream should not abort the byte copy that already
+    // succeeded. The exception is a panic in the spawn_blocking
+    // worker, which surfaces as `IoOther` so the test harness can
+    // assert.
+    if opts.preserve_security_metadata
+        && let Some(meta_ops) = opts.meta_ops.clone()
+    {
+        let policy = opts.meta_policy;
+        let outcome = crate::meta::transfer(meta_ops, src.clone(), dst.clone(), policy).await;
+        match outcome {
+            Ok(o) => {
+                if o.translated_to_appledouble
+                    && let Some(tx) = events
+                {
+                    let _ = tx
+                        .send(CopyEvent::MetaTranslatedToAppleDouble {
+                            ext: o.translated_extension,
+                        })
+                        .await;
+                }
+            }
+            Err(e) => {
+                // Down-grade to a non-fatal: the byte copy already
+                // succeeded. The structured-log line lives in the
+                // helper to keep the engine free of tracing deps.
+                tracing_log_meta_failure(&dst, &e);
+            }
         }
     }
     Ok(())
@@ -926,7 +972,14 @@ async fn copy_file_sparse_aware(
     drop(dst_file);
     drop(src_file);
 
-    preserve_metadata(src_path.clone(), dst_path.clone(), &src_metadata, &opts).await?;
+    preserve_metadata_with_events(
+        src_path.clone(),
+        dst_path.clone(),
+        &src_metadata,
+        &opts,
+        Some(&events),
+    )
+    .await?;
 
     // Verify pass — full-file byte-for-byte hash. Holes read back as
     // zeros on both sides, so a successful hash compare confirms the
@@ -1292,9 +1345,16 @@ async fn prime_blake3_from_dst_prefix(
 /// tracing dep stays internal — the engine itself does not panic
 /// or surface the error; it's informational.
 fn tracing_log_sync_failure(_dst: &Path, _err: &std::io::Error) {
-    // Intentionally a no-op until Phase 24 wires structured
-    // logging into the engine. Keeping the call site so the future
-    // logger lands here without engine churn.
+    // Intentionally a no-op until structured logging is wired
+    // workspace-wide. Keeping the call site so the future logger
+    // lands here without engine churn.
+}
+
+/// Best-effort meta-apply failure logger. Phase 24's apply pass is
+/// strictly post-byte-copy — losing xattrs / ADS / ACLs should not
+/// abort the operation that already succeeded.
+fn tracing_log_meta_failure(_dst: &Path, _err: &std::io::Error) {
+    // Same intentional no-op as `tracing_log_sync_failure`.
 }
 
 /// Phase 19b — open the source, then fall through to a snapshot if

@@ -330,6 +330,36 @@ pub struct CopyOptions {
     /// test harnesses) can plug in alternate backends without pulling
     /// in the platform crate's unsafe FFI.
     pub sparse_ops: Option<Arc<dyn crate::sparse::SparseOps>>,
+    /// Phase 24 — preserve out-of-band security metadata on the
+    /// destination.
+    ///
+    /// When `true` (the default) and a [`meta_ops`](Self::meta_ops)
+    /// hook is installed, the engine captures the source file's
+    /// metadata snapshot (NTFS ADS / xattrs / POSIX ACLs / SELinux
+    /// context / Linux file capabilities / macOS resource fork +
+    /// FinderInfo) after the byte copy completes and re-applies it to
+    /// the destination after timestamps + permissions. The
+    /// per-stream [`meta_policy`](Self::meta_policy) decides which
+    /// surfaces survive.
+    ///
+    /// `false` disables the apply pass entirely — useful when copying
+    /// to a sandbox that cannot accept any of the foreign metadata
+    /// (e.g. a tmpfs scratch dir for tests).
+    pub preserve_security_metadata: bool,
+    /// Phase 24 — per-toggle gating of the metadata apply pass.
+    /// Defaults to "preserve everything" (including
+    /// `preserve_motw` — the Mark-of-the-Web Zone.Identifier stream
+    /// that SmartScreen / Office Protected View key off).
+    pub meta_policy: crate::meta::MetaPolicy,
+    /// Phase 24 — security-metadata bridge.
+    ///
+    /// Implemented by `copythat_platform::PlatformMetaOps`. `None`
+    /// disables the metadata apply pass even when
+    /// [`preserve_security_metadata`](Self::preserve_security_metadata)
+    /// is `true`. Kept here as a trait object so callers (the Tauri
+    /// shell, the CLI, test harnesses) can plug in alternate
+    /// backends without pulling in the platform crate's unsafe FFI.
+    pub meta_ops: Option<Arc<dyn crate::meta::MetaOps>>,
 }
 
 /// User-selectable copy strategy.
@@ -416,6 +446,9 @@ impl Default for CopyOptions {
             shape: None,
             preserve_sparseness: true,
             sparse_ops: None,
+            preserve_security_metadata: true,
+            meta_policy: crate::meta::MetaPolicy::default(),
+            meta_ops: None,
         }
     }
 }

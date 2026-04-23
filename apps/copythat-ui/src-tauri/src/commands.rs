@@ -266,6 +266,15 @@ fn apply_options(
         preserve_times: settings.transfer.preserve_timestamps,
         preserve_permissions: settings.transfer.preserve_permissions,
         preserve_sparseness: settings.transfer.preserve_sparseness,
+        preserve_security_metadata: settings.transfer.preserve_security_metadata,
+        meta_policy: copythat_core::MetaPolicy {
+            preserve_motw: settings.transfer.preserve_motw,
+            preserve_xattrs: settings.transfer.preserve_posix_acls,
+            preserve_posix_acls: settings.transfer.preserve_posix_acls,
+            preserve_selinux: settings.transfer.preserve_selinux_contexts,
+            preserve_resource_forks: settings.transfer.preserve_resource_forks,
+            appledouble_fallback: settings.transfer.appledouble_fallback,
+        },
         strategy: match settings.transfer.reflink {
             copythat_settings::ReflinkPreference::Prefer => copythat_core::CopyStrategy::Auto,
             copythat_settings::ReflinkPreference::Avoid => copythat_core::CopyStrategy::NoReflink,
@@ -295,6 +304,15 @@ fn apply_options(
     // fully-dense source.
     if opts.preserve_sparseness {
         opts.sparse_ops = Some(std::sync::Arc::new(copythat_platform::PlatformSparseOps));
+    }
+
+    // Phase 24 — attach the platform security-metadata hook whenever
+    // metadata preservation is enabled. Stateless unit struct, same
+    // Arc-is-free pattern. The engine skips the apply pass at
+    // runtime if `meta_ops.capture` returns an empty snapshot
+    // (vanilla files with no out-of-band streams).
+    if opts.preserve_security_metadata {
+        opts.meta_ops = Some(std::sync::Arc::new(copythat_platform::PlatformMetaOps));
     }
 
     // Phase 19b — attach the snapshot bridge whenever the user opted

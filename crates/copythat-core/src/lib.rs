@@ -46,6 +46,24 @@
 //!   on densifying filesystems and `CopyErrorKind::SparsenessMismatch`
 //!   when the dst's allocated footprint balloons past the source's.
 //!
+//! Added in Phase 24:
+//! - `copythat_core::meta` — `MetaSnapshot`, `NtfsStream`, `XattrEntry`,
+//!   `PosixAclBlob`, `SeLinuxContext`, `FileCaps`, `ResourceForkBlob`,
+//!   `FinderInfoBlob`, `MetaPolicy` (per-toggle gating including
+//!   Mark-of-the-Web), `MetaApplyOutcome`, `MetaOps` trait, and the
+//!   `NoopMetaOps` fallback. `CopyOptions::preserve_security_metadata:
+//!   bool` + `CopyOptions::meta_policy: MetaPolicy` +
+//!   `CopyOptions::meta_ops: Option<Arc<dyn MetaOps>>` drive a
+//!   capture-on-source / apply-on-dst pass that runs after timestamps
+//!   and permissions. Cross-FS destinations that can't hold the
+//!   foreign metadata fall through to an `._<filename>` AppleDouble
+//!   sidecar (when `MetaPolicy::appledouble_fallback` is on) and the
+//!   engine surfaces `CopyEvent::MetaTranslatedToAppleDouble { ext }`.
+//!   Platform syscalls (`FindFirstStreamW` / `BackupRead` on Windows,
+//!   `xattr` family on Linux/macOS, `..namedfork/rsrc` for Carbon
+//!   resource forks) live in `copythat_platform::meta` so this crate
+//!   stays `#![forbid(unsafe_code)]`-clean.
+//!
 //! Not yet implemented (deferred by design):
 //! - Platform fast paths (CopyFileExW, copyfile, copy_file_range,
 //!   reflink) — Phase 6.
@@ -99,6 +117,7 @@ mod engine;
 mod error;
 mod event;
 pub mod filter;
+pub mod meta;
 mod options;
 pub mod queue;
 pub mod safety;
@@ -113,6 +132,10 @@ pub use engine::copy_file;
 pub use error::{CopyError, CopyErrorKind};
 pub use event::{Collision, CollisionResolution, CopyEvent, CopyReport, ErrorPrompt, TreeReport};
 pub use filter::{CompiledFilters, FilterError, FilterSet};
+pub use meta::{
+    FileCaps, FinderInfoBlob, MetaApplyOutcome, MetaOps, MetaPolicy, MetaSnapshot, NoopMetaOps,
+    NtfsStream, PosixAclBlob, ResourceForkBlob, SeLinuxContext, XattrEntry,
+};
 pub use options::{
     CopyOptions, CopyStrategy, DEFAULT_BUFFER_SIZE, DEFAULT_TREE_CONCURRENCY, ErrorAction,
     ErrorPolicy, FastCopyHook, FastCopyHookOutcome, JournalSink, LockedFilePolicy, MAX_BUFFER_SIZE,

@@ -850,3 +850,18 @@ sparse-not-supported-title = 대상이 스파스 파일을 채움  # MT
 sparse-not-supported-body = { $dst_fs }는 스파스 파일을 지원하지 않습니다. 원본의 구멍이 0으로 기록되어 대상이 디스크에서 더 큽니다.  # MT
 sparse-warning-densified = 스파스 레이아웃 보존: 할당된 범위만 복사되었습니다.  # MT
 sparse-warning-mismatch = 스파스 레이아웃 불일치 — 대상이 예상보다 클 수 있습니다.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = 보안 메타데이터 보존  # MT
+settings-preserve-security-metadata-hint = 모든 복사에서 대역 외 메타데이터 스트림(NTFS ADS / xattrs / POSIX ACL / SELinux 컨텍스트 / Linux 파일 기능 / macOS 리소스 포크)을 캡처하고 다시 적용합니다.  # MT
+settings-preserve-motw = Mark-of-the-Web(인터넷에서 다운로드 플래그) 보존  # MT
+settings-preserve-motw-hint = 보안에 매우 중요. SmartScreen 및 Office Protected View는 이 스트림을 사용하여 인터넷에서 다운로드한 파일에 대해 경고합니다. 비활성화하면 다운로드한 실행 파일이 복사 시 출처 표식을 잃고 운영 체제 보호를 우회할 수 있습니다.  # MT
+settings-preserve-posix-acls = POSIX ACL 및 확장 속성 보존  # MT
+settings-preserve-posix-acls-hint = 복사 시 user.* / system.* / trusted.* xattrs 및 POSIX 액세스 제어 목록을 전달합니다.  # MT
+settings-preserve-selinux = SELinux 컨텍스트 보존  # MT
+settings-preserve-selinux-hint = MAC 정책하에서 실행되는 데몬이 파일에 계속 액세스할 수 있도록 복사 시 security.selinux 레이블을 전달합니다.  # MT
+settings-preserve-resource-forks = macOS 리소스 포크 및 Finder 정보 보존  # MT
+settings-preserve-resource-forks-hint = 복사 시 레거시 리소스 포크 및 FinderInfo(색상 태그, Carbon 메타데이터)를 전달합니다.  # MT
+settings-appledouble-fallback = 호환되지 않는 파일 시스템에서 AppleDouble 사이드카 사용  # MT
+meta-translated-to-appledouble = 외래 메타데이터가 AppleDouble 사이드카에 저장됨 (._{ $ext })  # MT

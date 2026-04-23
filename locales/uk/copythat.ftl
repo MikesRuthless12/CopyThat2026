@@ -850,3 +850,18 @@ sparse-not-supported-title = Цільове місце заповнює розр
 sparse-not-supported-body = { $dst_fs } не підтримує розріджені файли. Отвори в джерелі були записані як нулі, тому цільове місце більше на диску.  # MT
 sparse-warning-densified = Розріджений макет збережено: скопійовано лише виділені діапазони.  # MT
 sparse-warning-mismatch = Невідповідність розрідженого макета — цільове місце може бути більшим за очікуване.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = Зберігати метадані безпеки  # MT
+settings-preserve-security-metadata-hint = Захоплюйте та повторно застосовуйте позасмужні потоки метаданих (NTFS ADS / xattrs / POSIX ACL / контексти SELinux / можливості файлів Linux / форки ресурсів macOS) під час кожної копії.  # MT
+settings-preserve-motw = Зберігати Mark-of-the-Web (прапорець завантаження з інтернету)  # MT
+settings-preserve-motw-hint = Критично для безпеки. SmartScreen і Office Protected View використовують цей потік для попередження про файли, завантажені з інтернету. Вимкнення дозволяє завантаженому виконуваному файлу втратити маркер походження під час копіювання та обійти захист операційної системи.  # MT
+settings-preserve-posix-acls = Зберігати POSIX ACL та розширені атрибути  # MT
+settings-preserve-posix-acls-hint = Переносити xattrs user.* / system.* / trusted.* і списки керування доступом POSIX під час копіювання.  # MT
+settings-preserve-selinux = Зберігати контексти SELinux  # MT
+settings-preserve-selinux-hint = Переносити мітку security.selinux під час копіювання, щоб демони під політиками MAC могли продовжувати доступ до файлу.  # MT
+settings-preserve-resource-forks = Зберігати форки ресурсів macOS та інформацію Finder  # MT
+settings-preserve-resource-forks-hint = Переносити застарілий форк ресурсів і FinderInfo (кольорові теги, метадані Carbon) під час копіювання.  # MT
+settings-appledouble-fallback = Використовувати додатковий файл AppleDouble у несумісних файлових системах  # MT
+meta-translated-to-appledouble = Чужорідні метадані збережено в додатковому файлі AppleDouble (._{ $ext })  # MT

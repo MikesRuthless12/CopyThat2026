@@ -850,3 +850,18 @@ sparse-not-supported-title = Hedef seyrek dosyaları dolduruyor  # MT
 sparse-not-supported-body = { $dst_fs } seyrek dosyaları desteklemiyor. Kaynaktaki boşluklar sıfır olarak yazıldı, bu nedenle hedef diskte daha büyük.  # MT
 sparse-warning-densified = Seyrek düzen korundu: yalnızca ayrılmış kapsamlar kopyalandı.  # MT
 sparse-warning-mismatch = Seyrek düzen uyuşmazlığı — hedef beklenenden büyük olabilir.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = Güvenlik meta verilerini koru  # MT
+settings-preserve-security-metadata-hint = Her kopyalamada bant dışı meta veri akışlarını (NTFS ADS / xattrs / POSIX ACL'leri / SELinux bağlamları / Linux dosya yetenekleri / macOS kaynak çatalları) yakalayın ve yeniden uygulayın.  # MT
+settings-preserve-motw = Mark-of-the-Web'i (internetten-indirildi bayrağını) koru  # MT
+settings-preserve-motw-hint = Güvenlik için kritik. SmartScreen ve Office Protected View, internetten indirilen dosyalar hakkında uyarmak için bu akışı kullanır. Devre dışı bırakmak, indirilen bir çalıştırılabilir dosyanın kopyalama sırasında kaynak işaretini düşürmesine ve işletim sistemi güvenlik önlemlerini atlamasına olanak tanır.  # MT
+settings-preserve-posix-acls = POSIX ACL'leri ve genişletilmiş öznitelikleri koru  # MT
+settings-preserve-posix-acls-hint = Kopyalama sırasında user.* / system.* / trusted.* xattrs ve POSIX erişim kontrol listelerini taşı.  # MT
+settings-preserve-selinux = SELinux bağlamlarını koru  # MT
+settings-preserve-selinux-hint = MAC politikaları altında çalışan arka plan programlarının dosyaya erişmeye devam edebilmesi için kopyalama sırasında security.selinux etiketini taşı.  # MT
+settings-preserve-resource-forks = macOS kaynak çatallarını ve Finder bilgilerini koru  # MT
+settings-preserve-resource-forks-hint = Kopyalama sırasında eski kaynak çatalını ve FinderInfo'yu (renk etiketleri, Carbon meta verileri) taşı.  # MT
+settings-appledouble-fallback = Uyumsuz dosya sistemlerinde AppleDouble yan dosyası kullan  # MT
+meta-translated-to-appledouble = Yabancı meta veriler AppleDouble yan dosyasında saklandı (._{ $ext })  # MT

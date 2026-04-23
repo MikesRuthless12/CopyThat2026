@@ -850,3 +850,18 @@ sparse-not-supported-title = الوجهة تملأ الملفات المتناث
 sparse-not-supported-body = { $dst_fs } لا يدعم الملفات المتناثرة. تمت كتابة الثقوب الموجودة في المصدر كأصفار، لذا فإن حجم الوجهة على القرص أكبر.  # MT
 sparse-warning-densified = تم الحفاظ على تخطيط الملف المتناثر: تم نسخ النطاقات المخصصة فقط.  # MT
 sparse-warning-mismatch = عدم تطابق تخطيط الملف المتناثر — قد تكون الوجهة أكبر من المتوقع.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = الحفاظ على بيانات الأمان الوصفية  # MT
+settings-preserve-security-metadata-hint = التقاط وإعادة تطبيق تدفقات البيانات الوصفية خارج النطاق (NTFS ADS / xattrs / قوائم ACL / سياقات SELinux / إمكانيات ملف Linux / تفرعات موارد macOS) في كل عملية نسخ.  # MT
+settings-preserve-motw = الحفاظ على علامة الويب (تنزيل من الإنترنت)  # MT
+settings-preserve-motw-hint = حرج للأمان. يستخدم SmartScreen وOffice Protected View هذا التدفق للتحذير من الملفات التي تم تنزيلها من الإنترنت. تعطيله يسمح للملف القابل للتنفيذ بالتخلص من علامته على نسخة وتجاوز ضمانات نظام التشغيل.  # MT
+settings-preserve-posix-acls = الحفاظ على قوائم POSIX ACL والسمات الموسعة  # MT
+settings-preserve-posix-acls-hint = نقل سمات user.* / system.* / trusted.* وقوائم التحكم في وصول POSIX عبر النسخ.  # MT
+settings-preserve-selinux = الحفاظ على سياقات SELinux  # MT
+settings-preserve-selinux-hint = نقل تسمية security.selinux عبر النسخ بحيث يمكن للبرامج التي تعمل ضمن سياسات MAC الوصول إلى الملف.  # MT
+settings-preserve-resource-forks = الحفاظ على تفرعات موارد macOS ومعلومات Finder  # MT
+settings-preserve-resource-forks-hint = نقل تفرع الموارد القديم وFinderInfo (علامات الألوان، بيانات Carbon الوصفية) عبر النسخ.  # MT
+settings-appledouble-fallback = استخدام ملف AppleDouble الجانبي على أنظمة الملفات غير المتوافقة  # MT
+meta-translated-to-appledouble = تم تخزين البيانات الوصفية الأجنبية في ملف AppleDouble الجانبي (._{ $ext })  # MT

@@ -301,6 +301,38 @@ pub struct TransferSettings {
     /// destination to be fully allocated (e.g. latency-sensitive VM
     /// disks where on-demand allocation hurts first-write cost).
     pub preserve_sparseness: bool,
+    /// Phase 24 — security-metadata preservation. Master toggle for
+    /// the entire metadata pass; when `false`, none of the per-stream
+    /// flags below have any effect because the engine never enters
+    /// the `meta_ops.transfer` path.
+    pub preserve_security_metadata: bool,
+    /// Phase 24 — preserve the Windows Mark-of-the-Web stream
+    /// (`Zone.Identifier` ADS) that SmartScreen / Office Protected
+    /// View key off. Security-sensitive: turning this off lets a
+    /// downloaded executable shed its origin marker on copy.
+    pub preserve_motw: bool,
+    /// Phase 24 — preserve POSIX ACLs and the broader xattr surface
+    /// (`user.*` / `system.posix_acl_*` / `trusted.*`). The
+    /// `system.posix_acl_*` entries also flow through
+    /// `MetaSnapshot::posix_acl` so the UI can render them.
+    pub preserve_posix_acls: bool,
+    /// Phase 24 — preserve the `security.selinux` xattr (Mandatory
+    /// Access Control label). Required for daemons running under
+    /// SELinux confined contexts to keep accessing the file after
+    /// the copy.
+    pub preserve_selinux_contexts: bool,
+    /// Phase 24 — preserve macOS resource forks
+    /// (`<file>/..namedfork/rsrc` + `com.apple.ResourceFork` xattr)
+    /// and Finder info (`com.apple.FinderInfo` — color tags, Carbon
+    /// metadata).
+    pub preserve_resource_forks: bool,
+    /// Phase 24 — when the destination filesystem can't accept the
+    /// foreign metadata streams (e.g. macOS resource fork landing on
+    /// a Linux ext4 share, Windows ADS on a FAT32 USB), serialise
+    /// them into an `._<filename>` AppleDouble sidecar so the data
+    /// survives the trip. Default ON; only meaningful when
+    /// `preserve_security_metadata` is also ON.
+    pub appledouble_fallback: bool,
 }
 
 impl Default for TransferSettings {
@@ -317,6 +349,12 @@ impl Default for TransferSettings {
             reserve_free_space_bytes: 0,
             on_locked: LockedFilePolicyChoice::default(),
             preserve_sparseness: true,
+            preserve_security_metadata: true,
+            preserve_motw: true,
+            preserve_posix_acls: true,
+            preserve_selinux_contexts: true,
+            preserve_resource_forks: true,
+            appledouble_fallback: true,
         }
     }
 }

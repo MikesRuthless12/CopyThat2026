@@ -560,3 +560,22 @@ sparse-not-supported-title = Destination fills sparse files
 sparse-not-supported-body = { $dst_fs } does not support sparse files. Holes in the source were written out as zeros, so the destination is larger on disk.
 sparse-warning-densified = Sparse layout preserved: only allocated extents were copied.
 sparse-warning-mismatch = Sparse layout mismatch — destination may be larger than expected.
+
+# Phase 24 — security-metadata preservation. The Mark-of-the-Web
+# (Zone.Identifier ADS) toggle is security-sensitive: turning it off
+# lets a downloaded executable shed its SmartScreen / Office Protected
+# View flag on copy, which is why the tooltip carries an explicit
+# warning. AppleDouble fallback emits `._<filename>` sidecars on
+# destination filesystems that can't hold the foreign metadata.
+settings-preserve-security-metadata = Preserve security metadata
+settings-preserve-security-metadata-hint = Capture and re-apply out-of-band metadata streams (NTFS ADS / xattrs / POSIX ACLs / SELinux contexts / Linux file capabilities / macOS resource forks) on every copy.
+settings-preserve-motw = Preserve Mark-of-the-Web (downloaded-from-internet flag)
+settings-preserve-motw-hint = Critical for security. SmartScreen and Office Protected View use this stream to warn about files downloaded from the internet. Disabling lets a downloaded executable shed its origin marker on copy and bypass operating-system safeguards.
+settings-preserve-posix-acls = Preserve POSIX ACLs and extended attributes
+settings-preserve-posix-acls-hint = Carry user.* / system.* / trusted.* xattrs and POSIX access-control lists across the copy.
+settings-preserve-selinux = Preserve SELinux contexts
+settings-preserve-selinux-hint = Carry the security.selinux label across the copy so daemons running under MAC policies can still access the file.
+settings-preserve-resource-forks = Preserve macOS resource forks and Finder info
+settings-preserve-resource-forks-hint = Carry the legacy resource fork and FinderInfo (color tags, Carbon metadata) across the copy.
+settings-appledouble-fallback = Use AppleDouble sidecar on incompatible filesystems
+meta-translated-to-appledouble = Foreign metadata stored in AppleDouble sidecar (._{ $ext })

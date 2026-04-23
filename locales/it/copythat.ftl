@@ -850,3 +850,18 @@ sparse-not-supported-title = La destinazione riempie i file sparsi  # MT
 sparse-not-supported-body = { $dst_fs } non supporta i file sparsi. I buchi nell'origine sono stati scritti come zeri, quindi la destinazione è più grande su disco.  # MT
 sparse-warning-densified = Layout sparso preservato: sono state copiate solo le estensioni allocate.  # MT
 sparse-warning-mismatch = Discordanza layout sparso — la destinazione potrebbe essere più grande del previsto.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = Conserva metadati di sicurezza  # MT
+settings-preserve-security-metadata-hint = Acquisisci e riapplica flussi di metadati fuori banda (NTFS ADS / xattrs / ACL POSIX / contesti SELinux / capacità file Linux / fork di risorse macOS) ad ogni copia.  # MT
+settings-preserve-motw = Conserva Mark-of-the-Web (flag scaricato-da-internet)  # MT
+settings-preserve-motw-hint = Critico per la sicurezza. SmartScreen e Office Protected View usano questo flusso per avvisare sui file scaricati da internet. Disabilitare consente a un eseguibile scaricato di perdere il proprio marcatore di origine durante la copia e bypassare le protezioni del sistema operativo.  # MT
+settings-preserve-posix-acls = Conserva ACL POSIX e attributi estesi  # MT
+settings-preserve-posix-acls-hint = Trasporta xattrs user.* / system.* / trusted.* ed elenchi di controllo accesso POSIX durante la copia.  # MT
+settings-preserve-selinux = Conserva contesti SELinux  # MT
+settings-preserve-selinux-hint = Trasporta l'etichetta security.selinux durante la copia in modo che i demoni sotto policy MAC possano ancora accedere al file.  # MT
+settings-preserve-resource-forks = Conserva fork di risorse macOS e Finder info  # MT
+settings-preserve-resource-forks-hint = Trasporta il fork di risorse legacy e FinderInfo (tag colore, metadati Carbon) durante la copia.  # MT
+settings-appledouble-fallback = Usa sidecar AppleDouble su filesystem incompatibili  # MT
+meta-translated-to-appledouble = Metadati esterni archiviati nel sidecar AppleDouble (._{ $ext })  # MT

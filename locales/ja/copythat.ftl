@@ -850,3 +850,18 @@ sparse-not-supported-title = 宛先がスパースファイルを埋めます  #
 sparse-not-supported-body = { $dst_fs } はスパースファイルをサポートしていません。ソースの穴はゼロとして書き込まれ、宛先はディスク上で大きくなります。  # MT
 sparse-warning-densified = スパースレイアウトを保持: 割り当て済み範囲のみコピーされました。  # MT
 sparse-warning-mismatch = スパースレイアウトの不一致 — 宛先が予想より大きくなる可能性があります。  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = セキュリティメタデータを保持  # MT
+settings-preserve-security-metadata-hint = コピーごとに帯域外メタデータストリーム(NTFS ADS / xattrs / POSIX ACL / SELinux コンテキスト / Linux ファイル機能 / macOS リソースフォーク)をキャプチャして再適用します。  # MT
+settings-preserve-motw = Mark-of-the-Web(インターネットからダウンロードフラグ)を保持  # MT
+settings-preserve-motw-hint = セキュリティ上重要。SmartScreen と Office Protected View はこのストリームを使用してインターネットからダウンロードしたファイルに関する警告を表示します。無効にすると、ダウンロードした実行可能ファイルがコピー時に起源マーカーを失い、オペレーティングシステムの保護を回避できるようになります。  # MT
+settings-preserve-posix-acls = POSIX ACL と拡張属性を保持  # MT
+settings-preserve-posix-acls-hint = コピー時に user.* / system.* / trusted.* xattrs と POSIX アクセス制御リストを引き継ぎます。  # MT
+settings-preserve-selinux = SELinux コンテキストを保持  # MT
+settings-preserve-selinux-hint = MAC ポリシー下で実行されているデーモンが引き続きファイルにアクセスできるよう、コピー時に security.selinux ラベルを引き継ぎます。  # MT
+settings-preserve-resource-forks = macOS リソースフォークと Finder 情報を保持  # MT
+settings-preserve-resource-forks-hint = コピー時にレガシーリソースフォークと FinderInfo(カラータグ、Carbon メタデータ)を引き継ぎます。  # MT
+settings-appledouble-fallback = 互換性のないファイルシステムでは AppleDouble サイドカーを使用  # MT
+meta-translated-to-appledouble = 外部メタデータを AppleDouble サイドカーに保存しました (._{ $ext })  # MT

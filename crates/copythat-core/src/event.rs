@@ -159,6 +159,18 @@ pub enum CopyEvent {
     SparsenessNotSupported {
         dst_fs: &'static str,
     },
+    /// Phase 24 — the destination filesystem couldn't accept some of
+    /// the source's foreign metadata streams (e.g. macOS resource
+    /// fork landing on a Linux ext4 share, Windows ADS landing on a
+    /// FAT32 USB stick). The engine fell through to an
+    /// `._<filename>` AppleDouble sidecar so the data survives the
+    /// trip and can be re-applied when the file lands back on a
+    /// capable FS. `ext` is the source file's extension
+    /// (lowercase, no leading dot — `"docx"`, `"jpg"`) so the UI
+    /// can render a per-row info badge.
+    MetaTranslatedToAppleDouble {
+        ext: String,
+    },
 }
 
 impl Clone for CopyEvent {
@@ -296,6 +308,9 @@ impl Clone for CopyEvent {
             },
             CopyEvent::SparsenessNotSupported { dst_fs } => {
                 CopyEvent::SparsenessNotSupported { dst_fs }
+            }
+            CopyEvent::MetaTranslatedToAppleDouble { ext } => {
+                CopyEvent::MetaTranslatedToAppleDouble { ext: ext.clone() }
             }
         }
     }

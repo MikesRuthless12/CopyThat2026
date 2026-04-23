@@ -850,3 +850,18 @@ sparse-not-supported-title = 目标填充稀疏文件  # MT
 sparse-not-supported-body = { $dst_fs } 不支持稀疏文件。源中的空洞被写入为零,因此目标在磁盘上更大。  # MT
 sparse-warning-densified = 已保留稀疏布局:仅复制了已分配的区段。  # MT
 sparse-warning-mismatch = 稀疏布局不匹配——目标可能比预期更大。  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = 保留安全元数据  # MT
+settings-preserve-security-metadata-hint = 在每次复制时捕获并重新应用带外元数据流(NTFS ADS / xattrs / POSIX ACL / SELinux 上下文 / Linux 文件能力 / macOS 资源分支)。  # MT
+settings-preserve-motw = 保留网络标记(从互联网下载标志)  # MT
+settings-preserve-motw-hint = 对安全至关重要。SmartScreen 和 Office Protected View 使用此流来警告从互联网下载的文件。禁用会让下载的可执行文件在复制时失去其来源标记,并绕过操作系统的安全防护。  # MT
+settings-preserve-posix-acls = 保留 POSIX ACL 和扩展属性  # MT
+settings-preserve-posix-acls-hint = 在复制过程中携带 user.* / system.* / trusted.* xattrs 和 POSIX 访问控制列表。  # MT
+settings-preserve-selinux = 保留 SELinux 上下文  # MT
+settings-preserve-selinux-hint = 在复制过程中携带 security.selinux 标签,以便在 MAC 策略下运行的守护进程仍能访问该文件。  # MT
+settings-preserve-resource-forks = 保留 macOS 资源分支和 Finder 信息  # MT
+settings-preserve-resource-forks-hint = 在复制过程中携带遗留的资源分支和 FinderInfo(颜色标签、Carbon 元数据)。  # MT
+settings-appledouble-fallback = 在不兼容的文件系统上使用 AppleDouble 附属文件  # MT
+meta-translated-to-appledouble = 外部元数据已存储在 AppleDouble 附属文件中 (._{ $ext })  # MT

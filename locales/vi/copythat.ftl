@@ -850,3 +850,18 @@ sparse-not-supported-title = Đích lấp đầy tệp thưa  # MT
 sparse-not-supported-body = { $dst_fs } không hỗ trợ tệp thưa. Các lỗ trong nguồn đã được ghi dưới dạng số 0, do đó đích lớn hơn trên đĩa.  # MT
 sparse-warning-densified = Bố cục thưa được bảo toàn: chỉ các phạm vi được cấp phát đã được sao chép.  # MT
 sparse-warning-mismatch = Không khớp bố cục thưa — đích có thể lớn hơn mong đợi.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = Bảo toàn siêu dữ liệu bảo mật  # MT
+settings-preserve-security-metadata-hint = Bắt và áp dụng lại các luồng siêu dữ liệu ngoài băng (NTFS ADS / xattrs / ACL POSIX / ngữ cảnh SELinux / khả năng tệp Linux / nhánh tài nguyên macOS) trên mỗi bản sao.  # MT
+settings-preserve-motw = Bảo toàn Mark-of-the-Web (cờ tải xuống từ internet)  # MT
+settings-preserve-motw-hint = Quan trọng cho bảo mật. SmartScreen và Office Protected View sử dụng luồng này để cảnh báo về các tệp đã tải xuống từ internet. Vô hiệu hóa cho phép một tệp thực thi đã tải xuống mất dấu nguồn gốc khi sao chép và bỏ qua các biện pháp bảo vệ của hệ điều hành.  # MT
+settings-preserve-posix-acls = Bảo toàn ACL POSIX và thuộc tính mở rộng  # MT
+settings-preserve-posix-acls-hint = Mang theo các xattrs user.* / system.* / trusted.* và danh sách kiểm soát truy cập POSIX trong quá trình sao chép.  # MT
+settings-preserve-selinux = Bảo toàn ngữ cảnh SELinux  # MT
+settings-preserve-selinux-hint = Mang theo nhãn security.selinux trong quá trình sao chép để các tiến trình nền chạy dưới chính sách MAC vẫn có thể truy cập tệp.  # MT
+settings-preserve-resource-forks = Bảo toàn nhánh tài nguyên macOS và thông tin Finder  # MT
+settings-preserve-resource-forks-hint = Mang theo nhánh tài nguyên kế thừa và FinderInfo (thẻ màu, siêu dữ liệu Carbon) trong quá trình sao chép.  # MT
+settings-appledouble-fallback = Sử dụng tệp đi kèm AppleDouble trên hệ thống tệp không tương thích  # MT
+meta-translated-to-appledouble = Siêu dữ liệu nước ngoài được lưu trữ trong tệp đi kèm AppleDouble (._{ $ext })  # MT

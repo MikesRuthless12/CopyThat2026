@@ -850,3 +850,18 @@ sparse-not-supported-title = El destino rellena los archivos dispersos  # MT
 sparse-not-supported-body = { $dst_fs } no admite archivos dispersos. Los huecos del origen se escribieron como ceros, por lo que el destino ocupa más espacio en disco.  # MT
 sparse-warning-densified = Diseño disperso preservado: solo se copiaron las extensiones asignadas.  # MT
 sparse-warning-mismatch = Desajuste de diseño disperso — el destino puede ser mayor de lo esperado.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = Preservar metadatos de seguridad  # MT
+settings-preserve-security-metadata-hint = Capture y vuelva a aplicar flujos de metadatos fuera de banda (NTFS ADS / xattrs / ACL POSIX / contextos SELinux / capacidades de archivo Linux / bifurcaciones de recursos macOS) en cada copia.  # MT
+settings-preserve-motw = Preservar Marca de la Web (indicador de descarga de internet)  # MT
+settings-preserve-motw-hint = Crítico para la seguridad. SmartScreen y Office Protected View usan este flujo para advertir sobre archivos descargados de internet. Desactivarlo permite que un ejecutable descargado pierda su marca de origen al copiar y omita las protecciones del sistema operativo.  # MT
+settings-preserve-posix-acls = Preservar ACL POSIX y atributos extendidos  # MT
+settings-preserve-posix-acls-hint = Traslade los xattrs user.* / system.* / trusted.* y las listas de control de acceso POSIX en la copia.  # MT
+settings-preserve-selinux = Preservar contextos SELinux  # MT
+settings-preserve-selinux-hint = Traslade la etiqueta security.selinux en la copia para que los demonios bajo políticas MAC puedan seguir accediendo al archivo.  # MT
+settings-preserve-resource-forks = Preservar bifurcaciones de recursos y Finder info de macOS  # MT
+settings-preserve-resource-forks-hint = Traslade la bifurcación de recursos heredada y FinderInfo (etiquetas de color, metadatos Carbon) en la copia.  # MT
+settings-appledouble-fallback = Usar archivo lateral AppleDouble en sistemas de archivos incompatibles  # MT
+meta-translated-to-appledouble = Metadatos foráneos guardados en archivo lateral AppleDouble (._{ $ext })  # MT

@@ -78,6 +78,12 @@ pub const EVENT_SNAPSHOT_CREATED: &str = "snapshot-created";
 // will be larger on disk than the source.
 pub const EVENT_SPARSENESS_NOT_SUPPORTED: &str = "sparseness-not-supported";
 
+// Phase 24 — foreign metadata couldn't land on the destination
+// filesystem natively, so the engine wrote an `._<filename>`
+// AppleDouble sidecar carrying it. The frontend shows an info badge
+// on the affected job row.
+pub const EVENT_META_TRANSLATED_TO_APPLEDOUBLE: &str = "meta-translated-to-appledouble";
+
 // Phase 21 — shape rate changed (settings update OR schedule poll
 // minute tick). The header badge subscribes so the "🔻 30 MB/s · scheduled"
 // pill re-renders without polling.
@@ -627,6 +633,28 @@ pub struct TransferDto {
     /// (older builds) fall through serde-default to `true`.
     #[serde(default = "default_true")]
     pub preserve_sparseness: bool,
+    /// Phase 24 — master toggle for security-metadata preservation
+    /// (NTFS ADS / xattrs / ACLs / SELinux / resource forks).
+    #[serde(default = "default_true")]
+    pub preserve_security_metadata: bool,
+    /// Phase 24 — preserve Mark-of-the-Web (`Zone.Identifier` ADS).
+    /// Security-sensitive: tooltip warns the user.
+    #[serde(default = "default_true")]
+    pub preserve_motw: bool,
+    /// Phase 24 — preserve POSIX ACLs and the broader xattr surface.
+    #[serde(default = "default_true")]
+    pub preserve_posix_acls: bool,
+    /// Phase 24 — preserve `security.selinux` Mandatory Access
+    /// Control labels.
+    #[serde(default = "default_true")]
+    pub preserve_selinux_contexts: bool,
+    /// Phase 24 — preserve macOS resource forks + Finder info.
+    #[serde(default = "default_true")]
+    pub preserve_resource_forks: bool,
+    /// Phase 24 — fall back to `._<filename>` AppleDouble sidecar
+    /// when the destination FS can't accept the foreign metadata.
+    #[serde(default = "default_true")]
+    pub appledouble_fallback: bool,
 }
 
 fn default_true() -> bool {
@@ -835,6 +863,19 @@ pub struct SparsenessNotSupportedDto {
     pub dst_fs: String,
 }
 
+/// Phase 24 — `meta-translated-to-appledouble` payload. Emitted when
+/// the destination filesystem couldn't accept the source's foreign
+/// metadata streams (NTFS ADS / xattrs / resource fork) and the
+/// engine fell through to an `._<filename>` AppleDouble sidecar.
+/// `ext` is the source file's extension (`"docx"` / `"jpg"` /
+/// `"none"`).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetaTranslatedToAppleDoubleDto {
+    pub job_id: u64,
+    pub ext: String,
+}
+
 /// Phase 19a — `scan-started` payload.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -932,6 +973,12 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 preserve_acls: s.transfer.preserve_acls,
                 on_locked: s.transfer.on_locked.as_str().to_string(),
                 preserve_sparseness: s.transfer.preserve_sparseness,
+                preserve_security_metadata: s.transfer.preserve_security_metadata,
+                preserve_motw: s.transfer.preserve_motw,
+                preserve_posix_acls: s.transfer.preserve_posix_acls,
+                preserve_selinux_contexts: s.transfer.preserve_selinux_contexts,
+                preserve_resource_forks: s.transfer.preserve_resource_forks,
+                appledouble_fallback: s.transfer.appledouble_fallback,
             },
             shell: ShellDto {
                 context_menu_enabled: s.shell.context_menu_enabled,
@@ -1079,6 +1126,12 @@ impl SettingsDto {
         s.transfer.preserve_acls = self.transfer.preserve_acls;
         s.transfer.on_locked = LockedFilePolicyChoice::from_wire(&self.transfer.on_locked);
         s.transfer.preserve_sparseness = self.transfer.preserve_sparseness;
+        s.transfer.preserve_security_metadata = self.transfer.preserve_security_metadata;
+        s.transfer.preserve_motw = self.transfer.preserve_motw;
+        s.transfer.preserve_posix_acls = self.transfer.preserve_posix_acls;
+        s.transfer.preserve_selinux_contexts = self.transfer.preserve_selinux_contexts;
+        s.transfer.preserve_resource_forks = self.transfer.preserve_resource_forks;
+        s.transfer.appledouble_fallback = self.transfer.appledouble_fallback;
 
         s.shell.context_menu_enabled = self.shell.context_menu_enabled;
         s.shell.intercept_default_copy = self.shell.intercept_default_copy;

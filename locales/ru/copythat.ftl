@@ -850,3 +850,18 @@ sparse-not-supported-title = Место назначения заполняет 
 sparse-not-supported-body = { $dst_fs } не поддерживает разреженные файлы. Пропуски в источнике были записаны нулями, поэтому место назначения занимает больше места на диске.  # MT
 sparse-warning-densified = Разреженная структура сохранена: скопированы только выделенные области.  # MT
 sparse-warning-mismatch = Несоответствие разреженной структуры — место назначения может быть больше ожидаемого.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = Сохранять метаданные безопасности  # MT
+settings-preserve-security-metadata-hint = Захватывайте и применяйте повторно внешние потоки метаданных (NTFS ADS / xattrs / POSIX ACL / контексты SELinux / возможности файлов Linux / форки ресурсов macOS) при каждой копии.  # MT
+settings-preserve-motw = Сохранять Mark-of-the-Web (флаг загрузки из интернета)  # MT
+settings-preserve-motw-hint = Критично для безопасности. SmartScreen и Office Protected View используют этот поток для предупреждения о файлах, загруженных из интернета. Отключение позволяет загруженному исполняемому файлу потерять метку происхождения при копировании и обойти защиту операционной системы.  # MT
+settings-preserve-posix-acls = Сохранять POSIX ACL и расширенные атрибуты  # MT
+settings-preserve-posix-acls-hint = Переносите xattrs user.* / system.* / trusted.* и списки контроля доступа POSIX при копировании.  # MT
+settings-preserve-selinux = Сохранять контексты SELinux  # MT
+settings-preserve-selinux-hint = Переносите метку security.selinux при копировании, чтобы демоны под политиками MAC могли по-прежнему получать доступ к файлу.  # MT
+settings-preserve-resource-forks = Сохранять форки ресурсов macOS и информацию Finder  # MT
+settings-preserve-resource-forks-hint = Переносите устаревший форк ресурсов и FinderInfo (цветовые теги, метаданные Carbon) при копировании.  # MT
+settings-appledouble-fallback = Использовать дополнительный файл AppleDouble в несовместимых файловых системах  # MT
+meta-translated-to-appledouble = Иностранные метаданные сохранены в дополнительном файле AppleDouble (._{ $ext })  # MT

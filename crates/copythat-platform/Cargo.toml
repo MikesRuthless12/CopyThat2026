@@ -41,6 +41,10 @@ tokio = { version = "1", features = [
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+# Phase 24 — extended-attribute capture/apply for Linux + macOS.
+# `xattr` 1.x is MIT/Apache-2.0 dual-licensed and re-uses libc for the
+# underlying `getxattr` / `setxattr` / `listxattr` calls.
+xattr = "1"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
@@ -72,3 +76,8 @@ path = "../../tests/smoke/phase_06_fast_paths.rs"
 [[test]]
 name = "phase_23_sparse"
 path = "../../tests/smoke/phase_23_sparse.rs"
+
+# Phase 24 smoke test lives at the workspace root.
+[[test]]
+name = "phase_24_meta"
+path = "../../tests/smoke/phase_24_meta.rs"

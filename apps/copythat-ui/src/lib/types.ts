@@ -440,6 +440,19 @@ export interface TransferSettingsDto {
   onLocked: LockedFilePolicyWire;
   /// Phase 23 — preserve source sparseness on the destination.
   preserveSparseness: boolean;
+  /// Phase 24 — master toggle for security-metadata preservation.
+  preserveSecurityMetadata: boolean;
+  /// Phase 24 — preserve Mark-of-the-Web (Zone.Identifier ADS).
+  preserveMotw: boolean;
+  /// Phase 24 — preserve POSIX ACLs and the broader xattr surface.
+  preservePosixAcls: boolean;
+  /// Phase 24 — preserve `security.selinux` MAC labels.
+  preserveSelinuxContexts: boolean;
+  /// Phase 24 — preserve macOS resource forks + Finder info.
+  preserveResourceForks: boolean;
+  /// Phase 24 — fall back to AppleDouble sidecar on incompatible
+  /// destination filesystems.
+  appledoubleFallback: boolean;
 }
 
 export interface ShellSettingsDto {

@@ -626,6 +626,89 @@
                 <span class="label">{t("settings-preserve-sparseness")}</span>
               </label>
 
+              <!-- Phase 24 — Security-metadata subsection (5 toggles) -->
+              <div class="meta-subsection">
+                <label
+                  class="row check"
+                  title={t("settings-preserve-security-metadata-hint")}
+                >
+                  <input
+                    type="checkbox"
+                    bind:checked={settings.transfer.preserveSecurityMetadata}
+                    onchange={pushSettings}
+                  />
+                  <span class="label section-header"
+                    >{t("settings-preserve-security-metadata")}</span
+                  >
+                </label>
+
+                {#if settings.transfer.preserveSecurityMetadata}
+                  <label
+                    class="row check meta-child"
+                    title={t("settings-preserve-motw-hint")}
+                  >
+                    <input
+                      type="checkbox"
+                      bind:checked={settings.transfer.preserveMotw}
+                      onchange={pushSettings}
+                    />
+                    <span class="label">
+                      {t("settings-preserve-motw")}
+                      <span class="motw-warning" aria-hidden="true">⚠</span>
+                    </span>
+                  </label>
+
+                  <label
+                    class="row check meta-child"
+                    title={t("settings-preserve-posix-acls-hint")}
+                  >
+                    <input
+                      type="checkbox"
+                      bind:checked={settings.transfer.preservePosixAcls}
+                      onchange={pushSettings}
+                    />
+                    <span class="label">{t("settings-preserve-posix-acls")}</span>
+                  </label>
+
+                  <label
+                    class="row check meta-child"
+                    title={t("settings-preserve-selinux-hint")}
+                  >
+                    <input
+                      type="checkbox"
+                      bind:checked={settings.transfer.preserveSelinuxContexts}
+                      onchange={pushSettings}
+                    />
+                    <span class="label">{t("settings-preserve-selinux")}</span>
+                  </label>
+
+                  <label
+                    class="row check meta-child"
+                    title={t("settings-preserve-resource-forks-hint")}
+                  >
+                    <input
+                      type="checkbox"
+                      bind:checked={settings.transfer.preserveResourceForks}
+                      onchange={pushSettings}
+                    />
+                    <span class="label"
+                      >{t("settings-preserve-resource-forks")}</span
+                    >
+                  </label>
+
+                  <label class="row check meta-child">
+                    <input
+                      type="checkbox"
+                      bind:checked={settings.transfer.appledoubleFallback}
+                      onchange={pushSettings}
+                    />
+                    <span class="label">
+                      {t("settings-appledouble-fallback")}
+                    </span>
+                  </label>
+                {/if}
+              </div>
+
               <label class="row">
                 <span class="label">{t("settings-on-locked")}</span>
                 <select
@@ -1335,5 +1418,26 @@
     font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* Phase 24 — Security-metadata subsection. The header row carries
+     the master toggle; nested toggles indent under it and only render
+     when the master is on so a user opting out doesn't have to look at
+     five irrelevant sub-checkboxes. */
+  .meta-subsection {
+    margin-top: 8px;
+    padding: 8px 0 4px 0;
+    border-top: 1px solid var(--border, rgba(127, 127, 127, 0.2));
+  }
+  .meta-subsection .section-header {
+    font-weight: 600;
+  }
+  .meta-child {
+    padding-left: 18px;
+  }
+  .motw-warning {
+    color: var(--warning, #d97706);
+    margin-left: 4px;
+    font-size: 0.9em;
   }
 </style>

@@ -28,9 +28,10 @@ use tokio::sync::mpsc;
 use crate::ipc::{
     CollisionPromptDto, EVENT_COLLISION_RAISED, EVENT_ERROR_RAISED, EVENT_GLOBALS_TICK,
     EVENT_JOB_ADDED, EVENT_JOB_CANCELLED, EVENT_JOB_COMPLETED, EVENT_JOB_FAILED, EVENT_JOB_PAUSED,
-    EVENT_JOB_PROGRESS, EVENT_JOB_RESUMED, EVENT_JOB_STARTED, EVENT_SNAPSHOT_CREATED,
-    EVENT_SPARSENESS_NOT_SUPPORTED, ErrorPromptDto, GlobalsDto, JobDto, JobFailedDto, JobIdDto,
-    JobProgressDto, SnapshotCreatedDto, SparsenessNotSupportedDto,
+    EVENT_JOB_PROGRESS, EVENT_JOB_RESUMED, EVENT_JOB_STARTED, EVENT_META_TRANSLATED_TO_APPLEDOUBLE,
+    EVENT_SNAPSHOT_CREATED, EVENT_SPARSENESS_NOT_SUPPORTED, ErrorPromptDto, GlobalsDto, JobDto,
+    JobFailedDto, JobIdDto, JobProgressDto, MetaTranslatedToAppleDoubleDto, SnapshotCreatedDto,
+    SparsenessNotSupportedDto,
 };
 use crate::state::AppState;
 
@@ -885,6 +886,15 @@ async fn forward_events(
                     SparsenessNotSupportedDto {
                         job_id: id.as_u64(),
                         dst_fs: dst_fs.to_string(),
+                    },
+                );
+            }
+            CopyEvent::MetaTranslatedToAppleDouble { ext } => {
+                let _ = app.emit(
+                    EVENT_META_TRANSLATED_TO_APPLEDOUBLE,
+                    MetaTranslatedToAppleDoubleDto {
+                        job_id: id.as_u64(),
+                        ext,
                     },
                 );
             }

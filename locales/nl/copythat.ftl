@@ -850,3 +850,18 @@ sparse-not-supported-title = Bestemming vult sparse-bestanden  # MT
 sparse-not-supported-body = { $dst_fs } ondersteunt geen sparse-bestanden. Gaten in de bron zijn als nullen geschreven, dus de bestemming is groter op schijf.  # MT
 sparse-warning-densified = Sparse-indeling behouden: alleen toegewezen gebieden zijn gekopieerd.  # MT
 sparse-warning-mismatch = Sparse-indeling komt niet overeen — bestemming kan groter zijn dan verwacht.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = Beveiligingsmetadata behouden  # MT
+settings-preserve-security-metadata-hint = Leg buiten-band-metadatastromen (NTFS ADS / xattrs / POSIX ACL's / SELinux-contexten / Linux-bestandscapabilities / macOS-resourceforks) vast en pas ze opnieuw toe bij elke kopie.  # MT
+settings-preserve-motw = Mark-of-the-Web (van-internet-gedownload-vlag) behouden  # MT
+settings-preserve-motw-hint = Kritiek voor de beveiliging. SmartScreen en Office Protected View gebruiken deze stroom om te waarschuwen voor van internet gedownloade bestanden. Uitschakelen laat een gedownload uitvoerbaar bestand zijn oorsprongmarker verliezen bij het kopiëren en de beschermingen van het besturingssysteem omzeilen.  # MT
+settings-preserve-posix-acls = POSIX ACL's en uitgebreide attributen behouden  # MT
+settings-preserve-posix-acls-hint = Draag user.* / system.* / trusted.* xattrs en POSIX-toegangscontrolelijsten over tijdens het kopiëren.  # MT
+settings-preserve-selinux = SELinux-contexten behouden  # MT
+settings-preserve-selinux-hint = Draag het security.selinux-label over tijdens het kopiëren zodat daemons onder MAC-beleid het bestand kunnen blijven openen.  # MT
+settings-preserve-resource-forks = macOS-resourceforks en Finder-info behouden  # MT
+settings-preserve-resource-forks-hint = Draag de legacy resource-fork en FinderInfo (kleurtags, Carbon-metadata) over tijdens het kopiëren.  # MT
+settings-appledouble-fallback = AppleDouble-sidecar gebruiken op incompatibele bestandssystemen  # MT
+meta-translated-to-appledouble = Buitenlandse metadata opgeslagen in AppleDouble-sidecar (._{ $ext })  # MT

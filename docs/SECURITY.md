@@ -219,6 +219,63 @@ Settings → Network. Threat-model deltas:
   unrelated to file contents. An observer of the transfer wall
   time learns nothing beyond the configured cap.
 
+## Phase 24 — security metadata preservation (shipped)
+
+The Phase 24 metadata pass captures and replays out-of-band
+streams (NTFS ADS / Linux + macOS xattrs / POSIX ACLs / SELinux /
+Linux file capabilities / macOS resource forks) so security-
+sensitive flags survive a copy. The threat model:
+
+- **Mark-of-the-Web preserves SmartScreen / Office Protected View
+  warnings.** A downloaded `.exe` / `.docx` carries a Windows
+  `Zone.Identifier` ADS that SmartScreen and Office Protected View
+  read to decide whether to warn the user before execution. A
+  copy that drops MOTW silently turns "downloaded from the
+  internet" into "trusted local file" — the engine's default
+  behaviour now preserves the stream so the OS-level warning
+  fires at the destination too. The Settings → Transfer →
+  "Preserve Mark-of-the-Web" toggle defaults ON; the UI tooltip
+  carries an explicit warning that disabling it is dangerous.
+- **POSIX ACLs and SELinux contexts survive the trip.** Linux
+  daemons running under MAC policies (`unconfined_u:...:s0`) need
+  the `security.selinux` label to remain accurate after a copy or
+  they lose access to the destination. Same for POSIX
+  `system.posix_acl_*` entries — a copy that drops them silently
+  widens or narrows access. The default-on toggles preserve both;
+  per-stream policy flags let the user opt out per scenario.
+- **Linux file capabilities make the trip.** The
+  `security.capability` xattr carries cap_net_admin / cap_setuid
+  /etc on `setcap`-enabled binaries. Dropping it on copy turns a
+  privileged helper into a non-functional one — Phase 24 keeps
+  it by default.
+- **macOS resource forks + Finder color tags survive.** The
+  legacy `..namedfork/rsrc` stream and `com.apple.FinderInfo`
+  xattr carry Carbon metadata + Finder color tags; older
+  workflows still depend on them.
+- **AppleDouble fallback is a fidelity feature, not a leak.**
+  Cross-FS destinations (SMB / FAT / exFAT / ext4) that cannot
+  hold the foreign metadata get an `._<filename>` AppleDouble v2
+  sidecar carrying the unsupported streams. The sidecar contains
+  exactly the metadata the source had — no new attack surface;
+  the same bytes the user was already storing.
+  `MetaPolicy::appledouble_fallback` is the master toggle; a user
+  who prefers to lose the metadata rather than write a sidecar
+  flips it off.
+- **Capture and apply both run in `spawn_blocking` workers.** The
+  underlying syscalls (`FindFirstStreamW`, `getxattr`, `setxattr`,
+  `..namedfork/rsrc` open) are blocking; the engine isolates them
+  off the tokio scheduler so a slow xattr table on a network
+  share can't block the copy loop.
+- **Metadata apply failures are non-fatal.** The byte copy
+  finishes first; the apply pass runs after timestamps and
+  permissions and downgrades per-stream errors into
+  `MetaApplyOutcome::partial_failures`. A `setxattr` permission-
+  denied on the destination never aborts a copy that already
+  succeeded.
+- **The `xattr` crate is MIT/Apache-2.0**, dual-licensed, and
+  re-uses libc for the underlying syscalls. No new transitive
+  dependencies on Windows. No new network calls.
+
 ## Build hardening (target, post-Phase 17)
 
 - Stack probes enabled.

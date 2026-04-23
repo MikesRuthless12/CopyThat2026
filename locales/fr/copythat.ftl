@@ -850,3 +850,18 @@ sparse-not-supported-title = La destination remplit les fichiers clairsemés  # 
 sparse-not-supported-body = { $dst_fs } ne prend pas en charge les fichiers clairsemés. Les trous de la source ont été écrits sous forme de zéros, donc la destination est plus grande sur disque.  # MT
 sparse-warning-densified = Disposition clairsemée préservée : seules les étendues allouées ont été copiées.  # MT
 sparse-warning-mismatch = Incompatibilité de disposition clairsemée — la destination peut être plus grande que prévu.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = Préserver les métadonnées de sécurité  # MT
+settings-preserve-security-metadata-hint = Capturer et réappliquer les flux de métadonnées hors-bande (NTFS ADS / xattrs / ACL POSIX / contextes SELinux / capacités de fichier Linux / forks de ressources macOS) à chaque copie.  # MT
+settings-preserve-motw = Préserver la Marque du Web (indicateur de téléchargement Internet)  # MT
+settings-preserve-motw-hint = Critique pour la sécurité. SmartScreen et Office Protected View utilisent ce flux pour avertir des fichiers téléchargés depuis Internet. Désactiver permet à un exécutable téléchargé de perdre son marqueur d'origine lors de la copie et de contourner les protections du système d'exploitation.  # MT
+settings-preserve-posix-acls = Préserver les ACL POSIX et attributs étendus  # MT
+settings-preserve-posix-acls-hint = Transporter les xattrs user.* / system.* / trusted.* et les listes de contrôle d'accès POSIX lors de la copie.  # MT
+settings-preserve-selinux = Préserver les contextes SELinux  # MT
+settings-preserve-selinux-hint = Transporter l'étiquette security.selinux lors de la copie pour que les démons sous politiques MAC puissent accéder au fichier.  # MT
+settings-preserve-resource-forks = Préserver les forks de ressources macOS et Finder info  # MT
+settings-preserve-resource-forks-hint = Transporter le fork de ressources hérité et FinderInfo (étiquettes de couleur, métadonnées Carbon) lors de la copie.  # MT
+settings-appledouble-fallback = Utiliser un fichier annexe AppleDouble sur les systèmes de fichiers incompatibles  # MT
+meta-translated-to-appledouble = Métadonnées étrangères stockées dans le fichier annexe AppleDouble (._{ $ext })  # MT

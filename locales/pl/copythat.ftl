@@ -850,3 +850,18 @@ sparse-not-supported-title = Miejsce docelowe wypełnia pliki rozrzedzone  # MT
 sparse-not-supported-body = { $dst_fs } nie obsługuje plików rozrzedzonych. Dziury w źródle zostały zapisane jako zera, więc miejsce docelowe jest większe na dysku.  # MT
 sparse-warning-densified = Zachowano układ rozrzedzony: skopiowano tylko przydzielone zakresy.  # MT
 sparse-warning-mismatch = Niezgodność układu rozrzedzonego — miejsce docelowe może być większe niż oczekiwano.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = Zachowaj metadane bezpieczeństwa  # MT
+settings-preserve-security-metadata-hint = Przechwyć i ponownie zastosuj strumienie metadanych poza pasmem (NTFS ADS / xattrs / listy ACL POSIX / konteksty SELinux / uprawnienia plików Linux / forki zasobów macOS) przy każdej kopii.  # MT
+settings-preserve-motw = Zachowaj Mark-of-the-Web (flagę pobrania z internetu)  # MT
+settings-preserve-motw-hint = Krytyczne dla bezpieczeństwa. SmartScreen i Office Protected View używają tego strumienia do ostrzegania o plikach pobranych z internetu. Wyłączenie pozwala pobranemu programowi pozbyć się znacznika pochodzenia podczas kopiowania i obejść zabezpieczenia systemu operacyjnego.  # MT
+settings-preserve-posix-acls = Zachowaj listy ACL POSIX i atrybuty rozszerzone  # MT
+settings-preserve-posix-acls-hint = Przenieś atrybuty user.* / system.* / trusted.* xattrs i listy kontroli dostępu POSIX podczas kopiowania.  # MT
+settings-preserve-selinux = Zachowaj konteksty SELinux  # MT
+settings-preserve-selinux-hint = Przenieś etykietę security.selinux podczas kopiowania, aby demony działające pod politykami MAC nadal miały dostęp do pliku.  # MT
+settings-preserve-resource-forks = Zachowaj forki zasobów macOS i informacje Findera  # MT
+settings-preserve-resource-forks-hint = Przenieś starszy fork zasobów i FinderInfo (tagi kolorów, metadane Carbon) podczas kopiowania.  # MT
+settings-appledouble-fallback = Użyj towarzyszącego pliku AppleDouble na niezgodnych systemach plików  # MT
+meta-translated-to-appledouble = Obce metadane zapisane w towarzyszącym pliku AppleDouble (._{ $ext })  # MT

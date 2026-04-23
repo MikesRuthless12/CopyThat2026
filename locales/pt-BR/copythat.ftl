@@ -850,3 +850,18 @@ sparse-not-supported-title = Destino preenche arquivos esparsos  # MT
 sparse-not-supported-body = { $dst_fs } não suporta arquivos esparsos. Buracos na origem foram gravados como zeros, portanto o destino ocupa mais espaço em disco.  # MT
 sparse-warning-densified = Layout esparso preservado: apenas as extensões alocadas foram copiadas.  # MT
 sparse-warning-mismatch = Incompatibilidade de layout esparso — destino pode ser maior que o esperado.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = Preservar metadados de segurança  # MT
+settings-preserve-security-metadata-hint = Capture e reaplique fluxos de metadados fora de banda (NTFS ADS / xattrs / ACLs POSIX / contextos SELinux / capacidades de arquivo Linux / forks de recursos macOS) em cada cópia.  # MT
+settings-preserve-motw = Preservar Marca da Web (flag de download da internet)  # MT
+settings-preserve-motw-hint = Crítico para a segurança. SmartScreen e Office Protected View usam este fluxo para alertar sobre arquivos baixados da internet. Desativar permite que um executável baixado perca seu marcador de origem ao copiar e contorne as proteções do sistema operacional.  # MT
+settings-preserve-posix-acls = Preservar ACLs POSIX e atributos estendidos  # MT
+settings-preserve-posix-acls-hint = Transporte os xattrs user.* / system.* / trusted.* e listas de controle de acesso POSIX durante a cópia.  # MT
+settings-preserve-selinux = Preservar contextos SELinux  # MT
+settings-preserve-selinux-hint = Transporte o rótulo security.selinux durante a cópia para que daemons sob políticas MAC possam continuar acessando o arquivo.  # MT
+settings-preserve-resource-forks = Preservar forks de recursos macOS e Finder info  # MT
+settings-preserve-resource-forks-hint = Transporte o fork de recursos legado e FinderInfo (etiquetas de cor, metadados Carbon) durante a cópia.  # MT
+settings-appledouble-fallback = Usar arquivo lateral AppleDouble em sistemas de arquivos incompatíveis  # MT
+meta-translated-to-appledouble = Metadados estrangeiros armazenados em arquivo lateral AppleDouble (._{ $ext })  # MT

@@ -850,3 +850,18 @@ sparse-not-supported-title = Ziel füllt Sparse-Dateien aus  # MT
 sparse-not-supported-body = { $dst_fs } unterstützt keine Sparse-Dateien. Löcher in der Quelle wurden als Nullen geschrieben, daher ist das Ziel auf dem Datenträger größer.  # MT
 sparse-warning-densified = Sparse-Layout beibehalten: nur zugewiesene Bereiche wurden kopiert.  # MT
 sparse-warning-mismatch = Sparse-Layout stimmt nicht überein — Ziel könnte größer als erwartet sein.  # MT
+
+# Phase 24 — security-metadata preservation. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+settings-preserve-security-metadata = Sicherheitsmetadaten bewahren  # MT
+settings-preserve-security-metadata-hint = Out-of-Band-Metadatenströme (NTFS-ADS / xattrs / POSIX-ACLs / SELinux-Kontexte / Linux-Datei-Capabilities / macOS-Ressourcen-Forks) bei jeder Kopie erfassen und erneut anwenden.  # MT
+settings-preserve-motw = Mark-of-the-Web (Aus-dem-Internet-heruntergeladen-Flag) bewahren  # MT
+settings-preserve-motw-hint = Sicherheitskritisch. SmartScreen und Office Protected View nutzen diesen Stream, um vor aus dem Internet heruntergeladenen Dateien zu warnen. Deaktivieren erlaubt einer heruntergeladenen Anwendung, ihre Herkunftsmarkierung beim Kopieren abzuwerfen und Betriebssystem-Schutzmaßnahmen zu umgehen.  # MT
+settings-preserve-posix-acls = POSIX-ACLs und erweiterte Attribute bewahren  # MT
+settings-preserve-posix-acls-hint = user.* / system.* / trusted.* xattrs und POSIX-Zugriffssteuerungslisten beim Kopieren übernehmen.  # MT
+settings-preserve-selinux = SELinux-Kontexte bewahren  # MT
+settings-preserve-selinux-hint = Das security.selinux-Label beim Kopieren übernehmen, damit unter MAC-Richtlinien laufende Daemons weiterhin auf die Datei zugreifen können.  # MT
+settings-preserve-resource-forks = macOS-Ressourcen-Forks und Finder-Info bewahren  # MT
+settings-preserve-resource-forks-hint = Den Legacy-Ressourcen-Fork und FinderInfo (Farbtags, Carbon-Metadaten) beim Kopieren übernehmen.  # MT
+settings-appledouble-fallback = AppleDouble-Sidecar auf inkompatiblen Dateisystemen verwenden  # MT
+meta-translated-to-appledouble = Fremde Metadaten im AppleDouble-Sidecar gespeichert (._{ $ext })  # MT
