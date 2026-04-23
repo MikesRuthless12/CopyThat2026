@@ -92,6 +92,10 @@ pub struct Settings {
     /// name handling, `\\?\` long-path prefix). See
     /// [`PathTranslationSettings`].
     pub path_translation: PathTranslationSettings,
+    /// Phase 31 — power-aware copying (pause on battery, slow-down
+    /// on metered networks, pause during Zoom calls / fullscreen,
+    /// thermal-throttle cap). See [`PowerPoliciesSettings`].
+    pub power: PowerPoliciesSettings,
 }
 
 impl Settings {
@@ -1420,6 +1424,113 @@ pub fn default_text_extensions_for_settings() -> Vec<String> {
     .iter()
     .map(|s| (*s).to_string())
     .collect()
+}
+
+// ---------------------------------------------------------------------
+// Phase 31 — power-aware copying
+// ---------------------------------------------------------------------
+
+/// Per-dimension policy choice with a uniform `Continue / Pause /
+/// Cap` shape. Mirrors `copythat_power::BatteryPolicy` and
+/// `copythat_power::NetworkPolicy` — kept local so this crate stays
+/// independent of `copythat-power`. The Tauri bridge translates at
+/// enqueue time.
+///
+/// `Cap` carries the rate as bytes-per-second (matches the
+/// `NetworkSettings::fixed_bytes_per_second` wire format from Phase
+/// 21).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "kind")]
+pub enum PowerRuleChoice {
+    #[default]
+    Continue,
+    Pause,
+    Cap {
+        bytes_per_second: u64,
+    },
+}
+
+impl PowerRuleChoice {
+    /// Stable short wire string — used by the IPC DTO so older
+    /// frontends that expect string enums round-trip cleanly.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Continue => "continue",
+            Self::Pause => "pause",
+            Self::Cap { .. } => "cap",
+        }
+    }
+}
+
+/// Thermal-specific policy — caps as a *percent of current shape
+/// rate* rather than an absolute bytes-per-second, so cooling down
+/// works across bandwidth settings. Default matches the brief's
+/// "cap to 50 %" when throttling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "kind")]
+pub enum ThermalRuleChoice {
+    Continue,
+    Pause,
+    CapPercent {
+        percent: u8,
+    },
+}
+
+impl Default for ThermalRuleChoice {
+    fn default() -> Self {
+        Self::CapPercent { percent: 50 }
+    }
+}
+
+impl ThermalRuleChoice {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Continue => "continue",
+            Self::Pause => "pause",
+            Self::CapPercent { .. } => "cap-percent",
+        }
+    }
+}
+
+/// Full power-policy settings group. Round-trips via TOML; the Tauri
+/// runner subscribes to `copythat_power::PowerBus` and maps each
+/// event through these rules.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct PowerPoliciesSettings {
+    /// Master toggle. When `false`, the runner skips the power
+    /// subscriber entirely — pre-Phase-31 behaviour. Default `true`
+    /// so the default policies take effect immediately after upgrade.
+    pub enabled: bool,
+    /// "On battery" rule. Default `Continue` — existing behaviour
+    /// for any user who hasn't changed their Settings.
+    pub battery: PowerRuleChoice,
+    /// "On metered network" rule. Default `Continue`.
+    pub metered: PowerRuleChoice,
+    /// "On cellular network" rule. Default `Continue`.
+    pub cellular: PowerRuleChoice,
+    /// "When presenting (Zoom / Teams / Keynote / PowerPoint / Meet)"
+    /// rule. Default `Pause` per the Phase 31 brief.
+    pub presentation: PowerRuleChoice,
+    /// "When any app is fullscreen" rule. Default `Continue`.
+    pub fullscreen: PowerRuleChoice,
+    /// "When CPU is thermal-throttling" rule. Default
+    /// `CapPercent(50)` per the Phase 31 brief.
+    pub thermal: ThermalRuleChoice,
+}
+
+impl Default for PowerPoliciesSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            battery: PowerRuleChoice::Continue,
+            metered: PowerRuleChoice::Continue,
+            cellular: PowerRuleChoice::Continue,
+            presentation: PowerRuleChoice::Pause,
+            fullscreen: PowerRuleChoice::Continue,
+            thermal: ThermalRuleChoice::default(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------
