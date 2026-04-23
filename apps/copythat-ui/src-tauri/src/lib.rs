@@ -46,6 +46,7 @@ pub mod runner;
 pub mod scan_commands;
 pub mod shell;
 pub mod state;
+pub mod sync_commands;
 pub mod thumbnail;
 pub mod updater;
 
@@ -290,6 +291,13 @@ pub fn run() {
             commands::save_conflict_profile,
             commands::delete_conflict_profile,
             commands::set_active_conflict_profile,
+            // Phase 25 — two-way sync pair management + lifecycle.
+            sync_commands::list_sync_pairs,
+            sync_commands::add_sync_pair,
+            sync_commands::remove_sync_pair,
+            sync_commands::start_sync,
+            sync_commands::pause_sync,
+            sync_commands::cancel_sync,
         ])
         .setup(move |app| {
             // Phase 16 — tray icon + menu. Visible regardless of the

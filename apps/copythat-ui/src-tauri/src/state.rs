@@ -84,6 +84,10 @@ pub struct AppState {
     /// Hot-updated via `Shape::set_rate` from the schedule poller
     /// task spawned in `lib.rs::run`.
     pub shape: Arc<Shape>,
+    /// Phase 25 — registry of actively-running sync pair IDs keyed
+    /// to their `SyncControl`. Pause / cancel IPC commands look up
+    /// the handle here; absent entries mean the pair is idle.
+    pub syncs: crate::sync_commands::SyncRegistry,
 }
 
 impl AppState {
@@ -126,6 +130,7 @@ impl AppState {
             // `apply_network_settings_to_shape` to honour the persisted
             // NetworkSettings on the first tick.
             shape: Arc::new(Shape::new(None)),
+            syncs: crate::sync_commands::SyncRegistry::new(),
         }
     }
 

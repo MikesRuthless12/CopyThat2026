@@ -74,6 +74,9 @@ pub struct Settings {
     /// collision prompt so that previously-answered patterns
     /// auto-resolve. See [`ConflictProfileSettings`].
     pub conflict_profiles: ConflictProfileSettings,
+    /// Phase 25 — two-way sync pair definitions + global defaults.
+    /// See [`SyncSettings`].
+    pub sync: SyncSettings,
 }
 
 impl Settings {
@@ -887,6 +890,105 @@ impl AutoThrottleRule {
             Self::Cap { .. } => "cap",
         }
     }
+}
+
+// ---------------------------------------------------------------------
+// Sync (Phase 25)
+// ---------------------------------------------------------------------
+
+/// Top-level sync state: the list of configured pairs + the defaults
+/// a new pair inherits when the user clicks "Add".
+///
+/// Mirrors `copythat_sync::SyncPair` / `SyncMode` at the settings
+/// boundary so this crate stays free of a `copythat-sync` dependency;
+/// the Tauri bridge translates the DTO at enqueue time.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct SyncSettings {
+    /// All configured sync pairs. Each pair has its own state DB at
+    /// `.copythat-sync.db` under its left root by default; the path
+    /// override is available when the DB needs to live elsewhere
+    /// (read-only left root, shared NAS left root, etc).
+    pub pairs: Vec<SyncPairConfig>,
+    /// Default mode for a freshly-added pair.
+    pub default_mode: SyncModeChoice,
+    /// Default conflict-preservation suffix format. Reserved for a
+    /// future phase that lets the user customise this; the engine
+    /// reads it but the UI does not yet expose the knob.
+    pub conflict_suffix_format: ConflictSuffixFormat,
+    /// Host identifier for this device. Empty = "use the OS hostname
+    /// at runtime". Override for fleet deployments where the OS
+    /// hostname isn't a friendly label.
+    pub host_label_override: String,
+}
+
+/// One configured pair.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct SyncPairConfig {
+    /// Stable pair ID (UUID v4 string, generated when the pair is
+    /// created). Used as the key in the IPC surface so a rename of
+    /// `label` doesn't lose the on-disk DB association.
+    pub id: String,
+    /// User-visible label — "Documents ↔ NAS", "Photos ↔ Backup".
+    pub label: String,
+    /// Left-hand side absolute path.
+    pub left: String,
+    /// Right-hand side absolute path.
+    pub right: String,
+    /// Sync mode. Default is `TwoWay`.
+    pub mode: SyncModeChoice,
+    /// Optional override for the pair DB path. Empty → default
+    /// `<left>/.copythat-sync.db`.
+    pub db_path_override: String,
+    /// ISO-8601 last-run timestamp (UTC). Empty = "never run".
+    pub last_run_at: String,
+    /// Summary of the last run, for the pair row in the UI:
+    /// `"+3 / −1 / !2"` = 3 copies, 1 delete, 2 conflicts.
+    pub last_run_summary: String,
+}
+
+/// Mirror of `copythat_sync::SyncMode`. Kept as a separate enum so
+/// this crate has no engine dependency.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SyncModeChoice {
+    #[default]
+    TwoWay,
+    MirrorLeftToRight,
+    MirrorRightToLeft,
+    ContributeLeftToRight,
+}
+
+impl SyncModeChoice {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TwoWay => "two-way",
+            Self::MirrorLeftToRight => "mirror-left-to-right",
+            Self::MirrorRightToLeft => "mirror-right-to-left",
+            Self::ContributeLeftToRight => "contribute-left-to-right",
+        }
+    }
+
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "mirror-left-to-right" => Self::MirrorLeftToRight,
+            "mirror-right-to-left" => Self::MirrorRightToLeft,
+            "contribute-left-to-right" => Self::ContributeLeftToRight,
+            _ => Self::TwoWay,
+        }
+    }
+}
+
+/// Placeholder for a future per-pair conflict-suffix format
+/// (`syncthing-style`, `timestamp-only`, `host-only`, etc).
+/// Currently only the Syncthing-style default is implemented.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ConflictSuffixFormat {
+    /// `name.sync-conflict-YYYYMMDD-HHMMSS-<host>.ext`. Default.
+    #[default]
+    Syncthing,
 }
 
 // ---------------------------------------------------------------------

@@ -26,13 +26,21 @@
   import TotalsDrawer from "./lib/components/TotalsDrawer.svelte";
   import SettingsModal from "./lib/components/SettingsModal.svelte";
   import ResumePromptModal from "./lib/components/ResumePromptModal.svelte";
+  import SyncDrawer from "./lib/components/SyncDrawer.svelte";
   import Toast from "./lib/components/Toast.svelte";
 
   import { invoke } from "@tauri-apps/api/core";
 
   import { initI18n, t } from "./lib/i18n";
   import { initTheme } from "./lib/theme";
-  import { dropped, errorDisplayMode, initStores, jobs } from "./lib/stores";
+  import {
+    closeSyncDrawer,
+    dropped,
+    errorDisplayMode,
+    initStores,
+    jobs,
+    syncDrawerOpen,
+  } from "./lib/stores";
   import {
     cancelJob,
     pauseJob,
@@ -220,6 +228,11 @@
     {autoResume}
     onClose={() => (pendingResumes = [])}
   />
+
+  <!-- Phase 25: two-way sync pair drawer -->
+  {#if $syncDrawerOpen}
+    <SyncDrawer onClose={closeSyncDrawer} />
+  {/if}
 
   <Toast />
 </main>

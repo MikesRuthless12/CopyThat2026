@@ -1,0 +1,74 @@
+[package]
+name = "copythat-sync"
+description = "Two-way folder sync with vector-clock conflict detection for Copy That v1.0.0."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Larger 500-file smoke configuration. Off by default so the default
+# workspace test run stays under a minute. CI matrix opts in via
+# `COPYTHAT_PHASE25_FULL=1`; the smoke test reads the env var rather
+# than depending on this feature, but the gate is here so a future
+# bench can branch on it.
+slow-tests = []
+
+[dependencies]
+# Phase 25 drives `copy_file` + reads `CopyErrorKind` for error
+# translation. No leakage in the other direction — core stays free of
+# sync concerns.
+copythat-core = { path = "../copythat-core", version = "1" }
+# BLAKE3 content digests are the lingua franca across Phases 3, 20,
+# 24, and now 25. Sharing the algorithm means a synced file that
+# already rode through verify doesn't need re-hashing.
+blake3 = "1"
+chrono = { version = "0.4", default-features = false, features = [
+    "clock",
+    "std",
+] }
+# Single-file embedded ACID KV store. Already in the tree via Phase
+# 20's journal; reusing the same crate keeps deny.toml untouched.
+redb = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+# UUIDs identify each device participating in the vector-clock
+# algorithm. v4 (random) matches the Syncthing / Git-annex convention.
+uuid = { version = "1", features = ["serde", "v4"] }
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "test-util",
+    "time",
+] }
+
+# Phase 25 smoke test lives at the workspace root alongside every
+# other phase's smoke.
+[[test]]
+name = "phase_25_sync"
+path = "../../tests/smoke/phase_25_sync.rs"

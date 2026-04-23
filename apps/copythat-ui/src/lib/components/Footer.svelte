@@ -10,6 +10,7 @@
     openErrorLogDrawer,
     openHistoryDrawer,
     openSettings,
+    openSyncDrawer,
     openTotalsDrawer,
     pushToast,
   } from "../stores";
@@ -126,6 +127,20 @@
     >
       <Icon name="external-link" size={14} />
       {t("footer-history")}
+    </button>
+    <!--
+      Phase 25 — two-way sync pairs entry point. Opens the
+      `SyncDrawer` where the user manages configured pairs, runs a
+      sync, and resolves conflicts.
+    -->
+    <button
+      class="history"
+      type="button"
+      onclick={openSyncDrawer}
+      aria-label={t("footer-sync")}
+    >
+      <Icon name="refresh" size={14} />
+      {t("footer-sync")}
     </button>
     <!--
       Phase 11b — Settings entry point. Icon-only button; the Footer

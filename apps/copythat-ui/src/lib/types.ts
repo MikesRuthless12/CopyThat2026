@@ -596,3 +596,65 @@ export interface ProfileInfoDto {
   name: string;
   path: string;
 }
+
+// ---------------------------------------------------------------------
+// Phase 25 — two-way sync DTOs (wire payloads from the Tauri runtime).
+// ---------------------------------------------------------------------
+
+export type SyncModeWire =
+  | "two-way"
+  | "mirror-left-to-right"
+  | "mirror-right-to-left"
+  | "contribute-left-to-right";
+
+export type SyncSideWire = "left-to-right" | "right-to-left";
+
+export type SyncConflictKindWire =
+  | "concurrent-write"
+  | "delete-edit"
+  | "add-add"
+  | "corrupt-equal";
+
+export interface SyncPairDto {
+  id: string;
+  label: string;
+  left: string;
+  right: string;
+  mode: SyncModeWire;
+  lastRunAt: string;
+  lastRunSummary: string;
+  running: boolean;
+}
+
+export interface SyncStartedDto {
+  pairId: string;
+  label: string;
+  left: string;
+  right: string;
+  mode: SyncModeWire;
+}
+
+export interface SyncConflictDto {
+  pairId: string;
+  relpath: string;
+  kind: SyncConflictKindWire;
+  winnerSide: SyncSideWire;
+  loserSide: SyncSideWire;
+  loserPreservationPath: string;
+}
+
+export interface SyncCompletedDto {
+  pairId: string;
+  appliedLeft: number;
+  appliedRight: number;
+  deletedLeft: number;
+  deletedRight: number;
+  conflicts: number;
+  cancelled: boolean;
+  durationMs: number;
+}
+
+export interface SyncFailedDto {
+  pairId: string;
+  message: string;
+}

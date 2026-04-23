@@ -579,3 +579,54 @@ settings-preserve-resource-forks = Preserve macOS resource forks and Finder info
 settings-preserve-resource-forks-hint = Carry the legacy resource fork and FinderInfo (color tags, Carbon metadata) across the copy.
 settings-appledouble-fallback = Use AppleDouble sidecar on incompatible filesystems
 meta-translated-to-appledouble = Foreign metadata stored in AppleDouble sidecar (._{ $ext })
+
+# Phase 25 — two-way sync with vector-clock conflict detection.
+# The drawer lists configured sync pairs; each pair runs an
+# independent reconciliation round against a per-pair `.copythat-sync.db`
+# state store. Concurrent edits from a common ancestor surface as
+# conflicts rather than silent overwrites; the losing side's content
+# is preserved as `name.sync-conflict-YYYYMMDD-HHMMSS-<host>.ext`.
+footer-sync = Sync
+sync-drawer-title = Two-way sync
+sync-drawer-hint = Keep two folders in sync without silent overwrites. Concurrent edits surface as conflicts you can resolve.
+sync-add-pair = Add pair
+sync-add-cancel = Cancel
+sync-refresh = Refresh
+sync-add-save = Save pair
+sync-add-saving = Saving…
+sync-add-missing-fields = Label, left path, and right path are all required.
+sync-remove-confirm = Remove this sync pair? The state database is preserved; the folders are untouched.
+sync-field-label = Label
+sync-field-label-placeholder = e.g. Documents ↔ NAS
+sync-field-left = Left folder
+sync-field-left-placeholder = Pick or paste an absolute path
+sync-field-right = Right folder
+sync-field-right-placeholder = Pick or paste an absolute path
+sync-field-mode = Mode
+sync-mode-two-way = Two-way
+sync-mode-mirror-left-to-right = Mirror (left → right)
+sync-mode-mirror-right-to-left = Mirror (right → left)
+sync-mode-contribute-left-to-right = Contribute (left → right, no deletes)
+sync-no-pairs = No sync pairs configured yet. Click "Add pair" to start.
+sync-loading = Loading configured pairs…
+sync-never-run = Never run
+sync-running = Running
+sync-run-now = Run now
+sync-cancel = Cancel
+sync-remove-pair = Remove
+sync-view-conflicts = View conflicts ({ $count })
+sync-conflicts-heading = Conflicts
+sync-no-conflicts = No conflicts from the last run.
+sync-winner = Winner
+sync-side-left-to-right = left
+sync-side-right-to-left = right
+sync-conflict-kind-concurrent-write = Concurrent edit
+sync-conflict-kind-delete-edit = Delete ↔ edit
+sync-conflict-kind-add-add = Both sides added
+sync-conflict-kind-corrupt-equal = Content diverged without a new write
+sync-resolve-keep-left = Keep left
+sync-resolve-keep-right = Keep right
+sync-resolve-keep-both = Keep both
+sync-resolve-three-way = Resolve via 3-way merge
+sync-resolve-phase-53-tooltip = Interactive 3-way merge for non-text files lands in Phase 53.
+sync-error-prefix = Sync error
