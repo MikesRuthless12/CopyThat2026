@@ -48,8 +48,21 @@ tokio = { version = "1", features = [
 # Phase 19a — per-scan UUID identifiers.
 uuid = { version = "1", features = ["v4"] }
 walkdir = "2"
+# Phase 30 — Unicode NFC/NFD normalization for cross-platform path
+# translation (macOS HFS+ stores NFD; Windows + Linux expect NFC).
+unicode-normalization = "0.1"
+# Phase 30 — canonicalize Windows paths without the `\\?\` UNC prefix.
+# Tri-licensed CC0-1.0 / MIT-0 / Apache-2.0; Apache-2.0 satisfies our
+# allowlist. The `\\?\` long-path prefix itself is applied manually in
+# `translate::apply_long_path_prefix`; `dunce` is used to simplify
+# already-prefixed inputs before our length gate fires.
+dunce = "1"
 
 [dev-dependencies]
+# Phase 30 — smoke test exercises the TOML round-trip of
+# `PathTranslationSettings`. Dev-only so the settings crate is still
+# kept out of the engine's release graph.
+copythat-settings = { path = "../copythat-settings" }
 criterion = { version = "0.7", features = ["html_reports"] }
 rand = "0.9"
 # Phase 19a — cross-platform RSS probe used by the scan smoke test to
@@ -96,6 +109,12 @@ path = "../../tests/smoke/phase_17_security.rs"
 [[test]]
 name = "phase_19a_scan_db"
 path = "../../tests/smoke/phase_19a_scan_db.rs"
+
+# Phase 30 — cross-platform path translation (NFC/NFD, reserved
+# Windows names, `\\?\` long-path prefix, opt-in CRLF/LF rewrite).
+[[test]]
+name = "phase_30_translate"
+path = "../../tests/smoke/phase_30_translate.rs"
 
 # Phase 13 — Criterion benchmarks for the async copy engine.
 # `cargo bench -p copythat-core --bench copy_bench` runs the full
