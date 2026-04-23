@@ -607,6 +607,32 @@ pub struct SettingsDto {
     pub scan: ScanDto,
     /// Phase 21 — bandwidth shaping (global cap + schedule + auto-throttle).
     pub network: NetworkDto,
+    /// Phase 29 — drag-and-drop polish (spring-load, drag thumbnails,
+    /// invalid-target highlight).
+    #[serde(default)]
+    pub dnd: DndDto,
+}
+
+/// Phase 29 — wire form of `copythat_settings::DndSettings`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DndDto {
+    pub spring_load_enabled: bool,
+    pub spring_load_delay_ms: u32,
+    pub show_drag_thumbnails: bool,
+    pub highlight_invalid_targets: bool,
+}
+
+impl Default for DndDto {
+    fn default() -> Self {
+        let defaults = copythat_settings::DndSettings::default();
+        Self {
+            spring_load_enabled: defaults.spring_load_enabled,
+            spring_load_delay_ms: defaults.spring_load_delay_ms,
+            show_drag_thumbnails: defaults.show_drag_thumbnails,
+            highlight_invalid_targets: defaults.highlight_invalid_targets,
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1197,6 +1223,12 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 auto_on_battery: auto_throttle_to_dto(s.network.auto_on_battery),
                 auto_on_cellular: auto_throttle_to_dto(s.network.auto_on_cellular),
             },
+            dnd: DndDto {
+                spring_load_enabled: s.dnd.spring_load_enabled,
+                spring_load_delay_ms: s.dnd.effective_spring_ms(),
+                show_drag_thumbnails: s.dnd.show_drag_thumbnails,
+                highlight_invalid_targets: s.dnd.highlight_invalid_targets,
+            },
         }
     }
 }
@@ -1347,6 +1379,16 @@ impl SettingsDto {
             auto_on_metered: auto_throttle_from_dto(self.network.auto_on_metered),
             auto_on_battery: auto_throttle_from_dto(self.network.auto_on_battery),
             auto_on_cellular: auto_throttle_from_dto(self.network.auto_on_cellular),
+        };
+
+        s.dnd = copythat_settings::DndSettings {
+            spring_load_enabled: self.dnd.spring_load_enabled,
+            spring_load_delay_ms: self.dnd.spring_load_delay_ms.clamp(
+                copythat_settings::DND_MIN_SPRING_MS,
+                copythat_settings::DND_MAX_SPRING_MS,
+            ),
+            show_drag_thumbnails: self.dnd.show_drag_thumbnails,
+            highlight_invalid_targets: self.dnd.highlight_invalid_targets,
         };
 
         s

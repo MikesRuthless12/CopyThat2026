@@ -257,3 +257,12 @@ path = "../../../tests/smoke/phase_22_conflict_batch.rs"
 [[test]]
 name = "phase_28_dropstack"
 path = "../../../tests/smoke/phase_28_dropstack.rs"
+
+# Phase 29 smoke test — spring-loaded folders + native DnD polish.
+# The brief's Playwright + tauri-driver harness is deferred; this
+# Rust smoke exercises the DndSettings round-trip, the
+# `effective_spring_ms` clamp, and the Fluent key presence + parity
+# across all 18 locales. See the smoke file header for the rationale.
+[[test]]
+name = "phase_29_dnd"
+path = "../../../tests/smoke/phase_29_dnd.rs"
