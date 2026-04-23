@@ -39,6 +39,28 @@ copythat-journal = { path = "../../../crates/copythat-journal", version = "1" }
 # the user's NetworkSettings.
 copythat-shape = { path = "../../../crates/copythat-shape", version = "1" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "alloc"] }
+# Phase 22 — thumbnail generation for the aggregate conflict dialog.
+# `image` decodes jpg/png/gif/bmp/webp and downscales via bilinear
+# `thumbnail()`; `base64` emits the PNG bytes as a `data:` URL so
+# the Svelte component can drop the result straight into an `<img>`
+# without a second fetch. Both crates are already in the workspace
+# Cargo.lock transitively (image via arboard, base64 via tauri);
+# listing them explicitly documents the direct dependency.
+image = { version = "0.25", default-features = false, features = [
+    "jpeg",
+    "png",
+    "gif",
+    "bmp",
+    "webp",
+] }
+base64 = "0.22"
+# Phase 22 — `globset` validates per-pattern rules at IPC entry so
+# a malformed glob surfaces an error before it can wedge a running
+# job. `directories` resolves the platform-appropriate cache dir
+# for the thumbnail cache. Both are already workspace deps via
+# `copythat-core` / `copythat-settings`.
+globset = "0.4"
+directories = "6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon"] }
@@ -112,6 +134,10 @@ arboard = { version = "3", features = ["wayland-data-control"] }
 tempfile = "3"
 copythat-settings = { path = "../../../crates/copythat-settings", version = "1" }
 copythat-platform = { path = "../../../crates/copythat-platform", version = "1" }
+# Phase 22 smoke test — seeds colliding trees with explicit mtimes to
+# exercise the `OverwriteIfNewer` rule branch. `filetime` is already a
+# workspace dep via `copythat-core` and `copythat-secure-delete`.
+filetime = "0.2"
 # Phase 18 E2E smoke uses walkdir to independently re-count the copied
 # tree as a ground-truth cross-check on `TreeReport.files` / `.bytes`.
 # Already a transitive workspace dep via `copythat-core` / `-secure-delete`;
@@ -200,3 +226,14 @@ path = "../../../tests/smoke/phase_16_package.rs"
 [[test]]
 name = "phase_18_e2e"
 path = "../../../tests/smoke/phase_18_e2e.rs"
+
+# Phase 22 smoke test — aggregate conflict dialog v2. Drives the
+# engine with a `ConflictPolicy::Prompt` tree + a `ConflictProfile`-
+# backed simulator that mirrors the runner's rule-based
+# auto-resolution. Verifies the brief's 50-collision mix
+# (20 *.txt skip / 15 *.docx newer-wins / 15 misc keep-both) +
+# ProfileStore round-trip + re-run-without-prompts. Lives in the
+# UI crate so the `copythat-settings` dep is already available.
+[[test]]
+name = "phase_22_conflict_batch"
+path = "../../../tests/smoke/phase_22_conflict_batch.rs"

@@ -50,6 +50,11 @@ pub const EVENT_COLLISION_RAISED: &str = "collision-raised";
 pub const EVENT_ERROR_RESOLVED: &str = "error-resolved";
 /// Phase 8 — mirror of [`EVENT_ERROR_RESOLVED`] for collisions.
 pub const EVENT_COLLISION_RESOLVED: &str = "collision-resolved";
+/// Phase 22 — a collision was resolved by the runner against the
+/// active [`ConflictProfile`] without ever showing a prompt to the
+/// user. Emitted alongside the usual engine-side resolution so the
+/// aggregate dialog renders "via rule '*.docx → newer'" rows.
+pub const EVENT_COLLISION_AUTO_RESOLVED: &str = "collision-auto-resolved";
 
 /// Per-file activity — lets the UI render a TeraCopy-style live list
 /// of files inside a tree job. Emitted alongside the aggregate
@@ -300,6 +305,56 @@ pub struct CollisionResolvedDto {
     pub id: u64,
     pub job_id: u64,
     pub resolution: &'static str,
+}
+
+/// Phase 22 — emitted by the runner when an incoming
+/// `CopyEvent::Collision` was silently auto-resolved against the
+/// active `ConflictProfile`. The UI mirrors this into the
+/// aggregate dialog's left rail as a "✓ via rule '*.docx → newer'"
+/// row so the user can see *what was decided* without having seen
+/// the prompt. The resolution is always the engine's four-variant
+/// wire string (`"skip"` / `"overwrite"` / `"rename"`); the
+/// `matched_rule_pattern` carries the glob that fired (or `"*"`
+/// for a fallback hit).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollisionAutoResolvedDto {
+    pub job_id: u64,
+    pub src: String,
+    pub dst: String,
+    /// Engine-facing resolution string — what actually happened.
+    pub resolution: &'static str,
+    /// UI-facing rule-level resolution — what the user's intent
+    /// was (e.g. `"overwrite-if-newer"` resolves to the engine's
+    /// `"overwrite"` or `"skip"` depending on mtimes).
+    pub rule_resolution: &'static str,
+    pub matched_rule_pattern: String,
+}
+
+/// Phase 22 — payload for `thumbnail_for`. `kind` selects the
+/// rendering branch:
+///
+/// - `"image"` — `data_url` is a base64-encoded PNG ≤ `max_dim`
+///   on its longest edge. The frontend drops it into an `<img>`
+///   without a second fetch.
+/// - `"icon"` — `icon_kind` / `extension` name a Lucide glyph the
+///   existing `FileKindIcon.svelte` already knows how to render.
+///   Emitted for PDFs, videos, audio, archives, and anything the
+///   pure-Rust decoders can't handle; acceptable fallback per the
+///   Phase 22 brief ("for other formats fall back to the file-
+///   kind icon").
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThumbnailDto {
+    /// `"image"` or `"icon"`.
+    pub kind: &'static str,
+    /// Base64-encoded PNG data URL, populated when `kind == "image"`.
+    pub data_url: Option<String>,
+    /// Lucide glyph name, populated when `kind == "icon"`.
+    pub icon_kind: Option<&'static str>,
+    /// Lowercase extension (no dot) for icon-kind payloads — helps
+    /// the UI render `.docx` / `.xlsx` badges.
+    pub extension: Option<String>,
 }
 
 /// Phase 8 — a single entry in the error log, as exposed to the

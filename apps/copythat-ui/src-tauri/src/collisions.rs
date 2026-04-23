@@ -14,12 +14,13 @@
 //! the same shape (the user means "yes, overwrite all").
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use copythat_core::CollisionResolution;
+use copythat_settings::{ConflictProfile, ConflictRule, ConflictRuleResolution};
 use tokio::sync::oneshot;
 
 #[derive(Clone, Default)]
@@ -33,6 +34,12 @@ struct CollisionRegistryInner {
     /// job_id → cached resolution. Set when a user ticks "Apply to
     /// all" and chooses a non-Abort action.
     apply_all: Mutex<HashMap<u64, CollisionResolution>>,
+    /// Phase 22 — per-job accumulated pattern rules. Seeded from the
+    /// active `ConflictProfile` when a job starts; appended to as
+    /// the user clicks "Apply to all of this extension" / "Apply to
+    /// glob" in the aggregate dialog. First-match-wins semantics
+    /// within the job.
+    rules: Mutex<HashMap<u64, ConflictProfile>>,
     next_id: AtomicU64,
 }
 
@@ -127,6 +134,162 @@ impl CollisionRegistry {
             .expect("collision registry poisoned")
             .len()
     }
+
+    /// Phase 22 — seed a job's per-job rule set from the user's
+    /// persisted active profile. Called by the runner right after
+    /// `enqueue_jobs` allocates a fresh `JobId`. Idempotent — a
+    /// later call overwrites the seed (useful for tests that
+    /// re-seed mid-run).
+    pub fn seed_rules(&self, job_id: u64, profile: ConflictProfile) {
+        self.inner
+            .rules
+            .lock()
+            .expect("collision registry poisoned")
+            .insert(job_id, profile);
+    }
+
+    /// Append one rule to the end of a job's rule list. The UI
+    /// invokes this via the `add_conflict_rule` IPC when the user
+    /// clicks "Apply to all of this extension" / "Apply to glob"
+    /// on a running job. Creates an empty profile for the job on
+    /// first call.
+    pub fn append_rule(&self, job_id: u64, rule: ConflictRule) {
+        self.inner
+            .rules
+            .lock()
+            .expect("collision registry poisoned")
+            .entry(job_id)
+            .or_default()
+            .rules
+            .push(rule);
+    }
+
+    /// Consult the job's accumulated rules for `src_path`. Returns
+    /// `Some((resolution, matched_pattern))` when a rule or
+    /// fallback fires; `None` when the user must still be
+    /// prompted. The runner peeks source/dest metadata and calls
+    /// [`apply_rule_resolution`] to translate the rule hit into
+    /// the engine's four-variant `CollisionResolution`.
+    pub fn consult_rules(
+        &self,
+        job_id: u64,
+        src_path: &Path,
+        rel_path: Option<&str>,
+    ) -> Option<(ConflictRuleResolution, String)> {
+        let rules = self.inner.rules.lock().expect("collision registry poisoned");
+        let profile = rules.get(&job_id)?;
+        if profile.is_empty() {
+            return None;
+        }
+        let basename = src_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+        let rel = rel_path.unwrap_or(basename);
+        let hit = profile.match_basename_or_path(basename, rel)?;
+        Some((hit.resolution, hit.pattern.to_string()))
+    }
+
+    /// Snapshot of a job's current rule list — UI renders this in
+    /// the profile-save dialog so users can see what will be
+    /// persisted. `None` when the job has no rules recorded.
+    pub fn rules_for(&self, job_id: u64) -> Option<ConflictProfile> {
+        self.inner
+            .rules
+            .lock()
+            .expect("collision registry poisoned")
+            .get(&job_id)
+            .cloned()
+    }
+
+    /// Remove all per-job state (pending, apply-all cache, rules)
+    /// when a job finishes. Runner calls on Completed / Failed /
+    /// Cancelled so a later job with the same id (impossible today
+    /// but defensive) doesn't inherit stale rules.
+    pub fn clear_job(&self, job_id: u64) {
+        self.inner
+            .apply_all
+            .lock()
+            .expect("collision registry poisoned")
+            .remove(&job_id);
+        self.inner
+            .rules
+            .lock()
+            .expect("collision registry poisoned")
+            .remove(&job_id);
+    }
+}
+
+/// Translate a `ConflictRuleResolution` into the engine's
+/// four-variant `CollisionResolution`, using source/destination
+/// metadata for the mtime- and size-comparison variants. `dst`
+/// is the destination path the engine was about to write — needed
+/// because `KeepBoth` generates a free filename relative to it.
+///
+/// Returns `None` only in the vanishingly-rare case where a
+/// `KeepBoth` rule fires but no free suffix was found within 10000
+/// attempts — in that case the runner falls through to the
+/// interactive prompt rather than silently skipping.
+pub fn apply_rule_resolution(
+    resolution: ConflictRuleResolution,
+    src_size: Option<u64>,
+    dst_size: Option<u64>,
+    src_modified_ms: Option<i64>,
+    dst_modified_ms: Option<i64>,
+    dst: &Path,
+) -> Option<CollisionResolution> {
+    match resolution {
+        ConflictRuleResolution::Skip => Some(CollisionResolution::Skip),
+        ConflictRuleResolution::Overwrite => Some(CollisionResolution::Overwrite),
+        ConflictRuleResolution::OverwriteIfNewer => {
+            let s = src_modified_ms.unwrap_or(i64::MIN);
+            let d = dst_modified_ms.unwrap_or(i64::MIN);
+            Some(if s > d {
+                CollisionResolution::Overwrite
+            } else {
+                CollisionResolution::Skip
+            })
+        }
+        ConflictRuleResolution::OverwriteIfLarger => {
+            let s = src_size.unwrap_or(0);
+            let d = dst_size.unwrap_or(0);
+            Some(if s > d {
+                CollisionResolution::Overwrite
+            } else {
+                CollisionResolution::Skip
+            })
+        }
+        ConflictRuleResolution::KeepBoth => {
+            let fresh = next_keep_both_name(dst)?;
+            Some(CollisionResolution::Rename(fresh))
+        }
+    }
+}
+
+/// Mirror of the engine's `keep_both_path` naming: `foo.txt` →
+/// `foo_2.txt`, then `_3`, `_4`… Returns the bare filename (no
+/// directory component) because `CollisionResolution::Rename`
+/// takes a filename that lands in the same parent as the
+/// original destination. Gives up at 10000.
+fn next_keep_both_name(dst: &Path) -> Option<String> {
+    let parent = dst.parent()?;
+    let stem = dst.file_stem()?.to_string_lossy().into_owned();
+    let ext = dst
+        .extension()
+        .map(|e| e.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    for n in 2..10_000 {
+        let candidate_name = if ext.is_empty() {
+            format!("{stem}_{n}")
+        } else {
+            format!("{stem}_{n}.{ext}")
+        };
+        let candidate = parent.join(&candidate_name);
+        if !candidate.exists() {
+            return Some(candidate_name);
+        }
+    }
+    None
 }
 
 #[derive(Debug, Clone)]
@@ -203,5 +366,147 @@ mod tests {
             "rename"
         );
         assert_eq!(resolution_name(&CollisionResolution::Abort), "abort");
+    }
+
+    #[test]
+    fn consult_rules_matches_extension_glob() {
+        let reg = CollisionRegistry::new();
+        reg.seed_rules(
+            99,
+            ConflictProfile::with_rules(vec![ConflictRule {
+                pattern: "*.txt".into(),
+                resolution: ConflictRuleResolution::Skip,
+            }]),
+        );
+        let hit = reg.consult_rules(99, Path::new("/src/notes.txt"), Some("notes.txt"));
+        assert!(matches!(hit, Some((ConflictRuleResolution::Skip, _))));
+        let miss = reg.consult_rules(99, Path::new("/src/photo.jpg"), Some("photo.jpg"));
+        assert!(miss.is_none());
+    }
+
+    #[test]
+    fn consult_rules_returns_none_for_unseeded_job() {
+        let reg = CollisionRegistry::new();
+        assert!(
+            reg.consult_rules(42, Path::new("/src/a.txt"), Some("a.txt"))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn append_rule_grows_the_job_profile() {
+        let reg = CollisionRegistry::new();
+        reg.append_rule(
+            5,
+            ConflictRule {
+                pattern: "*.docx".into(),
+                resolution: ConflictRuleResolution::OverwriteIfNewer,
+            },
+        );
+        reg.append_rule(
+            5,
+            ConflictRule {
+                pattern: "*.tmp".into(),
+                resolution: ConflictRuleResolution::Skip,
+            },
+        );
+        let hit = reg
+            .consult_rules(5, Path::new("/src/a.docx"), Some("a.docx"))
+            .unwrap();
+        assert_eq!(hit.0, ConflictRuleResolution::OverwriteIfNewer);
+        assert_eq!(hit.1, "*.docx");
+    }
+
+    #[test]
+    fn apply_rule_resolution_newer_wins_by_mtime() {
+        let out = apply_rule_resolution(
+            ConflictRuleResolution::OverwriteIfNewer,
+            Some(100),
+            Some(100),
+            Some(2000),
+            Some(1000),
+            Path::new("/dst/a.txt"),
+        )
+        .unwrap();
+        assert_eq!(out, CollisionResolution::Overwrite);
+
+        let out = apply_rule_resolution(
+            ConflictRuleResolution::OverwriteIfNewer,
+            Some(100),
+            Some(100),
+            Some(500),
+            Some(1000),
+            Path::new("/dst/a.txt"),
+        )
+        .unwrap();
+        assert_eq!(out, CollisionResolution::Skip);
+    }
+
+    #[test]
+    fn apply_rule_resolution_larger_wins_by_size() {
+        let out = apply_rule_resolution(
+            ConflictRuleResolution::OverwriteIfLarger,
+            Some(500),
+            Some(100),
+            None,
+            None,
+            Path::new("/dst/a.txt"),
+        )
+        .unwrap();
+        assert_eq!(out, CollisionResolution::Overwrite);
+
+        let out = apply_rule_resolution(
+            ConflictRuleResolution::OverwriteIfLarger,
+            Some(10),
+            Some(500),
+            None,
+            None,
+            Path::new("/dst/a.txt"),
+        )
+        .unwrap();
+        assert_eq!(out, CollisionResolution::Skip);
+    }
+
+    #[test]
+    fn apply_rule_resolution_keep_both_generates_suffix() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dst = tmp.path().join("report.docx");
+        std::fs::write(&dst, b"occupied").unwrap();
+        let out = apply_rule_resolution(
+            ConflictRuleResolution::KeepBoth,
+            Some(1),
+            Some(1),
+            None,
+            None,
+            &dst,
+        )
+        .unwrap();
+        match out {
+            CollisionResolution::Rename(name) => assert_eq!(name, "report_2.docx"),
+            other => panic!("expected Rename(report_2.docx), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn clear_job_removes_rules_and_apply_all() {
+        let reg = CollisionRegistry::new();
+        reg.append_rule(
+            7,
+            ConflictRule {
+                pattern: "*".into(),
+                resolution: ConflictRuleResolution::Skip,
+            },
+        );
+        // apply-all cache goes via `resolve(..., true)`; drop a fake
+        // entry by registering + resolving with apply-to-all.
+        let (tx, _rx) = oneshot::channel();
+        let id = reg.register(7, PathBuf::from("/s"), PathBuf::from("/d"), tx);
+        reg.resolve(id, CollisionResolution::Overwrite, true).unwrap();
+        assert!(reg.cached_resolution(7).is_some());
+        assert!(reg.rules_for(7).is_some());
+
+        reg.clear_job(7);
+        assert!(reg.cached_resolution(7).is_none());
+        assert!(reg.rules_for(7).is_none());
     }
 }

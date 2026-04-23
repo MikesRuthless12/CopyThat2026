@@ -18,6 +18,7 @@ import {
 import {
   EVENTS,
   type ClipboardFilesDetectedDto,
+  type CollisionAutoResolvedDto,
   type CollisionPromptDto,
   type CollisionResolvedDto,
   type DropReceivedDto,
@@ -54,6 +55,47 @@ const toastStore = writable<ToastMessage[]>([]);
 // `resolve_error` / `resolve_collision` pops on response.
 const errorQueueStore = writable<ErrorPromptDto[]>([]);
 const collisionQueueStore = writable<CollisionPromptDto[]>([]);
+
+// ---- Phase 22 aggregate conflict dialog state ----
+//
+// The aggregate dialog stays open for the lifetime of a job and
+// shows every collision that occurs — pending, interactively
+// resolved, and rule-auto-resolved. Each row carries enough state
+// for the dialog to render its two-column view without another
+// IPC round-trip:
+//
+// - `pending`: the oneshot is parked in the Rust registry; the UI
+//   renders "action buttons" to let the user resolve.
+// - `resolved`: the user picked an action OR a rule auto-resolved.
+//   The row shows a checkmark + the chosen action.
+//
+// A single `batch` store is simpler than two queues because every
+// list view the dialog needs (pending, resolved, by-extension)
+// derives from the same row set. Cleared on job removal.
+export type ConflictBatchRowState =
+  | { phase: "pending" }
+  | {
+      phase: "resolved";
+      action: string;
+      matchedRulePattern: string | null;
+    };
+
+export interface ConflictBatchRow {
+  jobId: number;
+  /// Mirrors CollisionPromptDto.id. `null` when the row is a
+  /// rule-auto-resolved event (no interactive prompt was
+  /// registered, so there's no id to address later).
+  id: number | null;
+  src: string;
+  dst: string;
+  srcSize: number | null;
+  srcModifiedMs: number | null;
+  dstSize: number | null;
+  dstModifiedMs: number | null;
+  state: ConflictBatchRowState;
+  createdAtMs: number;
+}
+const conflictBatchStore = writable<ConflictBatchRow[]>([]);
 const errorLogDrawerOpenStore = writable<boolean>(false);
 // Phase 9: History drawer open/closed flag + selected detail row.
 // The drawer fetches on open; no in-store cache of rows (Rust is
@@ -145,6 +187,28 @@ export const errorQueue: Readable<ErrorPromptDto[]> = {
 export const collisionQueue: Readable<CollisionPromptDto[]> = {
   subscribe: collisionQueueStore.subscribe,
 };
+
+/// Phase 22 — the full per-job conflict feed. Each incoming
+/// `collision-raised` appends a `pending` row; each
+/// `collision-resolved` flips the matching row to `resolved`;
+/// each `collision-auto-resolved` appends a brand-new `resolved`
+/// row (no prior prompt existed). The aggregate modal reads this;
+/// the single-file `CollisionModal` still reads `collisionQueue`
+/// so both pathways coexist until the aggregate modal is the
+/// default everywhere.
+export const conflictBatch: Readable<ConflictBatchRow[]> = {
+  subscribe: conflictBatchStore.subscribe,
+};
+
+/// Reset the aggregate feed — called by the modal's "Close"
+/// button once every row is resolved, and by job removal.
+export function clearConflictBatch(jobId?: number): void {
+  if (jobId === undefined) {
+    conflictBatchStore.set([]);
+    return;
+  }
+  conflictBatchStore.update(($rows) => $rows.filter((r) => r.jobId !== jobId));
+}
 export const errorLogDrawerOpen: Readable<boolean> = {
   subscribe: errorLogDrawerOpenStore.subscribe,
 };
@@ -685,10 +749,64 @@ export async function initStores(): Promise<() => void> {
     }),
     onEvent<CollisionPromptDto>(EVENTS.collisionRaised, (p) => {
       collisionQueueStore.update(($q) => [...$q, p]);
+      conflictBatchStore.update(($rows) => [
+        ...$rows,
+        {
+          jobId: p.jobId,
+          id: p.id,
+          src: p.src,
+          dst: p.dst,
+          srcSize: p.srcSize,
+          srcModifiedMs: p.srcModifiedMs,
+          dstSize: p.dstSize,
+          dstModifiedMs: p.dstModifiedMs,
+          state: { phase: "pending" } satisfies ConflictBatchRowState,
+          createdAtMs: Date.now(),
+        },
+      ]);
     }),
     onEvent<CollisionResolvedDto>(EVENTS.collisionResolved, (p) => {
       collisionQueueStore.update(($q) => $q.filter((c) => c.id !== p.id));
+      conflictBatchStore.update(($rows) =>
+        $rows.map((r) =>
+          r.id === p.id
+            ? {
+                ...r,
+                state: {
+                  phase: "resolved",
+                  action: p.resolution,
+                  matchedRulePattern: null,
+                } satisfies ConflictBatchRowState,
+              }
+            : r,
+        ),
+      );
       pushToast("info", "toast-collision-resolved");
+    }),
+    // Phase 22 — the runner auto-resolved a collision by matching
+    // the job's active ConflictProfile. No prompt was registered,
+    // so this appends a fresh `resolved` row rather than flipping
+    // an existing one.
+    onEvent<CollisionAutoResolvedDto>(EVENTS.collisionAutoResolved, (p) => {
+      conflictBatchStore.update(($rows) => [
+        ...$rows,
+        {
+          jobId: p.jobId,
+          id: null,
+          src: p.src,
+          dst: p.dst,
+          srcSize: null,
+          srcModifiedMs: null,
+          dstSize: null,
+          dstModifiedMs: null,
+          state: {
+            phase: "resolved",
+            action: p.resolution,
+            matchedRulePattern: p.matchedRulePattern,
+          } satisfies ConflictBatchRowState,
+          createdAtMs: Date.now(),
+        },
+      ]);
     }),
     // Phase 13d — per-file live activity. `start`/`dir` append a new
     // row; `progress` patches the existing in-flight row; `done`/

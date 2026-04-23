@@ -129,6 +129,8 @@ export const EVENTS = {
   errorResolved: "error-resolved",
   collisionRaised: "collision-raised",
   collisionResolved: "collision-resolved",
+  // Phase 22 — aggregate conflict dialog: auto-resolved by rule.
+  collisionAutoResolved: "collision-auto-resolved",
   // Phase 13d
   fileActivity: "file-activity",
   // Post-Phase-12 paste hotkey + clipboard watcher
@@ -200,6 +202,56 @@ export interface CollisionResolvedDto {
   id: number;
   jobId: number;
   resolution: CollisionAction;
+}
+
+// ---- Phase 22 — aggregate conflict dialog v2 ----
+
+/// Wire-level rule resolutions — a superset of `CollisionAction`.
+/// The runner translates `overwrite-if-newer` / `overwrite-if-larger`
+/// / `keep-both` into one of the engine's four variants by peeking
+/// source + destination metadata before calling the engine's
+/// oneshot.
+export type ConflictRuleResolution =
+  | "skip"
+  | "overwrite"
+  | "overwrite-if-newer"
+  | "overwrite-if-larger"
+  | "keep-both";
+
+export interface ConflictRuleDto {
+  pattern: string;
+  resolution: ConflictRuleResolution;
+}
+
+export interface ConflictProfileDto {
+  rules: ConflictRuleDto[];
+  fallback: ConflictRuleResolution | null;
+}
+
+/// `collision-auto-resolved` payload — the runner silently
+/// resolved a collision against the job's rule set and the UI
+/// should render a "✓ via rule '*.docx → newer'" row in the
+/// aggregate dialog without having surfaced a prompt.
+export interface CollisionAutoResolvedDto {
+  jobId: number;
+  src: string;
+  dst: string;
+  /// `"skip"` / `"overwrite"` / `"rename"` — what the engine did.
+  resolution: CollisionAction;
+  /// `"skip"` / `"overwrite"` / `"overwrite-if-newer"` /
+  /// `"overwrite-if-larger"` / `"keep-both"` — the user's intent.
+  ruleResolution: ConflictRuleResolution;
+  matchedRulePattern: string;
+}
+
+/// `thumbnail_for` return shape — image data URL OR a file-kind
+/// icon descriptor. Frontend renders `<img>` for `kind="image"`
+/// and hands to the existing FileKindIcon component otherwise.
+export interface ThumbnailDto {
+  kind: "image" | "icon";
+  dataUrl: string | null;
+  iconKind: string | null;
+  extension: string | null;
 }
 
 export interface LoggedErrorDto {
