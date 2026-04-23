@@ -131,6 +131,24 @@ pub enum CopyEvent {
         /// or `/mnt/pool/.zfs/snapshot/<name>` for ZFS.
         snap_mount: PathBuf,
     },
+    /// Phase 20 — the engine asked the journal for a `ResumePlan`,
+    /// the journal said `Resume { offset, src_hash_at_offset }`, but
+    /// the prefix re-hash of the existing destination did not match.
+    /// Engine falls back to a full restart (truncate + rewrite from
+    /// byte 0); the UI surfaces the reason in a row toast so the
+    /// user knows why a "resumable" copy went all the way back.
+    ResumeAborted {
+        /// Stable wire string: `"prefix-hash-mismatch"` /
+        /// `"dst-shrunk"` / `"checkpoint-corrupt"`. New variants
+        /// land here as additional resume paths discover their own
+        /// abort modes.
+        reason: &'static str,
+        /// Best-effort offset where the mismatch was first observed.
+        /// `0` if the mismatch was outside a per-byte compare (e.g.
+        /// the dst length was already shorter than the journal
+        /// expected).
+        offset: u64,
+    },
 }
 
 impl Clone for CopyEvent {
@@ -261,6 +279,10 @@ impl Clone for CopyEvent {
                 kind,
                 original: original.clone(),
                 snap_mount: snap_mount.clone(),
+            },
+            CopyEvent::ResumeAborted { reason, offset } => CopyEvent::ResumeAborted {
+                reason,
+                offset: *offset,
             },
         }
     }

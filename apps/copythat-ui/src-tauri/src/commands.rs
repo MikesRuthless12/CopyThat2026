@@ -1657,3 +1657,92 @@ pub fn post_completion_action(action: String, app: AppHandle) -> Result<(), Stri
         _ => Ok(()),
     }
 }
+
+// ---------------------------------------------------------------------
+// Phase 20 — resume journal
+// ---------------------------------------------------------------------
+
+/// Snapshot of jobs the journal flagged as unfinished at app start.
+/// Returns an empty list when journaling is disabled or the boot
+/// sweep found nothing — both are perfectly valid "no work to
+/// resume" states.
+#[tauri::command]
+pub fn pending_resumes(state: State<'_, AppState>) -> Vec<crate::ipc::PendingResumeDto> {
+    let guard = state.startup_unfinished.lock().expect("lock poisoned");
+    guard
+        .iter()
+        .map(|u| {
+            let last = u
+                .files
+                .iter()
+                .map(|f| f.last_checkpoint_at_ms)
+                .max()
+                .unwrap_or(0);
+            crate::ipc::PendingResumeDto {
+                row_id: u.row_id.as_u64(),
+                kind: u.record.kind.clone(),
+                src_root: u.record.src_root.to_string_lossy().into_owned(),
+                dst_root: u
+                    .record
+                    .dst_root
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().into_owned()),
+                status: u.record.status.as_str().to_string(),
+                started_at_ms: u.record.started_at_ms,
+                bytes_done: u.record.bytes_done,
+                bytes_total: u.record.bytes_total,
+                files_done: u.record.files_done,
+                files_total: u.record.files_total,
+                last_checkpoint_at_ms: last,
+            }
+        })
+        .collect()
+}
+
+/// Discard a pending resume — the user picked "Don't resume" on the
+/// modal. Removes the journal row + its file checkpoints so the next
+/// launch's `pending_resumes()` is empty for this id.
+///
+/// `row_id` is the `JobRowId` returned by `pending_resumes()`.
+#[tauri::command]
+pub fn discard_resume(row_id: u64, state: State<'_, AppState>) -> Result<(), String> {
+    if let Some(j) = state.journal.as_ref() {
+        j.delete_job(copythat_journal::JobRowId(row_id))
+            .map_err(|e| e.to_string())?;
+    }
+    state
+        .startup_unfinished
+        .lock()
+        .expect("lock poisoned")
+        .retain(|u| u.row_id.as_u64() != row_id);
+    Ok(())
+}
+
+/// "Discard all" header button. Clears every unfinished journal row
+/// + the in-memory list. Best-effort: a per-row delete failure is
+/// surfaced via the returned `Vec<String>` of error messages so the
+/// UI can show "discarded N, kept M (errors: …)".
+#[tauri::command]
+pub fn discard_all_resumes(state: State<'_, AppState>) -> Vec<String> {
+    let mut errors = Vec::new();
+    let ids: Vec<u64> = state
+        .startup_unfinished
+        .lock()
+        .expect("lock poisoned")
+        .iter()
+        .map(|u| u.row_id.as_u64())
+        .collect();
+    if let Some(j) = state.journal.as_ref() {
+        for id in &ids {
+            if let Err(e) = j.delete_job(copythat_journal::JobRowId(*id)) {
+                errors.push(format!("row {id}: {e}"));
+            }
+        }
+    }
+    state
+        .startup_unfinished
+        .lock()
+        .expect("lock poisoned")
+        .clear();
+    errors
+}

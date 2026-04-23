@@ -30,6 +30,10 @@ copythat-settings = { path = "../../../crates/copythat-settings", version = "1" 
 # wired into `CopyOptions::snapshot_hook` when the user opts into the
 # "Use snapshot" locked-file policy.
 copythat-snapshot = { path = "../../../crates/copythat-snapshot", version = "1" }
+# Phase 20 — durable resume journal. Opened at app start; the runner
+# attaches a per-job CopyThatJournalSink to every CopyOptions so a
+# crash mid-copy can resume from the last 50 ms checkpoint.
+copythat-journal = { path = "../../../crates/copythat-journal", version = "1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon"] }

@@ -52,6 +52,7 @@ workloads.
 - **Clipboard watcher** (opt-in) — surfaces a toast when file URLs land on the OS clipboard, hinting the paste hotkey is ready. Polls every 500 ms while enabled; silent when off.
 - **Secure delete** — single-pass zero / random, DoD 3-pass, DoD 7-pass, Gutmann 35-pass, NIST 800-88. SSD-aware (skips multi-pass overwrites on SSDs by default — use TRIM instead).
 - **Read-through-snapshot for locked files** — when another process holds the source open for exclusive write, Copy That can pull a read-only filesystem snapshot (VSS on Windows, ZFS / Btrfs on Linux, APFS local snapshot on macOS) and copy from there instead of surfacing the "file in use" error. Opt-in via Settings → Transfer → "When a file is locked". The Windows path spawns a sibling `copythat-helper-vss.exe` via UAC so the main app never needs elevation of its own.
+- **Crash / reboot resume** — every 50 ms the copy engine fsync's the destination and writes a checkpoint to a redb-backed journal at `<data-dir>/copythat-journal.redb` (carrying the running BLAKE3 of consumed source bytes). On the next launch Copy That detects unfinished jobs, BLAKE3-verifies the partial destination's prefix, and seeks both source and destination past the verified offset — power-cut at 96 % of a 2 TB transfer no longer means starting over. Toggle "Auto-resume interrupted jobs without prompting" in Settings → General to skip the resume modal.
 
 ### Internationalisation
 

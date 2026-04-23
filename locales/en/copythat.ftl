@@ -483,3 +483,14 @@ snapshot-source-active = 📷 Reading from { $kind } snapshot of { $volume }
 snapshot-create-failed = Could not create a snapshot of the source volume
 snapshot-vss-needs-elevation = Reading from a VSS snapshot requires Administrator permission. Copy That will ask you to allow it.
 snapshot-cleanup-failed = The snapshot helper reported a cleanup failure — a leftover shadow copy may remain on the volume.
+
+# Phase 20 — durable resume journal.
+resume-prompt-title = Resume previous transfers?
+resume-prompt-body = Copy That detected { $count } unfinished transfer(s) from a previous session. Choose what to do with each.
+resume-prompt-resume = Resume
+resume-prompt-resume-all = Resume all
+resume-discard-one = Don't resume
+resume-discard-all = Discard all
+resume-aborted-hash-mismatch = The destination's first { $offset } bytes don't match the source — restarting from the beginning.
+settings-auto-resume = Auto-resume interrupted jobs without prompting
+settings-auto-resume-hint = Skip the resume prompt at startup and silently re-enqueue every unfinished job. Off by default.

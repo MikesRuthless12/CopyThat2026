@@ -126,6 +126,41 @@ pub(crate) async fn run_job(job: RunJob) {
     let mut copy_opts_with_verify = copy_opts;
     copy_opts_with_verify.verify = verifier;
 
+    // Phase 20 — wire a per-job journal sink onto the CopyOptions
+    // so the engine checkpoints into the redb-backed journal every
+    // 50 ms. The runner allocates the JobRowId once per queued job;
+    // single-file copies use file_idx=0, tree copies advance through
+    // a shared atomic so each per-file copy_file invocation gets a
+    // monotonic index. Failure to begin the journal entry is non-
+    // fatal — the copy still runs, just without resume on the next
+    // launch.
+    let journal_row = state.journal.as_ref().and_then(|j| {
+        let kind_wire = match kind {
+            JobKind::Copy => "copy",
+            JobKind::Move => "move",
+            JobKind::Delete => "delete",
+            JobKind::SecureDelete => "secure-delete",
+            JobKind::Verify => "verify",
+        };
+        let rec = copythat_journal::JobRecord::new(kind_wire, src.clone(), dst.clone());
+        match j.begin_job(rec) {
+            Ok(row) => Some(row),
+            Err(e) => {
+                eprintln!("[run_job] journal begin_job failed: {e}");
+                None
+            }
+        }
+    });
+    if let (Some(j), Some(row)) = (state.journal.as_ref(), journal_row) {
+        copy_opts_with_verify.journal = Some(std::sync::Arc::new(
+            copythat_journal::CopyThatJournalSink::new(j.clone(), row),
+        ));
+    }
+    // Clone the trait-object handle so we can call the per-job
+    // terminator (`finish_job_*`) after the engine returns; the
+    // engine itself only ever calls per-file methods.
+    let journal_sink_for_terminator = copy_opts_with_verify.journal.clone();
+
     let result: Result<(), CopyError> = match kind {
         JobKind::Copy => {
             let Some(dst_path) = dst.clone() else {
@@ -251,6 +286,18 @@ pub(crate) async fn run_job(job: RunJob) {
         Err(err) if err.is_cancelled() => "cancelled",
         Err(_) => "failed",
     };
+
+    // Phase 20 — terminal journal call. The engine's per-file
+    // `finish_file` already captured each file's BLAKE3; this
+    // promotes the job-level row to a terminal status so it stops
+    // showing up in `unfinished()` on the next launch.
+    if let Some(sink) = journal_sink_for_terminator.as_ref() {
+        match terminal_status {
+            "succeeded" => sink.finish_job_succeeded(),
+            "cancelled" => sink.finish_job_cancelled(),
+            _ => sink.finish_job_failed(),
+        }
+    }
 
     match result {
         Ok(()) => {

@@ -532,6 +532,8 @@ pub struct GeneralDto {
     /// Tauri `global-shortcut` combo string (e.g. `"CmdOrCtrl+Shift+V"`).
     pub paste_shortcut: String,
     pub clipboard_watcher_enabled: bool,
+    /// Phase 20 — silent re-enqueue of unfinished jobs at startup.
+    pub auto_resume_interrupted: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -657,6 +659,32 @@ pub struct ScanDto {
     pub max_scans_to_keep: u32,
 }
 
+/// Phase 20 — one row of the resume modal. Mirrors
+/// `copythat_journal::UnfinishedJob` with camelCase field naming
+/// and string-formatted paths so the Svelte frontend can render
+/// without Rust → JSON glue at every property access.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingResumeDto {
+    pub row_id: u64,
+    /// `"copy" | "move" | "delete" | "secure-delete" | "verify"`.
+    pub kind: String,
+    pub src_root: String,
+    /// `null` for delete/shred jobs.
+    pub dst_root: Option<String>,
+    /// `"running" | "paused"` (terminal statuses are excluded by
+    /// `Journal::unfinished`).
+    pub status: String,
+    pub started_at_ms: i64,
+    pub bytes_done: u64,
+    pub bytes_total: u64,
+    pub files_done: u64,
+    pub files_total: u64,
+    /// Wall-clock millis of the latest per-file checkpoint, or `0`
+    /// when no checkpoint landed (e.g. the engine died sub-50 ms).
+    pub last_checkpoint_at_ms: i64,
+}
+
 /// Phase 19b — `snapshot-created` payload. Emitted when the engine
 /// falls through to a filesystem snapshot because the live source was
 /// locked. The frontend renders a "📷 Reading from <kind> snapshot"
@@ -756,6 +784,7 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 paste_shortcut_enabled: s.general.paste_shortcut_enabled,
                 paste_shortcut: s.general.paste_shortcut.clone(),
                 clipboard_watcher_enabled: s.general.clipboard_watcher_enabled,
+                auto_resume_interrupted: s.general.auto_resume_interrupted,
             },
             transfer: TransferDto {
                 buffer_size_bytes: s.transfer.buffer_size_bytes as u64,
@@ -867,6 +896,7 @@ impl SettingsDto {
             combo.to_string()
         };
         s.general.clipboard_watcher_enabled = self.general.clipboard_watcher_enabled;
+        s.general.auto_resume_interrupted = self.general.auto_resume_interrupted;
 
         s.transfer.buffer_size_bytes = self.transfer.buffer_size_bytes as usize;
         s.transfer.verify = parse_verify(&self.transfer.verify);

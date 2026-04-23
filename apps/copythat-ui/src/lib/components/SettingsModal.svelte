@@ -506,6 +506,16 @@
                 <span class="label">{t("settings-clipboard-watcher")}</span>
               </label>
               <p class="hint">{t("settings-clipboard-watcher-hint")}</p>
+
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.general.autoResumeInterrupted}
+                  onchange={pushSettings}
+                />
+                <span class="label">{t("settings-auto-resume")}</span>
+              </label>
+              <p class="hint">{t("settings-auto-resume-hint")}</p>
             {:else if activeTab === "transfer"}
               <label class="row">
                 <span class="label">{t("settings-buffer-size")}</span>
