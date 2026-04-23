@@ -933,3 +933,20 @@ chunk-store-max-size = Максимальный размер хранилища 
 chunk-store-prune = Удалять фрагменты старше (дней)  # MT
 chunk-store-savings = Сэкономлено { $gib } ГиБ благодаря дедупликации фрагментов  # MT
 chunk-store-disk-usage = Используется { $size } в { $chunks } фрагментах  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Drop Stack  # MT
+dropstack-tray-open = Drop Stack  # MT
+dropstack-empty-title = Drop Stack пуст  # MT
+dropstack-empty-hint = Перетащите файлы сюда из Проводника или щелкните правой кнопкой мыши по строке задания, чтобы добавить её.  # MT
+dropstack-add-to-stack = Добавить в Drop Stack  # MT
+dropstack-copy-all-to = Скопировать всё в…  # MT
+dropstack-move-all-to = Переместить всё в…  # MT
+dropstack-clear = Очистить стек  # MT
+dropstack-remove-row = Удалить из стека  # MT
+dropstack-path-missing-toast = { $path } удалён — файл больше не существует.  # MT
+dropstack-always-on-top = Всегда держать Drop Stack поверх других окон  # MT
+dropstack-show-tray-icon = Показывать значок Copy That в области уведомлений  # MT
+dropstack-open-on-start = Открывать Drop Stack автоматически при запуске приложения  # MT
+dropstack-count = { $count } путь  # MT

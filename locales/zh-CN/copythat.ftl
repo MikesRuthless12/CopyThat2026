@@ -933,3 +933,20 @@ chunk-store-max-size = 最大分块存储大小  # MT
 chunk-store-prune = 清除早于 (天) 的分块  # MT
 chunk-store-savings = 通过分块去重节省了 { $gib } GiB  # MT
 chunk-store-disk-usage = 在 { $chunks } 个分块中使用 { $size }  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = 拖放堆栈  # MT
+dropstack-tray-open = 拖放堆栈  # MT
+dropstack-empty-title = 拖放堆栈为空  # MT
+dropstack-empty-hint = 从资源管理器拖动文件到此处,或右键单击作业行以添加。  # MT
+dropstack-add-to-stack = 添加到拖放堆栈  # MT
+dropstack-copy-all-to = 全部复制到…  # MT
+dropstack-move-all-to = 全部移动到…  # MT
+dropstack-clear = 清空堆栈  # MT
+dropstack-remove-row = 从堆栈移除  # MT
+dropstack-path-missing-toast = 已移除 { $path } — 文件不再存在。  # MT
+dropstack-always-on-top = 拖放堆栈始终置顶  # MT
+dropstack-show-tray-icon = 显示 Copy That 托盘图标  # MT
+dropstack-open-on-start = 应用启动时自动打开拖放堆栈  # MT
+dropstack-count = { $count } 路径  # MT

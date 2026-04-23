@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capabilities granted to the main window by default.",
-  "windows": ["main"],
+  "windows": ["main", "dropstack"],
   "permissions": ["core:default", "dialog:default", "updater:default"]
 }

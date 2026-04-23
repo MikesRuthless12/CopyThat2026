@@ -933,3 +933,20 @@ chunk-store-max-size = 청크 저장소 최대 크기  # MT
 chunk-store-prune = 다음 일수보다 오래된 청크 정리 (일)  # MT
 chunk-store-savings = 청크 중복 제거를 통해 { $gib } GiB 절약됨  # MT
 chunk-store-disk-usage = { $chunks }개 청크에 { $size } 사용 중  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = 드롭 스택  # MT
+dropstack-tray-open = 드롭 스택  # MT
+dropstack-empty-title = 드롭 스택이 비어 있습니다  # MT
+dropstack-empty-hint = 탐색기에서 파일을 여기로 끌거나 작업 행을 마우스 오른쪽 버튼으로 클릭하여 추가하세요.  # MT
+dropstack-add-to-stack = 드롭 스택에 추가  # MT
+dropstack-copy-all-to = 모두 복사…  # MT
+dropstack-move-all-to = 모두 이동…  # MT
+dropstack-clear = 스택 지우기  # MT
+dropstack-remove-row = 스택에서 제거  # MT
+dropstack-path-missing-toast = { $path }을(를) 제거했습니다 — 파일이 더 이상 존재하지 않습니다.  # MT
+dropstack-always-on-top = 드롭 스택을 항상 위에 유지  # MT
+dropstack-show-tray-icon = Copy That 트레이 아이콘 표시  # MT
+dropstack-open-on-start = 앱 시작 시 드롭 스택 자동 열기  # MT
+dropstack-count = { $count }개 경로  # MT

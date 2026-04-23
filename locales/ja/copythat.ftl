@@ -933,3 +933,20 @@ chunk-store-max-size = チャンクストアの最大サイズ  # MT
 chunk-store-prune = 以下の日数より古いチャンクを削除 (日)  # MT
 chunk-store-savings = チャンク重複排除により { $gib } GiB を節約  # MT
 chunk-store-disk-usage = { $chunks } 個のチャンクで { $size } を使用中  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = ドロップスタック  # MT
+dropstack-tray-open = ドロップスタック  # MT
+dropstack-empty-title = ドロップスタックは空です  # MT
+dropstack-empty-hint = エクスプローラーからファイルをここにドラッグするか、ジョブ行を右クリックして追加します。  # MT
+dropstack-add-to-stack = ドロップスタックに追加  # MT
+dropstack-copy-all-to = すべてをコピー…  # MT
+dropstack-move-all-to = すべてを移動…  # MT
+dropstack-clear = スタックをクリア  # MT
+dropstack-remove-row = スタックから削除  # MT
+dropstack-path-missing-toast = { $path } を削除しました — ファイルは存在しません。  # MT
+dropstack-always-on-top = ドロップスタックを常に最前面に表示  # MT
+dropstack-show-tray-icon = Copy That のトレイアイコンを表示  # MT
+dropstack-open-on-start = アプリ起動時にドロップスタックを自動的に開く  # MT
+dropstack-count = { $count } 個のパス  # MT
