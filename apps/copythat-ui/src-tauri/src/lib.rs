@@ -43,6 +43,7 @@ pub mod i18n;
 pub mod icon;
 pub mod ipc;
 pub mod live_mirror;
+pub mod power;
 pub mod reveal;
 pub mod runner;
 pub mod scan_commands;
@@ -316,6 +317,8 @@ pub fn run() {
             commands::list_directory,
             commands::list_roots,
             commands::drag_out_stage,
+            // Phase 31 — power-aware copying test-inject IPC.
+            power::inject_power_event,
         ])
         .setup(move |app| {
             // Phase 16 / 28 — tray icon + menu. Visible regardless
@@ -437,6 +440,20 @@ pub fn run() {
                         eprintln!("copythat: dropstack load failed: {e}");
                     }
                 }
+            }
+
+            // Phase 31 — power-aware copying. Spawn the probe poller
+            // (real battery + x86 thermal + stubs for the per-OS FFI
+            // probes that land in Phase 31b), then the subscriber
+            // task that maps PowerEvents into pause_all / resume_all
+            // / shape cap via the user's PowerPoliciesSettings.
+            if let Some(state) = app.handle().try_state::<AppState>() {
+                let app_state: AppState = state.inner().clone();
+                let probes = copythat_power::ProbeSet::production();
+                let _poller = app_state
+                    .power_bus
+                    .spawn_poller(probes, copythat_power::bus::DEFAULT_POLL_PERIOD);
+                let _subscriber = power::spawn_power_subscriber(app_state, app.handle().clone());
             }
 
             if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {

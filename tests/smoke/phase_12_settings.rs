@@ -102,6 +102,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
         drop_stack: copythat_settings::DropStackSettings::default(),
         dnd: copythat_settings::DndSettings::default(),
         path_translation: copythat_settings::PathTranslationSettings::default(),
+        power: copythat_settings::PowerPoliciesSettings::default(),
     };
 
     before.save_to(&path).expect("save_to");
@@ -171,6 +172,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
         drop_stack: copythat_settings::DropStackSettings::default(),
         dnd: copythat_settings::DndSettings::default(),
         path_translation: copythat_settings::PathTranslationSettings::default(),
+        power: copythat_settings::PowerPoliciesSettings::default(),
     };
     assert_eq!(after, expected);
 }

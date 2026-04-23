@@ -15,6 +15,7 @@ members = [
     "crates/copythat-sync",
     "crates/copythat-watch",
     "crates/copythat-chunk",
+    "crates/copythat-power",
     "xtask",
     "apps/copythat-ui/src-tauri",
 ]
