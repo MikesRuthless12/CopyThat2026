@@ -12,6 +12,7 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 
 use crate::error::CopyError;
+use crate::options::ErrorAction;
 
 /// A single event emitted on the `events` channel during a copy or
 /// move. Dropped sends are tolerated: if the receiver disappears the
@@ -68,6 +69,16 @@ pub enum CopyEvent {
         dst_hex: String,
     },
     // ---------- tree-level aggregates (Phase 2) ----------
+    //
+    // Phase 16: emit once the tree walk has started but *before*
+    // the walker has returned. Fires periodically with running
+    // totals so a whole-drive enumeration shows live progress
+    // instead of a silent several-minute wait. `TreeStarted` still
+    // fires afterwards with the final counts.
+    TreeEnumerating {
+        files_so_far: u64,
+        bytes_so_far: u64,
+    },
     TreeStarted {
         root_src: PathBuf,
         root_dst: PathBuf,
@@ -89,6 +100,55 @@ pub enum CopyEvent {
     },
     // ---------- collision (Phase 2) ----------
     Collision(Collision),
+    // ---------- error UX (Phase 8) ----------
+    /// A non-fatal per-file error inside a tree copy. Emitted when
+    /// `TreeOptions::on_error` is `Skip` or when `RetryN` exhausts
+    /// its attempts; the tree continues. The `errored` counter on
+    /// `TreeReport` ticks for each of these.
+    FileError {
+        err: CopyError,
+    },
+    /// Interactive error prompt. Emitted when `TreeOptions::on_error`
+    /// is `Ask`. Consumers reply on the enclosed oneshot with
+    /// `Retry` / `Skip` / `Abort`. If the channel drops without a
+    /// reply the engine treats it as `Skip` (mirrors the Collision
+    /// fallback).
+    ErrorPrompt(ErrorPrompt),
+    /// Phase 19b — the engine hit an `ERROR_SHARING_VIOLATION` /
+    /// `EBUSY` / `NSFileLockingError` reading `original`, the
+    /// `on_locked` policy was `Snapshot`, and the hook minted a
+    /// filesystem snapshot. The UI renders a "📷 Reading from <kind>
+    /// snapshot of <original_root>" badge on the active row until
+    /// the file finishes.
+    SnapshotCreated {
+        /// Wire string: `"vss"` / `"zfs"` / `"btrfs"` / `"apfs"`.
+        kind: &'static str,
+        /// The original live-source path the engine was trying to
+        /// open before it fell through to the snapshot.
+        original: PathBuf,
+        /// Root of the snapshot mount — e.g.
+        /// `\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy5` for VSS
+        /// or `/mnt/pool/.zfs/snapshot/<name>` for ZFS.
+        snap_mount: PathBuf,
+    },
+    /// Phase 20 — the engine asked the journal for a `ResumePlan`,
+    /// the journal said `Resume { offset, src_hash_at_offset }`, but
+    /// the prefix re-hash of the existing destination did not match.
+    /// Engine falls back to a full restart (truncate + rewrite from
+    /// byte 0); the UI surfaces the reason in a row toast so the
+    /// user knows why a "resumable" copy went all the way back.
+    ResumeAborted {
+        /// Stable wire string: `"prefix-hash-mismatch"` /
+        /// `"dst-shrunk"` / `"checkpoint-corrupt"`. New variants
+        /// land here as additional resume paths discover their own
+        /// abort modes.
+        reason: &'static str,
+        /// Best-effort offset where the mismatch was first observed.
+        /// `0` if the mismatch was outside a per-byte compare (e.g.
+        /// the dst length was already shorter than the journal
+        /// expected).
+        offset: u64,
+    },
 }
 
 impl Clone for CopyEvent {
@@ -160,6 +220,13 @@ impl Clone for CopyEvent {
                 src_hex: src_hex.clone(),
                 dst_hex: dst_hex.clone(),
             },
+            CopyEvent::TreeEnumerating {
+                files_so_far,
+                bytes_so_far,
+            } => CopyEvent::TreeEnumerating {
+                files_so_far: *files_so_far,
+                bytes_so_far: *bytes_so_far,
+            },
             CopyEvent::TreeStarted {
                 root_src,
                 root_dst,
@@ -198,6 +265,25 @@ impl Clone for CopyEvent {
             // Collision carries a oneshot sender; it can't be cloned.
             // Broadcast subscribers only see a placeholder.
             CopyEvent::Collision(_) => CopyEvent::Collision(Collision::placeholder_for_clone()),
+            CopyEvent::FileError { err } => CopyEvent::FileError { err: err.clone() },
+            // ErrorPrompt carries a oneshot sender; same pattern as
+            // Collision — broadcast subscribers see a placeholder.
+            CopyEvent::ErrorPrompt(_) => {
+                CopyEvent::ErrorPrompt(ErrorPrompt::placeholder_for_clone())
+            }
+            CopyEvent::SnapshotCreated {
+                kind,
+                original,
+                snap_mount,
+            } => CopyEvent::SnapshotCreated {
+                kind,
+                original: original.clone(),
+                snap_mount: snap_mount.clone(),
+            },
+            CopyEvent::ResumeAborted { reason, offset } => CopyEvent::ResumeAborted {
+                reason,
+                offset: *offset,
+            },
         }
     }
 }
@@ -223,6 +309,11 @@ pub struct TreeReport {
     pub rate_bps: u64,
     /// Files the caller asked us to skip (via collision policy).
     pub skipped: u64,
+    /// Files that failed their per-file copy and were recorded via
+    /// `FileError` (policy = `Skip` / exhausted `RetryN`). Zero when
+    /// `on_error` is `Abort` — that path bails before the counter
+    /// can tick.
+    pub errored: u64,
 }
 
 /// Destination-already-exists prompt. Consumers reply on the enclosed
@@ -279,4 +370,48 @@ pub enum CollisionResolution {
     Rename(String),
     /// Abort the whole tree operation.
     Abort,
+}
+
+/// Interactive error prompt (Phase 8). Emitted when
+/// `TreeOptions::on_error == Ask` and a per-file copy fails.
+/// Consumers reply on the `resolver` oneshot; dropping it without
+/// a reply is equivalent to `ErrorAction::Skip`.
+#[derive(Debug)]
+pub struct ErrorPrompt {
+    pub err: CopyError,
+    /// Reply channel. `None` only on cloned placeholders — broadcast
+    /// subscribers can't drive the engine forward.
+    pub resolver: Option<oneshot::Sender<ErrorAction>>,
+}
+
+impl ErrorPrompt {
+    pub(crate) fn new(err: CopyError, resolver: oneshot::Sender<ErrorAction>) -> Self {
+        Self {
+            err,
+            resolver: Some(resolver),
+        }
+    }
+
+    fn placeholder_for_clone() -> Self {
+        // A placeholder carries a zeroed error; consumers that see a
+        // cloned ErrorPrompt can't act on it anyway (no resolver).
+        Self {
+            err: CopyError {
+                kind: crate::error::CopyErrorKind::IoOther,
+                src: PathBuf::new(),
+                dst: PathBuf::new(),
+                raw_os_error: None,
+                message: String::new(),
+            },
+            resolver: None,
+        }
+    }
+
+    /// Resolve the prompt. Consumes the oneshot. No-op on a cloned
+    /// placeholder.
+    pub fn resolve(mut self, action: ErrorAction) {
+        if let Some(tx) = self.resolver.take() {
+            let _ = tx.send(action);
+        }
+    }
 }

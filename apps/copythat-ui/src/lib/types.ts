@@ -87,12 +87,28 @@ export interface FileIconDto {
   extension: string | null;
 }
 
+export type CollisionPolicyWire =
+  | "skip"
+  | "overwrite"
+  | "overwrite-if-newer"
+  | "keep-both"
+  | "prompt";
+
+export type ErrorPolicyDto =
+  | { kind: "ask" }
+  | { kind: "skip" }
+  | { kind: "abort" }
+  | { kind: "retryN"; maxAttempts: number; backoffMs: number };
+
 export interface CopyOptionsDto {
   verify?: string;
   preserveTimes?: boolean;
   preservePermissions?: boolean;
   fsyncOnClose?: boolean;
   followSymlinks?: boolean;
+  // Phase 8
+  onError?: ErrorPolicyDto;
+  collision?: CollisionPolicyWire;
 }
 
 export const EVENTS = {
@@ -107,7 +123,97 @@ export const EVENTS = {
   jobRemoved: "job-removed",
   globalsTick: "globals-tick",
   dropReceived: "drop-received",
+  shellEnqueue: "shell-enqueue",
+  // Phase 8
+  errorRaised: "error-raised",
+  errorResolved: "error-resolved",
+  collisionRaised: "collision-raised",
+  collisionResolved: "collision-resolved",
+  // Phase 13d
+  fileActivity: "file-activity",
+  // Post-Phase-12 paste hotkey + clipboard watcher
+  clipboardFilesDetected: "clipboard-files-detected",
 } as const;
+
+export type FileActivityPhase =
+  | "start"
+  | "progress"
+  | "done"
+  | "error"
+  | "dir";
+
+export interface FileActivityDto {
+  jobId: number;
+  seq: number;
+  phase: FileActivityPhase;
+  src: string;
+  dst: string;
+  bytesDone: number;
+  bytesTotal: number;
+  isDir: boolean;
+  message: string | null;
+}
+
+// Phase 8 DTOs
+export type ErrorKind =
+  | "not-found"
+  | "permission-denied"
+  | "disk-full"
+  | "interrupted"
+  | "verify-failed"
+  | "io-other";
+
+export type ErrorAction = "retry" | "skip" | "abort";
+
+export type CollisionAction = "skip" | "overwrite" | "rename" | "abort";
+
+export interface ErrorPromptDto {
+  id: number;
+  jobId: number;
+  src: string;
+  dst: string;
+  kind: ErrorKind;
+  localizedKey: string;
+  message: string;
+  rawOsError: number | null;
+  createdAtMs: number;
+}
+
+export interface CollisionPromptDto {
+  id: number;
+  jobId: number;
+  src: string;
+  dst: string;
+  srcSize: number | null;
+  srcModifiedMs: number | null;
+  dstSize: number | null;
+  dstModifiedMs: number | null;
+}
+
+export interface ErrorResolvedDto {
+  id: number;
+  jobId: number;
+  action: ErrorAction;
+}
+
+export interface CollisionResolvedDto {
+  id: number;
+  jobId: number;
+  resolution: CollisionAction;
+}
+
+export interface LoggedErrorDto {
+  id: number;
+  jobId: number;
+  timestampMs: number;
+  src: string;
+  dst: string;
+  kind: ErrorKind;
+  localizedKey: string;
+  message: string;
+  rawOsError: number | null;
+  resolution: "retry" | "skip" | "abort" | "auto-skip" | null;
+}
 
 export type ToastKind = "info" | "success" | "error";
 
@@ -132,4 +238,245 @@ export interface ContextMenuItem {
   tone?: "default" | "danger";
   disabled?: boolean;
   onClick: () => void;
+}
+
+// Phase 9 — History DTOs (mirror the Rust `HistoryJobDto`,
+// `HistoryItemDto`, `HistoryFilterDto` in `src-tauri/src/ipc.rs`).
+
+export interface HistoryJobDto {
+  rowId: number;
+  kind: string;
+  status: "running" | "succeeded" | "failed" | "cancelled" | string;
+  startedAtMs: number;
+  finishedAtMs: number | null;
+  srcRoot: string;
+  dstRoot: string;
+  totalBytes: number;
+  filesOk: number;
+  filesFailed: number;
+  verifyAlgo: string | null;
+  optionsJson: string | null;
+}
+
+export interface HistoryItemDto {
+  jobRowId: number;
+  src: string;
+  dst: string;
+  size: number;
+  status: "ok" | "failed" | "skipped" | "cancelled" | string;
+  hashHex: string | null;
+  errorCode: string | null;
+  errorMsg: string | null;
+  timestampMs: number;
+}
+
+export interface HistoryFilterDto {
+  startedSinceMs?: number;
+  startedUntilMs?: number;
+  kind?: string;
+  status?: string;
+  text?: string;
+  limit?: number;
+}
+
+// Phase 10 — lifetime aggregates (mirror the Rust `TotalsDto`,
+// `KindBreakdownDto`, `DayTotalDto`).
+
+export interface KindBreakdownDto {
+  kind: string;
+  bytes: number;
+  files: number;
+  jobs: number;
+}
+
+export interface TotalsDto {
+  bytes: number;
+  files: number;
+  jobs: number;
+  errors: number;
+  durationMs: number;
+  byKind: KindBreakdownDto[];
+}
+
+export interface DayTotalDto {
+  dateMs: number;
+  bytes: number;
+  files: number;
+  jobs: number;
+}
+
+// Phase 12 — Settings DTOs. Mirror the Rust `SettingsDto` at
+// apps/copythat-ui/src-tauri/src/ipc.rs. Enum-shaped fields are
+// kebab-case lowercase strings on the wire; the UI formats them.
+
+export type ErrorDisplayModeWire = "modal" | "drawer";
+
+export interface GeneralSettingsDto {
+  language: string;
+  theme: "auto" | "light" | "dark";
+  startWithOs: boolean;
+  singleInstance: boolean;
+  minimizeToTray: boolean;
+  errorDisplayMode: ErrorDisplayModeWire;
+  pasteShortcutEnabled: boolean;
+  /** Tauri global-shortcut combo (e.g. "CmdOrCtrl+Shift+V"). */
+  pasteShortcut: string;
+  clipboardWatcherEnabled: boolean;
+  /** Phase 20 — silent re-enqueue of unfinished jobs at startup. */
+  autoResumeInterrupted: boolean;
+}
+
+/** Phase-post-12 — fired when the clipboard watcher sees new files land
+ *  on the OS clipboard. The UI surfaces a toast hint; the user can then
+ *  press the configured paste shortcut to open the staging dialog. */
+export interface ClipboardFilesDetectedDto {
+  paths: string[];
+  count: number;
+  shortcut: string;
+}
+
+export type VerifyChoiceWire =
+  | "off"
+  | "crc32"
+  | "md5"
+  | "sha1"
+  | "sha256"
+  | "sha512"
+  | "xxhash3-64"
+  | "xxhash3-128"
+  | "blake3";
+
+export type ReflinkWire = "prefer" | "avoid" | "disabled";
+
+/**
+ * Phase 19b — wire value for the "When a file is locked" setting.
+ * Mirrors `copythat_core::LockedFilePolicy`.
+ */
+export type LockedFilePolicyWire = "ask" | "retry" | "skip" | "snapshot";
+
+/**
+ * Phase 20 — one row of the resume modal. Mirrors
+ * `crate::ipc::PendingResumeDto`.
+ */
+export interface PendingResumeDto {
+  rowId: number;
+  /** "copy" | "move" | "delete" | "secure-delete" | "verify" */
+  kind: string;
+  srcRoot: string;
+  dstRoot: string | null;
+  /** "running" | "paused" — terminal statuses are filtered out */
+  status: string;
+  startedAtMs: number;
+  bytesDone: number;
+  bytesTotal: number;
+  filesDone: number;
+  filesTotal: number;
+  lastCheckpointAtMs: number;
+}
+
+export interface TransferSettingsDto {
+  bufferSizeBytes: number;
+  verify: VerifyChoiceWire;
+  /// "auto" or "manual-N" for 1..=16
+  concurrency: string;
+  reflink: ReflinkWire;
+  fsyncOnClose: boolean;
+  preserveTimestamps: boolean;
+  preservePermissions: boolean;
+  preserveAcls: boolean;
+  /// Phase 19b — filesystem-snapshot fallback for locked sources.
+  onLocked: LockedFilePolicyWire;
+}
+
+export interface ShellSettingsDto {
+  contextMenuEnabled: boolean;
+  interceptDefaultCopy: boolean;
+  notifyOnCompletion: boolean;
+}
+
+export type ShredMethodWire =
+  | "zero"
+  | "random"
+  | "dod-3-pass"
+  | "dod-7-pass"
+  | "gutmann"
+  | "nist-800-88";
+
+export interface SecureDeleteSettingsDto {
+  method: ShredMethodWire;
+  confirmTwice: boolean;
+}
+
+export type LogLevelWire =
+  | "off"
+  | "trace"
+  | "debug"
+  | "info"
+  | "warn"
+  | "error";
+
+export type ErrorPolicyDtoV2 =
+  | { kind: "ask" }
+  | { kind: "skip" }
+  | { kind: "abort" }
+  | { kind: "retryN"; maxAttempts: number; backoffMs: number };
+
+export interface AdvancedSettingsDto {
+  logLevel: LogLevelWire;
+  telemetry: boolean;
+  errorPolicy: ErrorPolicyDtoV2;
+  historyRetentionDays: number;
+  databasePath: string | null;
+}
+
+/** Phase 14a — enumeration-time filters. Sizes are byte counts;
+ *  dates are signed Unix epoch seconds so pre-1970 mtimes don't wrap.
+ *  `null` on a bound means "unbounded on that end". */
+export interface FiltersDto {
+  enabled: boolean;
+  includeGlobs: string[];
+  excludeGlobs: string[];
+  minSizeBytes: number | null;
+  maxSizeBytes: number | null;
+  minMtimeUnixSecs: number | null;
+  maxMtimeUnixSecs: number | null;
+  skipHidden: boolean;
+  skipSystem: boolean;
+  skipReadonly: boolean;
+}
+
+/** Phase 15 — auto-update channel + throttle state. */
+export type UpdateChannelWire = "stable" | "beta";
+
+export interface UpdaterSettingsDto {
+  autoCheck: boolean;
+  channel: UpdateChannelWire;
+  lastCheckUnixSecs: number;
+  dismissedVersion: string;
+  checkIntervalSecs: number;
+}
+
+export interface SettingsDto {
+  general: GeneralSettingsDto;
+  transfer: TransferSettingsDto;
+  shell: ShellSettingsDto;
+  secureDelete: SecureDeleteSettingsDto;
+  advanced: AdvancedSettingsDto;
+  filters: FiltersDto;
+  updater: UpdaterSettingsDto;
+}
+
+/** Phase 15 — return shape of `updater_check_now`. */
+export interface UpdateCheckDto {
+  availableVersion: string;
+  notes: string;
+  pubDate: string;
+  isNewer: boolean;
+  checkedAtUnixSecs: number;
+  skippedByThrottle: boolean;
+}
+
+export interface ProfileInfoDto {
+  name: string;
+  path: string;
 }

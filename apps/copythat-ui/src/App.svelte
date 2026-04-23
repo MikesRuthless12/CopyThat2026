@@ -14,14 +14,25 @@
   import Footer from "./lib/components/Footer.svelte";
   import ProgressBar from "./lib/components/ProgressBar.svelte";
   import JobList from "./lib/components/JobList.svelte";
+  import FileActivityList from "./lib/components/FileActivityList.svelte";
   import ContextMenu from "./lib/components/ContextMenu.svelte";
   import DetailsDrawer from "./lib/components/DetailsDrawer.svelte";
   import DropStagingDialog from "./lib/components/DropStagingDialog.svelte";
+  import ErrorModal from "./lib/components/ErrorModal.svelte";
+  import ErrorPromptDrawer from "./lib/components/ErrorPromptDrawer.svelte";
+  import CollisionModal from "./lib/components/CollisionModal.svelte";
+  import ErrorLogDrawer from "./lib/components/ErrorLogDrawer.svelte";
+  import HistoryDrawer from "./lib/components/HistoryDrawer.svelte";
+  import TotalsDrawer from "./lib/components/TotalsDrawer.svelte";
+  import SettingsModal from "./lib/components/SettingsModal.svelte";
+  import ResumePromptModal from "./lib/components/ResumePromptModal.svelte";
   import Toast from "./lib/components/Toast.svelte";
+
+  import { invoke } from "@tauri-apps/api/core";
 
   import { initI18n, t } from "./lib/i18n";
   import { initTheme } from "./lib/theme";
-  import { dropped, initStores, jobs } from "./lib/stores";
+  import { dropped, errorDisplayMode, initStores, jobs } from "./lib/stores";
   import {
     cancelJob,
     pauseJob,
@@ -29,13 +40,19 @@
     resumeJob,
     revealInFolder,
   } from "./lib/ipc";
-  import type { ContextMenuItem, JobDto } from "./lib/types";
+  import type { ContextMenuItem, JobDto, PendingResumeDto, SettingsDto } from "./lib/types";
 
   let selectedId: number | null = $state(null);
   let detailsJob: JobDto | null = $state(null);
   let contextMenu:
     | { job: JobDto; x: number; y: number; items: ContextMenuItem[] }
     | null = $state(null);
+
+  // Phase 20 — boot-time resume prompt state. `null` until the
+  // initial `pending_resumes()` IPC returns; an empty array means
+  // "no work to resume" and the modal stays hidden.
+  let pendingResumes: PendingResumeDto[] = $state([]);
+  let autoResume: boolean = $state(false);
 
   let storesCleanup: (() => void) | null = null;
   let themeCleanup: (() => void) | null = null;
@@ -44,6 +61,17 @@
     themeCleanup = initTheme();
     await initI18n();
     storesCleanup = await initStores();
+    // Phase 20 — fetch the pending-resume list once at mount. The
+    // Rust side populated `AppState::startup_unfinished` from the
+    // journal during `lib.rs::run`. Failure surfaces an empty list
+    // (the journal opens are best-effort).
+    try {
+      pendingResumes = await invoke<PendingResumeDto[]>("pending_resumes");
+      const settings = await invoke<SettingsDto>("get_settings");
+      autoResume = settings.general.autoResumeInterrupted;
+    } catch (err) {
+      console.error("[pending_resumes]", err);
+    }
   });
 
   onDestroy(() => {
@@ -122,7 +150,6 @@
 
 <main class="app" aria-label={t("window-title")}>
   <Header />
-  <ProgressBar />
   <JobList
     {selectedId}
     onSelect={(id) => {
@@ -133,6 +160,13 @@
       detailsJob = job;
     }}
   />
+  <!-- Phase 13d: collapsible per-file live feed with icons +
+       per-row progress. Sits between the job list and the
+       aggregate bar so it doesn't cover the global controls. -->
+  <FileActivityList />
+  <!-- Thin aggregate bar across the bottom (TeraCopy-style),
+       sitting directly above the Footer counters. -->
+  <ProgressBar />
   <Footer />
 
   {#if detailsJob}
@@ -156,6 +190,32 @@
   {#if $dropped.length > 0}
     <DropStagingDialog paths={$dropped} />
   {/if}
+
+  <!-- Phase 8: error prompt (modal or drawer, user-configurable),
+       collision modal, + historical error-log drawer. -->
+  {#if $errorDisplayMode === "drawer"}
+    <ErrorPromptDrawer />
+  {:else}
+    <ErrorModal />
+  {/if}
+  <CollisionModal />
+  <ErrorLogDrawer />
+
+  <!-- Phase 9: SQLite history drawer -->
+  <HistoryDrawer />
+
+  <!-- Phase 10: lifetime totals drawer -->
+  <TotalsDrawer />
+
+  <!-- Phase 11b: Settings modal (Phase 12 extends with more tabs) -->
+  <SettingsModal />
+
+  <!-- Phase 20: resume prompt for unfinished jobs from a prior crash -->
+  <ResumePromptModal
+    rows={pendingResumes}
+    {autoResume}
+    onClose={() => (pendingResumes = [])}
+  />
 
   <Toast />
 </main>

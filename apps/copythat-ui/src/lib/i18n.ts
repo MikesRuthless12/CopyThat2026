@@ -29,10 +29,21 @@ const initial: LocaleState = {
 
 const store = writable<LocaleState>(initial);
 
+/// Monotonic counter bumped on every `initI18n` / `setLocale`. Bound
+/// by components to a `data-locale` attribute so static `t(...)`
+/// calls in their templates re-evaluate when the translation table
+/// hydrates (on first load, `store.code` stays `"en"` but the table
+/// goes from `{}` to populated — binding to `.code` would miss that
+/// transition because Svelte compares by value).
+const versionStore = writable<number>(0);
+
 /// Read-only view used by components; `t()` reads directly from the
 /// store under the hood so components can bind to it reactively by
 /// subscribing or by re-invoking `t("key")` inside a reactive block.
 export const locale: Readable<LocaleState> = { subscribe: store.subscribe };
+export const i18nVersion: Readable<number> = {
+  subscribe: versionStore.subscribe,
+};
 
 /// Determine and load the user's preferred locale. Order of sources:
 ///   1. `navigator.language` (webview-advertised system locale)
@@ -55,6 +66,7 @@ export async function initI18n(): Promise<LocaleState> {
     available,
   };
   store.set(state);
+  versionStore.update((n) => n + 1);
   applyHtmlAttributes(state);
   return state;
 }
@@ -76,6 +88,7 @@ export async function setLocale(code: string): Promise<void> {
     available: current.available,
   };
   store.set(state);
+  versionStore.update((n) => n + 1);
   applyHtmlAttributes(state);
 }
 

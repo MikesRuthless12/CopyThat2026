@@ -1,0 +1,28 @@
+# Maintainer: Copy That Contributors <https://github.com/MikesRuthless12/CopyThat2026>
+#
+# AUR binary package that installs the .deb-converted Copy That v1.0.0
+# on Arch-family distributions. Free to publish to aur.archlinux.org.
+# The `sha256sums` array is a placeholder; the release helper rewrites
+# it from the freshly-built .deb at publish time.
+pkgname=copythat-bin
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Byte-exact cross-platform file copier (Rust + Tauri 2)"
+arch=('x86_64')
+url="https://github.com/MikesRuthless12/CopyThat2026"
+license=('custom')
+depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator')
+makedepends=('binutils' 'tar')
+provides=('copythat')
+conflicts=('copythat')
+source=("${pkgname}-${pkgver}.deb::https://github.com/MikesRuthless12/CopyThat2026/releases/download/v${pkgver}/copythat-ui_${pkgver}_amd64.deb")
+sha256sums=('SKIP')
+
+package() {
+    # Extract the deb in-place; bsdtar can read ar archives directly.
+    bsdtar -xf "${pkgname}-${pkgver}.deb" -C "${srcdir}"
+    bsdtar -xf "${srcdir}/data.tar."* -C "${pkgdir}"
+    # Ship the upstream LICENSE under the conventional Arch path.
+    install -Dm644 "${pkgdir}/usr/share/doc/copythat-ui/LICENSE" \
+        "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE" 2>/dev/null || true
+}

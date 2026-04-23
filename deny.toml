@@ -48,6 +48,13 @@ allow = [
     "Zlib",
     "MPL-2.0",            # file-scope copyleft only — acceptable for shipping
                           # a closed-source app that does not modify MPL files.
+    "CDLA-Permissive-2.0", # Community Data License Agreement — Permissive 2.0.
+                          # Linux-Foundation-authored, ODI-conformant permissive
+                          # data license used by some data-carrying crates (e.g.
+                          # `webpki-roots` / TLS root trust bundles pulled in
+                          # transitively through Tauri's HTTP stack). Allows
+                          # redistribution, modification, and closed-source
+                          # use. https://cdla.dev/permissive-2-0/
 ]
 
 # Per-crate exceptions — none for Phase 0; add here only with documented reason.

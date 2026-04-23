@@ -1,6 +1,6 @@
 [package]
 name = "copythat-platform"
-description = "OS-specific fast paths (CopyFileExW / copyfile / copy_file_range / reflink) and shell hooks for Copy That 2026."
+description = "OS-specific fast paths (CopyFileExW / copyfile / copy_file_range / reflink) and shell hooks for Copy That v1.0.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -26,7 +26,7 @@ default = []
 slow-tests = []
 
 [dependencies]
-copythat-core = { path = "../copythat-core", version = "0.1" }
+copythat-core = { path = "../copythat-core", version = "1" }
 reflink-copy = "0.1"
 thiserror = "2"
 tokio = { version = "1", features = [
