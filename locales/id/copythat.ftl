@@ -922,3 +922,14 @@ live-mirror-watching = Mengawasi  # MT
 live-mirror-toggle-hint = Sinkronisasi ulang secara otomatis pada setiap perubahan sistem berkas yang terdeteksi. Satu thread latar per pasangan aktif.  # MT
 watch-event-prefix = Perubahan berkas  # MT
 watch-overflow-recovered = Buffer pengawas meluap; mengenumerasi ulang untuk memulihkan  # MT
+
+# Phase 27 — content-defined chunk store. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+chunk-store-section = Penyimpanan chunk  # MT
+chunk-store-enable = Aktifkan penyimpanan chunk (delta-resume dan deduplikasi)  # MT
+chunk-store-enable-hint = Membagi setiap berkas yang disalin berdasarkan konten (FastCDC) dan menyimpan chunk dengan pengalamatan konten. Percobaan ulang hanya menulis ulang chunk yang berubah; berkas dengan konten bersama diduplikasi secara otomatis.  # MT
+chunk-store-location = Lokasi penyimpanan chunk  # MT
+chunk-store-max-size = Ukuran maksimum penyimpanan chunk  # MT
+chunk-store-prune = Pangkas chunk yang lebih lama dari (hari)  # MT
+chunk-store-savings = Hemat { $gib } GiB melalui deduplikasi chunk  # MT
+chunk-store-disk-usage = Menggunakan { $size } dalam { $chunks } chunk  # MT

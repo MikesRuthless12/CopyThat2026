@@ -922,3 +922,14 @@ live-mirror-watching = Kijken  # MT
 live-mirror-toggle-hint = Synchroniseer automatisch opnieuw bij elke gedetecteerde wijziging in het bestandssysteem. Eén achtergrondthread per actief paar.  # MT
 watch-event-prefix = Bestandswijziging  # MT
 watch-overflow-recovered = Buffer van waarnemer liep over; opnieuw opsommen om te herstellen  # MT
+
+# Phase 27 — content-defined chunk store. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+chunk-store-section = Chunk-opslag  # MT
+chunk-store-enable = Chunk-opslag inschakelen (delta-hervatting en deduplicatie)  # MT
+chunk-store-enable-hint = Splitst elk gekopieerd bestand op inhoud (FastCDC) en slaat chunks inhoudsgeadresseerd op. Herhalingen herschrijven alleen gewijzigde chunks; bestanden met gedeelde inhoud worden automatisch gededupliceerd.  # MT
+chunk-store-location = Locatie van chunk-opslag  # MT
+chunk-store-max-size = Maximale grootte van chunk-opslag  # MT
+chunk-store-prune = Chunks ouder dan (dagen) opruimen  # MT
+chunk-store-savings = { $gib } GiB bespaard via chunk-deduplicatie  # MT
+chunk-store-disk-usage = Gebruikt { $size } over { $chunks } chunks  # MT

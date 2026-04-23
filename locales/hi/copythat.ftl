@@ -922,3 +922,14 @@ live-mirror-watching = निगरानी  # MT
 live-mirror-toggle-hint = हर पहचाने गए फ़ाइल सिस्टम परिवर्तन पर स्वचालित रूप से पुनः-सिंक करें। प्रति सक्रिय जोड़ी एक पृष्ठभूमि थ्रेड।  # MT
 watch-event-prefix = फ़ाइल परिवर्तन  # MT
 watch-overflow-recovered = मॉनिटर बफ़र अतिप्रवाहित हुआ; पुनर्प्राप्ति के लिए पुनः-सूचीकरण  # MT
+
+# Phase 27 — content-defined chunk store. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+chunk-store-section = चंक स्टोर  # MT
+chunk-store-enable = चंक स्टोर सक्षम करें (डेल्टा-रिज़्यूम और डीडुप)  # MT
+chunk-store-enable-hint = प्रत्येक कॉपी की गई फ़ाइल को सामग्री के अनुसार विभाजित करता है (FastCDC) और चंक्स को सामग्री-एड्रेस्ड के रूप में संग्रहीत करता है। पुनः प्रयास केवल बदले गए चंक्स को फिर से लिखते हैं; साझा सामग्री वाली फ़ाइलें स्वचालित रूप से डीडुप हो जाती हैं।  # MT
+chunk-store-location = चंक स्टोर स्थान  # MT
+chunk-store-max-size = अधिकतम चंक स्टोर आकार  # MT
+chunk-store-prune = इस से पुराने चंक्स को हटाएं (दिन)  # MT
+chunk-store-savings = चंक डीडुप के माध्यम से { $gib } GiB बचाया गया  # MT
+chunk-store-disk-usage = { $chunks } चंक्स में { $size } का उपयोग  # MT

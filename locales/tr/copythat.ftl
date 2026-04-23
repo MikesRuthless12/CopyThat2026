@@ -922,3 +922,14 @@ live-mirror-watching = İzleniyor  # MT
 live-mirror-toggle-hint = Algılanan her dosya sistemi değişikliğinde otomatik olarak yeniden eşitleme. Etkin çift başına bir arka plan iş parçacığı.  # MT
 watch-event-prefix = Dosya değişikliği  # MT
 watch-overflow-recovered = İzleyici arabelleği taştı; kurtarmak için yeniden numaralandırılıyor  # MT
+
+# Phase 27 — content-defined chunk store. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+chunk-store-section = Parça deposu  # MT
+chunk-store-enable = Parça deposunu etkinleştir (delta devam ve tekilleştirme)  # MT
+chunk-store-enable-hint = Her kopyalanan dosyayı içeriğe göre böler (FastCDC) ve parçaları içerik-adresli olarak depolar. Yeniden denemeler yalnızca değişen parçaları yeniden yazar; paylaşılan içeriğe sahip dosyalar otomatik olarak tekilleştirilir.  # MT
+chunk-store-location = Parça deposu konumu  # MT
+chunk-store-max-size = Maksimum parça deposu boyutu  # MT
+chunk-store-prune = Şundan eski parçaları temizle (gün)  # MT
+chunk-store-savings = Parça tekilleştirme ile { $gib } GiB tasarruf edildi  # MT
+chunk-store-disk-usage = { $chunks } parçada { $size } kullanılıyor  # MT

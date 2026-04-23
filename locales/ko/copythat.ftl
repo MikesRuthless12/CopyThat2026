@@ -922,3 +922,14 @@ live-mirror-watching = 감시 중  # MT
 live-mirror-toggle-hint = 감지된 모든 파일 시스템 변경 시 자동으로 다시 동기화합니다. 활성 쌍당 하나의 백그라운드 스레드.  # MT
 watch-event-prefix = 파일 변경  # MT
 watch-overflow-recovered = 감시자 버퍼 오버플로; 복구를 위해 재열거 중  # MT
+
+# Phase 27 — content-defined chunk store. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+chunk-store-section = 청크 저장소  # MT
+chunk-store-enable = 청크 저장소 활성화 (델타 재개 및 중복 제거)  # MT
+chunk-store-enable-hint = 복사되는 모든 파일을 콘텐츠별로 분할 (FastCDC)하고 청크를 콘텐츠 주소 지정 방식으로 저장합니다. 재시도는 변경된 청크만 다시 씁니다. 공유 콘텐츠가 있는 파일은 자동으로 중복 제거됩니다.  # MT
+chunk-store-location = 청크 저장소 위치  # MT
+chunk-store-max-size = 청크 저장소 최대 크기  # MT
+chunk-store-prune = 다음 일수보다 오래된 청크 정리 (일)  # MT
+chunk-store-savings = 청크 중복 제거를 통해 { $gib } GiB 절약됨  # MT
+chunk-store-disk-usage = { $chunks }개 청크에 { $size } 사용 중  # MT

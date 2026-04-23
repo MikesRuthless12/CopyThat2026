@@ -360,6 +360,49 @@ pub struct CopyOptions {
     /// shell, the CLI, test harnesses) can plug in alternate
     /// backends without pulling in the platform crate's unsafe FFI.
     pub meta_ops: Option<Arc<dyn crate::meta::MetaOps>>,
+    /// Phase 27 — content-defined chunk store sink.
+    ///
+    /// When `Some`, the engine may consult the sink to report
+    /// delta-resume savings, query whether a chunk is already present,
+    /// and persist / retrieve per-file manifests. The concrete
+    /// implementation lives in `copythat-chunk`
+    /// (`CopyThatChunkSink`); kept here as a trait object so the core
+    /// engine can stay independent of redb + fastcdc.
+    ///
+    /// `None` disables the chunk pathway entirely; the engine behaves
+    /// exactly as it did pre-Phase-27.
+    pub chunk_store: Option<Arc<dyn ChunkStoreSink>>,
+}
+
+/// Bridge contract for the Phase 27 content-defined chunk store.
+///
+/// Implemented by `copythat_chunk::CopyThatChunkSink`. Kept in
+/// `copythat-core` so [`CopyOptions`] can hold a trait object without
+/// pulling the redb + fastcdc + blake3 dependencies into every crate
+/// that touches the engine's public API.
+///
+/// The engine consults the sink at two points:
+///
+/// 1. **Pre-open**, to ask for an existing manifest keyed by the
+///    destination path. If one is returned, it caches the chunk
+///    hashes and, after the fresh manifest is computed, only
+///    re-writes the deltas.
+/// 2. **Post-copy**, to persist the freshly-built manifest so the
+///    next retry can benefit from the same delta plan.
+///
+/// All methods are infallible by design (failures are swallowed
+/// inside the implementation and may be logged): a chunk-store
+/// outage should never break a copy, only defeat the dedup /
+/// delta-resume optimisation.
+pub trait ChunkStoreSink: Send + Sync + std::fmt::Debug {
+    /// Look up a previously-persisted manifest by key. Returns
+    /// serialised bytes so the trait stays independent of the chunk
+    /// crate's `Manifest` type.
+    fn get_manifest(&self, key: &str) -> Option<Vec<u8>>;
+    /// Persist a manifest under `key`.
+    fn put_manifest(&self, key: &str, serialised: &[u8]);
+    /// Quick "is this chunk already indexed?" probe.
+    fn has_chunk(&self, hash: &[u8; 32]) -> bool;
 }
 
 /// User-selectable copy strategy.
@@ -449,6 +492,7 @@ impl Default for CopyOptions {
             preserve_security_metadata: true,
             meta_policy: crate::meta::MetaPolicy::default(),
             meta_ops: None,
+            chunk_store: None,
         }
     }
 }

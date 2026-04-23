@@ -922,3 +922,14 @@ live-mirror-watching = 監視中  # MT
 live-mirror-toggle-hint = 検出されたすべてのファイルシステム変更で自動的に再同期します。アクティブなペアごとに 1 つのバックグラウンド スレッド。  # MT
 watch-event-prefix = ファイルの変更  # MT
 watch-overflow-recovered = ウォッチャー バッファがオーバーフローしました; 回復のために再列挙中  # MT
+
+# Phase 27 — content-defined chunk store. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+chunk-store-section = チャンクストア  # MT
+chunk-store-enable = チャンクストアを有効化 (差分再開と重複排除)  # MT
+chunk-store-enable-hint = コピーされるすべてのファイルをコンテンツ (FastCDC) で分割し、コンテンツアドレス指定されたチャンクとして保存します。再試行では変更されたチャンクのみ書き換えられます。コンテンツを共有するファイルは自動的に重複排除されます。  # MT
+chunk-store-location = チャンクストアの場所  # MT
+chunk-store-max-size = チャンクストアの最大サイズ  # MT
+chunk-store-prune = 以下の日数より古いチャンクを削除 (日)  # MT
+chunk-store-savings = チャンク重複排除により { $gib } GiB を節約  # MT
+chunk-store-disk-usage = { $chunks } 個のチャンクで { $size } を使用中  # MT
