@@ -933,3 +933,20 @@ chunk-store-max-size = الحد الأقصى لحجم مخزن الأجزاء  #
 chunk-store-prune = تنظيف الأجزاء الأقدم من (أيام)  # MT
 chunk-store-savings = تم توفير { $gib } جيجابايت عبر إزالة تكرار الأجزاء  # MT
 chunk-store-disk-usage = يستخدم { $size } عبر { $chunks } جزءًا  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Drop Stack  # MT
+dropstack-tray-open = Drop Stack  # MT
+dropstack-empty-title = مكدس الإسقاط فارغ  # MT
+dropstack-empty-hint = اسحب الملفات هنا من المستكشف أو انقر بزر الماوس الأيمن على صف المهمة لإضافته.  # MT
+dropstack-add-to-stack = إضافة إلى مكدس الإسقاط  # MT
+dropstack-copy-all-to = نسخ الكل إلى…  # MT
+dropstack-move-all-to = نقل الكل إلى…  # MT
+dropstack-clear = مسح المكدس  # MT
+dropstack-remove-row = إزالة من المكدس  # MT
+dropstack-path-missing-toast = تم إسقاط { $path } — الملف لم يعد موجودًا.  # MT
+dropstack-always-on-top = إبقاء مكدس الإسقاط دائمًا في المقدمة  # MT
+dropstack-show-tray-icon = إظهار أيقونة علبة Copy That  # MT
+dropstack-open-on-start = فتح مكدس الإسقاط تلقائيًا عند بدء التطبيق  # MT
+dropstack-count = { $count } مسار  # MT

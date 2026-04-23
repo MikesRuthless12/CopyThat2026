@@ -933,3 +933,20 @@ chunk-store-max-size = Ukuran maksimum penyimpanan chunk  # MT
 chunk-store-prune = Pangkas chunk yang lebih lama dari (hari)  # MT
 chunk-store-savings = Hemat { $gib } GiB melalui deduplikasi chunk  # MT
 chunk-store-disk-usage = Menggunakan { $size } dalam { $chunks } chunk  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Drop Stack  # MT
+dropstack-tray-open = Drop Stack  # MT
+dropstack-empty-title = Drop Stack kosong  # MT
+dropstack-empty-hint = Seret file ke sini dari Penjelajah atau klik kanan baris pekerjaan untuk menambahkannya.  # MT
+dropstack-add-to-stack = Tambahkan ke Drop Stack  # MT
+dropstack-copy-all-to = Salin semua ke…  # MT
+dropstack-move-all-to = Pindahkan semua ke…  # MT
+dropstack-clear = Bersihkan tumpukan  # MT
+dropstack-remove-row = Hapus dari tumpukan  # MT
+dropstack-path-missing-toast = { $path } dihapus — file tidak ada lagi.  # MT
+dropstack-always-on-top = Selalu tampilkan Drop Stack di atas  # MT
+dropstack-show-tray-icon = Tampilkan ikon baki Copy That  # MT
+dropstack-open-on-start = Buka Drop Stack secara otomatis saat aplikasi mulai  # MT
+dropstack-count = { $count } jalur  # MT

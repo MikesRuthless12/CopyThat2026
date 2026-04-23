@@ -933,3 +933,20 @@ chunk-store-max-size = Kích thước tối đa của kho phân đoạn  # MT
 chunk-store-prune = Xóa các phân đoạn cũ hơn (ngày)  # MT
 chunk-store-savings = Đã tiết kiệm { $gib } GiB nhờ loại bỏ trùng lặp phân đoạn  # MT
 chunk-store-disk-usage = Đang sử dụng { $size } trong { $chunks } phân đoạn  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Drop Stack  # MT
+dropstack-tray-open = Drop Stack  # MT
+dropstack-empty-title = Drop Stack trống  # MT
+dropstack-empty-hint = Kéo tệp vào đây từ Explorer hoặc nhấp chuột phải vào một dòng công việc để thêm.  # MT
+dropstack-add-to-stack = Thêm vào Drop Stack  # MT
+dropstack-copy-all-to = Sao chép tất cả đến…  # MT
+dropstack-move-all-to = Di chuyển tất cả đến…  # MT
+dropstack-clear = Xóa ngăn xếp  # MT
+dropstack-remove-row = Xóa khỏi ngăn xếp  # MT
+dropstack-path-missing-toast = Đã xóa { $path } — tệp không còn tồn tại.  # MT
+dropstack-always-on-top = Luôn giữ Drop Stack ở trên cùng  # MT
+dropstack-show-tray-icon = Hiển thị biểu tượng khay Copy That  # MT
+dropstack-open-on-start = Tự động mở Drop Stack khi ứng dụng khởi động  # MT
+dropstack-count = { $count } đường dẫn  # MT
