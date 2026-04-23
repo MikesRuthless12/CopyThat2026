@@ -312,6 +312,10 @@ pub fn run() {
             dropstack::dropstack_toggle_window,
             dropstack::dropstack_copy_all_to,
             dropstack::dropstack_move_all_to,
+            // Phase 29 — destination picker + drag-out staging.
+            commands::list_directory,
+            commands::list_roots,
+            commands::drag_out_stage,
         ])
         .setup(move |app| {
             // Phase 16 / 28 — tray icon + menu. Visible regardless
@@ -426,7 +430,7 @@ pub fn run() {
                 match registry.load() {
                     Ok(missing) => {
                         for p in &missing {
-                            dropstack::emit_path_missing(&app.handle(), p);
+                            dropstack::emit_path_missing(app.handle(), p);
                         }
                     }
                     Err(e) => {
