@@ -933,3 +933,20 @@ chunk-store-max-size = Maximale grootte van chunk-opslag  # MT
 chunk-store-prune = Chunks ouder dan (dagen) opruimen  # MT
 chunk-store-savings = { $gib } GiB bespaard via chunk-deduplicatie  # MT
 chunk-store-disk-usage = Gebruikt { $size } over { $chunks } chunks  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Drop Stack  # MT
+dropstack-tray-open = Drop Stack  # MT
+dropstack-empty-title = Drop Stack is leeg  # MT
+dropstack-empty-hint = Sleep bestanden hier vanuit Verkenner of klik met de rechtermuisknop op een taakrij om deze toe te voegen.  # MT
+dropstack-add-to-stack = Toevoegen aan Drop Stack  # MT
+dropstack-copy-all-to = Alles kopiëren naar…  # MT
+dropstack-move-all-to = Alles verplaatsen naar…  # MT
+dropstack-clear = Stack wissen  # MT
+dropstack-remove-row = Uit stack verwijderen  # MT
+dropstack-path-missing-toast = { $path } verwijderd — het bestand bestaat niet meer.  # MT
+dropstack-always-on-top = Drop Stack altijd op voorgrond houden  # MT
+dropstack-show-tray-icon = Copy That-systeemvakpictogram weergeven  # MT
+dropstack-open-on-start = Drop Stack automatisch openen bij app-start  # MT
+dropstack-count = { $count } pad  # MT

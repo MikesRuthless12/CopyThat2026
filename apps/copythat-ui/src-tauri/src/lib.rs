@@ -36,6 +36,7 @@ pub mod clipboard;
 pub mod clipboard_watcher;
 pub mod collisions;
 pub mod commands;
+pub mod dropstack;
 pub mod errors;
 pub mod global_paste;
 pub mod i18n;
@@ -303,15 +304,27 @@ pub fn run() {
             live_mirror::start_live_mirror,
             live_mirror::stop_live_mirror,
             live_mirror::list_live_mirrors,
+            // Phase 28 — tray-resident Drop Stack.
+            dropstack::dropstack_add,
+            dropstack::dropstack_remove,
+            dropstack::dropstack_clear,
+            dropstack::dropstack_list,
+            dropstack::dropstack_toggle_window,
+            dropstack::dropstack_copy_all_to,
+            dropstack::dropstack_move_all_to,
         ])
         .setup(move |app| {
-            // Phase 16 — tray icon + menu. Visible regardless of the
-            // "minimize to tray" setting; the setting only changes
-            // what the window's close button does. The menu always
-            // lets the user re-show the window and quit cleanly.
+            // Phase 16 / 28 — tray icon + menu. Visible regardless
+            // of the "minimize to tray" setting; the setting only
+            // changes what the window's close button does. Phase 28
+            // adds the Drop Stack entry between Show and Quit so the
+            // user can pop the stack window from the tray without
+            // first restoring the main window.
             let show = MenuItem::with_id(app, "tray-show", "Show", true, None::<&str>)?;
+            let dropstack =
+                MenuItem::with_id(app, "tray-dropstack", "Drop Stack", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "tray-quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &dropstack, &quit])?;
             let _tray = TrayIconBuilder::with_id("copythat-main-tray")
                 .tooltip("Copy That v1.0.0")
                 .icon(app.default_window_icon().unwrap().clone())
@@ -319,6 +332,14 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event: MenuEvent| match event.id.as_ref() {
                     "tray-show" => show_main_window(app),
+                    "tray-dropstack" => {
+                        // Fire-and-forget — the Tauri runtime owns
+                        // the async context for the command.
+                        let handle = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = dropstack::dropstack_toggle_window(handle).await;
+                        });
+                    }
                     "tray-quit" => {
                         app.exit(0);
                     }
@@ -394,6 +415,24 @@ pub fn run() {
                         }
                     }
                 });
+            }
+
+            // Phase 28 — load persisted Drop Stack entries. Paths
+            // that no longer resolve are dropped from the stack and
+            // announced to the frontend via one event per missing
+            // path so the UI can render a one-time toast.
+            if let Some(state) = app.handle().try_state::<AppState>() {
+                let registry = state.dropstack.clone();
+                match registry.load() {
+                    Ok(missing) => {
+                        for p in &missing {
+                            dropstack::emit_path_missing(&app.handle(), p);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("copythat: dropstack load failed: {e}");
+                    }
+                }
             }
 
             if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {

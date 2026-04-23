@@ -92,6 +92,10 @@ pub struct AppState {
     /// Each entry owns a stop flag the watcher loop checks between
     /// iterations.
     pub live_mirrors: crate::live_mirror::LiveMirrorRegistry,
+    /// Phase 28 — tray-resident Drop Stack. Holds the list of
+    /// staged paths + persists JSON to
+    /// `<config-dir>/dropstack.json` on every mutation.
+    pub dropstack: crate::dropstack::DropStackRegistry,
 }
 
 impl AppState {
@@ -136,7 +140,21 @@ impl AppState {
             shape: Arc::new(Shape::new(None)),
             syncs: crate::sync_commands::SyncRegistry::new(),
             live_mirrors: crate::live_mirror::LiveMirrorRegistry::new(),
+            // Default-empty DropStack pointed at the OS config dir
+            // (or an ephemeral test path when the default resolver
+            // fails — tests override via `with_dropstack_path`).
+            dropstack: crate::dropstack::DropStackRegistry::new(
+                crate::dropstack::default_dropstack_path()
+                    .unwrap_or_else(|| std::path::PathBuf::from("dropstack.json")),
+            ),
         }
+    }
+
+    /// Test hook — override the DropStack persistence path. Avoids
+    /// tests racing each other over the OS config dir.
+    pub fn with_dropstack_path(mut self, path: PathBuf) -> Self {
+        self.dropstack = crate::dropstack::DropStackRegistry::new(path);
+        self
     }
 
     /// Phase 20 — attach an opened `Journal` and the

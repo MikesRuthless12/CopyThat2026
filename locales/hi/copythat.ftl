@@ -933,3 +933,20 @@ chunk-store-max-size = अधिकतम चंक स्टोर आकार
 chunk-store-prune = इस से पुराने चंक्स को हटाएं (दिन)  # MT
 chunk-store-savings = चंक डीडुप के माध्यम से { $gib } GiB बचाया गया  # MT
 chunk-store-disk-usage = { $chunks } चंक्स में { $size } का उपयोग  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = ड्रॉप स्टैक  # MT
+dropstack-tray-open = ड्रॉप स्टैक  # MT
+dropstack-empty-title = ड्रॉप स्टैक खाली है  # MT
+dropstack-empty-hint = एक्सप्लोरर से यहां फ़ाइलें खींचें या जॉब पंक्ति पर दाएं क्लिक करके जोड़ें।  # MT
+dropstack-add-to-stack = ड्रॉप स्टैक में जोड़ें  # MT
+dropstack-copy-all-to = सभी को कॉपी करें…  # MT
+dropstack-move-all-to = सभी को स्थानांतरित करें…  # MT
+dropstack-clear = स्टैक साफ़ करें  # MT
+dropstack-remove-row = स्टैक से हटाएं  # MT
+dropstack-path-missing-toast = { $path } हटाया गया — फ़ाइल अब मौजूद नहीं है।  # MT
+dropstack-always-on-top = ड्रॉप स्टैक को हमेशा शीर्ष पर रखें  # MT
+dropstack-show-tray-icon = Copy That ट्रे आइकन दिखाएं  # MT
+dropstack-open-on-start = ऐप स्टार्ट पर ड्रॉप स्टैक स्वचालित रूप से खोलें  # MT
+dropstack-count = { $count } पथ  # MT

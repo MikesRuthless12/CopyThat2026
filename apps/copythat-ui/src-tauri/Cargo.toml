@@ -247,3 +247,13 @@ path = "../../../tests/smoke/phase_18_e2e.rs"
 [[test]]
 name = "phase_22_conflict_batch"
 path = "../../../tests/smoke/phase_22_conflict_batch.rs"
+
+# Phase 28 smoke test — tray-resident Drop Stack. Exercises the
+# `DropStackRegistry` through the same code path the Tauri IPC
+# commands call: add / save / reload / revalidate-missing /
+# clear. Shell-script wrappers named in the brief can't be driven
+# headlessly in CI; this Rust smoke covers the four invariants
+# identically.
+[[test]]
+name = "phase_28_dropstack"
+path = "../../../tests/smoke/phase_28_dropstack.rs"

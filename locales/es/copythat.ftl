@@ -933,3 +933,20 @@ chunk-store-max-size = Tamaño máximo del almacén de fragmentos  # MT
 chunk-store-prune = Eliminar fragmentos más antiguos que (días)  # MT
 chunk-store-savings = Ahorrados { $gib } GiB mediante deduplicación de fragmentos  # MT
 chunk-store-disk-usage = Usando { $size } en { $chunks } fragmentos  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Pila de arrastre  # MT
+dropstack-tray-open = Pila de arrastre  # MT
+dropstack-empty-title = La pila de arrastre está vacía  # MT
+dropstack-empty-hint = Arrastra archivos aquí desde el Explorador o haz clic derecho en una fila de trabajo para añadirla.  # MT
+dropstack-add-to-stack = Añadir a la pila de arrastre  # MT
+dropstack-copy-all-to = Copiar todo a…  # MT
+dropstack-move-all-to = Mover todo a…  # MT
+dropstack-clear = Vaciar pila  # MT
+dropstack-remove-row = Quitar de la pila  # MT
+dropstack-path-missing-toast = Se quitó { $path } — el archivo ya no existe.  # MT
+dropstack-always-on-top = Mantener la pila de arrastre siempre en primer plano  # MT
+dropstack-show-tray-icon = Mostrar el icono de Copy That en la bandeja  # MT
+dropstack-open-on-start = Abrir la pila de arrastre al iniciar la aplicación  # MT
+dropstack-count = { $count } ruta  # MT
