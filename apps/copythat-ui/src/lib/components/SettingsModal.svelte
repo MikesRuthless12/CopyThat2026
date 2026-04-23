@@ -55,6 +55,7 @@
     | "secure-delete"
     | "advanced"
     | "updater"
+    | "network"
     | "profiles";
 
   let activeTab: TabId = $state("general");
@@ -400,7 +401,7 @@
       {:else}
         <div class="body">
           <div class="tabs" role="tablist" aria-label={t("settings-title")}>
-            {#each [["general", "settings-tab-general"], ["transfer", "settings-tab-transfer"], ["filters", "settings-tab-filters"], ["shell", "settings-tab-shell"], ["secure-delete", "settings-tab-secure-delete"], ["advanced", "settings-tab-advanced"], ["updater", "settings-tab-updater"], ["profiles", "settings-tab-profiles"]] as const as [id, key] (id)}
+            {#each [["general", "settings-tab-general"], ["transfer", "settings-tab-transfer"], ["filters", "settings-tab-filters"], ["shell", "settings-tab-shell"], ["secure-delete", "settings-tab-secure-delete"], ["advanced", "settings-tab-advanced"], ["updater", "settings-tab-updater"], ["network", "settings-tab-network"], ["profiles", "settings-tab-profiles"]] as const as [id, key] (id)}
               <button
                 type="button"
                 role="tab"
@@ -956,6 +957,93 @@
                   <strong>{settings.updater.dismissedVersion}</strong>
                 </p>
               {/if}
+            {:else if activeTab === "network"}
+              <p class="hint">{t("settings-network-hint")}</p>
+
+              <label class="row">
+                <span class="label">{t("settings-network-mode")}</span>
+                <select
+                  bind:value={settings.network.mode}
+                  onchange={pushSettings}
+                >
+                  <option value="off">{t("settings-network-mode-off")}</option>
+                  <option value="fixed">{t("settings-network-mode-fixed")}</option>
+                  <option value="schedule">{t("settings-network-mode-schedule")}</option>
+                </select>
+              </label>
+
+              {#if settings.network.mode === "fixed"}
+                <label class="row">
+                  <span class="label">{t("settings-network-cap-mbps")}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={Math.round(
+                      settings.network.fixedBytesPerSecond / (1024 * 1024),
+                    )}
+                    onchange={(e) => {
+                      if (!settings) return;
+                      const mb = parseInt(
+                        (e.currentTarget as HTMLInputElement).value,
+                        10,
+                      );
+                      const bps = Number.isFinite(mb) && mb > 0
+                        ? mb * 1024 * 1024
+                        : 0;
+                      settings = {
+                        ...settings,
+                        network: { ...settings.network, fixedBytesPerSecond: bps },
+                      };
+                      void pushSettings();
+                    }}
+                  />
+                </label>
+              {/if}
+
+              {#if settings.network.mode === "schedule"}
+                <label class="row column">
+                  <span class="label">{t("settings-network-schedule")}</span>
+                  <textarea
+                    rows="3"
+                    spellcheck={false}
+                    placeholder="08:00,512k 12:00,off 13:00,512k 18:00,10M Sat-Sun,unlimited"
+                    bind:value={settings.network.scheduleSpec}
+                    onchange={pushSettings}
+                  ></textarea>
+                </label>
+                <p class="hint">{t("settings-network-schedule-hint")}</p>
+              {/if}
+
+              <p class="section-header">{t("settings-network-auto-header")}</p>
+
+              {#each [["autoOnMetered", "settings-network-auto-metered"], ["autoOnBattery", "settings-network-auto-battery"], ["autoOnCellular", "settings-network-auto-cellular"]] as const as [field, key] (field)}
+                <label class="row">
+                  <span class="label">{t(key)}</span>
+                  <select
+                    value={settings.network[field].kind}
+                    onchange={(e) => {
+                      if (!settings) return;
+                      const kind = (e.currentTarget as HTMLSelectElement).value as
+                        | "unchanged"
+                        | "pause"
+                        | "cap";
+                      const next = kind === "cap"
+                        ? { kind: "cap" as const, value: 1024 * 1024 }
+                        : { kind } as { kind: "unchanged" | "pause" };
+                      settings = {
+                        ...settings,
+                        network: { ...settings.network, [field]: next },
+                      };
+                      void pushSettings();
+                    }}
+                  >
+                    <option value="unchanged">{t("settings-network-auto-unchanged")}</option>
+                    <option value="pause">{t("settings-network-auto-pause")}</option>
+                    <option value="cap">{t("settings-network-auto-cap")}</option>
+                  </select>
+                </label>
+              {/each}
             {:else if activeTab === "profiles"}
               <p class="hint">{t("settings-profiles-hint")}</p>
               <div class="row">

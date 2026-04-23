@@ -177,6 +177,48 @@ Phase 20 adds a redb-backed durable journal at
   copy still works. A follow-up phase will add a "journal
   unhealthy" toast so the user can manually recover.
 
+## Phase 21 — bandwidth shaping (shipped)
+
+Phase 21 adds a GCRA token bucket on the engine's byte-by-byte
+read loop plus a user-editable schedule / auto-throttle table in
+Settings → Network. Threat-model deltas:
+
+- **No new persistent surface.** Shape state lives in RAM
+  (`AppState::shape: Arc<Shape>`); only the user's configuration
+  writes to disk, via the existing `settings.toml` round-trip.
+  Settings are still `#[serde(default)]`-gated — an older binary
+  loading the Phase 21 file silently drops the `[network]` table
+  and keeps running.
+- **No new network calls.** Despite the name, "network settings"
+  here means the user's local link class (metered / battery /
+  cellular); Copy That still never phones home. The auto-throttle
+  probes in `copythat_shape::auto` are stubbed to
+  `Unmetered` / `PluggedIn` in Phase 21 and will use OS-native
+  APIs only (`INetworkCostManager` on Windows,
+  `NWPathMonitor` on macOS, NetworkManager DBus + `battery` on
+  Linux) when the per-OS bridges land — no HTTP / DNS / anything
+  external.
+- **Shape parser rejects malformed input.** `Schedule::parse`
+  surfaces typed errors (`MissingComma`, `InvalidKey`,
+  `InvalidRate`, `TimeOutOfRange`, `UnknownDay`) so a user who
+  types `25:00,512k` or `Foo-Sun,10M` gets inline feedback in the
+  textarea rather than a panic or silent cap-of-zero. The
+  `validate_schedule_spec` IPC lints before persisting.
+- **Shape cannot corrupt a transfer.** `Shape::permit` is a pure
+  delay primitive — it blocks the engine's read loop but never
+  touches the bytes. BLAKE3 verify still fires at the same cadence
+  whether a shape is attached or not.
+- **Paused shape is not a DoS risk.** A `Shape::set_rate(Some(0))`
+  path makes `permit` block indefinitely, which in turn pauses
+  the copy. The copy's `CopyControl::cancel()` remains responsive
+  (the engine checks `is_cancelled` at the top of each loop turn
+  before calling `permit`), so the user can always abort a shape-
+  paused job from the UI.
+- **No data leaked via rate timing.** Unlike an encryption
+  side-channel, the shape's delay is user-configured and
+  unrelated to file contents. An observer of the transfer wall
+  time learns nothing beyond the configured cap.
+
 ## Build hardening (target, post-Phase 17)
 
 - Stack probes enabled.
