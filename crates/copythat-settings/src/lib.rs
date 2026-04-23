@@ -77,6 +77,10 @@ pub struct Settings {
     /// Phase 25 — two-way sync pair definitions + global defaults.
     /// See [`SyncSettings`].
     pub sync: SyncSettings,
+    /// Phase 27 — content-defined chunk store. Gates delta-resume +
+    /// same-job dedup + the moonshot phases that layer on top. See
+    /// [`ChunkStoreSettings`].
+    pub chunk_store: ChunkStoreSettings,
 }
 
 impl Settings {
@@ -994,6 +998,51 @@ pub enum ConflictSuffixFormat {
     /// `name.sync-conflict-YYYYMMDD-HHMMSS-<host>.ext`. Default.
     #[default]
     Syncthing,
+}
+
+// ---------------------------------------------------------------------
+// Phase 27 — chunk store
+// ---------------------------------------------------------------------
+
+/// Content-defined chunk store configuration.
+///
+/// The chunk store is always optional — Copy That works identically
+/// with it disabled. When enabled, every copy ingests its source
+/// files into the store so that (a) a retry of the same copy only
+/// re-writes the chunks that actually changed, and (b) within one
+/// job, files that share content blocks store those blocks once.
+/// The moonshot Phases 49–51 extend the same store for backup + P2P
+/// sync + encrypted collaboration.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct ChunkStoreSettings {
+    /// Master toggle. Default `false` — opt-in so new users don't
+    /// pay the disk cost of a chunk store they might not need.
+    pub enabled: bool,
+    /// Absolute path to the chunk-store root. Empty string = "use
+    /// [`copythat_chunk::default_chunk_store_path`] at runtime", which
+    /// resolves to `<data-dir>/chunks/` under the Copy That project
+    /// dir.
+    pub location_override: String,
+    /// Maximum store size in bytes. `0` disables the cap (unbounded).
+    /// The default of 20 GiB is generous enough to hold a few
+    /// full-disk backups' worth of chunks on a typical workstation.
+    pub max_size_bytes: u64,
+    /// Prune chunks that haven't been referenced for this many days.
+    /// `0` disables pruning. Default 60 days.
+    pub prune_older_than_days: u32,
+}
+
+impl Default for ChunkStoreSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            location_override: String::new(),
+            // 20 GiB.
+            max_size_bytes: 20 * 1024 * 1024 * 1024,
+            prune_older_than_days: 60,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------

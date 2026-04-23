@@ -171,6 +171,17 @@ pub enum CopyEvent {
     MetaTranslatedToAppleDouble {
         ext: String,
     },
+    /// Phase 27 — content-defined chunk store reported dedup savings
+    /// for this copy.
+    ///
+    /// Emitted once after the copy's chunk-ingest pass completes.
+    /// `savings_bytes` is the byte count that dedup'd against chunks
+    /// the store already had (either from an earlier file in the
+    /// same job or from a prior job). The UI / history sums these
+    /// into the "Saved N.NN GiB via chunk dedup" badge.
+    ChunkStoreSavings {
+        savings_bytes: u64,
+    },
 }
 
 impl Clone for CopyEvent {
@@ -312,6 +323,9 @@ impl Clone for CopyEvent {
             CopyEvent::MetaTranslatedToAppleDouble { ext } => {
                 CopyEvent::MetaTranslatedToAppleDouble { ext: ext.clone() }
             }
+            CopyEvent::ChunkStoreSavings { savings_bytes } => CopyEvent::ChunkStoreSavings {
+                savings_bytes: *savings_bytes,
+            },
         }
     }
 }

@@ -922,3 +922,14 @@ live-mirror-watching = Đang theo dõi  # MT
 live-mirror-toggle-hint = Tự động đồng bộ lại trên mọi thay đổi hệ thống tệp được phát hiện. Một luồng nền cho mỗi cặp hoạt động.  # MT
 watch-event-prefix = Thay đổi tệp  # MT
 watch-overflow-recovered = Bộ đệm theo dõi bị tràn; liệt kê lại để khôi phục  # MT
+
+# Phase 27 — content-defined chunk store. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+chunk-store-section = Kho phân đoạn  # MT
+chunk-store-enable = Kích hoạt kho phân đoạn (tiếp tục delta và loại bỏ trùng lặp)  # MT
+chunk-store-enable-hint = Phân chia mỗi tệp được sao chép theo nội dung (FastCDC) và lưu trữ các phân đoạn được địa chỉ hóa theo nội dung. Các lần thử lại chỉ ghi lại các phân đoạn đã thay đổi; các tệp có nội dung chung được loại bỏ trùng lặp tự động.  # MT
+chunk-store-location = Vị trí kho phân đoạn  # MT
+chunk-store-max-size = Kích thước tối đa của kho phân đoạn  # MT
+chunk-store-prune = Xóa các phân đoạn cũ hơn (ngày)  # MT
+chunk-store-savings = Đã tiết kiệm { $gib } GiB nhờ loại bỏ trùng lặp phân đoạn  # MT
+chunk-store-disk-usage = Đang sử dụng { $size } trong { $chunks } phân đoạn  # MT

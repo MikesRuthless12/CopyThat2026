@@ -922,3 +922,14 @@ live-mirror-watching = مراقبة  # MT
 live-mirror-toggle-hint = إعادة المزامنة تلقائيًا عند كل تغيير في نظام الملفات تم اكتشافه. يستخدم خيطًا واحدًا في الخلفية لكل زوج نشط.  # MT
 watch-event-prefix = تغيير ملف  # MT
 watch-overflow-recovered = تجاوز مخزن المراقب المؤقت؛ إعادة التعداد للاسترداد  # MT
+
+# Phase 27 — content-defined chunk store. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+chunk-store-section = مخزن الأجزاء  # MT
+chunk-store-enable = تمكين مخزن الأجزاء (استئناف التغييرات + إزالة التكرار)  # MT
+chunk-store-enable-hint = يقسم كل ملف منسوخ حسب المحتوى (FastCDC) ويخزن الأجزاء بمعالجة المحتوى. تعيد المحاولات كتابة الأجزاء المتغيرة فقط؛ الملفات ذات المحتوى المشترك تزيل التكرار تلقائيًا.  # MT
+chunk-store-location = موقع مخزن الأجزاء  # MT
+chunk-store-max-size = الحد الأقصى لحجم مخزن الأجزاء  # MT
+chunk-store-prune = تنظيف الأجزاء الأقدم من (أيام)  # MT
+chunk-store-savings = تم توفير { $gib } جيجابايت عبر إزالة تكرار الأجزاء  # MT
+chunk-store-disk-usage = يستخدم { $size } عبر { $chunks } جزءًا  # MT

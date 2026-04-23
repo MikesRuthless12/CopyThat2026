@@ -922,3 +922,14 @@ live-mirror-watching = Наблюдение  # MT
 live-mirror-toggle-hint = Автоматическая повторная синхронизация при каждом обнаруженном изменении файловой системы. Один фоновый поток на активную пару.  # MT
 watch-event-prefix = Изменение файла  # MT
 watch-overflow-recovered = Буфер наблюдателя переполнен; повторное перечисление для восстановления  # MT
+
+# Phase 27 — content-defined chunk store. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+chunk-store-section = Хранилище фрагментов  # MT
+chunk-store-enable = Включить хранилище фрагментов (дельта-возобновление и дедупликация)  # MT
+chunk-store-enable-hint = Разделяет каждый копируемый файл по содержимому (FastCDC) и сохраняет фрагменты с адресацией по содержимому. Повторные попытки переписывают только изменённые фрагменты; файлы с общим содержимым автоматически дедуплицируются.  # MT
+chunk-store-location = Расположение хранилища фрагментов  # MT
+chunk-store-max-size = Максимальный размер хранилища фрагментов  # MT
+chunk-store-prune = Удалять фрагменты старше (дней)  # MT
+chunk-store-savings = Сэкономлено { $gib } ГиБ благодаря дедупликации фрагментов  # MT
+chunk-store-disk-usage = Используется { $size } в { $chunks } фрагментах  # MT

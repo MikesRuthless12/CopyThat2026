@@ -922,3 +922,14 @@ live-mirror-watching = 监视中  # MT
 live-mirror-toggle-hint = 在每次检测到文件系统更改时自动重新同步。每个活动对一个后台线程。  # MT
 watch-event-prefix = 文件更改  # MT
 watch-overflow-recovered = 监视器缓冲区溢出;正在重新枚举以恢复  # MT
+
+# Phase 27 — content-defined chunk store. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+chunk-store-section = 分块存储  # MT
+chunk-store-enable = 启用分块存储 (增量恢复和去重)  # MT
+chunk-store-enable-hint = 按内容 (FastCDC) 拆分每个复制的文件并以内容寻址方式存储分块。重试仅重写已更改的分块;具有共享内容的文件自动去重。  # MT
+chunk-store-location = 分块存储位置  # MT
+chunk-store-max-size = 最大分块存储大小  # MT
+chunk-store-prune = 清除早于 (天) 的分块  # MT
+chunk-store-savings = 通过分块去重节省了 { $gib } GiB  # MT
+chunk-store-disk-usage = 在 { $chunks } 个分块中使用 { $size }  # MT

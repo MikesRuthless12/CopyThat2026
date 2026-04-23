@@ -642,3 +642,17 @@ live-mirror-watching = Watching
 live-mirror-toggle-hint = Re-sync automatically on every detected filesystem change. One background thread per active pair.
 watch-event-prefix = File change
 watch-overflow-recovered = Watcher buffer overflowed; re-enumerating to recover
+
+# Phase 27 — content-defined chunk store. Enables delta-resume (a
+# retry only re-writes chunks that actually changed) and same-job
+# dedup (files sharing content blocks store those blocks once). The
+# store is disk-backed under `<data-dir>/chunks/` by default and is
+# the foundation for the Phase 49–51 moonshot repository phases.
+chunk-store-section = Chunk store
+chunk-store-enable = Enable chunk store (delta-resume and dedup)
+chunk-store-enable-hint = Splits every copied file by content (FastCDC) and stores chunks content-addressed. Retries only re-write changed chunks; files with shared content dedup automatically.
+chunk-store-location = Chunk store location
+chunk-store-max-size = Maximum chunk store size
+chunk-store-prune = Prune chunks older than (days)
+chunk-store-savings = Saved { $gib } GiB via chunk dedup
+chunk-store-disk-usage = Using { $size } across { $chunks } chunks
