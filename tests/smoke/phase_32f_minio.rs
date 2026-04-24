@@ -62,8 +62,8 @@ fn minio_backend() -> Option<(Backend, String)> {
     if !should_run() {
         return None;
     }
-    let endpoint = std::env::var("COPYTHAT_MINIO_ENDPOINT")
-        .unwrap_or_else(|_| "http://localhost:9000".into());
+    let endpoint =
+        std::env::var("COPYTHAT_MINIO_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".into());
     let bucket = std::env::var("COPYTHAT_MINIO_BUCKET").unwrap_or_else(|_| "copythat-test".into());
     let ak = std::env::var("COPYTHAT_MINIO_AK").unwrap_or_else(|_| "minioadmin".into());
     let sk = std::env::var("COPYTHAT_MINIO_SK").unwrap_or_else(|_| "minioadmin".into());
@@ -90,8 +90,7 @@ async fn case_minio_round_trip_1mib() {
     };
 
     let op = make_operator(&backend, Some(&secret)).expect("minio operator");
-    let target: Arc<dyn CopyTarget> =
-        Arc::new(OperatorTarget::new(backend.name.clone(), op));
+    let target: Arc<dyn CopyTarget> = Arc::new(OperatorTarget::new(backend.name.clone(), op));
 
     let src_dir = tempfile::tempdir().expect("src dir");
     let dst_dir = tempfile::tempdir().expect("dst dir");

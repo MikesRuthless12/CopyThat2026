@@ -119,7 +119,10 @@ impl MountBackend for NoopBackend {
         let session = NoopSession {
             counter: self.unmount_counter.clone(),
         };
-        Ok(MountHandle::new(mountpoint.to_path_buf(), Box::new(session)))
+        Ok(MountHandle::new(
+            mountpoint.to_path_buf(),
+            Box::new(session),
+        ))
     }
 }
 

@@ -396,7 +396,11 @@ pub fn resolve_target_os(target: TargetOs) -> TargetOs {
 /// `unicode_normalization` knob. Returns the (possibly rewritten)
 /// name plus a `changed` flag so callers can decide whether to emit
 /// `CopyEvent::UnicodeRenormalized`.
-pub fn normalize_name(name: &str, policy: &PathPolicy, effective_target: TargetOs) -> (String, bool) {
+pub fn normalize_name(
+    name: &str,
+    policy: &PathPolicy,
+    effective_target: TargetOs,
+) -> (String, bool) {
     use unicode_normalization::UnicodeNormalization;
 
     let mode = match policy.unicode_normalization {
@@ -547,8 +551,8 @@ fn truncate_to_max_path(path: &Path) -> PathBuf {
     let parent_len = path_utf16_len(parent);
     // `parent + sep + stem' + SUFFIX + ext` must fit in MAX_PATH.
     let sep_len = 1;
-    let budget = WINDOWS_MAX_PATH
-        .saturating_sub(parent_len + sep_len + SUFFIX.len() + ext.chars().count());
+    let budget =
+        WINDOWS_MAX_PATH.saturating_sub(parent_len + sep_len + SUFFIX.len() + ext.chars().count());
     let mut truncated_stem: String = stem.chars().take(budget).collect();
     if truncated_stem.is_empty() {
         truncated_stem.push('x');
@@ -707,10 +711,7 @@ mod tests {
         };
         let out = translate_path(&src, &dst_root, &policy).unwrap();
         let s = out.to_string_lossy();
-        assert!(
-            s.starts_with(r"\\?\"),
-            "expected long-path prefix, got {s}"
-        );
+        assert!(s.starts_with(r"\\?\"), "expected long-path prefix, got {s}");
     }
 
     #[test]

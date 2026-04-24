@@ -70,7 +70,9 @@ impl Credentials {
     /// `<prefix>/<name>` join is unambiguous.
     fn entry(&self, backend_name: &str) -> Result<keyring::Entry, CredentialsError> {
         if backend_name.is_empty() || backend_name.contains('/') || backend_name.contains('\0') {
-            return Err(CredentialsError::InvalidBackendName(backend_name.to_owned()));
+            return Err(CredentialsError::InvalidBackendName(
+                backend_name.to_owned(),
+            ));
         }
         let service = format!("{SERVICE_PREFIX}/{backend_name}");
         Ok(keyring::Entry::new(&service, CREDENTIAL_USER)?)

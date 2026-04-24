@@ -80,10 +80,7 @@ pub fn battery_snapshot() -> Option<BatterySnapshot> {
         // authoritative matches what Windows' own power indicator
         // does in practice.
         let state = bat.state();
-        let on_battery = matches!(
-            state,
-            battery::State::Discharging | battery::State::Empty
-        );
+        let on_battery = matches!(state, battery::State::Discharging | battery::State::Empty);
         // `state_of_charge()` returns a unitless ratio; convert to
         // percent. `value()` accesses the inner `f32` ratio.
         let percent = bat.state_of_charge().value * 100.0;
@@ -353,13 +350,21 @@ impl BatteryProbe for SyntheticProbes {
 
 impl PresentationProbe for SyntheticProbes {
     fn is_presenting(&self) -> bool {
-        self.inner.lock().ok().map(|g| g.presenting).unwrap_or(false)
+        self.inner
+            .lock()
+            .ok()
+            .map(|g| g.presenting)
+            .unwrap_or(false)
     }
 }
 
 impl FullscreenProbe for SyntheticProbes {
     fn is_fullscreen(&self) -> bool {
-        self.inner.lock().ok().map(|g| g.fullscreen).unwrap_or(false)
+        self.inner
+            .lock()
+            .ok()
+            .map(|g| g.fullscreen)
+            .unwrap_or(false)
     }
 }
 

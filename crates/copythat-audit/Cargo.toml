@@ -1,0 +1,74 @@
+[package]
+name = "copythat-audit"
+description = "Phase 34 — enterprise-grade audit log export + WORM (write-once-read-many) tamper-evident logging for Copy That. Emits CSV / JSON-lines / Syslog RFC 5424 / ArcSight CEF / QRadar LEEF records with a rolling chain hash."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+# The WORM platform layer for Linux / macOS / Windows uses raw
+# ioctl / chflags / SetFileAttributesW calls. The workspace lint
+# is `warn` for `unsafe_code`; we inherit that so accidental
+# unsafe introductions anywhere outside the `worm` module are
+# flagged without a per-call `#[allow(unsafe_code)]` dance.
+workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# Stable monotonic UTC timestamps for every record. `chrono` already
+# ships across the workspace (history / shape / updater / runner).
+chrono = { version = "0.4", default-features = false, features = [
+    "clock",
+    "alloc",
+    "serde",
+] }
+# BLAKE3 computes the per-record chain hash: each line embeds the
+# hash of the previous line so the log is end-to-end tamper-
+# evident. BLAKE3 is already in the workspace Cargo.lock (hash
+# crate + cloud verify), so this adds no new license obligation.
+blake3 = "1"
+# CSV writer — MIT/Apache-2.0. Only used for `AuditFormat::Csv`.
+csv = "1"
+# Hex encoding for the chain-hash column (both CSV + CEF escape
+# cleanly). Already in the workspace via `copythat-cloud`.
+hex = "0.4"
+# `tracing-subscriber::Layer` impl: `AuditLayer` fans selected
+# events off the trace bus into the active AuditSink. MIT.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = [
+    "registry",
+] }
+# Hostname discovery for Syslog RFC 5424 + LoginEvent records.
+# BSD-3-Clause — already in the permissive allowlist.
+gethostname = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# `nix` wraps `ioctl_readwrite!` for the Linux `FS_IOC_SETFLAGS`
+# syscall used to set `FS_APPEND_FL` (the kernel flag behind
+# `chattr +a`). Feature-minimised to keep the compile graph
+# tight. MIT.
+nix = { version = "0.29", default-features = false, features = ["ioctl"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[[test]]
+name = "phase_34_audit"
+path = "../../tests/smoke/phase_34_audit.rs"

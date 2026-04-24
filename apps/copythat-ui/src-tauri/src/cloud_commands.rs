@@ -16,14 +16,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use copythat_cloud::{
-    AzureBlobConfig, Backend, BackendConfig, BackendKind, BackendRegistry, CopyTarget,
-    Credentials, FtpConfig, GcsConfig, LocalFsConfig, OAuthConfig, OperatorTarget, S3Config,
-    SftpConfig, WebdavConfig, copy_from_target, copy_to_target, make_operator, opendal,
+    AzureBlobConfig, Backend, BackendConfig, BackendKind, BackendRegistry, CopyTarget, Credentials,
+    FtpConfig, GcsConfig, LocalFsConfig, OAuthConfig, OperatorTarget, S3Config, SftpConfig,
+    WebdavConfig, copy_from_target, copy_to_target, make_operator, opendal,
 };
 use copythat_settings::{
     AzureBlobBackendConfig, BackendConfigEntry, BackendKindChoice, FtpBackendConfig,
-    GcsBackendConfig, LocalFsBackendConfig, OAuthBackendConfig, S3BackendConfig,
-    SftpBackendConfig, WebdavBackendConfig,
+    GcsBackendConfig, LocalFsBackendConfig, OAuthBackendConfig, S3BackendConfig, SftpBackendConfig,
+    WebdavBackendConfig,
 };
 use serde::{Deserialize, Serialize};
 
@@ -79,11 +79,7 @@ pub struct TestConnectionResult {
 #[tauri::command]
 pub fn list_backends(state: tauri::State<'_, AppState>) -> Vec<BackendDto> {
     let snap = state.settings_snapshot();
-    snap.remotes
-        .backends
-        .iter()
-        .map(entry_to_dto)
-        .collect()
+    snap.remotes.backends.iter().map(entry_to_dto).collect()
 }
 
 /// Insert a new backend entry. Rejects with a typed error when a
@@ -122,7 +118,9 @@ pub fn add_backend(
     if let Some(s) = secret
         && !s.is_empty()
     {
-        Credentials.store(&backend.name, &s).map_err(|e| e.to_string())?;
+        Credentials
+            .store(&backend.name, &s)
+            .map_err(|e| e.to_string())?;
     }
 
     state.cloud_backends.upsert(backend);
@@ -143,7 +141,12 @@ pub fn update_backend(
     let backend = entry_to_cloud_backend(&entry).map_err(|e| e.to_string())?;
 
     let mut guard = state.settings.write().map_err(|e| e.to_string())?;
-    if let Some(slot) = guard.remotes.backends.iter_mut().find(|b| b.name == entry.name) {
+    if let Some(slot) = guard
+        .remotes
+        .backends
+        .iter_mut()
+        .find(|b| b.name == entry.name)
+    {
         *slot = entry.clone();
     } else {
         guard.remotes.backends.push(entry.clone());
@@ -158,7 +161,9 @@ pub fn update_backend(
     if let Some(s) = secret
         && !s.is_empty()
     {
-        Credentials.store(&backend.name, &s).map_err(|e| e.to_string())?;
+        Credentials
+            .store(&backend.name, &s)
+            .map_err(|e| e.to_string())?;
     }
 
     state.cloud_backends.upsert(backend);
@@ -289,12 +294,9 @@ pub async fn copy_local_to_backend(
         .cloud_backends
         .get(&backend_name)
         .ok_or_else(|| format!("backend `{backend_name}` is not registered"))?;
-    let secret = Credentials
-        .load(&backend.name)
-        .map_err(|e| e.to_string())?;
+    let secret = Credentials.load(&backend.name).map_err(|e| e.to_string())?;
     let operator = make_operator(&backend, secret.as_deref()).map_err(|e| e.to_string())?;
-    let target: Arc<dyn CopyTarget> =
-        Arc::new(OperatorTarget::new(backend.name.clone(), operator));
+    let target: Arc<dyn CopyTarget> = Arc::new(OperatorTarget::new(backend.name.clone(), operator));
     copy_to_target(&PathBuf::from(&src_path), &target, &dst_key)
         .await
         .map_err(|e| e.to_string())
@@ -313,12 +315,9 @@ pub async fn copy_backend_to_local(
         .cloud_backends
         .get(&backend_name)
         .ok_or_else(|| format!("backend `{backend_name}` is not registered"))?;
-    let secret = Credentials
-        .load(&backend.name)
-        .map_err(|e| e.to_string())?;
+    let secret = Credentials.load(&backend.name).map_err(|e| e.to_string())?;
     let operator = make_operator(&backend, secret.as_deref()).map_err(|e| e.to_string())?;
-    let target: Arc<dyn CopyTarget> =
-        Arc::new(OperatorTarget::new(backend.name.clone(), operator));
+    let target: Arc<dyn CopyTarget> = Arc::new(OperatorTarget::new(backend.name.clone(), operator));
     copy_from_target(&target, &src_key, &PathBuf::from(&dst_path))
         .await
         .map_err(|e| e.to_string())
@@ -440,7 +439,9 @@ fn dto_to_entry(dto: &BackendDto) -> Option<BackendConfigEntry> {
     let c = &dto.config;
     match kind {
         BackendKindChoice::LocalFs => {
-            entry.local_fs = Some(LocalFsBackendConfig { root: c.root.clone() });
+            entry.local_fs = Some(LocalFsBackendConfig {
+                root: c.root.clone(),
+            });
         }
         BackendKindChoice::S3 => entry.s3 = Some(s3_from_dto(c)),
         BackendKindChoice::R2 => entry.r2 = Some(s3_from_dto(c)),
@@ -723,7 +724,9 @@ mod tests {
         settings.remotes.backends.push(BackendConfigEntry {
             name: "good".into(),
             kind: BackendKindChoice::LocalFs,
-            local_fs: Some(LocalFsBackendConfig { root: "/tmp".into() }),
+            local_fs: Some(LocalFsBackendConfig {
+                root: "/tmp".into(),
+            }),
             ..Default::default()
         });
         // Unknown kinds are already rejected at parse time — simulate
@@ -734,7 +737,11 @@ mod tests {
             ..Default::default()
         });
         hydrate_registry_from_settings(&registry, &settings);
-        assert_eq!(registry.len(), 2, "both entries registered (validation happens at operator-build)");
+        assert_eq!(
+            registry.len(),
+            2,
+            "both entries registered (validation happens at operator-build)"
+        );
         assert!(registry.get("good").is_some());
         assert!(registry.get("empty").is_some());
     }

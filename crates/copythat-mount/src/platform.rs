@@ -96,6 +96,10 @@ mod tests {
         // We can only assert `mount()` returns *some* result on the
         // default feature set (Noop succeeds; Fuse / WinFsp stubs
         // surface `BackendUnavailable`).
-        let _ = backend.mount(tmp.path(), MountLayout::all(), &crate::backends::ArchiveRefs::default());
+        let _ = backend.mount(
+            tmp.path(),
+            MountLayout::all(),
+            &crate::backends::ArchiveRefs::default(),
+        );
     }
 }

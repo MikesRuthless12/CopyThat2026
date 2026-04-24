@@ -789,3 +789,27 @@ settings-mount-hint = Expose the history archive as a read-only filesystem. Phas
 settings-mount-on-launch = Mount the latest snapshot on launch
 settings-mount-on-launch-path = Mountpoint path
 settings-mount-on-launch-path-placeholder = e.g. C:\Mounts\copythat
+
+# Phase 34 — enterprise-grade audit log export + WORM (write-once-read-
+# many) tamper-resistance. Settings → Advanced → Audit log collects the
+# format + destination + rotation + WORM toggle; runtime records job and
+# file events into the tamper-evident chain-hashed sink.
+settings-audit-heading = Audit log
+settings-audit-hint = Append-only tamper-evident log of every job and file event. Formats include CSV, JSON-lines, RFC 5424 Syslog, ArcSight CEF, and QRadar LEEF.
+settings-audit-enable = Enable audit logging
+settings-audit-format = Log format
+settings-audit-format-json-lines = JSON lines (recommended default)
+settings-audit-format-csv = CSV (spreadsheet-friendly)
+settings-audit-format-syslog = Syslog (RFC 5424)
+settings-audit-format-cef = CEF (ArcSight)
+settings-audit-format-leef = LEEF 2.0 (IBM QRadar)
+settings-audit-file-path = Log file path
+settings-audit-file-path-placeholder = e.g. C:\ProgramData\CopyThat\audit.log
+settings-audit-max-size = Rotate after (bytes, 0 = never)
+settings-audit-worm = Enable WORM mode (write-once-read-many)
+settings-audit-worm-hint = Applies the platform's append-only flag (Linux chattr +a, macOS chflags uappnd, Windows read-only attribute) after every create or rotation. Even an administrator must explicitly clear the flag to truncate the log.
+settings-audit-test-write = Test write
+settings-audit-verify-chain = Verify chain
+toast-audit-test-write-ok = Audit log test write succeeded
+toast-audit-verify-ok = Audit chain verified intact
+toast-audit-verify-failed = Audit chain verification reported mismatches

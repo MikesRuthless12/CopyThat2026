@@ -140,9 +140,8 @@ mod winfsp_body {
             // view.
             let sddl = U16CString::from_str("D:P(A;;GR;;;WD)")
                 .map_err(|e| MountError::BackendUnavailable(format!("sddl: {e}")))?;
-            let default_sd = SecurityDescriptor::from_wstr(&sddl).map_err(|e| {
-                MountError::BackendUnavailable(format!("parse default sd: {e}"))
-            })?;
+            let default_sd = SecurityDescriptor::from_wstr(&sddl)
+                .map_err(|e| MountError::BackendUnavailable(format!("parse default sd: {e}")))?;
             Ok(Self {
                 map,
                 history,
@@ -184,7 +183,7 @@ mod winfsp_body {
             const EPOCH_OFFSET: u64 = 11_644_473_600;
             let filetime = (attr.mtime_unix_secs.max(0) as u64 + EPOCH_OFFSET) * 10_000_000;
             info.set_file_size(attr.size);
-            info.set_allocation_size(((attr.size + 511) / 512) * 512);
+            info.set_allocation_size(attr.size.div_ceil(512) * 512);
             info.set_hard_links(attr.nlink);
             info.set_index_number(attr.ino);
             info.set_time(filetime);
@@ -214,8 +213,7 @@ mod winfsp_body {
 
         fn get_volume_info(&self) -> Result<VolumeInfo, NTSTATUS> {
             let label = U16String::from_str("CopyThat");
-            VolumeInfo::new(u64::MAX, u64::MAX, &label)
-                .map_err(|_| STATUS_NOT_IMPLEMENTED)
+            VolumeInfo::new(u64::MAX, u64::MAX, &label).map_err(|_| STATUS_NOT_IMPLEMENTED)
         }
 
         fn get_security_by_name(
@@ -275,10 +273,9 @@ mod winfsp_body {
             let crate::NodeKind::JobPlaceholder { job_row_id } = &entry.kind else {
                 return Err(STATUS_NOT_IMPLEMENTED);
             };
-            let (Some(history), Some(chunk_store)) = (
-                self.history.as_ref(),
-                self.chunk_store.as_ref(),
-            ) else {
+            let (Some(history), Some(chunk_store)) =
+                (self.history.as_ref(), self.chunk_store.as_ref())
+            else {
                 // Read without archive refs (test / stubbed mount)
                 // reports EOF.
                 return Err(STATUS_END_OF_FILE);
@@ -316,8 +313,7 @@ mod winfsp_body {
                 let Some(info) = self.file_info_for(child_ino as usize) else {
                     continue;
                 };
-                let wide =
-                    U16CString::from_str(&name).map_err(|_| STATUS_OBJECT_NAME_NOT_FOUND)?;
+                let wide = U16CString::from_str(&name).map_err(|_| STATUS_OBJECT_NAME_NOT_FOUND)?;
                 let dir_info = DirInfo::new(info, &wide);
                 if !add_dir_info(dir_info) {
                     // Buffer full — WinFsp will call again with
@@ -344,9 +340,11 @@ mod winfsp_body {
         let rt = Builder::new_current_thread().enable_all().build().ok()?;
         let history = history.clone();
         let items = rt
-            .block_on(
-                async move { history.items_for(copythat_history::JobRowId(job_row_id)).await },
-            )
+            .block_on(async move {
+                history
+                    .items_for(copythat_history::JobRowId(job_row_id))
+                    .await
+            })
             .ok()?;
         let read_end = offset.saturating_add(max_len as u64);
         let mut out: Vec<u8> = Vec::new();
@@ -414,17 +412,18 @@ mod winfsp_body {
             .chunk_store
             .clone()
             .unwrap_or_else(|| Arc::new(chunk_placeholder_fs()));
-        let tree = MountTree::build(&jobs, chunk_placeholder.as_ref(), layout).unwrap_or_else(
-            |_| MountTree {
-                root: crate::MountNode {
-                    name: String::new(),
-                    kind: crate::NodeKind::Directory,
-                    children: Default::default(),
-                },
-                layout,
-                job_count: 0,
-            },
-        );
+        let tree =
+            MountTree::build(&jobs, chunk_placeholder.as_ref(), layout).unwrap_or_else(|_| {
+                MountTree {
+                    root: crate::MountNode {
+                        name: String::new(),
+                        kind: crate::NodeKind::Directory,
+                        children: Default::default(),
+                    },
+                    layout,
+                    job_count: 0,
+                }
+            });
         let map = Arc::new(TreeInodeMap::from_tree(&tree));
         let fs = CopyThatWinFspFs::new(map, archive.history, archive.chunk_store)?;
 
@@ -439,9 +438,7 @@ mod winfsp_body {
         params
             .volume_params
             .set_volume_serial_number(0xC0FF_EE00u32);
-        params
-            .volume_params
-            .set_file_info_timeout(1000 /* ms */);
+        params.volume_params.set_file_info_timeout(1000 /* ms */);
 
         // Compose the mountpoint as a wide string. Typical form:
         // a drive letter like `Z:` or an NTFS directory.
@@ -457,9 +454,8 @@ mod winfsp_body {
         let live = FileSystem::start(params, Some(&mp_wide), fs)
             .map_err(|nts| MountError::BackendUnavailable(format!("FspFileSystemStart: {nts}")))?;
 
-        let session: Box<dyn crate::backends::MountSession> = Box::new(WinFspSession {
-            fs: Some(live),
-        });
+        let session: Box<dyn crate::backends::MountSession> =
+            Box::new(WinFspSession { fs: Some(live) });
         Ok(MountHandle::new(mountpoint.to_path_buf(), session))
     }
 
@@ -476,20 +472,19 @@ mod winfsp_body {
         }
     }
 
-    /// An empty ChunkStore placeholder keeps the tree builder
-    /// + winfsp initializer off the hot-path `Option<Arc<_>>`
-    /// hunts at every callback.
+    /// An empty ChunkStore placeholder keeps the tree builder +
+    /// winfsp initializer off the hot-path `Option<Arc<_>>` hunts
+    /// at every callback.
     fn chunk_placeholder_fs() -> copythat_chunk::ChunkStore {
-        let dir = std::env::temp_dir().join(format!(
-            "copythat-winfsp-empty-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("copythat-winfsp-empty-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         copythat_chunk::ChunkStore::open(&dir).expect("empty winfsp chunk store open")
     }
 }
 
 #[cfg(test)]
+#[cfg(not(all(feature = "winfsp", target_os = "windows")))]
 mod tests {
     use super::*;
 
@@ -500,7 +495,6 @@ mod tests {
     /// admin; that validation belongs to the platform-gated
     /// Phase 33h smoke rather than this unit test.
     #[test]
-    #[cfg(not(all(feature = "winfsp", target_os = "windows")))]
     fn mount_on_default_build_reports_backend_unavailable() {
         let backend = WinFspBackend::default();
         let tmp = tempfile::tempdir().expect("tempdir");

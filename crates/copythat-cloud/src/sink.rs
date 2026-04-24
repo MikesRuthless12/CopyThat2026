@@ -183,9 +183,7 @@ impl CloudSink for CopyThatCloudSink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{
-        Backend, BackendConfig, BackendKind, LocalFsConfig, make_operator,
-    };
+    use crate::backend::{Backend, BackendConfig, BackendKind, LocalFsConfig, make_operator};
     use crate::target::OperatorTarget;
 
     #[test]

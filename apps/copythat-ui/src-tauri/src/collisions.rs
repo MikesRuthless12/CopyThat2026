@@ -118,12 +118,16 @@ impl CollisionRegistry {
                 .insert(pending.job_id, resolution.clone());
         }
 
+        let src = pending.src.clone();
+        let dst = pending.dst.clone();
         let _ = pending.resolver.send(resolution.clone());
 
         Ok(ResolvedCollision {
             id: pending.id,
             job_id: pending.job_id,
             resolution,
+            src,
+            dst,
         })
     }
 
@@ -298,6 +302,11 @@ pub struct ResolvedCollision {
     pub id: u64,
     pub job_id: u64,
     pub resolution: CollisionResolution,
+    /// Phase 34 — paths are kept on the resolved struct so the
+    /// Tauri `resolve_collision` command can record a
+    /// `CollisionResolved` audit event without a second lookup.
+    pub src: PathBuf,
+    pub dst: PathBuf,
 }
 
 /// Wire name for a `CollisionResolution`. Used in the DTO that goes

@@ -31,10 +31,11 @@
 //! the `tauri://drag-drop` window event which this crate translates
 //! into the `drop-received` IPC event for the Svelte layer.
 
+pub mod audit_commands;
 pub mod cli;
-pub mod cloud_commands;
 pub mod clipboard;
 pub mod clipboard_watcher;
+pub mod cloud_commands;
 pub mod collisions;
 pub mod commands;
 pub mod dropstack;
@@ -346,6 +347,11 @@ pub fn run() {
             mount_commands::mount_snapshot,
             mount_commands::unmount_snapshot,
             mount_commands::mount_backend_name,
+            // Phase 34 — audit log export + WORM mode.
+            audit_commands::audit_status,
+            audit_commands::audit_test_write,
+            audit_commands::audit_verify,
+            audit_commands::audit_verify_file,
         ])
         .setup(move |app| {
             // Phase 16 / 28 — tray icon + menu. Visible regardless
@@ -496,6 +502,26 @@ pub fn run() {
                     let state: tauri::State<'_, state::AppState> = handle.state();
                     mount_commands::mount_latest_on_launch(&state).await;
                 });
+            }
+
+            // Phase 34 — open the audit sink if the user has audit
+            // logging turned on, then record the app-launch
+            // `LoginEvent`. Failures log to stderr and the launch
+            // continues with the sink idle (matches the Phase 33
+            // mount-on-launch convention).
+            {
+                let handle = app.handle().clone();
+                let state: tauri::State<'_, state::AppState> = handle.state();
+                let snap = state.settings_snapshot();
+                match audit_commands::build_sink(&snap.audit) {
+                    Ok(sink) => {
+                        state.audit.set(sink);
+                        audit_commands::record_login(&state.audit);
+                    }
+                    Err(e) => {
+                        eprintln!("[audit] startup sink open failed: {e}");
+                    }
+                }
             }
 
             Ok(())
