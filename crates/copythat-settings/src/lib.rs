@@ -96,6 +96,11 @@ pub struct Settings {
     /// on metered networks, pause during Zoom calls / fullscreen,
     /// thermal-throttle cap). See [`PowerPoliciesSettings`].
     pub power: PowerPoliciesSettings,
+    /// Phase 32 — cloud backend matrix (S3, R2, B2, Azure Blob, GCS,
+    /// OneDrive, Drive, Dropbox, WebDAV, SFTP, FTP, LocalFs). Stores
+    /// the list of configured remotes; secrets live in the OS
+    /// keychain, not here. See [`RemoteSettings`].
+    pub remotes: RemoteSettings,
 }
 
 impl Settings {
@@ -1534,6 +1539,201 @@ impl Default for PowerPoliciesSettings {
 }
 
 // ---------------------------------------------------------------------
+// Phase 32 — cloud backend matrix (RemoteSettings)
+// ---------------------------------------------------------------------
+//
+// The settings layer owns *persistence*; the `copythat-cloud` crate
+// owns *operators + credentials*. These types are the on-disk mirror
+// of `copythat_cloud::Backend`. They stay here (rather than in
+// `copythat-cloud`) to keep this crate free of the OpenDAL dep — the
+// Tauri shell translates `BackendConfigEntry` into
+// `copythat_cloud::Backend` when it builds operators.
+
+/// Phase 32 — list of user-configured remote backends + a per-backend
+/// default-root override. Secrets never live here; they're in the OS
+/// keychain under `copythat-cloud/<name>` via the
+/// `copythat-cloud::Credentials` API. The entries round-trip through
+/// TOML so older builds without Phase 32 support just ignore the
+/// `remotes` table.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct RemoteSettings {
+    /// Configured backends, in display order. Duplicate names are
+    /// collapsed at registry-load time (see
+    /// `copythat_cloud::BackendRegistry::from_snapshot`).
+    pub backends: Vec<BackendConfigEntry>,
+    /// Per-backend name that the runner defaults to when a user
+    /// picks "Copy to remote…" without naming one. Empty = no
+    /// default; the picker opens unfiltered.
+    pub default_backend: String,
+}
+
+/// One TOML-persisted backend descriptor. The kind-specific config
+/// is stored as a sibling `Option<...>` rather than a tagged enum so
+/// `#[serde(default)]`-driven forward compat still works when a
+/// future build adds a new kind — older readers see `kind = "..."`
+/// plus one or more unrecognised sub-tables and keep the entry
+/// intact without panicking.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct BackendConfigEntry {
+    pub name: String,
+    pub kind: BackendKindChoice,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_fs: Option<LocalFsBackendConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub s3: Option<S3BackendConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r2: Option<S3BackendConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub b2: Option<S3BackendConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub azure_blob: Option<AzureBlobBackendConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gcs: Option<GcsBackendConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub onedrive: Option<OAuthBackendConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub google_drive: Option<OAuthBackendConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dropbox: Option<OAuthBackendConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub webdav: Option<WebdavBackendConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sftp: Option<SftpBackendConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ftp: Option<FtpBackendConfig>,
+}
+
+/// Which of the 12 backend kinds this entry configures. Wire string
+/// mirrors `copythat_cloud::BackendKind::wire`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BackendKindChoice {
+    S3,
+    R2,
+    B2,
+    AzureBlob,
+    Gcs,
+    Onedrive,
+    GoogleDrive,
+    Dropbox,
+    Webdav,
+    Sftp,
+    Ftp,
+    #[default]
+    LocalFs,
+}
+
+impl BackendKindChoice {
+    /// Stable wire string — kept in lockstep with
+    /// `copythat_cloud::BackendKind::wire`.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::S3 => "s3",
+            Self::R2 => "r2",
+            Self::B2 => "b2",
+            Self::AzureBlob => "azure-blob",
+            Self::Gcs => "gcs",
+            Self::Onedrive => "onedrive",
+            Self::GoogleDrive => "google-drive",
+            Self::Dropbox => "dropbox",
+            Self::Webdav => "webdav",
+            Self::Sftp => "sftp",
+            Self::Ftp => "ftp",
+            Self::LocalFs => "local-fs",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct LocalFsBackendConfig {
+    pub root: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct S3BackendConfig {
+    pub bucket: String,
+    pub region: String,
+    pub endpoint: String,
+    pub root: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct AzureBlobBackendConfig {
+    pub container: String,
+    pub account_name: String,
+    pub endpoint: String,
+    pub root: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct GcsBackendConfig {
+    pub bucket: String,
+    pub service_account: String,
+    pub root: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct OAuthBackendConfig {
+    pub client_id: String,
+    pub root: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct WebdavBackendConfig {
+    pub endpoint: String,
+    pub username: String,
+    pub root: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct SftpBackendConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub root: String,
+}
+
+impl Default for SftpBackendConfig {
+    fn default() -> Self {
+        Self {
+            host: String::new(),
+            port: 22,
+            username: String::new(),
+            root: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct FtpBackendConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub root: String,
+}
+
+impl Default for FtpBackendConfig {
+    fn default() -> Self {
+        Self {
+            host: String::new(),
+            port: 21,
+            username: String::new(),
+            root: String::new(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
 // Convenience surface
 // ---------------------------------------------------------------------
 
@@ -1962,5 +2162,26 @@ log-level = "debug"
             dumped.contains("min-mtime-unix-secs = 1700000000"),
             "{dumped}"
         );
+    }
+
+    #[test]
+    fn remotes_round_trip_preserves_config() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = tmp.path().join("settings.toml");
+        let mut s = Settings::default();
+        s.remotes.backends.push(BackendConfigEntry {
+            name: "prod-s3".into(),
+            kind: BackendKindChoice::S3,
+            s3: Some(S3BackendConfig {
+                bucket: "my-bucket".into(),
+                region: "us-east-1".into(),
+                endpoint: String::new(),
+                root: "archive/".into(),
+            }),
+            ..Default::default()
+        });
+        s.save_to(&path).unwrap();
+        let back = Settings::load_from(&path).unwrap();
+        assert_eq!(back.remotes, s.remotes);
     }
 }
