@@ -24,10 +24,21 @@
 
 pub mod backends;
 pub mod error;
+pub mod fuse_backend;
+pub mod fuse_filesystem;
 pub mod handle;
+pub mod platform;
 pub mod tree;
+pub mod winfsp_backend;
 
 pub use backends::{MountBackend, MountSession, NoopBackend};
 pub use error::MountError;
+pub use fuse_backend::FuseBackend;
+pub use fuse_filesystem::{
+    InodeEntry, MountFileAttr, MountFileKind, ROOT_INODE, TreeInodeMap, now_unix_secs,
+    synthesize_attr,
+};
 pub use handle::MountHandle;
+pub use platform::{default_backend, default_backend_name};
 pub use tree::{MountLayout, MountNode, MountTree, NodeKind};
+pub use winfsp_backend::WinFspBackend;

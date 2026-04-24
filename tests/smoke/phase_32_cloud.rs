@@ -307,6 +307,168 @@ fn case7_phase_32b_enabled_kinds_stable() {
     );
 }
 
+/// Case 8a — Phase 32d engine-level cloud-sink branch. `copy_file`
+/// with `CopyOptions::cloud_sink` set routes the write through
+/// `CloudSink::put_blocking` instead of opening a local dst file;
+/// emits the normal Started / Progress / Completed event sequence
+/// + returns a `CopyReport` with the transferred byte count.
+#[test]
+fn case8a_engine_cloud_sink_branch() {
+    use std::sync::{Arc, Mutex};
+
+    use copythat_core::{CloudSink, CopyControl, CopyEvent, CopyOptions, copy_file};
+
+    #[derive(Debug, Default)]
+    struct RecordingSink {
+        captured: Mutex<Option<(String, Vec<u8>)>>,
+    }
+
+    impl CloudSink for RecordingSink {
+        fn backend_name(&self) -> &str {
+            "recording"
+        }
+        fn put_blocking(&self, path: &str, bytes: &[u8]) -> Result<u64, String> {
+            *self.captured.lock().expect("lock") = Some((path.to_owned(), bytes.to_vec()));
+            Ok(bytes.len() as u64)
+        }
+    }
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+
+    rt.block_on(async {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let src = tmp.path().join("payload.bin");
+        let payload = b"phase-32d engine cloud-sink branch".to_vec();
+        tokio::fs::write(&src, &payload).await.expect("seed");
+
+        let sink = Arc::new(RecordingSink::default());
+        let opts = CopyOptions {
+            cloud_sink: Some(sink.clone() as Arc<dyn CloudSink>),
+            ..Default::default()
+        };
+
+        let ctrl = CopyControl::new();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(32);
+        let dst_key = "archive/payload.bin";
+
+        let report = copy_file(&src, std::path::Path::new(dst_key), opts, ctrl, tx)
+            .await
+            .expect("copy ok");
+
+        assert_eq!(report.bytes, payload.len() as u64);
+
+        // Drain + verify the event order.
+        let mut kinds: Vec<&'static str> = Vec::new();
+        while let Ok(evt) = rx.try_recv() {
+            kinds.push(match evt {
+                CopyEvent::Started { .. } => "Started",
+                CopyEvent::Progress { .. } => "Progress",
+                CopyEvent::Completed { .. } => "Completed",
+                CopyEvent::Failed { .. } => "Failed",
+                _ => "Other",
+            });
+        }
+        assert!(kinds.first() == Some(&"Started"), "kinds={kinds:?}");
+        assert!(kinds.last() == Some(&"Completed"), "kinds={kinds:?}");
+
+        let captured = sink
+            .captured
+            .lock()
+            .expect("lock")
+            .clone()
+            .expect("sink received a put");
+        assert_eq!(captured.0, dst_key);
+        assert_eq!(captured.1, payload);
+    });
+}
+
+/// Case 8b — Phase 32e chunked progress reporting. When the source
+/// is several buffer-sizes long, `copy_file` with a cloud-sink
+/// emits at least one `Progress` event *per chunk* rather than one
+/// halfway-tick.
+#[test]
+fn case8b_chunked_progress_events_during_cloud_sink_upload() {
+    use std::sync::{Arc, Mutex};
+
+    use copythat_core::{CloudSink, CopyControl, CopyEvent, CopyOptions, copy_file};
+
+    #[derive(Debug, Default)]
+    struct RecordingSink {
+        captured: Mutex<Option<(String, usize)>>,
+    }
+
+    impl CloudSink for RecordingSink {
+        fn backend_name(&self) -> &str {
+            "chunked"
+        }
+        fn put_blocking(&self, path: &str, bytes: &[u8]) -> Result<u64, String> {
+            *self.captured.lock().expect("lock") = Some((path.to_owned(), bytes.len()));
+            Ok(bytes.len() as u64)
+        }
+    }
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+
+    rt.block_on(async {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let src = tmp.path().join("bigger.bin");
+        // 5 MiB payload with a 1 MiB buffer → expect ≥5 Progress
+        // events (one per chunk) plus the final one.
+        let payload: Vec<u8> = (0..5 * 1024 * 1024).map(|i| (i % 251) as u8).collect();
+        tokio::fs::write(&src, &payload).await.expect("seed");
+
+        let sink = Arc::new(RecordingSink::default());
+        let opts = CopyOptions {
+            cloud_sink: Some(sink.clone() as Arc<dyn CloudSink>),
+            buffer_size: 1024 * 1024,
+            ..Default::default()
+        };
+
+        let ctrl = CopyControl::new();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        let dst_key = "data/bigger.bin";
+        let report = copy_file(&src, std::path::Path::new(dst_key), opts, ctrl, tx)
+            .await
+            .expect("copy ok");
+        assert_eq!(report.bytes as usize, payload.len());
+
+        let mut progress_events = 0usize;
+        let mut last_bytes: u64 = 0;
+        while let Ok(evt) = rx.try_recv() {
+            if let CopyEvent::Progress {
+                bytes, rate_bps, ..
+            } = evt
+            {
+                progress_events += 1;
+                // Bytes must monotonically increase.
+                assert!(bytes >= last_bytes, "progress regressed {last_bytes} -> {bytes}");
+                last_bytes = bytes;
+                let _ = rate_bps;
+            }
+        }
+        assert!(
+            progress_events >= 5,
+            "expected ≥5 progress events for a 5 MiB × 1 MiB buffer, got {progress_events}"
+        );
+        assert_eq!(last_bytes as usize, payload.len());
+
+        let captured = sink
+            .captured
+            .lock()
+            .expect("lock")
+            .clone()
+            .expect("sink got full payload");
+        assert_eq!(captured.0, dst_key);
+        assert_eq!(captured.1, payload.len());
+    });
+}
+
 /// Case 8 — RemoteSettings round-trip with an empty backend list
 /// keeps the shape intact (no stray null / empty-string drift).
 #[test]
