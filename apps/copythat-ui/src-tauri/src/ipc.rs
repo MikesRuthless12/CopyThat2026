@@ -620,6 +620,37 @@ pub struct SettingsDto {
     /// presentation / fullscreen / thermal pause-and-cap policies).
     #[serde(default)]
     pub power: PowerPoliciesDto,
+    /// Phase 33 — mount-as-filesystem (auto-mount-on-launch toggle).
+    /// Marked `#[serde(default)]` so older persisted settings round-
+    /// trip cleanly when a newer UI reads them.
+    #[serde(default)]
+    pub mount: MountDto,
+}
+
+/// Phase 33 — wire form of `copythat_settings::MountSettings`.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MountDto {
+    pub mount_on_launch: bool,
+    pub mount_on_launch_path: String,
+}
+
+impl From<copythat_settings::MountSettings> for MountDto {
+    fn from(s: copythat_settings::MountSettings) -> Self {
+        Self {
+            mount_on_launch: s.mount_on_launch,
+            mount_on_launch_path: s.mount_on_launch_path,
+        }
+    }
+}
+
+impl From<MountDto> for copythat_settings::MountSettings {
+    fn from(d: MountDto) -> Self {
+        Self {
+            mount_on_launch: d.mount_on_launch,
+            mount_on_launch_path: d.mount_on_launch_path,
+        }
+    }
 }
 
 /// Phase 29 — wire form of `copythat_settings::DndSettings`.
@@ -1411,6 +1442,7 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 fullscreen: (&s.power.fullscreen).into(),
                 thermal: (&s.power.thermal).into(),
             },
+            mount: s.mount.clone().into(),
         }
     }
 }
@@ -1602,6 +1634,8 @@ impl SettingsDto {
             fullscreen: (&self.power.fullscreen).into(),
             thermal: (&self.power.thermal).into(),
         };
+
+        s.mount = self.mount.into();
 
         s
     }

@@ -1112,6 +1112,7 @@ dependencies = [
  "copythat-hash",
  "copythat-history",
  "copythat-journal",
+ "copythat-mount",
  "copythat-platform",
  "copythat-power",
  "copythat-secure-delete",

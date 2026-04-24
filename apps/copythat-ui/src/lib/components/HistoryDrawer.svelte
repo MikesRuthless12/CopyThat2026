@@ -12,6 +12,7 @@
 
   import Icon from "../icons/Icon.svelte";
   import { i18nVersion, t } from "../i18n";
+  import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { formatBytes } from "../format";
   import {
     historyClearAll,
@@ -20,6 +21,7 @@
     historyPurge,
     historyRerun,
     historySearch,
+    mountSnapshot,
   } from "../ipc";
   import {
     closeHistoryDetail,
@@ -117,6 +119,24 @@
       pushToast("info", "toast-history-rerun-queued");
     } catch (e) {
       pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function mountRow(row: HistoryJobDto) {
+    try {
+      const picked = await openDialog({
+        directory: true,
+        multiple: false,
+        title: t("mount-picker-title"),
+      });
+      if (picked == null || typeof picked !== "string") {
+        return;
+      }
+      const dto = await mountSnapshot(row.rowId, picked);
+      pushToast("success", t("mount-toast-mounted", { path: dto.mountpoint }));
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      pushToast("error", t("mount-toast-failed", { reason }));
     }
   }
 
@@ -315,6 +335,17 @@
                 >
                   <Icon name="refresh" size={13} />
                   <span>{t("history-rerun")}</span>
+                </button>
+                <button
+                  type="button"
+                  class="tiny"
+                  onclick={() => mountRow(row)}
+                  aria-label={t("mount-action-mount")}
+                  title={t("mount-heading")}
+                  disabled={row.status !== "succeeded"}
+                >
+                  <Icon name="folder" size={13} />
+                  <span>{t("mount-action-mount")}</span>
                 </button>
               </td>
             </tr>
