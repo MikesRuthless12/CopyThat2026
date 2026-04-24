@@ -1,0 +1,58 @@
+[package]
+name = "copythat-cloud"
+description = "Phase 32 — cloud backend matrix for Copy That. Wraps OpenDAL with a typed Backend / BackendKind / CopyTarget surface and OS-keychain credential storage."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# OpenDAL is the cross-backend storage layer. We enable only the services
+# we surface in the Phase 32a UI today; Phase 32b adds the remaining
+# backends behind their own opendal feature flags so the dep tree stays
+# bounded. `services-fs` covers the LocalFs backend (and the Phase 32a
+# smoke); `services-s3` covers Amazon S3 + Cloudflare R2 + Backblaze B2
+# + any S3-compatible endpoint via the same `services-s3` driver.
+opendal = { version = "0.54", default-features = false, features = [
+    "services-fs",
+    "services-s3",
+] }
+
+# OS keychain. Apple Keychain on macOS, Windows Credential Manager on
+# Windows, Secret Service / kwallet on Linux. MIT/Apache-2.0.
+keyring = { version = "3", default-features = false, features = [
+    "apple-native",
+    "windows-native",
+    "linux-native",
+    "sync-secret-service",
+] }
+
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt", "sync", "io-util"] }
+futures = "0.3"
+bytes = "1"
+async-trait = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "io-util",
+    "test-util",
+] }
+toml = "0.8"
+copythat-settings = { path = "../copythat-settings" }
+
+[[test]]
+name = "phase_32_cloud"
+path = "../../tests/smoke/phase_32_cloud.rs"
