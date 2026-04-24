@@ -522,3 +522,32 @@ export async function testBackendConnection(
 ): Promise<TestConnectionResult> {
   return invoke<TestConnectionResult>("test_backend_connection", { name });
 }
+
+// ---------------------------------------------------------------------
+// Phase 33 — mount-as-filesystem.
+// ---------------------------------------------------------------------
+
+/** Wire-form for one live mount. `jobRowId` matches the history
+ *  `jobs.row_id` primary key. */
+export type MountDto = {
+  jobRowId: number;
+  mountpoint: string;
+};
+
+/** Enumerate currently-active mounts. */
+export async function listMounts(): Promise<MountDto[]> {
+  return invoke<MountDto[]>("list_mounts");
+}
+
+/** Mount the snapshot for a history row at `mountpoint`. */
+export async function mountSnapshot(
+  jobRowId: number,
+  mountpoint: string,
+): Promise<MountDto> {
+  return invoke<MountDto>("mount_snapshot", { jobRowId, mountpoint });
+}
+
+/** Unmount the snapshot for `jobRowId`. */
+export async function unmountSnapshot(jobRowId: number): Promise<void> {
+  await invoke("unmount_snapshot", { jobRowId });
+}

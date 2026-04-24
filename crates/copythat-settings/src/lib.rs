@@ -101,6 +101,10 @@ pub struct Settings {
     /// the list of configured remotes; secrets live in the OS
     /// keychain, not here. See [`RemoteSettings`].
     pub remotes: RemoteSettings,
+    /// Phase 33 — mount-as-filesystem (FUSE / WinFsp). Persists the
+    /// "mount latest snapshot on launch" toggle + the target
+    /// mountpoint. Active mounts themselves are runtime-only.
+    pub mount: MountSettings,
 }
 
 impl Settings {
@@ -1731,6 +1735,29 @@ impl Default for FtpBackendConfig {
             root: String::new(),
         }
     }
+}
+
+// ---------------------------------------------------------------------
+// Phase 33 — mount-as-filesystem (MountSettings)
+// ---------------------------------------------------------------------
+
+/// Phase 33 — persisted preferences for the `copythat-mount` integration.
+/// Active mount handles + their mountpoints live at runtime in the
+/// Tauri `AppState.mounts` registry; this struct only captures the
+/// "start with the latest snapshot mounted" toggle + its target path.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct MountSettings {
+    /// When `true`, the Tauri runner's startup hook (see
+    /// `apps/copythat-ui/src-tauri/src/mount_commands.rs::mount_latest_on_launch`)
+    /// picks the most recent successful history row and mounts it at
+    /// [`Self::mount_on_launch_path`]. No-op when the path is empty
+    /// or history has no rows.
+    pub mount_on_launch: bool,
+    /// Absolute path the auto-mount lands at. Empty = disabled (the
+    /// toggle can be on without a configured path if the user is
+    /// between a toggle-on + path-picker step).
+    pub mount_on_launch_path: String,
 }
 
 // ---------------------------------------------------------------------

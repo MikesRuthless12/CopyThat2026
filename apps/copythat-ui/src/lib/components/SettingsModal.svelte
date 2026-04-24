@@ -1014,6 +1014,31 @@
                 </span>
               </div>
 
+              <h4 class="subheading">{t("settings-mount-heading")}</h4>
+              <p class="hint">{t("settings-mount-hint")}</p>
+
+              {#if settings.mount}
+                <label class="row check">
+                  <input
+                    type="checkbox"
+                    bind:checked={settings.mount.mountOnLaunch}
+                    onchange={pushSettings}
+                  />
+                  <span class="label">{t("settings-mount-on-launch")}</span>
+                </label>
+
+                <label class="row">
+                  <span class="label">{t("settings-mount-on-launch-path")}</span>
+                  <input
+                    type="text"
+                    bind:value={settings.mount.mountOnLaunchPath}
+                    placeholder={t("settings-mount-on-launch-path-placeholder")}
+                    disabled={!settings.mount.mountOnLaunch}
+                    onchange={pushSettings}
+                  />
+                </label>
+              {/if}
+
               <div class="row end">
                 <button class="danger" type="button" onclick={onResetAll} disabled={busy}>
                   {t("settings-reset-all")}

@@ -110,6 +110,12 @@ pub struct AppState {
     /// `copythat_cloud::make_operator` using the persisted config +
     /// the secret pulled from the OS keychain.
     pub cloud_backends: Arc<copythat_cloud::BackendRegistry>,
+    /// Phase 33 — mount-as-filesystem registry. Holds one live
+    /// `MountHandle` per currently-mounted `job_row_id`. Phase 33b
+    /// uses `copythat_mount::NoopBackend` for every mount; Phase 33c
+    /// swaps in `fuser` / `winfsp` behind the mount crate's feature
+    /// flags.
+    pub mounts: crate::mount_commands::MountRegistry,
 }
 
 impl AppState {
@@ -169,6 +175,10 @@ impl AppState {
             // Phase 32 — empty registry; `lib.rs::run` hydrates it
             // from `settings.remotes.backends` after Settings load.
             cloud_backends: Arc::new(copythat_cloud::BackendRegistry::new()),
+            // Phase 33 — empty mount registry; populated lazily when
+            // the user invokes `mount_snapshot` or by
+            // `mount_latest_on_launch` at startup if the setting is on.
+            mounts: crate::mount_commands::MountRegistry::new(),
         }
     }
 

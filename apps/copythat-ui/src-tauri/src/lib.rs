@@ -44,6 +44,7 @@ pub mod i18n;
 pub mod icon;
 pub mod ipc;
 pub mod live_mirror;
+pub mod mount_commands;
 pub mod power;
 pub mod reveal;
 pub mod runner;
@@ -337,6 +338,10 @@ pub fn run() {
             cloud_commands::update_backend,
             cloud_commands::remove_backend,
             cloud_commands::test_backend_connection,
+            // Phase 33 — mount-as-filesystem CRUD.
+            mount_commands::list_mounts,
+            mount_commands::mount_snapshot,
+            mount_commands::unmount_snapshot,
         ])
         .setup(move |app| {
             // Phase 16 / 28 — tray icon + menu. Visible regardless
@@ -477,6 +482,18 @@ pub fn run() {
             if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {
                 shell::dispatch_cli_action(&app.handle().clone(), action);
             }
+
+            // Phase 33 — auto-mount the latest snapshot if the user
+            // has enabled `settings.mount.mount_on_launch`. Best-
+            // effort: any failure logs to stderr and launch proceeds.
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let state: tauri::State<'_, state::AppState> = handle.state();
+                    mount_commands::mount_latest_on_launch(&state).await;
+                });
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
