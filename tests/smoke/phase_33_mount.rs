@@ -21,7 +21,8 @@ use std::path::PathBuf;
 use copythat_chunk::ChunkStore;
 use copythat_history::JobSummary;
 use copythat_mount::{
-    MountBackend, MountError, MountHandle, MountLayout, MountTree, NodeKind, NoopBackend,
+    MountBackend, MountError, MountFileKind, MountHandle, MountLayout, MountTree, NodeKind,
+    NoopBackend, ROOT_INODE, TreeInodeMap, default_backend_name, synthesize_attr,
 };
 
 const PHASE_33_KEYS: &[&str] = &[
@@ -209,4 +210,79 @@ fn workspace_root() -> PathBuf {
         .and_then(|p| p.parent())
         .map(PathBuf::from)
         .expect("workspace root")
+}
+
+/// Case 9 — Phase 33c feature-gate contract: on a default build
+/// (no `fuse` / `winfsp` features), the runtime selector reports
+/// `"noop"`. Platform-enabled builds surface `"fuse"` / `"winfsp"`;
+/// either way, the selector never panics.
+#[test]
+fn case9_default_backend_name_is_stable() {
+    let name = default_backend_name();
+    assert!(matches!(name, "fuse" | "winfsp" | "noop"));
+}
+
+/// Case 11 — Phase 33e `synthesize_attr` projects an inode entry
+/// into the platform-neutral `MountFileAttr` a real FUSE/WinFsp
+/// `getattr` callback will translate to its native shape.
+#[test]
+fn case11_synthesize_attr_projection() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let chunk_store = ChunkStore::open(tmp.path()).expect("chunk store");
+    let jobs = vec![sample_job(1, "/src", "/dst/archive", 1_776_781_935_000)];
+    let tree = MountTree::build(&jobs, &chunk_store, MountLayout::all()).expect("build");
+    let map = TreeInodeMap::from_tree(&tree);
+
+    // Root: directory, 0o555, nlink = 2 + 3 subdirs.
+    let root_attr = synthesize_attr(&map, ROOT_INODE, 1_776_781_935).expect("root");
+    assert_eq!(root_attr.kind, MountFileKind::Directory);
+    assert_eq!(root_attr.perm, 0o555);
+    assert_eq!(root_attr.nlink, 5);
+
+    // Leaf (the single job placeholder under by-job-id/1): file,
+    // 0o444, size 0 in 33e.
+    let by_job_id = map.lookup(ROOT_INODE, "by-job-id").expect("by-job-id");
+    let job_one = map.lookup(by_job_id, "1").expect("1");
+    let leaf = map.lookup(job_one, "archive-copy").expect("archive-copy");
+    let attr = synthesize_attr(&map, leaf, 1_776_781_935).expect("leaf");
+    assert_eq!(attr.kind, MountFileKind::RegularFile);
+    assert_eq!(attr.perm, 0o444);
+    assert_eq!(attr.size, 0);
+    assert_eq!(attr.nlink, 1);
+
+    // Missing inode surfaces None — callback will return ENOENT.
+    assert!(synthesize_attr(&map, 999_999, 1_776_781_935).is_none());
+}
+
+/// Case 10 — Phase 33d inode map: a `TreeInodeMap` built from a
+/// `MountTree` exposes root-inode 1, parent-child links, and a
+/// stable-sorted readdir.
+#[test]
+fn case10_tree_inode_map_exposes_readdir_and_lookup() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let chunk_store = ChunkStore::open(tmp.path()).expect("chunk store");
+    let jobs = vec![sample_job(1, "/src", "/dst/archive", 1_776_781_935_000)];
+    let tree = MountTree::build(&jobs, &chunk_store, MountLayout::all()).expect("build");
+    let map = TreeInodeMap::from_tree(&tree);
+
+    let root = map.get(ROOT_INODE).expect("root present");
+    assert_eq!(root.parent, ROOT_INODE);
+
+    // readdir at root is sorted: by-date / by-job-id / by-source.
+    let top: Vec<String> = map
+        .readdir(ROOT_INODE)
+        .into_iter()
+        .map(|(_, n, _)| n)
+        .collect();
+    assert_eq!(top, ["by-date", "by-job-id", "by-source"]);
+
+    // Drill into by-job-id/1/archive-copy.
+    let by_job_id = map.lookup(ROOT_INODE, "by-job-id").expect("by-job-id");
+    let job_one = map.lookup(by_job_id, "1").expect("job 1");
+    let leaf = map.lookup(job_one, "archive-copy").expect("leaf");
+    let leaf_entry = map.get(leaf).expect("leaf entry");
+    assert!(matches!(
+        leaf_entry.kind,
+        NodeKind::JobPlaceholder { job_row_id: 1 }
+    ));
 }
