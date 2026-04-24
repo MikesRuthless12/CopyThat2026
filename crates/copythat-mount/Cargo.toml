@@ -14,24 +14,26 @@ workspace = true
 
 [features]
 # Phase 33a shipped pure-Rust tree builder + handle types with no
-# platform FFI. Phase 33c adds feature-gated backend scaffolding:
+# platform FFI. Phase 33c/f lit the feature-gated backends:
 #
 #   cargo build -p copythat-mount --features fuse    # Linux/macOS
 #   cargo build -p copythat-mount --features winfsp  # Windows
 #
-# The `fuse` feature pulls `fuser` 0.15 (MIT) on Unix targets and is
-# a no-op elsewhere. The `winfsp` feature is a no-op marker today:
-# the obvious candidate `winfsp-sys` crate is GPL-3.0 licensed,
-# which conflicts with the workspace's permissive-only allowlist.
-# Phase 33d will land a WinFsp binding through either an
-# MIT-licensed alternative or direct-FFI bindings we write in-tree
-# under our own licence; the feature flag is kept here so the
-# `WinFspBackend` type surface + `default_backend()` selector can
-# already name it. Real kernel read callbacks that stream chunks
-# from the Phase 27 chunk store are the same Phase 33d follow-up.
+# - `fuse` pulls `fuser` 0.15 (MIT) on Unix; no-op elsewhere.
+# - `winfsp` pulls `winfsp_wrs` 0.4 (MIT — Scille/Parsec's wrapper)
+#   on Windows; no-op elsewhere. This replaces the initial
+#   `winfsp-sys` candidate, which is GPL-3.0 and violates the
+#   workspace's permissive-only `deny.toml` allowlist. `winfsp_wrs`
+#   re-implements the FFI surface under MIT so Copy That stays
+#   commercially shippable.
+#
+# The `winfsp` feature also requires the WinFsp driver installed
+# on the host at runtime (https://winfsp.dev/). Phase 33g adds a
+# runtime probe that surfaces `BackendUnavailable` with a clean
+# install-WinFsp reason when the driver is missing.
 default = []
 fuse = ["dep:fuser"]
-winfsp = []
+winfsp = ["dep:winfsp_wrs", "dep:widestring", "dep:tokio"]
 
 [dependencies]
 # History + chunk-store references feed the virtual tree. The mount
@@ -53,9 +55,25 @@ copythat-core = { path = "../copythat-core", version = "1" }
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 fuser = { version = "0.15", optional = true }
 
+# Phase 33f — `winfsp_wrs` is Scille's MIT-licensed WinFsp binding
+# (replaces the GPL-blocked `winfsp-sys`). Target-gated to Windows;
+# non-Windows builds with `--features winfsp` simply skip this dep
+# and the `WinFspBackend` mount path surfaces `BackendUnavailable`.
+# `widestring` + `tokio` come along for Phase 33i's real
+# FileSystemInterface implementation (wide-string conversions +
+# history DB block_on from the sync WinFsp callback thread).
+[target.'cfg(target_os = "windows")'.dependencies]
+winfsp_wrs = { version = "0.4", optional = true }
+widestring = { version = "1", optional = true }
+tokio = { version = "1", features = ["rt"], optional = true }
+
 [dev-dependencies]
 tempfile = "3"
 
 [[test]]
 name = "phase_33_mount"
 path = "../../tests/smoke/phase_33_mount.rs"
+
+[[test]]
+name = "phase_33h_mount"
+path = "../../tests/smoke/phase_33h_mount.rs"

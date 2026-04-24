@@ -98,15 +98,18 @@ impl BackendKind {
     }
 
     /// Whether [`make_operator`] can successfully build an operator
-    /// for this kind in the current build. Phase 32b enables all
-    /// kinds except [`BackendKind::Sftp`] — the `openssh` 0.11 crate
-    /// that OpenDAL's `services-sftp` driver pulls in fails to build
-    /// on Windows (blanket-`TryFrom` conflict). Config + persistence
-    /// still carry `Sftp` so a settings.toml from a user on a
-    /// platform where SFTP works doesn't lose the row on Windows;
-    /// the operator build is what surfaces the typed error.
+    /// for this kind in the current build. Phase 32f flipped SFTP
+    /// from "config-only" to "supported via custom russh backend"
+    /// — SFTP now bypasses OpenDAL (whose `services-sftp` driver
+    /// pulls the GPL/Windows-broken `openssh` crate) and uses
+    /// [`crate::SftpTarget`] instead. Because that path isn't an
+    /// opendal operator, `make_operator` still returns
+    /// `BackendError::BackendNotEnabled { kind: "sftp" }` for
+    /// `Sftp` — the caller uses [`crate::make_target`] instead
+    /// to resolve either an opendal-backed or an
+    /// SFTP-native `CopyTarget` by kind.
     pub fn is_enabled(&self) -> bool {
-        !matches!(self, BackendKind::Sftp)
+        true
     }
 }
 
@@ -212,6 +215,14 @@ pub struct SftpConfig {
     pub username: String,
     #[serde(default)]
     pub root: String,
+    /// Phase 32h — path to an OpenSSH-format `known_hosts` file.
+    /// When non-empty, the SFTP handshake pins the server key
+    /// against entries matching `(host, port)` in this file;
+    /// missing entries + mismatches surface as an auth error.
+    /// When empty, falls back to trust-on-first-use (Phase 32f
+    /// default — safe only on private networks / dev setups).
+    #[serde(default)]
+    pub known_hosts_path: String,
 }
 
 fn default_sftp_port() -> u16 {
@@ -418,6 +429,36 @@ pub fn make_operator(
     }
 }
 
+/// Phase 32f — resolve a [`Backend`] into a live
+/// [`crate::CopyTarget`] trait object. Unlike [`make_operator`],
+/// this factory handles both OpenDAL-backed kinds AND the
+/// SFTP-via-russh custom backend. The caller uses `CopyTarget`
+/// for uniform dispatch (put / get / list / stat / delete).
+///
+/// `secret` semantics match [`make_operator`] for OpenDAL kinds;
+/// for SFTP it's the keychain blob whose first line is either
+/// `KEY\n<openssh-private-key>` or (default) the plain password.
+pub fn make_target(
+    backend: &Backend,
+    secret: Option<&str>,
+) -> Result<std::sync::Arc<dyn crate::target::CopyTarget>, crate::error::BackendError> {
+    use crate::sftp::SftpTarget;
+    use crate::target::OperatorTarget;
+    use std::sync::Arc;
+
+    match &backend.config {
+        BackendConfig::Sftp(cfg) => Ok(Arc::new(SftpTarget::new(
+            backend.name.clone(),
+            cfg.clone(),
+            secret.unwrap_or_default().to_owned(),
+        ))),
+        _ => {
+            let op = make_operator(backend, secret)?;
+            Ok(Arc::new(OperatorTarget::new(backend.name.clone(), op)))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -509,6 +550,7 @@ mod tests {
                 port: 22,
                 username: "u".into(),
                 root: String::new(),
+                known_hosts_path: String::new(),
             }),
         };
         match make_operator(&backend, None) {
@@ -580,13 +622,12 @@ mod tests {
     }
 
     #[test]
-    fn is_enabled_matches_phase_32b_scope() {
-        // Phase 32b: everything but SFTP is enabled. SFTP stays
-        // config-only until the upstream `openssh`-on-Windows issue
-        // resolves.
+    fn is_enabled_matches_phase_32f_scope() {
+        // Phase 32f: every kind is supported. SFTP went from
+        // config-only → first-class via the custom russh backend
+        // (bypassing OpenDAL's GPL-blocked services-sftp driver).
         for kind in BackendKind::all() {
-            let expected = !matches!(kind, BackendKind::Sftp);
-            assert_eq!(kind.is_enabled(), expected, "is_enabled drift on {kind:?}");
+            assert!(kind.is_enabled(), "kind {kind:?} should be enabled in 32f");
         }
     }
 }

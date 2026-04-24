@@ -79,7 +79,7 @@ mod tests {
         let backend = NoopBackend::default();
         let tmp = tempfile::tempdir().expect("tempdir");
         let handle = backend
-            .mount(tmp.path(), crate::MountLayout::all())
+            .mount(tmp.path(), crate::MountLayout::all(), &crate::backends::ArchiveRefs::default())
             .expect("mount");
         assert!(handle.is_live());
         let counter = backend.unmount_counter();
@@ -93,7 +93,7 @@ mod tests {
         let backend = NoopBackend::default();
         let tmp = tempfile::tempdir().expect("tempdir");
         let handle = backend
-            .mount(tmp.path(), crate::MountLayout::all())
+            .mount(tmp.path(), crate::MountLayout::all(), &crate::backends::ArchiveRefs::default())
             .expect("mount");
         handle.unmount().expect("unmount");
         let counter = backend.unmount_counter();

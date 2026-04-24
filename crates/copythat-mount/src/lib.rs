@@ -31,12 +31,12 @@ pub mod platform;
 pub mod tree;
 pub mod winfsp_backend;
 
-pub use backends::{MountBackend, MountSession, NoopBackend};
+pub use backends::{ArchiveRefs, MountBackend, MountSession, NoopBackend};
 pub use error::MountError;
 pub use fuse_backend::FuseBackend;
 pub use fuse_filesystem::{
     InodeEntry, MountFileAttr, MountFileKind, ROOT_INODE, TreeInodeMap, now_unix_secs,
-    synthesize_attr,
+    synthesize_attr, synthesize_attr_with_size,
 };
 pub use handle::MountHandle;
 pub use platform::{default_backend, default_backend_name};

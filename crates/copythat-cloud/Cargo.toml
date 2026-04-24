@@ -60,6 +60,55 @@ async-trait = "0.1"
 # Phase 32b — CloudSink adapter against copythat-core's trait bound.
 copythat-core = { path = "../copythat-core", version = "1" }
 
+# Phase 32f — SFTP via russh + russh-sftp. Pure-Rust MIT-licensed
+# replacement for OpenDAL's `services-sftp` (which pulls the
+# openssh 0.11 crate that fails to build on Windows). Wired as a
+# custom `CopyTarget` impl in `src/sftp.rs` rather than through
+# OpenDAL, so it stays independent of OpenDAL's backend matrix.
+russh = { version = "0.60", default-features = false, features = [
+    "flate2",
+    "aws-lc-rs",
+] }
+russh-sftp = "2"
+# Phase 32f — BLAKE3 for verify-on-remote client-side hashing.
+blake3 = "1"
+# Phase 32g — SHA-256 for verify backends that expose a SHA-256
+# server-side checksum (GCS default object hash; Azure Blob with
+# MD5 disabled). MIT/Apache-2.0.
+sha2 = "0.10"
+# Phase 32h — MD5 for the S3/Azure ETag server-side-checksum
+# fast-path. Not a security primitive here — we're matching what
+# the backend reports, not attesting integrity. MIT/Apache-2.0.
+md-5 = "0.10"
+# Phase 32g — hex encoding for the stat-metadata ETag fast-path
+# comparator (OpenDAL stores etag/content-md5 as ASCII hex).
+hex = "0.4"
+# Phase 32h — base64 decode for Azure Blob's `content-md5` which
+# is base64-encoded rather than hex. MIT/Apache-2.0.
+base64 = "0.22"
+# Phase 32i — HMAC-SHA1 for hashed OpenSSH known_hosts entries
+# (|1|salt|hmac format). MIT/Apache-2.0.
+hmac = "0.12"
+sha1 = "0.10"
+# Phase 32i — Dropbox PKCE browser-redirect flow listens on a
+# local loopback port for the auth-code redirect. Raw TcpListener
+# from std::net; no extra crate needed. `getrandom` supplies the
+# PKCE code_verifier's cryptographic bytes (simpler than pulling
+# full `rand`; OpenDAL already brings getrandom transitively).
+getrandom = "0.3"
+# Phase 32f — reqwest for OAuth device-code HTTP flows. Uses
+# rustls so we don't pull OpenSSL into the dep tree.
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
+serde_json = "1"
+# Phase 32f OAuth — `webbrowser` opens the user_code verification
+# URL in the user's default browser (cross-platform). MIT.
+webbrowser = "1"
+# Phase 32f OAuth — `url` for RFC-3986 parsing of token endpoints.
+url = "2"
+
 [dev-dependencies]
 tempfile = "3"
 tokio = { version = "1", features = [
@@ -80,3 +129,7 @@ copythat-core = { path = "../copythat-core" }
 [[test]]
 name = "phase_32_cloud"
 path = "../../tests/smoke/phase_32_cloud.rs"
+
+[[test]]
+name = "phase_32f_minio"
+path = "../../tests/smoke/phase_32f_minio.rs"

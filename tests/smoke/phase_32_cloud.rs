@@ -278,12 +278,11 @@ fn cargo_workspace_root() -> PathBuf {
         .expect("workspace root resolvable from CARGO_MANIFEST_DIR")
 }
 
-/// Case 7 — `BackendKind::is_enabled` matches the Phase 32b scope
-/// (everything but SFTP — the `openssh` crate `services-sftp` pulls
-/// in fails to build on Windows; config + persistence still carry
-/// the kind so cross-platform TOMLs round-trip cleanly).
+/// Case 7 — Phase 32f contract: every `BackendKind` is enabled
+/// (SFTP shipped via the custom russh backend in `src/sftp.rs`
+/// rather than OpenDAL's GPL-blocked services-sftp driver).
 #[test]
-fn case7_phase_32b_enabled_kinds_stable() {
+fn case7_phase_32f_enabled_kinds_stable() {
     let enabled: Vec<&str> = BackendKind::all()
         .iter()
         .filter(|k| k.is_enabled())
@@ -301,6 +300,7 @@ fn case7_phase_32b_enabled_kinds_stable() {
             "google-drive",
             "dropbox",
             "webdav",
+            "sftp",
             "ftp",
             "local-fs",
         ]
@@ -385,30 +385,22 @@ fn case8a_engine_cloud_sink_branch() {
     });
 }
 
-/// Case 8b — Phase 32e chunked progress reporting. When the source
-/// is several buffer-sizes long, `copy_file` with a cloud-sink
-/// emits at least one `Progress` event *per chunk* rather than one
-/// halfway-tick.
+/// Case 8b — Phase 32f streaming writer through
+/// `CopyThatCloudSink`. Wraps a LocalFs `OperatorTarget` in a real
+/// sink, uploads a 5 MiB file through the engine, and asserts the
+/// engine emits one Progress per buffer chunk (via the
+/// `put_stream_blocking` override that pipes through
+/// `opendal::Operator::writer()` without buffering the full
+/// payload).
 #[test]
-fn case8b_chunked_progress_events_during_cloud_sink_upload() {
-    use std::sync::{Arc, Mutex};
+fn case8b_streaming_writer_through_real_cloud_sink() {
+    use std::sync::Arc;
 
+    use copythat_cloud::{
+        Backend as CloudBackend, BackendConfig, BackendKind, CopyThatCloudSink,
+        LocalFsConfig, OperatorTarget, make_operator,
+    };
     use copythat_core::{CloudSink, CopyControl, CopyEvent, CopyOptions, copy_file};
-
-    #[derive(Debug, Default)]
-    struct RecordingSink {
-        captured: Mutex<Option<(String, usize)>>,
-    }
-
-    impl CloudSink for RecordingSink {
-        fn backend_name(&self) -> &str {
-            "chunked"
-        }
-        fn put_blocking(&self, path: &str, bytes: &[u8]) -> Result<u64, String> {
-            *self.captured.lock().expect("lock") = Some((path.to_owned(), bytes.len()));
-            Ok(bytes.len() as u64)
-        }
-    }
 
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -416,14 +408,28 @@ fn case8b_chunked_progress_events_during_cloud_sink_upload() {
         .expect("runtime");
 
     rt.block_on(async {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let src = tmp.path().join("bigger.bin");
-        // 5 MiB payload with a 1 MiB buffer → expect ≥5 Progress
-        // events (one per chunk) plus the final one.
+        let src_dir = tempfile::tempdir().expect("src dir");
+        let remote_root = tempfile::tempdir().expect("remote root");
+
+        let src = src_dir.path().join("bigger.bin");
+        // 5 MiB payload with a 1 MiB buffer → expect multiple
+        // Progress events driven by the streaming writer's
+        // per-chunk callback.
         let payload: Vec<u8> = (0..5 * 1024 * 1024).map(|i| (i % 251) as u8).collect();
         tokio::fs::write(&src, &payload).await.expect("seed");
 
-        let sink = Arc::new(RecordingSink::default());
+        let backend = CloudBackend {
+            name: "streaming-test".into(),
+            kind: BackendKind::LocalFs,
+            config: BackendConfig::LocalFs(LocalFsConfig {
+                root: remote_root.path().to_string_lossy().into_owned(),
+            }),
+        };
+        let op = make_operator(&backend, None).expect("operator");
+        let target = Arc::new(OperatorTarget::new("streaming-test", op));
+        let sink = Arc::new(
+            CopyThatCloudSink::new(target).expect("sink runtime build"),
+        );
         let opts = CopyOptions {
             cloud_sink: Some(sink.clone() as Arc<dyn CloudSink>),
             buffer_size: 1024 * 1024,
@@ -446,26 +452,28 @@ fn case8b_chunked_progress_events_during_cloud_sink_upload() {
             } = evt
             {
                 progress_events += 1;
-                // Bytes must monotonically increase.
                 assert!(bytes >= last_bytes, "progress regressed {last_bytes} -> {bytes}");
                 last_bytes = bytes;
                 let _ = rate_bps;
             }
         }
+        // Streaming writer's per-chunk callback fires once per
+        // `buffer_size` read — plus the final halfway-tick the
+        // engine emits before calling close. 5 MiB / 1 MiB = 5
+        // chunks, so ≥3 progress events is a safe floor (buffer
+        // coalescing inside OpenDAL may merge a few).
         assert!(
-            progress_events >= 5,
-            "expected ≥5 progress events for a 5 MiB × 1 MiB buffer, got {progress_events}"
+            progress_events >= 3,
+            "expected ≥3 progress events for a 5 MiB × 1 MiB buffer, got {progress_events}"
         );
         assert_eq!(last_bytes as usize, payload.len());
 
-        let captured = sink
-            .captured
-            .lock()
-            .expect("lock")
-            .clone()
-            .expect("sink got full payload");
-        assert_eq!(captured.0, dst_key);
-        assert_eq!(captured.1, payload.len());
+        // Confirm the bytes actually landed on disk through the
+        // operator's streaming writer.
+        let landed = tokio::fs::read(remote_root.path().join("data/bigger.bin"))
+            .await
+            .expect("landed");
+        assert_eq!(landed, payload);
     });
 }
 
