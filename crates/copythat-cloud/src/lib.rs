@@ -35,6 +35,7 @@ pub mod error;
 pub mod registry;
 pub mod sink;
 pub mod target;
+pub mod transfer;
 
 pub use backend::{
     AzureBlobConfig, Backend, BackendConfig, BackendKind, FtpConfig, GcsConfig, LocalFsConfig,
@@ -45,6 +46,7 @@ pub use error::BackendError;
 pub use registry::BackendRegistry;
 pub use sink::CopyThatCloudSink;
 pub use target::{CopyTarget, EntryMeta, OperatorTarget};
+pub use transfer::{copy_from_target, copy_to_target};
 
 /// Re-export of `opendal` for callers that don't want to depend on it
 /// directly. The Phase 32 IPC layer leans on this to map OpenDAL's

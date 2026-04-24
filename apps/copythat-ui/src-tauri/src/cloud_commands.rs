@@ -12,10 +12,13 @@
 //! name + kind + config only and prompts for the secret on re-edit
 //! if the user needs to rotate it.
 
+use std::path::PathBuf;
+use std::sync::Arc;
+
 use copythat_cloud::{
-    AzureBlobConfig, Backend, BackendConfig, BackendKind, BackendRegistry, Credentials,
-    FtpConfig, GcsConfig, LocalFsConfig, OAuthConfig, S3Config, SftpConfig, WebdavConfig,
-    make_operator, opendal,
+    AzureBlobConfig, Backend, BackendConfig, BackendKind, BackendRegistry, CopyTarget,
+    Credentials, FtpConfig, GcsConfig, LocalFsConfig, OAuthConfig, OperatorTarget, S3Config,
+    SftpConfig, WebdavConfig, copy_from_target, copy_to_target, make_operator, opendal,
 };
 use copythat_settings::{
     AzureBlobBackendConfig, BackendConfigEntry, BackendKindChoice, FtpBackendConfig,
@@ -269,6 +272,56 @@ pub async fn test_backend_connection(
             detail: Some(e.to_string()),
         }),
     }
+}
+
+/// Phase 32c — transfer a single local file to a configured backend.
+/// The backend is identified by its registry `name`; the secret
+/// (when required) is pulled from the keychain just as
+/// `test_backend_connection` does.
+#[tauri::command]
+pub async fn copy_local_to_backend(
+    backend_name: String,
+    src_path: String,
+    dst_key: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<u64, String> {
+    let backend = state
+        .cloud_backends
+        .get(&backend_name)
+        .ok_or_else(|| format!("backend `{backend_name}` is not registered"))?;
+    let secret = Credentials
+        .load(&backend.name)
+        .map_err(|e| e.to_string())?;
+    let operator = make_operator(&backend, secret.as_deref()).map_err(|e| e.to_string())?;
+    let target: Arc<dyn CopyTarget> =
+        Arc::new(OperatorTarget::new(backend.name.clone(), operator));
+    copy_to_target(&PathBuf::from(&src_path), &target, &dst_key)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Phase 32c — pull a remote object onto the local filesystem. The
+/// mirror of `copy_local_to_backend`.
+#[tauri::command]
+pub async fn copy_backend_to_local(
+    backend_name: String,
+    src_key: String,
+    dst_path: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<u64, String> {
+    let backend = state
+        .cloud_backends
+        .get(&backend_name)
+        .ok_or_else(|| format!("backend `{backend_name}` is not registered"))?;
+    let secret = Credentials
+        .load(&backend.name)
+        .map_err(|e| e.to_string())?;
+    let operator = make_operator(&backend, secret.as_deref()).map_err(|e| e.to_string())?;
+    let target: Arc<dyn CopyTarget> =
+        Arc::new(OperatorTarget::new(backend.name.clone(), operator));
+    copy_from_target(&target, &src_key, &PathBuf::from(&dst_path))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Seed the in-memory registry from persisted settings. Called by
