@@ -548,6 +548,24 @@ export interface SettingsDto {
   /// Phase 34 — audit log export + WORM mode. Optional on the wire
   /// so older backends without the field don't break this frontend.
   audit?: AuditSettingsDto;
+  /// Phase 35 — encryption + compression policy. Optional on the
+  /// wire so older backends without the field don't break this
+  /// frontend.
+  crypt?: CryptSettingsDto;
+}
+
+/** Phase 35 — wire form of `copythat_settings::CryptSettings`. */
+export type EncryptionModeWire = "off" | "passphrase" | "recipients";
+export type CompressionModeWire = "off" | "always" | "smart";
+
+export interface CryptSettingsDto {
+  encryptionMode: EncryptionModeWire;
+  recipientsFile: string;
+  compressionMode: CompressionModeWire;
+  /** zstd level 1–22. Slider in Settings clamps into that range. */
+  compressionLevel: number;
+  /** Extras appended to the Smart policy's built-in deny list. */
+  compressionExtraDeny: string[];
 }
 
 /** Phase 33 — wire form of `copythat_settings::MountSettings`. */

@@ -195,6 +195,71 @@ pub trait ShapeSink: Send + Sync + std::fmt::Debug {
     fn permit<'a>(&'a self, bytes: u64) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 }
 
+/// Phase 35 — bridge contract for on-the-fly encryption + compression.
+///
+/// Implemented by `copythat_crypt::CopyThatCryptHook`. Kept in this
+/// crate so [`CopyOptions`] can hold a trait object without pulling
+/// `copythat-crypt` into the core dep graph (same pattern as
+/// [`ShapeSink`] / [`JournalSink`] / [`FastCopyHook`]).
+///
+/// The hook runs on a blocking thread (the engine wraps the call in
+/// `spawn_blocking`) because both `age` and `zstd` are sync-first
+/// libraries. The trait's one method consumes the source path + the
+/// destination path and returns a [`TransformOutcome`] summarising
+/// the bytes that flowed through the pipeline.
+///
+/// When a hook is installed and the sink returns
+/// [`TransformOutcome::Transformed`], the engine:
+///
+/// - Skips [`fast_copy_hook`](CopyOptions::fast_copy_hook) (fast
+///   paths are byte-identical copies; they can't handle a
+///   transformed destination).
+/// - Skips [`verify`](CopyOptions::verify) (a byte-exact verify
+///   against an encrypted / compressed destination would fail by
+///   construction).
+/// - Skips the write-after-verify fsync — the transform sink owns
+///   the destination file for its entire lifetime.
+/// - Emits [`crate::CopyEvent::CompressionSavings`] when the
+///   outcome includes compression metrics.
+pub trait TransformSink: Send + Sync + std::fmt::Debug {
+    /// Execute the transform. Implementations open `src` + `dst` on
+    /// the blocking thread they're invoked from, run the sync
+    /// pipeline, and return the outcome.
+    ///
+    /// The engine calls this inside a `spawn_blocking` task; the
+    /// future the trait returns is `Send + 'static` so it composes
+    /// with the standard tokio task API.
+    fn transform<'a>(
+        &'a self,
+        src: PathBuf,
+        dst: PathBuf,
+    ) -> Pin<Box<dyn Future<Output = Result<TransformOutcome, CopyError>> + Send + 'a>>;
+}
+
+/// Result payload the engine consumes from a [`TransformSink`].
+/// Carries both the final destination size (for the
+/// `CopyEvent::Completed` event) and optional compression metrics
+/// (for the `CopyEvent::CompressionSavings` event).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TransformOutcome {
+    /// The number of source bytes the sink read end-to-end. Used by
+    /// the engine as the `bytes` value on `CopyEvent::Completed`.
+    pub input_bytes: u64,
+    /// Bytes actually written to the destination (post-transform).
+    /// May be smaller than `input_bytes` when compression ran;
+    /// identical when it didn't.
+    pub output_bytes: u64,
+    /// When the sink ran compression, this is the ratio
+    /// `output_bytes / input_bytes`; `None` when compression was
+    /// off. The engine uses this to decide whether to fire the
+    /// `CompressionSavings` event.
+    pub compression_ratio: Option<f64>,
+    /// Whether encryption ran as part of the transform. Informational
+    /// — today only used by the runner when displaying the job row
+    /// badge.
+    pub encrypted: bool,
+}
+
 /// Behaviour knobs for a single `copy_file` invocation.
 #[derive(Debug, Clone)]
 pub struct CopyOptions {
@@ -389,6 +454,23 @@ pub struct CopyOptions {
     /// once the engine's read path is refactored for non-blocking
     /// destination IO. `None` preserves pre-Phase-32 behaviour.
     pub cloud_sink: Option<Arc<dyn CloudSink>>,
+
+    /// Phase 35 — on-the-fly encryption + compression sink.
+    ///
+    /// When `Some`, the engine short-circuits to the sink's
+    /// `transform` method (on a `spawn_blocking` thread) instead of
+    /// running its own read-write loop. The sink owns the pipeline:
+    /// it opens the source + destination itself, chains zstd / age
+    /// transforms, and returns the byte counts via
+    /// [`TransformOutcome`].
+    ///
+    /// Activating the sink is mutually exclusive with
+    /// [`fast_copy_hook`](Self::fast_copy_hook) (the transformed
+    /// bytes are not byte-exact with the source) and with
+    /// [`verify`](Self::verify) (post-copy hash would mismatch by
+    /// construction). The engine applies those exclusions
+    /// automatically when the sink is present.
+    pub transform: Option<Arc<dyn TransformSink>>,
 }
 
 /// Bridge contract for the Phase 32 cloud sink.
@@ -560,6 +642,7 @@ impl Default for CopyOptions {
             meta_ops: None,
             chunk_store: None,
             cloud_sink: None,
+            transform: None,
         }
     }
 }

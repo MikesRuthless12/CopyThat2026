@@ -141,7 +141,8 @@ pub use options::{
     ChunkStoreSink, CloudSink, CopyOptions, CopyStrategy, DEFAULT_BUFFER_SIZE,
     DEFAULT_TREE_CONCURRENCY, ErrorAction, ErrorPolicy, FastCopyHook, FastCopyHookOutcome,
     JournalSink, LockedFilePolicy, MAX_BUFFER_SIZE, MIN_BUFFER_SIZE, MoveOptions, ResumePlan,
-    ShapeSink, SnapshotGuard, SnapshotHook, SnapshotLease, TreeOptions,
+    ShapeSink, SnapshotGuard, SnapshotHook, SnapshotLease, TransformOutcome, TransformSink,
+    TreeOptions,
 };
 pub use queue::{Job, JobId, JobKind, JobState, Queue, QueueEvent};
 pub use safety::{PathSafetyError, validate_all, validate_path_no_traversal};

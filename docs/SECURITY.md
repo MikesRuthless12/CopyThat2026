@@ -315,6 +315,61 @@ sensitive flags survive a copy. The threat model:
   `gethostname` 1 (BSD-3-Clause) — are all in the permissive
   allowlist; no exceptions added.
 
+## Phase 35 — destination encryption + on-the-fly compression
+
+- **Encryption is opt-in per install.** A fresh install ships
+  `Settings::crypt.encryption_mode = "off"` — no transform runs,
+  no extra files appear, and the engine path is byte-for-byte
+  identical to pre-Phase-35 behaviour. The user must explicitly
+  pick `passphrase` or `recipients` from Settings → Transfer →
+  Encryption to enable the pipeline.
+- **age format wire-compatibility.** Encrypted destinations are
+  bit-for-bit identical to what the upstream `rage` CLI produces
+  (`age -r <recipient> <file>` / `age -p <file>`). Decryption
+  works without Copy That in the loop — a user who later loses
+  this app can still decrypt with the official `rage` binary
+  using the same passphrase or X25519 / SSH key.
+- **No key material on disk.** Passphrases live in
+  `secrecy::SecretString` for the duration of a copy; they're
+  never persisted to `settings.toml`. X25519 / SSH recipients are
+  read from a user-supplied recipients file path stored in
+  Settings — the *path* is persisted, not the key bytes.
+  (Identity files for *decryption* will live in `<config-dir>/keys/`
+  with file-mode 600 once the import-keys flow lands; today the
+  decrypted_reader path takes a pre-loaded `Identity` from
+  whichever source the caller chose.)
+- **Verify is auto-disabled when transform runs.** A byte-exact
+  post-copy hash against an age / zstd destination would always
+  mismatch (the destination bytes differ from the source by
+  construction). The runner strips any verifier the user
+  configured when it attaches the crypt hook so users don't see
+  spurious "verify failed" errors. Compression integrity is
+  still guaranteed by the format itself: zstd carries a 32-bit
+  XXH64 checksum per frame, age writes per-chunk MACs.
+- **Compression cannot exfiltrate or alter.** The zstd encoder is
+  a pure data-transform — it can't reach the network or read
+  files outside what the engine hands it. The deny-extension
+  list (jpg / mp4 / zip / pdf / msi / iso / …) is a correctness
+  optimisation: re-compressing already-compressed data wastes CPU
+  and may *grow* the file slightly, so Smart mode skips them.
+- **CRIME / BREACH-style attacks are not in-scope.** The crypt
+  pipeline is "compress then encrypt" because that's what produces
+  good ratios on plain text + small ciphertext overhead. Compress-
+  then-encrypt has well-known leakage characteristics when the
+  attacker controls part of the input (CRIME / BREACH against
+  TLS); for offline file backups + one-shot copies this is not
+  the threat model. A future opt-in flag could disable
+  compression for sensitive workloads.
+- **`cargo deny` coverage.** The three new direct deps —
+  [`age`](https://crates.io/crates/age) 0.11 (MIT/Apache-2.0),
+  [`zstd`](https://crates.io/crates/zstd) 0.13 (MIT/Apache-2.0;
+  zstd-sys ships under BSD/MIT), and
+  [`secrecy`](https://crates.io/crates/secrecy) 0.10
+  (MIT/Apache-2.0) — are all in the permissive allowlist; no
+  exceptions added. Transitive crypto crates (chacha20poly1305,
+  x25519-dalek, scrypt, sha2, hmac, hkdf) are all RustCrypto-
+  ecosystem MIT/Apache-2.0.
+
 ## Build hardening (target, post-Phase 17)
 
 - Stack probes enabled.

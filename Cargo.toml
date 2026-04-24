@@ -19,6 +19,7 @@ members = [
     "crates/copythat-cloud",
     "crates/copythat-mount",
     "crates/copythat-audit",
+    "crates/copythat-crypt",
     "xtask",
     "apps/copythat-ui/src-tauri",
 ]

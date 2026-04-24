@@ -96,6 +96,16 @@ workloads.
 - **Tracing fan-out**: `tracing_subscriber::Layer` captures any `target = "copythat::audit"` log from the rest of the workspace into the sink so ad-hoc `warn!` calls auditors care about land in the same file.
 - **Settings → Advanced → Audit log** surfaces the enable toggle, format picker, file path, rotation threshold, WORM toggle, and *Test write* + *Verify chain* buttons. The sink hot-swaps on every `update_settings` without restart.
 
+### Encryption + on-the-fly compression (Phase 35)
+
+- **Destination encryption via [age](https://age-encryption.org/)** — passphrase, X25519 (`age1…`), or SSH ed25519 / RSA recipients. Output is bit-for-bit compatible with the upstream `rage` CLI's binary format, so a future user can decrypt with the official `rage` binary without Copy That in the loop.
+- **On-the-fly zstd compression** with three modes: *Off* (default), *Always* (every file at the chosen level), *Smart* (every file *except* a built-in 38-extension deny list covering jpg / mp4 / zip / 7z / pdf / msi / iso / etc. — re-compressing already-compressed media wastes CPU and can grow the file). User can append extra extensions to the Smart deny list.
+- **zstd level 1–22 slider** in Settings → Transfer → Compression. Default is 3 (zstd's CLI default and the workspace's "fast + useful" pick); higher numbers compress harder at progressively-larger CPU cost.
+- **Live compression metrics**: every file's `CopyEvent::CompressionSavings { ratio, bytes_saved }` event powers a footer "💾 256 MiB → 84 MiB (67% saved)" badge against the running tree totals.
+- **Engine pipeline** (when either stage is active): `src bytes → optional zstd encoder → optional age encryptor → dst`. The pipeline runs on a `spawn_blocking` worker so age + zstd (both sync-first libraries) compose cleanly with the async copy engine. Fast paths + verify + sparse + chunk-store + journal are auto-bypassed because byte-level invariants don't hold against a transformed destination.
+- **Decryption is symmetric**: `copythat_crypt::decrypted_reader` accepts a passphrase, X25519 secret key, or SSH private key — same `Identity` bag, same age-format input. The runner's auto-decrypt-on-copy-FROM-`.age` flow lands in a Phase 35 follow-up.
+- **Settings → Transfer → Encryption + Compression** carries the mode pickers, recipients-file path, and the level slider. The passphrase modal flow (collect at copy-start, hold in `secrecy::SecretString` for the duration of the run) is deferred to a Phase 35 follow-up — today the runner falls back to plain copy when the user selects `passphrase` mode and logs the reason.
+
 ### Performance
 
 - **1 MiB** is the measured optimum buffer size; all other sizes regressed in the Phase 13b sweep — see [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).

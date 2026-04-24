@@ -110,6 +110,11 @@ pub struct Settings {
     /// user explicitly enables the toggle in Settings → Advanced →
     /// Audit log.
     pub audit: AuditSettings,
+    /// Phase 35 — destination encryption + on-the-fly compression.
+    /// Both stages are off by default so existing workflows see no
+    /// behaviour change until the user explicitly opts in via
+    /// Settings → Transfer. See [`CryptSettings`].
+    pub crypt: CryptSettings,
 }
 
 impl Settings {
@@ -1815,6 +1820,53 @@ impl Default for AuditSettings {
             worm: "off".into(),
             max_size_bytes: 10 * 1024 * 1024,
             syslog_destination: String::new(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+// Phase 35 — encryption + compression (CryptSettings)
+// ---------------------------------------------------------------------
+
+/// Persisted encryption + compression preferences. The live
+/// [`copythat_crypt::EncryptionPolicy`] / `CompressionPolicy` are
+/// built from these strings at copy time by the Tauri runner.
+///
+/// The enum-shaped fields (`encryption_mode`, `compression_mode`)
+/// are kebab-case strings for the same reason `audit.format` is:
+/// keeps the settings crate a pure preference layer with no
+/// `copythat-crypt` dep.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct CryptSettings {
+    /// `"off" | "passphrase" | "recipients"`. When `"passphrase"`,
+    /// the Settings UI pops a password modal at copy-start time —
+    /// the passphrase never touches disk. When `"recipients"`, the
+    /// `recipients_file` path is read for `age1…` / SSH keys.
+    pub encryption_mode: String,
+    /// Absolute path to a file with one recipient per line (an
+    /// `age1…` string or an SSH public key). Ignored unless
+    /// `encryption_mode == "recipients"`.
+    pub recipients_file: String,
+    /// `"off" | "always" | "smart"`. Default `"off"`.
+    pub compression_mode: String,
+    /// zstd level 1–22. UI slider clamps; defaults to 3 (zstd's
+    /// own CLI default and the workspace's "useful + fast" pick).
+    pub compression_level: i32,
+    /// Extra file extensions the Smart policy should deny on top
+    /// of the built-in defaults (`jpg`, `mp4`, `zip`, …). Lowercase,
+    /// no leading dot.
+    pub compression_extra_deny: Vec<String>,
+}
+
+impl Default for CryptSettings {
+    fn default() -> Self {
+        Self {
+            encryption_mode: "off".into(),
+            recipients_file: String::new(),
+            compression_mode: "off".into(),
+            compression_level: 3,
+            compression_extra_deny: Vec::new(),
         }
     }
 }

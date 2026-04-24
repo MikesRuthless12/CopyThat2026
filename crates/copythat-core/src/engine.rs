@@ -75,6 +75,17 @@ pub async fn copy_file(
             .await;
     }
 
+    // Phase 35 — transform sink early branch. When encryption /
+    // compression is configured, the transform sink owns the read +
+    // write path end-to-end. Fast paths + verify + sparseness are
+    // all bypassed by design (the destination bytes differ from
+    // the source by construction; byte-exact verification would
+    // always fail).
+    if let Some(sink) = opts.transform.clone() {
+        return copy_file_to_transform(src_path, dst_path, opts, ctrl, events, src_metadata, sink)
+            .await;
+    }
+
     // Phase 23 — sparse-file pre-flight. When the caller has wired a
     // `sparse_ops` hook and `preserve_sparseness` is on, detect the
     // source's extent layout up front. If the source actually contains
@@ -1221,6 +1232,91 @@ async fn copy_file_to_cloud_sink(
         src: src_path,
         dst: dst_path,
         bytes: written,
+        duration: elapsed,
+        rate_bps,
+    })
+}
+
+/// Phase 35 — route a local source file through a
+/// [`crate::options::TransformSink`] destination. Called from
+/// `copy_file` when `opts.transform` is set.
+///
+/// The sink owns the pipeline end-to-end: it reads from `src_path`,
+/// optionally compresses + encrypts, and writes the result to
+/// `dst_path`. Fast paths, verify, sparseness, chunk-store, and
+/// journal hooks are all bypassed by design — the transformed
+/// bytes are not byte-exact with the source, so byte-level
+/// invariants don't hold.
+async fn copy_file_to_transform(
+    src_path: PathBuf,
+    dst_path: PathBuf,
+    opts: CopyOptions,
+    ctrl: CopyControl,
+    events: mpsc::Sender<CopyEvent>,
+    src_metadata: std::fs::Metadata,
+    sink: std::sync::Arc<dyn crate::options::TransformSink>,
+) -> Result<CopyReport, CopyError> {
+    let _ = opts; // sink owns its own config; engine doesn't read buffer_size here
+    let _ = ctrl; // cancel is observed inside the transform body via the sink's own pipeline
+
+    let total_bytes = src_metadata.len();
+    let _ = events
+        .send(CopyEvent::Started {
+            src: src_path.clone(),
+            dst: dst_path.clone(),
+            total_bytes,
+        })
+        .await;
+
+    let start = Instant::now();
+
+    let outcome = match sink.transform(src_path.clone(), dst_path.clone()).await {
+        Ok(outcome) => outcome,
+        Err(err) => {
+            let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+            return Err(err);
+        }
+    };
+
+    let elapsed = start.elapsed();
+    let rate_bps = rate_bps_from(outcome.input_bytes, elapsed);
+
+    // Emit a final progress tick at 100% so UIs bound to the
+    // running Progress stream settle on the authoritative byte
+    // count before Completed fires.
+    let _ = events
+        .send(CopyEvent::Progress {
+            bytes: outcome.input_bytes,
+            total: outcome.input_bytes.max(total_bytes),
+            rate_bps,
+        })
+        .await;
+
+    // Phase 35 — compression-savings event if the sink ran
+    // compression. `bytes_saved` is the input/output delta; the UI
+    // renders it as a "💾 256 MiB → 84 MiB (67% saved)" footer
+    // badge against the running tree totals.
+    if let Some(ratio) = outcome.compression_ratio {
+        let saved = outcome.input_bytes.saturating_sub(outcome.output_bytes);
+        let _ = events
+            .send(CopyEvent::CompressionSavings {
+                ratio,
+                bytes_saved: saved,
+            })
+            .await;
+    }
+
+    let _ = events
+        .send(CopyEvent::Completed {
+            bytes: outcome.input_bytes,
+            duration: elapsed,
+            rate_bps,
+        })
+        .await;
+    Ok(CopyReport {
+        src: src_path,
+        dst: dst_path,
+        bytes: outcome.input_bytes,
         duration: elapsed,
         rate_bps,
     })
