@@ -103,6 +103,13 @@ pub struct AppState {
     /// same bus so the smoke test can fire synthetic events through
     /// the real end-to-end path without the OS probes.
     pub power_bus: copythat_power::PowerBus,
+    /// Phase 32 — cloud backend matrix. Owns the in-memory
+    /// `BackendRegistry` that mirrors `RemoteSettings::backends` on
+    /// disk. The Add-backend wizard + test-connection IPC read and
+    /// write through this registry; operators are built on-demand by
+    /// `copythat_cloud::make_operator` using the persisted config +
+    /// the secret pulled from the OS keychain.
+    pub cloud_backends: Arc<copythat_cloud::BackendRegistry>,
 }
 
 impl AppState {
@@ -159,6 +166,9 @@ impl AppState {
             // the smoke leave the bus idle and drive it via
             // `inject_power_event`.
             power_bus: copythat_power::PowerBus::new(),
+            // Phase 32 — empty registry; `lib.rs::run` hydrates it
+            // from `settings.remotes.backends` after Settings load.
+            cloud_backends: Arc::new(copythat_cloud::BackendRegistry::new()),
         }
     }
 

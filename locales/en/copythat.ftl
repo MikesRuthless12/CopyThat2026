@@ -730,3 +730,39 @@ power-reason-cellular-network = cellular network
 power-reason-presenting = presentation mode
 power-reason-fullscreen = fullscreen app
 power-reason-thermal-throttling = CPU is throttling
+
+# Phase 32 — cloud backend matrix via OpenDAL. Settings → Remotes
+# tab + the Add-backend wizard that writes one entry per remote into
+# the keychain-backed credential store.
+remote-heading = Remote backends
+remote-add = Add backend
+remote-list-empty = No remote backends configured
+remote-test = Test connection
+remote-test-success = Connection successful
+remote-test-failed = Connection failed
+remote-remove = Remove backend
+remote-name-label = Display name
+remote-kind-label = Backend type
+remote-save = Save backend
+remote-cancel = Cancel
+backend-s3 = Amazon S3
+backend-r2 = Cloudflare R2
+backend-b2 = Backblaze B2
+backend-azure-blob = Azure Blob Storage
+backend-gcs = Google Cloud Storage
+backend-onedrive = OneDrive
+backend-google-drive = Google Drive
+backend-dropbox = Dropbox
+backend-webdav = WebDAV
+backend-sftp = SFTP
+backend-ftp = FTP
+backend-local-fs = Local filesystem
+cloud-config-bucket = Bucket
+cloud-config-region = Region
+cloud-config-endpoint = Endpoint URL
+cloud-config-root = Root path
+cloud-error-invalid-config = Backend configuration is invalid
+cloud-error-network = Network error contacting backend
+cloud-error-not-found = Object not found at the requested path
+cloud-error-permission = Permission denied by remote backend
+cloud-error-keychain = OS keychain access failed

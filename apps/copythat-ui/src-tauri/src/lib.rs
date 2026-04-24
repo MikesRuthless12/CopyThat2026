@@ -32,6 +32,7 @@
 //! into the `drop-received` IPC event for the Svelte layer.
 
 pub mod cli;
+pub mod cloud_commands;
 pub mod clipboard;
 pub mod clipboard_watcher;
 pub mod collisions;
@@ -133,6 +134,17 @@ pub fn run() {
     };
 
     let app_state = state::AppState::new_with(history, settings, settings_path, profiles);
+
+    // Phase 32 — hydrate the cloud-backend registry from the
+    // `Settings::remotes.backends` mirror so the first
+    // `test_backend_connection` hits memory instead of re-parsing
+    // TOML. Best-effort — invalid rows are skipped with a stderr
+    // log; a later upsert from the Add-backend wizard brings the
+    // registry back in sync with disk.
+    {
+        let snap = app_state.settings_snapshot();
+        cloud_commands::hydrate_registry_from_settings(&app_state.cloud_backends, &snap);
+    }
 
     // Phase 20 — open the resume journal alongside history. Failure
     // is non-fatal: the runner skips checkpointing and the resume
@@ -319,6 +331,12 @@ pub fn run() {
             commands::drag_out_stage,
             // Phase 31 — power-aware copying test-inject IPC.
             power::inject_power_event,
+            // Phase 32 — cloud backend matrix CRUD + test-connection.
+            cloud_commands::list_backends,
+            cloud_commands::add_backend,
+            cloud_commands::update_backend,
+            cloud_commands::remove_backend,
+            cloud_commands::test_backend_connection,
         ])
         .setup(move |app| {
             // Phase 16 / 28 — tray icon + menu. Visible regardless
