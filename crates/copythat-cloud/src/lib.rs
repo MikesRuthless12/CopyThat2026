@@ -33,6 +33,7 @@ pub mod backend;
 pub mod credentials;
 pub mod error;
 pub mod registry;
+pub mod sink;
 pub mod target;
 
 pub use backend::{
@@ -42,6 +43,7 @@ pub use backend::{
 pub use credentials::{Credentials, CredentialsError};
 pub use error::BackendError;
 pub use registry::BackendRegistry;
+pub use sink::CopyThatCloudSink;
 pub use target::{CopyTarget, EntryMeta, OperatorTarget};
 
 /// Re-export of `opendal` for callers that don't want to depend on it

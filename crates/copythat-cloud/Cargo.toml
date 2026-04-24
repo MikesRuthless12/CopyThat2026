@@ -13,15 +13,33 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-# OpenDAL is the cross-backend storage layer. We enable only the services
-# we surface in the Phase 32a UI today; Phase 32b adds the remaining
-# backends behind their own opendal feature flags so the dep tree stays
-# bounded. `services-fs` covers the LocalFs backend (and the Phase 32a
-# smoke); `services-s3` covers Amazon S3 + Cloudflare R2 + Backblaze B2
-# + any S3-compatible endpoint via the same `services-s3` driver.
+# OpenDAL is the cross-backend storage layer. Phase 32b lights the
+# remaining 8 drivers: `services-azblob` (Azure Blob), `services-gcs`
+# (Google Cloud Storage), `services-onedrive`, `services-gdrive`
+# (Google Drive), `services-dropbox`, `services-webdav`,
+# `services-sftp`, `services-ftp`. `services-fs` covers LocalFs;
+# `services-s3` covers Amazon S3 + Cloudflare R2 + Backblaze B2 + any
+# S3-compatible endpoint via the same driver. Features are listed
+# explicitly rather than via a catch-all `--all-features` so
+# `cargo deny` audits a bounded, reviewable set.
 opendal = { version = "0.54", default-features = false, features = [
     "services-fs",
     "services-s3",
+    "services-azblob",
+    "services-gcs",
+    "services-onedrive",
+    "services-gdrive",
+    "services-dropbox",
+    "services-webdav",
+    # `services-sftp` pulls `openssh` 0.11 which fails to build on
+    # Windows (conflicting `TryFrom<tokio::process::Child*>` impls
+    # introduced by Rust's blanket-From; tracked upstream). Kept in
+    # BackendKind + config + settings persistence; `make_operator`
+    # surfaces `BackendError::BackendNotEnabled` until the upstream
+    # fix lands or we swap to a pure-Rust SSH implementation
+    # (`russh`). Re-enable here when that resolves.
+    # "services-sftp",
+    "services-ftp",
 ] }
 
 # OS keychain. Apple Keychain on macOS, Windows Credential Manager on
@@ -39,6 +57,8 @@ tokio = { version = "1", features = ["macros", "rt", "sync", "io-util"] }
 futures = "0.3"
 bytes = "1"
 async-trait = "0.1"
+# Phase 32b — CloudSink adapter against copythat-core's trait bound.
+copythat-core = { path = "../copythat-core", version = "1" }
 
 [dev-dependencies]
 tempfile = "3"

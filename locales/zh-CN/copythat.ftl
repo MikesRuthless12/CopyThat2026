@@ -1034,3 +1034,4 @@ cloud-error-network = Network error contacting backend  # MT
 cloud-error-not-found = Object not found at the requested path  # MT
 cloud-error-permission = Permission denied by remote backend  # MT
 cloud-error-keychain = OS keychain access failed  # MT
+settings-tab-remotes = Remotes  # MT

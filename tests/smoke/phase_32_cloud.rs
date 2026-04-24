@@ -278,16 +278,33 @@ fn cargo_workspace_root() -> PathBuf {
         .expect("workspace root resolvable from CARGO_MANIFEST_DIR")
 }
 
-/// Case 7 — `BackendKind::is_enabled` matches what Phase 32a actually
-/// wires up. Phase 32b flips the rest.
+/// Case 7 — `BackendKind::is_enabled` matches the Phase 32b scope
+/// (everything but SFTP — the `openssh` crate `services-sftp` pulls
+/// in fails to build on Windows; config + persistence still carry
+/// the kind so cross-platform TOMLs round-trip cleanly).
 #[test]
-fn case7_phase_32a_enabled_kinds_stable() {
+fn case7_phase_32b_enabled_kinds_stable() {
     let enabled: Vec<&str> = BackendKind::all()
         .iter()
         .filter(|k| k.is_enabled())
         .map(|k| k.wire())
         .collect();
-    assert_eq!(enabled, ["s3", "r2", "b2", "local-fs"]);
+    assert_eq!(
+        enabled,
+        [
+            "s3",
+            "r2",
+            "b2",
+            "azure-blob",
+            "gcs",
+            "onedrive",
+            "google-drive",
+            "dropbox",
+            "webdav",
+            "ftp",
+            "local-fs",
+        ]
+    );
 }
 
 /// Case 8 — RemoteSettings round-trip with an empty backend list
@@ -301,4 +318,116 @@ fn case8_empty_remote_settings_round_trip() {
     original.save_to(&path).expect("save");
     let back = Settings::load_from(&path).expect("load");
     assert_eq!(back.remotes, RemoteSettings::default());
+}
+
+/// Case 9 — Phase 32b lit drivers build a valid OpenDAL operator
+/// under minimally-valid config (no live network). The make_operator
+/// factory is where configuration-time validation runs — we exercise
+/// every kind so a future refactor that drops a driver surfaces here.
+#[test]
+fn case9_phase_32b_drivers_build_operator() {
+    use copythat_cloud::{
+        AzureBlobConfig, FtpConfig, GcsConfig, OAuthConfig, S3Config, WebdavConfig,
+    };
+
+    // Azure Blob — container + account required; secret optional at
+    // build time (OpenDAL surfaces a stat-time 401 otherwise).
+    let azure = Backend {
+        name: "az".into(),
+        kind: BackendKind::AzureBlob,
+        config: BackendConfig::AzureBlob(AzureBlobConfig {
+            container: "snapshots".into(),
+            account_name: "mystore".into(),
+            endpoint: String::new(),
+            root: String::new(),
+        }),
+    };
+    if let Err(e) = make_operator(&azure, None) {
+        panic!("azure build failed: {e}");
+    }
+
+    // GCS — bucket required; credential flows through the secret
+    // slot as raw JSON.
+    let gcs = Backend {
+        name: "gcs".into(),
+        kind: BackendKind::Gcs,
+        config: BackendConfig::Gcs(GcsConfig {
+            bucket: "backup-bucket".into(),
+            service_account: String::new(),
+            root: String::new(),
+        }),
+    };
+    assert!(make_operator(&gcs, None).is_ok());
+
+    // OneDrive / GoogleDrive / Dropbox all require the access token
+    // at build time — omitting it surfaces InvalidConfig.
+    let onedrive = Backend {
+        name: "od".into(),
+        kind: BackendKind::Onedrive,
+        config: BackendConfig::Onedrive(OAuthConfig {
+            client_id: "cid".into(),
+            root: String::new(),
+        }),
+    };
+    assert!(make_operator(&onedrive, Some("token123")).is_ok());
+
+    let gdrive = Backend {
+        name: "gd".into(),
+        kind: BackendKind::GoogleDrive,
+        config: BackendConfig::GoogleDrive(OAuthConfig {
+            client_id: "cid".into(),
+            root: String::new(),
+        }),
+    };
+    assert!(make_operator(&gdrive, Some("token123")).is_ok());
+
+    let dropbox = Backend {
+        name: "db".into(),
+        kind: BackendKind::Dropbox,
+        config: BackendConfig::Dropbox(OAuthConfig {
+            client_id: "cid".into(),
+            root: String::new(),
+        }),
+    };
+    assert!(make_operator(&dropbox, Some("token123")).is_ok());
+
+    // WebDAV — endpoint required; username + password both optional
+    // for public read-only endpoints.
+    let webdav = Backend {
+        name: "wd".into(),
+        kind: BackendKind::Webdav,
+        config: BackendConfig::Webdav(WebdavConfig {
+            endpoint: "https://dav.example.com/".into(),
+            username: "u".into(),
+            root: String::new(),
+        }),
+    };
+    assert!(make_operator(&webdav, Some("pw")).is_ok());
+
+    // FTP — host required; the driver auto-prepends the ftps://
+    // scheme + configured port.
+    let ftp = Backend {
+        name: "ftp".into(),
+        kind: BackendKind::Ftp,
+        config: BackendConfig::Ftp(FtpConfig {
+            host: "ftp.example.com".into(),
+            port: 21,
+            username: "anon".into(),
+            root: String::new(),
+        }),
+    };
+    assert!(make_operator(&ftp, None).is_ok());
+
+    // S3 passes both halves of the secret; missing separator fails.
+    let s3 = Backend {
+        name: "s3".into(),
+        kind: BackendKind::S3,
+        config: BackendConfig::S3(S3Config {
+            bucket: "b".into(),
+            region: "us-east-1".into(),
+            endpoint: String::new(),
+            root: String::new(),
+        }),
+    };
+    assert!(make_operator(&s3, Some("ak\nsk")).is_ok());
 }

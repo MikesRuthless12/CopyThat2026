@@ -98,11 +98,15 @@ impl BackendKind {
     }
 
     /// Whether [`make_operator`] can successfully build an operator
-    /// for this kind in the current build. Phase 32a returns true
-    /// only for `LocalFs` and `S3` (which covers R2 + B2 +
-    /// S3-compatible). Phase 32b flips the rest.
+    /// for this kind in the current build. Phase 32b enables all
+    /// kinds except [`BackendKind::Sftp`] — the `openssh` 0.11 crate
+    /// that OpenDAL's `services-sftp` driver pulls in fails to build
+    /// on Windows (blanket-`TryFrom` conflict). Config + persistence
+    /// still carry `Sftp` so a settings.toml from a user on a
+    /// platform where SFTP works doesn't lose the row on Windows;
+    /// the operator build is what surfaces the typed error.
     pub fn is_enabled(&self) -> bool {
-        matches!(self, BackendKind::LocalFs | BackendKind::S3 | BackendKind::R2 | BackendKind::B2)
+        !matches!(self, BackendKind::Sftp)
     }
 }
 
@@ -284,18 +288,130 @@ pub fn make_operator(
             }
             Ok(opendal::Operator::new(builder)?.finish())
         }
-        BackendConfig::AzureBlob(_) => {
-            Err(BackendError::BackendNotEnabled { kind: "azure-blob" })
+        BackendConfig::AzureBlob(cfg) => {
+            if cfg.container.is_empty() || cfg.account_name.is_empty() {
+                return Err(BackendError::InvalidConfig(
+                    "azure-blob backend requires container + account_name".into(),
+                ));
+            }
+            // Azure Storage's builder refuses to build without an
+            // endpoint. Synthesize the canonical public URL from
+            // account_name when the user didn't supply one
+            // (the common case — custom endpoints are for
+            // Azurite / sovereign clouds / private-link setups).
+            let default_endpoint =
+                format!("https://{}.blob.core.windows.net", cfg.account_name);
+            let endpoint = if cfg.endpoint.is_empty() {
+                default_endpoint.as_str()
+            } else {
+                cfg.endpoint.as_str()
+            };
+            let mut builder = opendal::services::Azblob::default()
+                .container(&cfg.container)
+                .account_name(&cfg.account_name)
+                .endpoint(endpoint);
+            if !cfg.root.is_empty() {
+                builder = builder.root(&cfg.root);
+            }
+            if let Some(s) = secret {
+                // Azure Storage uses one shared key at a time.
+                builder = builder.account_key(s);
+            }
+            Ok(opendal::Operator::new(builder)?.finish())
         }
-        BackendConfig::Gcs(_) => Err(BackendError::BackendNotEnabled { kind: "gcs" }),
-        BackendConfig::Onedrive(_) => Err(BackendError::BackendNotEnabled { kind: "onedrive" }),
-        BackendConfig::GoogleDrive(_) => {
-            Err(BackendError::BackendNotEnabled { kind: "google-drive" })
+        BackendConfig::Gcs(cfg) => {
+            if cfg.bucket.is_empty() {
+                return Err(BackendError::InvalidConfig(
+                    "gcs backend requires a bucket".into(),
+                ));
+            }
+            let mut builder = opendal::services::Gcs::default().bucket(&cfg.bucket);
+            if !cfg.service_account.is_empty() {
+                builder = builder.service_account(&cfg.service_account);
+            }
+            if !cfg.root.is_empty() {
+                builder = builder.root(&cfg.root);
+            }
+            if let Some(s) = secret {
+                // Secret is the raw JSON service-account credentials.
+                builder = builder.credential(s);
+            }
+            Ok(opendal::Operator::new(builder)?.finish())
         }
-        BackendConfig::Dropbox(_) => Err(BackendError::BackendNotEnabled { kind: "dropbox" }),
-        BackendConfig::Webdav(_) => Err(BackendError::BackendNotEnabled { kind: "webdav" }),
+        BackendConfig::Onedrive(cfg) => {
+            let secret =
+                secret.ok_or_else(|| BackendError::InvalidConfig(
+                    "onedrive backend requires an access token in the keychain".into(),
+                ))?;
+            let mut builder = opendal::services::Onedrive::default().access_token(secret);
+            if !cfg.root.is_empty() {
+                builder = builder.root(&cfg.root);
+            }
+            Ok(opendal::Operator::new(builder)?.finish())
+        }
+        BackendConfig::GoogleDrive(cfg) => {
+            let secret = secret.ok_or_else(|| {
+                BackendError::InvalidConfig(
+                    "google-drive backend requires an access token in the keychain".into(),
+                )
+            })?;
+            let mut builder = opendal::services::Gdrive::default().access_token(secret);
+            if !cfg.root.is_empty() {
+                builder = builder.root(&cfg.root);
+            }
+            Ok(opendal::Operator::new(builder)?.finish())
+        }
+        BackendConfig::Dropbox(cfg) => {
+            let secret = secret.ok_or_else(|| {
+                BackendError::InvalidConfig(
+                    "dropbox backend requires an access token in the keychain".into(),
+                )
+            })?;
+            let mut builder = opendal::services::Dropbox::default().access_token(secret);
+            if !cfg.root.is_empty() {
+                builder = builder.root(&cfg.root);
+            }
+            Ok(opendal::Operator::new(builder)?.finish())
+        }
+        BackendConfig::Webdav(cfg) => {
+            if cfg.endpoint.is_empty() {
+                return Err(BackendError::InvalidConfig(
+                    "webdav backend requires an endpoint URL".into(),
+                ));
+            }
+            let mut builder = opendal::services::Webdav::default().endpoint(&cfg.endpoint);
+            if !cfg.username.is_empty() {
+                builder = builder.username(&cfg.username);
+            }
+            if !cfg.root.is_empty() {
+                builder = builder.root(&cfg.root);
+            }
+            if let Some(s) = secret {
+                builder = builder.password(s);
+            }
+            Ok(opendal::Operator::new(builder)?.finish())
+        }
         BackendConfig::Sftp(_) => Err(BackendError::BackendNotEnabled { kind: "sftp" }),
-        BackendConfig::Ftp(_) => Err(BackendError::BackendNotEnabled { kind: "ftp" }),
+        BackendConfig::Ftp(cfg) => {
+            if cfg.host.is_empty() {
+                return Err(BackendError::InvalidConfig(
+                    "ftp backend requires a host".into(),
+                ));
+            }
+            let port = if cfg.port == 0 { 21 } else { cfg.port };
+            let endpoint = format!("ftps://{}:{port}", cfg.host);
+            let mut builder = opendal::services::Ftp::default().endpoint(&endpoint);
+            if !cfg.username.is_empty() {
+                builder = builder.user(&cfg.username);
+            }
+            if !cfg.root.is_empty() {
+                builder = builder.root(&cfg.root);
+            }
+            if let Some(s) = secret {
+                builder = builder.password(s);
+            }
+            Ok(opendal::Operator::new(builder)?.finish())
+        }
         BackendConfig::Empty => Err(BackendError::InvalidConfig(
             "backend has no config — re-add through the wizard".into(),
         )),
@@ -384,21 +500,72 @@ mod tests {
     }
 
     #[test]
-    fn make_operator_disabled_kinds_surface_typed_error() {
+    fn make_operator_sftp_surfaces_backend_not_enabled() {
+        let backend = Backend {
+            name: "sftp".into(),
+            kind: BackendKind::Sftp,
+            config: BackendConfig::Sftp(SftpConfig {
+                host: "example.com".into(),
+                port: 22,
+                username: "u".into(),
+                root: String::new(),
+            }),
+        };
+        match make_operator(&backend, None) {
+            Err(BackendError::BackendNotEnabled { kind }) => assert_eq!(kind, "sftp"),
+            other => panic!("expected BackendNotEnabled, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn make_operator_azure_blob_rejects_empty_container() {
         let backend = Backend {
             name: "azure".into(),
             kind: BackendKind::AzureBlob,
             config: BackendConfig::AzureBlob(AzureBlobConfig {
-                container: "c".into(),
+                container: String::new(),
                 account_name: "a".into(),
                 endpoint: String::new(),
                 root: String::new(),
             }),
         };
-        match make_operator(&backend, None) {
-            Err(BackendError::BackendNotEnabled { kind }) => assert_eq!(kind, "azure-blob"),
-            other => panic!("expected BackendNotEnabled, got {other:?}"),
-        }
+        assert!(matches!(
+            make_operator(&backend, None).unwrap_err(),
+            BackendError::InvalidConfig(_)
+        ));
+    }
+
+    #[test]
+    fn make_operator_onedrive_requires_access_token() {
+        let backend = Backend {
+            name: "od".into(),
+            kind: BackendKind::Onedrive,
+            config: BackendConfig::Onedrive(OAuthConfig {
+                client_id: "cid".into(),
+                root: String::new(),
+            }),
+        };
+        assert!(matches!(
+            make_operator(&backend, None).unwrap_err(),
+            BackendError::InvalidConfig(_)
+        ));
+    }
+
+    #[test]
+    fn make_operator_webdav_requires_endpoint() {
+        let backend = Backend {
+            name: "webdav".into(),
+            kind: BackendKind::Webdav,
+            config: BackendConfig::Webdav(WebdavConfig {
+                endpoint: String::new(),
+                username: "u".into(),
+                root: String::new(),
+            }),
+        };
+        assert!(matches!(
+            make_operator(&backend, None).unwrap_err(),
+            BackendError::InvalidConfig(_)
+        ));
     }
 
     #[test]
@@ -413,15 +580,12 @@ mod tests {
     }
 
     #[test]
-    fn is_enabled_matches_phase_32a_scope() {
+    fn is_enabled_matches_phase_32b_scope() {
+        // Phase 32b: everything but SFTP is enabled. SFTP stays
+        // config-only until the upstream `openssh`-on-Windows issue
+        // resolves.
         for kind in BackendKind::all() {
-            let expected = matches!(
-                kind,
-                BackendKind::LocalFs
-                    | BackendKind::S3
-                    | BackendKind::R2
-                    | BackendKind::B2
-            );
+            let expected = !matches!(kind, BackendKind::Sftp);
             assert_eq!(kind.is_enabled(), expected, "is_enabled drift on {kind:?}");
         }
     }
