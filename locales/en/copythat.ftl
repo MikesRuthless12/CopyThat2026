@@ -813,3 +813,33 @@ settings-audit-verify-chain = Verify chain
 toast-audit-test-write-ok = Audit log test write succeeded
 toast-audit-verify-ok = Audit chain verified intact
 toast-audit-verify-failed = Audit chain verification reported mismatches
+
+# Phase 35 — destination encryption via age (X25519 / passphrase /
+# SSH) + on-the-fly zstd compression with a per-extension deny
+# heuristic. Surfaced through Settings → Transfer → Encryption +
+# Compression; engine short-circuits to the crypt pipeline when
+# either stage is active.
+settings-crypt-heading = Encryption & compression
+settings-crypt-hint = Transform file contents before they land at the destination. Encryption uses the age format; compression uses zstd and can skip already-compressed media by extension.
+settings-crypt-encryption-mode = Encryption
+settings-crypt-encryption-off = Off
+settings-crypt-encryption-passphrase = Passphrase (prompt at copy start)
+settings-crypt-encryption-recipients = Recipient keys from file
+settings-crypt-encryption-hint = Passphrases are held only in memory for the duration of the copy. Recipient files list one age1… or ssh- public key per line.
+settings-crypt-recipients-file = Recipients file path
+settings-crypt-recipients-file-placeholder = e.g. C:\Users\me\recipients.txt
+settings-crypt-compression-mode = Compression
+settings-crypt-compression-off = Off
+settings-crypt-compression-always = Always
+settings-crypt-compression-smart = Smart (skip already-compressed media)
+settings-crypt-compression-hint = Smart mode skips jpg, mp4, zip, 7z and similar formats that don't benefit from zstd. Always mode compresses every file at the chosen level.
+settings-crypt-compression-level = zstd level (1-22)
+settings-crypt-compression-level-hint = Lower numbers are faster; higher numbers compress harder. Level 3 matches zstd's CLI default.
+compress-footer-savings = 💾 { $original } → { $compressed } ({ $percent }% saved)
+compress-savings-toast = Compressed { $percent }% ({ $bytes } saved)
+crypt-toast-recipients-loaded = Loaded { $count } encryption recipients
+crypt-toast-recipients-error = Failed to load recipients: { $reason }
+crypt-toast-passphrase-required = Encryption needs a passphrase before the copy starts
+crypt-toast-passphrase-set = Encryption passphrase captured
+crypt-footer-encrypted-badge = 🔒 Encrypted (age)
+crypt-footer-compressed-badge = 📦 Compressed (zstd)

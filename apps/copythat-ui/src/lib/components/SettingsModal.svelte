@@ -804,6 +804,61 @@
                 </select>
               </label>
               <p class="hint">{t("settings-on-locked-hint")}</p>
+
+              <h4 class="subheading">{t("settings-crypt-heading")}</h4>
+              <p class="hint">{t("settings-crypt-hint")}</p>
+
+              {#if settings.crypt}
+                <label class="row">
+                  <span class="label">{t("settings-crypt-encryption-mode")}</span>
+                  <select
+                    bind:value={settings.crypt.encryptionMode}
+                    onchange={pushSettings}
+                  >
+                    <option value="off">{t("settings-crypt-encryption-off")}</option>
+                    <option value="passphrase">{t("settings-crypt-encryption-passphrase")}</option>
+                    <option value="recipients">{t("settings-crypt-encryption-recipients")}</option>
+                  </select>
+                </label>
+                <p class="hint">{t("settings-crypt-encryption-hint")}</p>
+
+                <label class="row">
+                  <span class="label">{t("settings-crypt-recipients-file")}</span>
+                  <input
+                    type="text"
+                    bind:value={settings.crypt.recipientsFile}
+                    placeholder={t("settings-crypt-recipients-file-placeholder")}
+                    disabled={settings.crypt.encryptionMode !== "recipients"}
+                    onchange={pushSettings}
+                  />
+                </label>
+
+                <label class="row">
+                  <span class="label">{t("settings-crypt-compression-mode")}</span>
+                  <select
+                    bind:value={settings.crypt.compressionMode}
+                    onchange={pushSettings}
+                  >
+                    <option value="off">{t("settings-crypt-compression-off")}</option>
+                    <option value="always">{t("settings-crypt-compression-always")}</option>
+                    <option value="smart">{t("settings-crypt-compression-smart")}</option>
+                  </select>
+                </label>
+                <p class="hint">{t("settings-crypt-compression-hint")}</p>
+
+                <label class="row">
+                  <span class="label">{t("settings-crypt-compression-level")}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="22"
+                    bind:value={settings.crypt.compressionLevel}
+                    disabled={settings.crypt.compressionMode === "off"}
+                    onchange={pushSettings}
+                  />
+                </label>
+                <p class="hint">{t("settings-crypt-compression-level-hint")}</p>
+              {/if}
             {:else if activeTab === "filters"}
               <p class="hint">{t("settings-filters-hint")}</p>
 

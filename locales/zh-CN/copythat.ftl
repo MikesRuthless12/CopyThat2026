@@ -1078,3 +1078,33 @@ settings-audit-verify-chain = Verify chain  # MT
 toast-audit-test-write-ok = Audit log test write succeeded  # MT
 toast-audit-verify-ok = Audit chain verified intact  # MT
 toast-audit-verify-failed = Audit chain verification reported mismatches  # MT
+
+# Phase 35 — destination encryption via age (X25519 / passphrase /
+# SSH) + on-the-fly zstd compression with a per-extension deny
+# heuristic. Surfaced through Settings → Transfer → Encryption +
+# Compression; engine short-circuits to the crypt pipeline when
+# either stage is active.
+settings-crypt-heading = Encryption & compression  # MT
+settings-crypt-hint = Transform file contents before they land at the destination. Encryption uses the age format; compression uses zstd and can skip already-compressed media by extension.  # MT
+settings-crypt-encryption-mode = Encryption  # MT
+settings-crypt-encryption-off = Off  # MT
+settings-crypt-encryption-passphrase = Passphrase (prompt at copy start)  # MT
+settings-crypt-encryption-recipients = Recipient keys from file  # MT
+settings-crypt-encryption-hint = Passphrases are held only in memory for the duration of the copy. Recipient files list one age1… or ssh- public key per line.  # MT
+settings-crypt-recipients-file = Recipients file path  # MT
+settings-crypt-recipients-file-placeholder = e.g. C:\Users\me\recipients.txt  # MT
+settings-crypt-compression-mode = Compression  # MT
+settings-crypt-compression-off = Off  # MT
+settings-crypt-compression-always = Always  # MT
+settings-crypt-compression-smart = Smart (skip already-compressed media)  # MT
+settings-crypt-compression-hint = Smart mode skips jpg, mp4, zip, 7z and similar formats that don't benefit from zstd. Always mode compresses every file at the chosen level.  # MT
+settings-crypt-compression-level = zstd level (1-22)  # MT
+settings-crypt-compression-level-hint = Lower numbers are faster; higher numbers compress harder. Level 3 matches zstd's CLI default.  # MT
+compress-footer-savings = 💾 { $original } → { $compressed } ({ $percent }% saved)  # MT
+compress-savings-toast = Compressed { $percent }% ({ $bytes } saved)  # MT
+crypt-toast-recipients-loaded = Loaded { $count } encryption recipients  # MT
+crypt-toast-recipients-error = Failed to load recipients: { $reason }  # MT
+crypt-toast-passphrase-required = Encryption needs a passphrase before the copy starts  # MT
+crypt-toast-passphrase-set = Encryption passphrase captured  # MT
+crypt-footer-encrypted-badge = 🔒 Encrypted (age)  # MT
+crypt-footer-compressed-badge = 📦 Compressed (zstd)  # MT

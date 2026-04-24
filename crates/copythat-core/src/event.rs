@@ -194,6 +194,19 @@ pub enum CopyEvent {
         from: PathBuf,
         to: PathBuf,
     },
+    /// Phase 35 — the on-the-fly compression stage reported how many
+    /// bytes it saved for this file.
+    ///
+    /// Emitted once per transformed file immediately after the
+    /// transform sink's epilogue flush. `ratio` is
+    /// `output_bytes / input_bytes` (lower = better; typical text
+    /// workloads land at 0.1–0.3); `bytes_saved` is
+    /// `input_bytes.saturating_sub(output_bytes)`. The UI sums these
+    /// into the footer "💾 256 MiB → 84 MiB (67% saved)" badge.
+    CompressionSavings {
+        ratio: f64,
+        bytes_saved: u64,
+    },
 }
 
 impl Clone for CopyEvent {
@@ -341,6 +354,10 @@ impl Clone for CopyEvent {
             CopyEvent::UnicodeRenormalized { from, to } => CopyEvent::UnicodeRenormalized {
                 from: from.clone(),
                 to: to.clone(),
+            },
+            CopyEvent::CompressionSavings { ratio, bytes_saved } => CopyEvent::CompressionSavings {
+                ratio: *ratio,
+                bytes_saved: *bytes_saved,
             },
         }
     }

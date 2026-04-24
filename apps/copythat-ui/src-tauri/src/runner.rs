@@ -192,6 +192,32 @@ pub(crate) async fn run_job(job: RunJob) {
         copythat_shape::CopyThatShapeSink::new(state.shape.clone()),
     ));
 
+    // Phase 35 — attach the crypt transform hook when Settings has
+    // either encryption or compression turned on. The hook owns
+    // the pipeline end-to-end (spawn_blocking + age + zstd); the
+    // engine's `copy_file` short-circuits to it. Building the hook
+    // once per queued job keeps the recipient-file parse + deny-
+    // set construction off the hot path. A build failure logs to
+    // stderr and falls through to a plain copy.
+    {
+        let snap = state.settings_snapshot();
+        match crate::crypt_commands::build_hook(&snap.crypt) {
+            Ok(Some(hook)) => {
+                copy_opts_with_verify.transform = Some(hook);
+                // Byte-exact verify cannot run against a
+                // transformed destination, so strip any verifier
+                // the DTO asked for. The audit + history record
+                // the transform happened via the eventual
+                // `CompressionSavings` event path.
+                copy_opts_with_verify.verify = None;
+            }
+            Ok(None) => {}
+            Err(e) => {
+                eprintln!("[crypt] hook build failed, falling back to plain copy: {e}");
+            }
+        }
+    }
+
     let result: Result<(), CopyError> = match kind {
         JobKind::Copy => {
             let Some(dst_path) = dst.clone() else {
@@ -983,6 +1009,19 @@ async fn forward_events(
                     MetaTranslatedToAppleDoubleDto {
                         job_id: id.as_u64(),
                         ext,
+                    },
+                );
+            }
+            CopyEvent::CompressionSavings { ratio, bytes_saved } => {
+                // Phase 35 — fan the sink's savings report out to the
+                // UI as a `compression-savings` event so job rows can
+                // render the `💾 256 MiB → 84 MiB (67% saved)` badge.
+                let _ = app.emit(
+                    crate::ipc::EVENT_COMPRESSION_SAVINGS,
+                    crate::ipc::CompressionSavingsDto {
+                        job_id: id.as_u64(),
+                        ratio,
+                        bytes_saved,
                     },
                 );
             }

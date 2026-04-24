@@ -64,6 +64,14 @@ copythat-mount = { path = "../../../crates/copythat-mount", version = "1" }
 # / `FileFailed` / `CollisionResolved` / `SettingsChanged` into
 # the sink when one is active.
 copythat-audit = { path = "../../../crates/copythat-audit", version = "1" }
+# Phase 35 — destination encryption + on-the-fly compression. The
+# runner builds a `CopyThatCryptHook` from `Settings::crypt` and
+# attaches it to every queued job's `CopyOptions::transform`.
+copythat-crypt = { path = "../../../crates/copythat-crypt", version = "1" }
+# Phase 35 — `secrecy::SecretString` wraps the passphrase from the
+# Settings → Encryption prompt so it never leaks into debug / serde
+# output.
+secrecy = "0.10"
 # Phase 34 — process-wide tracing-subscriber registry. The audit
 # feature installs `AuditLayer` only when enabled; we still want a
 # default fmt layer for stderr dev logs so the registry is unused

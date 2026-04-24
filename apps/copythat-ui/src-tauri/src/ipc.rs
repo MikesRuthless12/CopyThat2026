@@ -84,6 +84,12 @@ pub const EVENT_SPARSENESS_NOT_SUPPORTED: &str = "sparseness-not-supported";
 // on the affected job row.
 pub const EVENT_META_TRANSLATED_TO_APPLEDOUBLE: &str = "meta-translated-to-appledouble";
 
+// Phase 35 — the on-the-fly compression stage reported bytes saved
+// for the current file. The job row renders
+// "💾 256 MiB → 84 MiB (67% saved)" against this event; the footer
+// aggregates across every job in the run.
+pub const EVENT_COMPRESSION_SAVINGS: &str = "compression-savings";
+
 // Phase 21 — shape rate changed (settings update OR schedule poll
 // minute tick). The header badge subscribes so the "🔻 30 MB/s · scheduled"
 // pill re-renders without polling.
@@ -630,6 +636,11 @@ pub struct SettingsDto {
     /// cleanly when a newer UI reads them.
     #[serde(default)]
     pub audit: AuditDto,
+    /// Phase 35 — destination encryption + on-the-fly compression.
+    /// Marked `#[serde(default)]` so older persisted settings
+    /// round-trip cleanly when a newer UI reads them.
+    #[serde(default)]
+    pub crypt: CryptDto,
 }
 
 /// Phase 33 — wire form of `copythat_settings::MountSettings`.
@@ -711,6 +722,60 @@ impl From<AuditDto> for copythat_settings::AuditSettings {
             worm: d.worm,
             max_size_bytes: d.max_size_bytes,
             syslog_destination: d.syslog_destination,
+        }
+    }
+}
+
+/// Phase 35 — wire form of `copythat_settings::CryptSettings`.
+/// `encryptionMode` and `compressionMode` ride as camelCase strings
+/// to match the existing DTO convention; the runner resolves them
+/// into typed `copythat_crypt::EncryptionPolicy` /
+/// `CompressionPolicy` values at copy-start time.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CryptDto {
+    /// `"off" | "passphrase" | "recipients"`.
+    pub encryption_mode: String,
+    pub recipients_file: String,
+    /// `"off" | "always" | "smart"`.
+    pub compression_mode: String,
+    pub compression_level: i32,
+    pub compression_extra_deny: Vec<String>,
+}
+
+impl Default for CryptDto {
+    fn default() -> Self {
+        let d = copythat_settings::CryptSettings::default();
+        Self {
+            encryption_mode: d.encryption_mode,
+            recipients_file: d.recipients_file,
+            compression_mode: d.compression_mode,
+            compression_level: d.compression_level,
+            compression_extra_deny: d.compression_extra_deny,
+        }
+    }
+}
+
+impl From<copythat_settings::CryptSettings> for CryptDto {
+    fn from(s: copythat_settings::CryptSettings) -> Self {
+        Self {
+            encryption_mode: s.encryption_mode,
+            recipients_file: s.recipients_file,
+            compression_mode: s.compression_mode,
+            compression_level: s.compression_level,
+            compression_extra_deny: s.compression_extra_deny,
+        }
+    }
+}
+
+impl From<CryptDto> for copythat_settings::CryptSettings {
+    fn from(d: CryptDto) -> Self {
+        Self {
+            encryption_mode: d.encryption_mode,
+            recipients_file: d.recipients_file,
+            compression_mode: d.compression_mode,
+            compression_level: d.compression_level,
+            compression_extra_deny: d.compression_extra_deny,
         }
     }
 }
@@ -1170,6 +1235,19 @@ pub struct MetaTranslatedToAppleDoubleDto {
     pub ext: String,
 }
 
+/// Phase 35 — payload for `compression-savings`. `ratio` is the
+/// ratio of post-compression bytes to pre-compression bytes (so
+/// `0.33` means the destination is a third the size); `bytes_saved`
+/// is the input/output delta in bytes. Frontend renders a
+/// "💾 N → M (X% saved)" badge and the footer aggregates.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompressionSavingsDto {
+    pub job_id: u64,
+    pub ratio: f64,
+    pub bytes_saved: u64,
+}
+
 /// Phase 19a — `scan-started` payload.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1506,6 +1584,7 @@ impl From<&copythat_settings::Settings> for SettingsDto {
             },
             mount: s.mount.clone().into(),
             audit: s.audit.clone().into(),
+            crypt: s.crypt.clone().into(),
         }
     }
 }
@@ -1700,6 +1779,7 @@ impl SettingsDto {
 
         s.mount = self.mount.into();
         s.audit = self.audit.into();
+        s.crypt = self.crypt.into();
 
         s
     }

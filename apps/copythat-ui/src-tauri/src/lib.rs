@@ -38,6 +38,7 @@ pub mod clipboard_watcher;
 pub mod cloud_commands;
 pub mod collisions;
 pub mod commands;
+pub mod crypt_commands;
 pub mod dropstack;
 pub mod errors;
 pub mod global_paste;
@@ -352,6 +353,8 @@ pub fn run() {
             audit_commands::audit_test_write,
             audit_commands::audit_verify,
             audit_commands::audit_verify_file,
+            // Phase 35 — encryption + compression status surface.
+            crypt_commands::crypt_status,
         ])
         .setup(move |app| {
             // Phase 16 / 28 — tray icon + menu. Visible regardless

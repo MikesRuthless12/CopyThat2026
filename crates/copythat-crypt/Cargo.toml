@@ -1,0 +1,51 @@
+[package]
+name = "copythat-crypt"
+description = "Phase 35 — transparent destination encryption via `age` (X25519 / passphrase / SSH recipients) + smart on-the-fly zstd compression with a per-extension deny heuristic. Feeds Copy That's engine pipeline: source → compress → encrypt → dest."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Phase 35d — adapter implements `copythat_core::TransformSink` so
+# the engine can wire the crypt pipeline as an optional hook.
+copythat-core = { path = "../copythat-core", version = "1" }
+# `age` is the Rust implementation of the age encryption format:
+# X25519 + ChaCha20-Poly1305 + scrypt for passphrase-derived KEKs.
+# We pull the default features for SSH-recipient support; the
+# `cli-common` feature (which drags in clap / pinentry) stays off.
+# MIT/Apache-2.0 dual-licensed. Picked over `rage` (the CLI) because
+# we want the library surface only.
+age = { version = "0.11", default-features = false, features = [
+    "armor",      # enables ASCII-armor encoding when callers opt in
+    "ssh",        # unlocks age::ssh::{Recipient,Identity} for ed25519 + RSA
+] }
+# zstd ergonomic wrapper — MIT/Apache-2.0 Rust wrapper over the
+# upstream BSD-licensed reference implementation.
+zstd = { version = "0.13", default-features = false }
+# Typed secret container so passphrases don't accidentally
+# `Debug`-print / leak across serde. MIT/Apache-2.0.
+secrecy = { version = "0.10", features = ["serde"] }
+
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+# Phase 35d — `CopyThatCryptHook::transform` bridges sync zstd +
+# age libraries onto the engine's async surface via
+# `spawn_blocking`. The engine already brings tokio into the
+# workspace; this is the same cross-runtime pattern as
+# `copythat-cloud`.
+tokio = { version = "1", features = ["rt"] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[[test]]
+name = "phase_35_crypt"
+path = "../../tests/smoke/phase_35_crypt.rs"
