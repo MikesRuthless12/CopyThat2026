@@ -541,6 +541,16 @@ export interface SettingsDto {
   /// invalid-target highlight). Optional on the wire so older
   /// frontends opening a newer settings.toml don't explode.
   dnd?: DndSettingsDto;
+  /// Phase 33 — mount-as-filesystem "mount latest snapshot on launch"
+  /// toggle. Optional on the wire so older backends without the
+  /// field don't break this frontend.
+  mount?: MountSettingsDto;
+}
+
+/** Phase 33 — wire form of `copythat_settings::MountSettings`. */
+export interface MountSettingsDto {
+  mountOnLaunch: boolean;
+  mountOnLaunchPath: string;
 }
 
 /** Phase 19a — disk-backed scan database settings. Optional in TS

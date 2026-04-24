@@ -124,6 +124,36 @@ fn canned_args(key: &str) -> HashMap<&'static str, String> {
         "sparse-not-supported-body" => {
             m.insert("dst_fs", "exFAT".to_string());
         }
+        // Phase 24 — foreign-metadata AppleDouble translation toast.
+        "meta-translated-to-appledouble" => {
+            m.insert("ext", "pdf".to_string());
+        }
+        // Phase 25 — aggregate conflict count in the sync drawer.
+        "sync-view-conflicts" => {
+            m.insert("count", "7".to_string());
+        }
+        // Phase 27 — chunk store disk-usage + savings toast.
+        "chunk-store-savings" => {
+            m.insert("gib", "1.4".to_string());
+        }
+        "chunk-store-disk-usage" => {
+            m.insert("size", "2.1 GiB".to_string());
+            m.insert("chunks", "31 256".to_string());
+        }
+        // Phase 28 — Drop Stack count + missing-path toast.
+        "dropstack-count" => {
+            m.insert("count", "5".to_string());
+        }
+        "dropstack-path-missing-toast" => {
+            m.insert("path", "C:/Users/miken/Desktop/old.txt".to_string());
+        }
+        // Phase 33 — mount status + toast placeables.
+        "mount-status-mounted" | "mount-toast-mounted" => {
+            m.insert("path", "C:/Mounts/copythat".to_string());
+        }
+        "mount-toast-failed" => {
+            m.insert("reason", "mountpoint not empty".to_string());
+        }
         _ => {}
     }
     m

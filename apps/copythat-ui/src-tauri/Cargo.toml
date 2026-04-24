@@ -53,6 +53,10 @@ copythat-power = { path = "../../../crates/copythat-power", version = "1" }
 # BackendRegistry + keychain-backed Credentials; IPC commands in
 # cloud_commands.rs surface list/add/remove/test-connection.
 copythat-cloud = { path = "../../../crates/copythat-cloud", version = "1" }
+# Phase 33 — mount-as-filesystem. AppState owns the MountRegistry +
+# an active NoopBackend (33b); real fuser / winfsp dispatch behind
+# the crate's feature flags lands in Phase 33c.
+copythat-mount = { path = "../../../crates/copythat-mount", version = "1" }
 # Phase 25 — pair IDs are random v4 UUIDs generated on the Tauri
 # side at `add_sync_pair` time.
 uuid = { version = "1", features = ["v4"] }
