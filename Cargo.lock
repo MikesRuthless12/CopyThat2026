@@ -976,6 +976,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "copythat-mount"
+version = "1.25.0"
+dependencies = [
+ "copythat-chunk",
+ "copythat-core",
+ "copythat-history",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "copythat-platform"
 version = "1.25.0"
 dependencies = [
