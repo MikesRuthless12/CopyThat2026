@@ -253,7 +253,11 @@
     class="drawer"
     role="dialog"
     aria-labelledby="sync-title"
+    tabindex={-1}
     onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => {
+      if (e.key === "Escape") onClose();
+    }}
   >
     <header>
       <h2 id="sync-title">{t("sync-drawer-title")}</h2>
