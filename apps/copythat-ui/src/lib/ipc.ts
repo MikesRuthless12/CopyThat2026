@@ -523,6 +523,34 @@ export async function testBackendConnection(
   return invoke<TestConnectionResult>("test_backend_connection", { name });
 }
 
+/** Phase 32c — push a local file to the configured backend at `dstKey`.
+ *  Returns the number of bytes written. */
+export async function copyLocalToBackend(
+  backendName: string,
+  srcPath: string,
+  dstKey: string,
+): Promise<number> {
+  return invoke<number>("copy_local_to_backend", {
+    backendName,
+    srcPath,
+    dstKey,
+  });
+}
+
+/** Phase 32c — pull an object from the backend to the local filesystem.
+ *  Returns the number of bytes written. */
+export async function copyBackendToLocal(
+  backendName: string,
+  srcKey: string,
+  dstPath: string,
+): Promise<number> {
+  return invoke<number>("copy_backend_to_local", {
+    backendName,
+    srcKey,
+    dstPath,
+  });
+}
+
 // ---------------------------------------------------------------------
 // Phase 33 — mount-as-filesystem.
 // ---------------------------------------------------------------------
@@ -550,4 +578,12 @@ export async function mountSnapshot(
 /** Unmount the snapshot for `jobRowId`. */
 export async function unmountSnapshot(jobRowId: number): Promise<void> {
   await invoke("unmount_snapshot", { jobRowId });
+}
+
+/** Phase 33c — report which mount backend this build selected:
+ *  `"fuse"` (Linux/macOS with `--features fuse`), `"winfsp"`
+ *  (Windows with `--features winfsp`), or `"noop"` (default build;
+ *  real kernel callbacks ship in Phase 33d). */
+export async function mountBackendName(): Promise<string> {
+  return invoke<string>("mount_backend_name");
 }

@@ -338,10 +338,14 @@ pub fn run() {
             cloud_commands::update_backend,
             cloud_commands::remove_backend,
             cloud_commands::test_backend_connection,
+            // Phase 32c — local <-> backend transfer.
+            cloud_commands::copy_local_to_backend,
+            cloud_commands::copy_backend_to_local,
             // Phase 33 — mount-as-filesystem CRUD.
             mount_commands::list_mounts,
             mount_commands::mount_snapshot,
             mount_commands::unmount_snapshot,
+            mount_commands::mount_backend_name,
         ])
         .setup(move |app| {
             // Phase 16 / 28 — tray icon + menu. Visible regardless

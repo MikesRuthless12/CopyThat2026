@@ -72,6 +72,10 @@ tokio = { version = "1", features = [
 ] }
 toml = "0.8"
 copythat-settings = { path = "../copythat-settings" }
+# Phase 32d — smoke exercises the `copy_file` engine-level cloud-sink
+# branch end-to-end. Dev-only so the release graph stays independent
+# of copythat-core.
+copythat-core = { path = "../copythat-core" }
 
 [[test]]
 name = "phase_32_cloud"

@@ -7,7 +7,7 @@
 //! succeeds; cleanup of the partial destination runs on any failure
 //! unless `keep_partial` overrides it.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use filetime::FileTime;
@@ -61,6 +61,26 @@ pub async fn copy_file(
 
     if !opts.follow_symlinks && src_metadata.file_type().is_symlink() {
         return copy_symlink(&src_path, &dst_path, &opts, &events).await;
+    }
+
+    // Phase 32d — cloud-sink early branch. When the caller has wired
+    // `CopyOptions::cloud_sink`, route the write path straight to the
+    // remote backend instead of opening a local destination file.
+    // Bypasses sparse / fast-copy / verify / chunk-store / journal
+    // pathways by design: those all assume a local dst handle, and
+    // porting them to a `CloudSink` is the Phase 32e follow-up.
+    // Symlinks + sparsity + verify on remote destinations land there.
+    if let Some(sink) = opts.cloud_sink.clone() {
+        return copy_file_to_cloud_sink(
+            src_path,
+            dst_path,
+            opts,
+            ctrl,
+            events,
+            src_metadata,
+            sink,
+        )
+        .await;
     }
 
     // Phase 23 — sparse-file pre-flight. When the caller has wired a
@@ -1090,6 +1110,181 @@ fn detect_dst_fs_label(_dst: &Path) -> &'static str {
     // event with the platform-probed label before forwarding it to
     // the UI.
     "unknown"
+}
+
+/// Phase 32e — chunked read of the source file into a Vec, emitting
+/// `CopyEvent::Progress` after every chunk so the UI sees live
+/// progress during large uploads. Observes `ctrl` between chunks
+/// so cancel takes effect within a buffer-size slice.
+async fn read_src_with_progress(
+    src_path: &Path,
+    dst_path: &Path,
+    total_bytes: u64,
+    buffer_size: usize,
+    ctrl: &CopyControl,
+    events: &mpsc::Sender<CopyEvent>,
+    start: Instant,
+) -> Result<Vec<u8>, CopyError> {
+    use tokio::io::AsyncReadExt;
+
+    let mut file = match tokio::fs::File::open(src_path).await {
+        Ok(f) => f,
+        Err(e) => return Err(CopyError::from_io(src_path, dst_path, e)),
+    };
+    let mut out: Vec<u8> = Vec::with_capacity(total_bytes as usize);
+    let mut buf = vec![0u8; buffer_size];
+    let mut bytes_done: u64 = 0;
+    loop {
+        if ctrl.is_cancelled() {
+            return Err(CopyError {
+                kind: crate::error::CopyErrorKind::Interrupted,
+                src: src_path.to_path_buf(),
+                dst: dst_path.to_path_buf(),
+                raw_os_error: None,
+                message: "cancelled during cloud-sink upload".into(),
+            });
+        }
+        let n = match file.read(&mut buf).await {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) => return Err(CopyError::from_io(src_path, dst_path, e)),
+        };
+        out.extend_from_slice(&buf[..n]);
+        bytes_done += n as u64;
+        let rate_bps = rate_bps_from(bytes_done, start.elapsed());
+        let _ = events
+            .send(CopyEvent::Progress {
+                bytes: bytes_done,
+                total: total_bytes,
+                rate_bps,
+            })
+            .await;
+    }
+    Ok(out)
+}
+
+/// Derive bytes-per-second for `Progress` events. Zero when the
+/// elapsed window is degenerate (< 1 ms).
+fn rate_bps_from(bytes_done: u64, elapsed: std::time::Duration) -> u64 {
+    if elapsed.as_secs_f64() > 0.0 {
+        (bytes_done as f64 / elapsed.as_secs_f64()) as u64
+    } else {
+        0
+    }
+}
+
+/// Phase 32d — push a local source file to a remote [`crate::CloudSink`]
+/// destination. Called from `copy_file` when `opts.cloud_sink` is
+/// set; keeps the complex local-to-local paths uncluttered.
+///
+/// Reads the full source into memory (tractable for the typical
+/// snapshot-shaped workload; Phase 32e switches to a streaming
+/// reader + `opendal::Operator::writer()` chunking when local
+/// memory pressure matters). `put_blocking` runs on a
+/// `spawn_blocking` pool so the async copy task stays free.
+async fn copy_file_to_cloud_sink(
+    src_path: PathBuf,
+    dst_path: PathBuf,
+    opts: CopyOptions,
+    ctrl: CopyControl,
+    events: mpsc::Sender<CopyEvent>,
+    src_metadata: std::fs::Metadata,
+    sink: std::sync::Arc<dyn crate::options::CloudSink>,
+) -> Result<CopyReport, CopyError> {
+    let total_bytes = src_metadata.len();
+    let _ = events
+        .send(CopyEvent::Started {
+            src: src_path.clone(),
+            dst: dst_path.clone(),
+            total_bytes,
+        })
+        .await;
+
+    let _ = ctrl; // ctrl is observed between chunk reads below
+
+    let start = Instant::now();
+
+    // Phase 32e — chunked progress reporting. Rather than reading
+    // the whole source in one shot, pull it in `opts.buffer_size`
+    // chunks and emit `CopyEvent::Progress` after each. The bytes
+    // still land in a single `Vec` and get flushed to the sink in
+    // one `put_blocking` call — full streaming through the sink
+    // (OpenDAL's writer API) lands in Phase 32f once the
+    // `CopyTarget` trait gains a streaming-writer surface.
+    let buffer_size = opts.buffer_size.clamp(
+        crate::options::MIN_BUFFER_SIZE,
+        crate::options::MAX_BUFFER_SIZE,
+    );
+    let bytes: Vec<u8> = match read_src_with_progress(
+        &src_path,
+        &dst_path,
+        total_bytes,
+        buffer_size,
+        &ctrl,
+        &events,
+        start,
+    )
+    .await
+    {
+        Ok(b) => b,
+        Err(err) => {
+            let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+            return Err(err);
+        }
+    };
+
+    let dst_key = dst_path.to_string_lossy().into_owned();
+    let sink_for_blocking = sink.clone();
+    let put_result = tokio::task::spawn_blocking(move || {
+        sink_for_blocking.put_blocking(&dst_key, &bytes)
+    })
+    .await;
+
+    let written = match put_result {
+        Ok(Ok(n)) => n,
+        Ok(Err(msg)) => {
+            let err = CopyError::from_io(
+                &src_path,
+                &dst_path,
+                std::io::Error::other(format!("cloud-sink put failed: {msg}")),
+            );
+            let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+            return Err(err);
+        }
+        Err(join_err) => {
+            let err = CopyError::from_io(
+                &src_path,
+                &dst_path,
+                std::io::Error::other(format!("cloud-sink worker join: {join_err}")),
+            );
+            let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
+            return Err(err);
+        }
+    };
+
+    let elapsed = start.elapsed();
+    let rate_bps = rate_bps_from(written, elapsed);
+    let _ = events
+        .send(CopyEvent::Progress {
+            bytes: written,
+            total: total_bytes,
+            rate_bps,
+        })
+        .await;
+    let _ = events
+        .send(CopyEvent::Completed {
+            bytes: written,
+            duration: elapsed,
+            rate_bps,
+        })
+        .await;
+    Ok(CopyReport {
+        src: src_path,
+        dst: dst_path,
+        bytes: written,
+        duration: elapsed,
+        rate_bps,
+    })
 }
 
 /// Clone a symlink source as a symlink at `dst` (i.e. `opts.follow_symlinks

@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 
 use copythat_history::HistoryFilter;
 use copythat_mount::{
-    MountBackend, MountError, MountHandle, MountLayout, NoopBackend,
+    MountBackend, MountError, MountHandle, MountLayout, NoopBackend, default_backend_name,
 };
 use serde::Serialize;
 
@@ -97,6 +97,16 @@ pub struct MountDto {
 // ---------------------------------------------------------------------
 // IPC commands
 // ---------------------------------------------------------------------
+
+/// Phase 33c — report which mount backend the current build
+/// selected. Values: `"fuse"` (Linux/macOS with `--features fuse`),
+/// `"winfsp"` (Windows with `--features winfsp`), or `"noop"`
+/// (default build — every mount stays logical; kernel callbacks
+/// land in Phase 33d).
+#[tauri::command]
+pub fn mount_backend_name() -> &'static str {
+    default_backend_name()
+}
 
 /// Enumerate every currently-active mount.
 #[tauri::command]

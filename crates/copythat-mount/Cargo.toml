@@ -13,19 +13,24 @@ publish.workspace = true
 workspace = true
 
 [features]
-# Phase 33a ships pure-Rust tree builder + handle types with no
-# platform FFI. Phase 33b lights the real FUSE / WinFsp backends
-# behind these feature flags so the default build stays lean and
-# CI doesn't require kernel-side FUSE modules or the WinFsp
-# installer image:
+# Phase 33a shipped pure-Rust tree builder + handle types with no
+# platform FFI. Phase 33c adds feature-gated backend scaffolding:
 #
 #   cargo build -p copythat-mount --features fuse    # Linux/macOS
 #   cargo build -p copythat-mount --features winfsp  # Windows
 #
-# Neither backend is wired up in 33a — the features exist so the
-# consumer crates and smoke test can hint at the upgrade path.
+# The `fuse` feature pulls `fuser` 0.15 (MIT) on Unix targets and is
+# a no-op elsewhere. The `winfsp` feature is a no-op marker today:
+# the obvious candidate `winfsp-sys` crate is GPL-3.0 licensed,
+# which conflicts with the workspace's permissive-only allowlist.
+# Phase 33d will land a WinFsp binding through either an
+# MIT-licensed alternative or direct-FFI bindings we write in-tree
+# under our own licence; the feature flag is kept here so the
+# `WinFspBackend` type surface + `default_backend()` selector can
+# already name it. Real kernel read callbacks that stream chunks
+# from the Phase 27 chunk store are the same Phase 33d follow-up.
 default = []
-fuse = []
+fuse = ["dep:fuser"]
 winfsp = []
 
 [dependencies]
@@ -39,6 +44,14 @@ thiserror = "2"
 # Path sanitisation on mount roots reuses the same traversal guard
 # the engine's `safety::validate_path_no_traversal` enforces.
 copythat-core = { path = "../copythat-core", version = "1" }
+
+# Phase 33c — `fuser` is the actively-maintained Rust FUSE binding.
+# MIT. Target-gated so a `cargo build --features fuse` on Windows
+# simply skips it instead of failing at link time — the FuseBackend
+# stub falls through to `MountError::BackendUnavailable` on non-
+# Unix hosts.
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+fuser = { version = "0.15", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
