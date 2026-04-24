@@ -767,3 +767,16 @@ cloud-error-not-found = Object not found at the requested path
 cloud-error-permission = Permission denied by remote backend
 cloud-error-keychain = OS keychain access failed
 settings-tab-remotes = Remotes
+
+# Phase 33 — mount Copy That's chunk store + history archive as a
+# read-only filesystem (FUSE / WinFsp). Surfaced by the History tab
+# context menu's "Mount snapshot" action + the Settings → Advanced
+# "Mount latest on launch" toggle.
+mount-heading = Mount snapshot
+mount-action-mount = Mount snapshot
+mount-action-unmount = Unmount
+mount-status-mounted = Mounted at { $path }
+mount-error-unsafe-mountpoint = Mountpoint path is unsafe
+mount-error-mountpoint-not-empty = Mountpoint must be an empty directory
+mount-error-backend-unavailable = Mount backend is not available on this system
+mount-error-archive-read = Archive read failed
