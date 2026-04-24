@@ -1,6 +1,6 @@
-app-name = Copy That v1.0.0
+app-name = Copy That v1.25.0
 # MT
-window-title = Copy That v1.0.0
+window-title = Copy That v1.25.0
 # MT
 shred-ssd-advisory = Avviso: questo bersaglio si trova su un SSD. Le riscritture multiple non sanificano in modo affidabile la memoria flash perché il wear-leveling e l'over-provisioning spostano i dati fuori dall'indirizzo logico del blocco. Per i supporti a stato solido, preferire ATA SECURE ERASE, NVMe Format con Secure Erase o la crittografia dell'intero disco con successiva distruzione della chiave.
 
@@ -933,3 +933,70 @@ chunk-store-max-size = Dimensione massima dell'archivio chunk  # MT
 chunk-store-prune = Elimina chunk più vecchi di (giorni)  # MT
 chunk-store-savings = Risparmiati { $gib } GiB tramite deduplicazione chunk  # MT
 chunk-store-disk-usage = In uso { $size } in { $chunks } chunk  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Pila di trascinamento  # MT
+dropstack-tray-open = Pila di trascinamento  # MT
+dropstack-empty-title = La pila di trascinamento è vuota  # MT
+dropstack-empty-hint = Trascina i file qui da Esplora risorse o fai clic con il tasto destro su una riga di lavoro per aggiungerla.  # MT
+dropstack-add-to-stack = Aggiungi alla pila di trascinamento  # MT
+dropstack-copy-all-to = Copia tutto in…  # MT
+dropstack-move-all-to = Sposta tutto in…  # MT
+dropstack-clear = Svuota pila  # MT
+dropstack-remove-row = Rimuovi dalla pila  # MT
+dropstack-path-missing-toast = { $path } rimosso — il file non esiste più.  # MT
+dropstack-always-on-top = Mantieni la pila di trascinamento sempre in primo piano  # MT
+dropstack-show-tray-icon = Mostra l'icona di Copy That nell'area di notifica  # MT
+dropstack-open-on-start = Apri la pila di trascinamento all'avvio dell'app  # MT
+dropstack-count = { $count } percorso  # MT
+
+# Phase 29 — spring-loaded folders + native DnD polish.
+settings-dnd-heading = Drag and drop  # MT
+settings-dnd-spring-load = Spring-load folders while dragging  # MT
+settings-dnd-spring-delay = Spring-load delay (ms)  # MT
+settings-dnd-thumbnails = Show drag thumbnails  # MT
+settings-dnd-invalid-highlight = Highlight invalid drop targets  # MT
+dropzone-invalid-title = Not a valid drop target  # MT
+dropzone-invalid-readonly = Destination is read-only  # MT
+dropzone-picker-title = Choose a destination  # MT
+dropzone-picker-up = Up  # MT
+dropzone-picker-path = Current path  # MT
+dropzone-picker-root = Roots  # MT
+dropzone-picker-use-this = Use this folder  # MT
+dropzone-picker-empty = No subfolders  # MT
+dropzone-picker-cancel = Cancel  # MT
+
+# Phase 30 — cross-platform path translation.
+translate-heading = Cross-platform compatibility  # MT
+translate-unicode-label = Unicode normalization  # MT
+translate-unicode-auto = Auto-detect destination  # MT
+translate-unicode-windows = NFC (Windows / Linux)  # MT
+translate-unicode-macos = Leave as-is (macOS / APFS)  # MT
+translate-line-endings-label = Translate line endings for text files  # MT
+translate-line-endings-allowlist = Text file extensions  # MT
+reserved-name-label = Windows reserved-name handling  # MT
+reserved-name-suffix = Append "_" (CON.txt → CON_.txt)  # MT
+reserved-name-reject = Reject and warn  # MT
+long-path-label = Use Windows long-path prefix (\?\) when over 260 chars  # MT
+long-path-hint = Some network shares and legacy tools don't honor the \?\ namespace.  # MT
+
+# Phase 31 — power-aware copying.
+power-heading = Power & State  # MT
+power-enabled = Enable power-aware rules  # MT
+power-battery-label = On battery  # MT
+power-metered-label = On metered Wi-Fi  # MT
+power-cellular-label = On cellular  # MT
+power-presentation-label = When presenting (Zoom / Teams / Keynote)  # MT
+power-fullscreen-label = When an app is fullscreen  # MT
+power-thermal-label = When CPU is thermal-throttling  # MT
+power-rule-continue = Continue at full speed  # MT
+power-rule-pause = Pause all jobs  # MT
+power-rule-cap = Cap bandwidth  # MT
+power-rule-cap-percent = Cap to a percent of current rate  # MT
+power-reason-on-battery = on battery  # MT
+power-reason-metered-network = metered network  # MT
+power-reason-cellular-network = cellular network  # MT
+power-reason-presenting = presentation mode  # MT
+power-reason-fullscreen = fullscreen app  # MT
+power-reason-thermal-throttling = CPU is throttling  # MT

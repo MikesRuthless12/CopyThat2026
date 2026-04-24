@@ -81,6 +81,21 @@ pub struct Settings {
     /// same-job dedup + the moonshot phases that layer on top. See
     /// [`ChunkStoreSettings`].
     pub chunk_store: ChunkStoreSettings,
+    /// Phase 28 — tray-resident Drop Stack. See
+    /// [`DropStackSettings`].
+    pub drop_stack: DropStackSettings,
+    /// Phase 29 — drag-and-drop polish (spring-load, drag thumbnails,
+    /// invalid-target highlight). See [`DndSettings`].
+    pub dnd: DndSettings,
+    /// Phase 30 — cross-platform path translation (Unicode NFC/NFD,
+    /// opt-in line-ending rewrite for text files, Windows reserved-
+    /// name handling, `\\?\` long-path prefix). See
+    /// [`PathTranslationSettings`].
+    pub path_translation: PathTranslationSettings,
+    /// Phase 31 — power-aware copying (pause on battery, slow-down
+    /// on metered networks, pause during Zoom calls / fullscreen,
+    /// thermal-throttle cap). See [`PowerPoliciesSettings`].
+    pub power: PowerPoliciesSettings,
 }
 
 impl Settings {
@@ -1041,6 +1056,479 @@ impl Default for ChunkStoreSettings {
             // 20 GiB.
             max_size_bytes: 20 * 1024 * 1024 * 1024,
             prune_older_than_days: 60,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+// Phase 28 — tray-resident Drop Stack
+// ---------------------------------------------------------------------
+
+/// Drop Stack preferences.
+///
+/// The Drop Stack itself (the list of staged paths) is persisted in
+/// a separate `dropstack.json` file under the same config dir —
+/// this struct holds only the UI knobs that govern the tray icon +
+/// window behaviour, which belong with every other Settings
+/// category.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct DropStackSettings {
+    /// Show the tray icon on app start. Default `true` — Copy That
+    /// has had a tray icon since Phase 16; the Drop Stack-specific
+    /// menu items extend the existing tray surface.
+    pub show_tray_icon: bool,
+    /// Pin the Drop Stack window always-on-top. Default `false`;
+    /// power users flip this on so the window floats over their
+    /// source applications while they drag.
+    pub always_on_top: bool,
+    /// Open the Drop Stack window automatically on app start.
+    /// Default `false` — the window is lazy until the user clicks
+    /// the tray icon or the "Drop Stack" menu entry.
+    pub open_on_start: bool,
+    /// Last-known window geometry. `None` = "let Tauri pick"
+    /// (720×480 default). Phase 28 persists whatever Tauri reports
+    /// on `CloseRequested` so the user's preferred size + position
+    /// survive restarts.
+    pub window_bounds: Option<DropStackBounds>,
+}
+
+impl Default for DropStackSettings {
+    fn default() -> Self {
+        Self {
+            show_tray_icon: true,
+            always_on_top: false,
+            open_on_start: false,
+            window_bounds: None,
+        }
+    }
+}
+
+/// Drop Stack window geometry. Coordinates are logical (Tauri's
+/// default). The `monitor` field is a stable identifier so moving
+/// the window across monitors doesn't make the next open show up
+/// off-screen.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct DropStackBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    /// Monitor label (OS-provided) the window was last positioned
+    /// on. Empty string = "unknown"; the app falls back to the
+    /// primary monitor.
+    pub monitor: String,
+}
+
+impl Default for DropStackBounds {
+    fn default() -> Self {
+        Self {
+            x: 100,
+            y: 100,
+            width: 380,
+            height: 520,
+            monitor: String::new(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+// Phase 29 — drag-and-drop polish
+// ---------------------------------------------------------------------
+
+/// Drag-and-drop UX preferences.
+///
+/// Governs Phase 29's spring-loaded folders, drag thumbnails, and the
+/// error-border treatment on invalid drop targets. Changes take effect
+/// the next time the DestinationPicker or DropTarget component is
+/// mounted — no restart required.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct DndSettings {
+    /// Master toggle for spring-loaded folders. Default `true`.
+    pub spring_load_enabled: bool,
+    /// Spring-load delay in milliseconds. Clamped to
+    /// [`DND_MIN_SPRING_MS`] .. [`DND_MAX_SPRING_MS`] on both read and
+    /// write so a hand-edited TOML file can't push the value outside
+    /// the spec'd 200..2000 ms band. Default `650` — matches macOS
+    /// Finder's well-known figure.
+    pub spring_load_delay_ms: u32,
+    /// Render a drag thumbnail (canvas composited via `setDragImage`)
+    /// when dragging rows out of in-app surfaces like the Drop Stack.
+    /// Default `true`; users on low-end GPUs or with prefers-reduced-
+    /// motion can turn it off.
+    pub show_drag_thumbnails: bool,
+    /// Paint the red error border + tooltip on drop targets that
+    /// aren't writable (read-only FS, insufficient permission).
+    /// Default `true`. Off falls back to the plain hover border so
+    /// the target visually looks droppable; the actual copy will
+    /// still fail with the underlying permission error.
+    pub highlight_invalid_targets: bool,
+}
+
+/// Minimum spring-load delay (50 ms). Anything shorter opens folders
+/// the moment the cursor nicks the edge, which defeats the "deliberate
+/// hover" intent.
+pub const DND_MIN_SPRING_MS: u32 = 50;
+
+/// Maximum spring-load delay (5 000 ms). Guard against accidental huge
+/// values in hand-edited TOML — the UI caps its slider at 2 000 ms but
+/// the clamp gives us one more safety net.
+pub const DND_MAX_SPRING_MS: u32 = 5_000;
+
+impl Default for DndSettings {
+    fn default() -> Self {
+        Self {
+            spring_load_enabled: true,
+            spring_load_delay_ms: 650,
+            show_drag_thumbnails: true,
+            highlight_invalid_targets: true,
+        }
+    }
+}
+
+impl DndSettings {
+    /// Returns the effective spring-load delay, clamped into the
+    /// valid band. Callers should prefer this over raw field access
+    /// so out-of-range TOML can't reach the UI.
+    pub fn effective_spring_ms(&self) -> u32 {
+        self.spring_load_delay_ms
+            .clamp(DND_MIN_SPRING_MS, DND_MAX_SPRING_MS)
+    }
+}
+
+// ---------------------------------------------------------------------
+// Phase 30 — cross-platform path translation
+// ---------------------------------------------------------------------
+
+/// Destination platform selection for path translation. Mirrors
+/// `copythat_core::translate::TargetOs` but kept local so this crate
+/// stays independent of `copythat-core`; the Tauri bridge translates
+/// at enqueue time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TargetOsChoice {
+    /// Resolve to the host OS at enqueue time. Right default for the
+    /// common "copy from one local drive to another" case; only flip
+    /// when the destination is a networked / mounted filesystem from
+    /// a different platform.
+    #[default]
+    Auto,
+    Windows,
+    MacOs,
+    Linux,
+}
+
+impl TargetOsChoice {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Windows => "windows",
+            Self::MacOs => "macos",
+            Self::Linux => "linux",
+        }
+    }
+
+    /// Parse the wire string. Unknown values fall back to `Auto` so
+    /// an older binary reading a settings file written by a newer
+    /// one never panics on a variant it doesn't know.
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "windows" => Self::Windows,
+            "macos" => Self::MacOs,
+            "linux" => Self::Linux,
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// Unicode normalization mode selector. Mirrors
+/// `copythat_core::translate::NormalizationMode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NormalizationModeChoice {
+    /// NFC for Windows + Linux destinations; leave macOS alone.
+    /// Default because it's the "do the right thing" answer for
+    /// cross-platform sync.
+    #[default]
+    Auto,
+    /// Force composed form (NFC).
+    Nfc,
+    /// Force decomposed form (NFD).
+    Nfd,
+    /// Don't renormalize — copy the source name unchanged.
+    AsIs,
+}
+
+impl NormalizationModeChoice {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Nfc => "nfc",
+            Self::Nfd => "nfd",
+            Self::AsIs => "as-is",
+        }
+    }
+
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "nfc" => Self::Nfc,
+            "nfd" => Self::Nfd,
+            "as-is" => Self::AsIs,
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// Line-ending rewrite mode selector. Mirrors
+/// `copythat_core::translate::LineEndingMode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LineEndingModeChoice {
+    /// Preserve whatever the source has. Default.
+    #[default]
+    AsIs,
+    /// Force CRLF (`\r\n`).
+    Crlf,
+    /// Force LF (`\n`).
+    Lf,
+}
+
+impl LineEndingModeChoice {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::AsIs => "as-is",
+            Self::Crlf => "crlf",
+            Self::Lf => "lf",
+        }
+    }
+
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "crlf" => Self::Crlf,
+            "lf" => Self::Lf,
+            _ => Self::AsIs,
+        }
+    }
+}
+
+/// Reserved-Windows-name strategy selector. Mirrors
+/// `copythat_core::translate::ReservedNameStrategy`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReservedNameChoice {
+    /// Append `_` between the stem and extension. Default — keeps
+    /// the copy moving without a user prompt.
+    #[default]
+    Suffix,
+    /// Reject with a typed error so the UI can surface it in the
+    /// aggregate conflict dialog.
+    Reject,
+}
+
+impl ReservedNameChoice {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Suffix => "suffix",
+            Self::Reject => "reject",
+        }
+    }
+
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "reject" => Self::Reject,
+            _ => Self::Suffix,
+        }
+    }
+}
+
+/// Long-path strategy selector. Mirrors
+/// `copythat_core::translate::LongPathStrategy`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LongPathChoice {
+    /// Prefix with `\\?\` (or `\\?\UNC\`). Default — Windows 10
+    /// 1607+ handles both transparently, and legacy tools can still
+    /// round-trip the long-path form through the Win32 API.
+    #[default]
+    Win32LongPath,
+    /// Shrink the filename stem to fit inside MAX_PATH.
+    Truncate,
+    /// Reject with a typed error.
+    Reject,
+}
+
+impl LongPathChoice {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Win32LongPath => "win32-long-path",
+            Self::Truncate => "truncate",
+            Self::Reject => "reject",
+        }
+    }
+
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "truncate" => Self::Truncate,
+            "reject" => Self::Reject,
+            _ => Self::Win32LongPath,
+        }
+    }
+}
+
+/// Persistent cross-platform translation preferences. TOML-round-
+/// trippable; the Tauri bridge builds
+/// `copythat_core::translate::PathPolicy` at enqueue time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct PathTranslationSettings {
+    /// Master toggle. When `false`, the runner skips the translator
+    /// entirely and the engine sees the source path unchanged —
+    /// matching pre-Phase-30 behaviour. Default `true`.
+    pub enabled: bool,
+    pub target_os: TargetOsChoice,
+    pub unicode_normalization: NormalizationModeChoice,
+    pub line_endings: LineEndingModeChoice,
+    pub reserved_name_strategy: ReservedNameChoice,
+    pub long_path_strategy: LongPathChoice,
+    /// Lowercase extensions (no leading dot) eligible for
+    /// line-ending conversion. Default matches
+    /// `copythat_core::translate::default_text_extensions()`.
+    pub line_ending_allowlist: Vec<String>,
+}
+
+impl Default for PathTranslationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            target_os: TargetOsChoice::Auto,
+            unicode_normalization: NormalizationModeChoice::Auto,
+            line_endings: LineEndingModeChoice::AsIs,
+            reserved_name_strategy: ReservedNameChoice::Suffix,
+            long_path_strategy: LongPathChoice::Win32LongPath,
+            line_ending_allowlist: default_text_extensions_for_settings(),
+        }
+    }
+}
+
+/// Mirror of `copythat_core::translate::default_text_extensions()`
+/// kept inline so this crate doesn't pull in `copythat-core`. Sync
+/// by hand if the engine's allowlist changes — the Phase-30 smoke
+/// test asserts parity between the two lists.
+pub fn default_text_extensions_for_settings() -> Vec<String> {
+    [
+        "txt", "md", "csv", "json", "xml", "yaml", "yml", "ini", "conf", "sh", "py", "rs", "ts",
+        "js", "css", "html",
+    ]
+    .iter()
+    .map(|s| (*s).to_string())
+    .collect()
+}
+
+// ---------------------------------------------------------------------
+// Phase 31 — power-aware copying
+// ---------------------------------------------------------------------
+
+/// Per-dimension policy choice with a uniform `Continue / Pause /
+/// Cap` shape. Mirrors `copythat_power::BatteryPolicy` and
+/// `copythat_power::NetworkPolicy` — kept local so this crate stays
+/// independent of `copythat-power`. The Tauri bridge translates at
+/// enqueue time.
+///
+/// `Cap` carries the rate as bytes-per-second (matches the
+/// `NetworkSettings::fixed_bytes_per_second` wire format from Phase
+/// 21).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "kind")]
+pub enum PowerRuleChoice {
+    #[default]
+    Continue,
+    Pause,
+    Cap {
+        bytes_per_second: u64,
+    },
+}
+
+impl PowerRuleChoice {
+    /// Stable short wire string — used by the IPC DTO so older
+    /// frontends that expect string enums round-trip cleanly.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Continue => "continue",
+            Self::Pause => "pause",
+            Self::Cap { .. } => "cap",
+        }
+    }
+}
+
+/// Thermal-specific policy — caps as a *percent of current shape
+/// rate* rather than an absolute bytes-per-second, so cooling down
+/// works across bandwidth settings. Default matches the brief's
+/// "cap to 50 %" when throttling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "kind")]
+pub enum ThermalRuleChoice {
+    Continue,
+    Pause,
+    CapPercent {
+        percent: u8,
+    },
+}
+
+impl Default for ThermalRuleChoice {
+    fn default() -> Self {
+        Self::CapPercent { percent: 50 }
+    }
+}
+
+impl ThermalRuleChoice {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Continue => "continue",
+            Self::Pause => "pause",
+            Self::CapPercent { .. } => "cap-percent",
+        }
+    }
+}
+
+/// Full power-policy settings group. Round-trips via TOML; the Tauri
+/// runner subscribes to `copythat_power::PowerBus` and maps each
+/// event through these rules.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct PowerPoliciesSettings {
+    /// Master toggle. When `false`, the runner skips the power
+    /// subscriber entirely — pre-Phase-31 behaviour. Default `true`
+    /// so the default policies take effect immediately after upgrade.
+    pub enabled: bool,
+    /// "On battery" rule. Default `Continue` — existing behaviour
+    /// for any user who hasn't changed their Settings.
+    pub battery: PowerRuleChoice,
+    /// "On metered network" rule. Default `Continue`.
+    pub metered: PowerRuleChoice,
+    /// "On cellular network" rule. Default `Continue`.
+    pub cellular: PowerRuleChoice,
+    /// "When presenting (Zoom / Teams / Keynote / PowerPoint / Meet)"
+    /// rule. Default `Pause` per the Phase 31 brief.
+    pub presentation: PowerRuleChoice,
+    /// "When any app is fullscreen" rule. Default `Continue`.
+    pub fullscreen: PowerRuleChoice,
+    /// "When CPU is thermal-throttling" rule. Default
+    /// `CapPercent(50)` per the Phase 31 brief.
+    pub thermal: ThermalRuleChoice,
+}
+
+impl Default for PowerPoliciesSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            battery: PowerRuleChoice::Continue,
+            metered: PowerRuleChoice::Continue,
+            cellular: PowerRuleChoice::Continue,
+            presentation: PowerRuleChoice::Pause,
+            fullscreen: PowerRuleChoice::Continue,
+            thermal: ThermalRuleChoice::default(),
         }
     }
 }

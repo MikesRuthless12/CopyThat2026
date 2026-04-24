@@ -98,6 +98,11 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
         network: copythat_settings::NetworkSettings::default(),
         conflict_profiles: copythat_settings::ConflictProfileSettings::default(),
         sync: copythat_settings::SyncSettings::default(),
+        chunk_store: copythat_settings::ChunkStoreSettings::default(),
+        drop_stack: copythat_settings::DropStackSettings::default(),
+        dnd: copythat_settings::DndSettings::default(),
+        path_translation: copythat_settings::PathTranslationSettings::default(),
+        power: copythat_settings::PowerPoliciesSettings::default(),
     };
 
     before.save_to(&path).expect("save_to");
@@ -163,6 +168,11 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
         network: copythat_settings::NetworkSettings::default(),
         conflict_profiles: copythat_settings::ConflictProfileSettings::default(),
         sync: copythat_settings::SyncSettings::default(),
+        chunk_store: copythat_settings::ChunkStoreSettings::default(),
+        drop_stack: copythat_settings::DropStackSettings::default(),
+        dnd: copythat_settings::DndSettings::default(),
+        path_translation: copythat_settings::PathTranslationSettings::default(),
+        power: copythat_settings::PowerPoliciesSettings::default(),
     };
     assert_eq!(after, expected);
 }

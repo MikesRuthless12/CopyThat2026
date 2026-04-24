@@ -1,6 +1,6 @@
-app-name = Copy That v1.0.0
+app-name = Copy That v1.25.0
 # MT
-window-title = Copy That v1.0.0
+window-title = Copy That v1.25.0
 # MT
 shred-ssd-advisory = Увага: ціль розташована на SSD. Багатопрохідне перезаписування не надійно очищує флеш-пам'ять, оскільки вирівнювання зносу та надлишкове виділення пересувають дані поза межі логічної адреси блоку. Для твердотільних носіїв слід віддавати перевагу ATA SECURE ERASE, NVMe Format із безпечним стиранням або повному шифруванню диска з подальшим знищенням ключа.
 
@@ -933,3 +933,70 @@ chunk-store-max-size = Максимальний розмір сховища фр
 chunk-store-prune = Видаляти фрагменти, старші за (дні)  # MT
 chunk-store-savings = Заощаджено { $gib } ГіБ завдяки дедуплікації фрагментів  # MT
 chunk-store-disk-usage = Використовується { $size } у { $chunks } фрагментах  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = Drop Stack  # MT
+dropstack-tray-open = Drop Stack  # MT
+dropstack-empty-title = Drop Stack порожній  # MT
+dropstack-empty-hint = Перетягніть файли сюди з Провідника або клацніть правою кнопкою миші по рядку завдання, щоб додати його.  # MT
+dropstack-add-to-stack = Додати до Drop Stack  # MT
+dropstack-copy-all-to = Копіювати все в…  # MT
+dropstack-move-all-to = Перемістити все в…  # MT
+dropstack-clear = Очистити стек  # MT
+dropstack-remove-row = Видалити зі стеку  # MT
+dropstack-path-missing-toast = { $path } видалено — файл більше не існує.  # MT
+dropstack-always-on-top = Завжди тримати Drop Stack зверху  # MT
+dropstack-show-tray-icon = Показувати значок Copy That в області сповіщень  # MT
+dropstack-open-on-start = Автоматично відкривати Drop Stack під час запуску програми  # MT
+dropstack-count = { $count } шлях  # MT
+
+# Phase 29 — spring-loaded folders + native DnD polish.
+settings-dnd-heading = Drag and drop  # MT
+settings-dnd-spring-load = Spring-load folders while dragging  # MT
+settings-dnd-spring-delay = Spring-load delay (ms)  # MT
+settings-dnd-thumbnails = Show drag thumbnails  # MT
+settings-dnd-invalid-highlight = Highlight invalid drop targets  # MT
+dropzone-invalid-title = Not a valid drop target  # MT
+dropzone-invalid-readonly = Destination is read-only  # MT
+dropzone-picker-title = Choose a destination  # MT
+dropzone-picker-up = Up  # MT
+dropzone-picker-path = Current path  # MT
+dropzone-picker-root = Roots  # MT
+dropzone-picker-use-this = Use this folder  # MT
+dropzone-picker-empty = No subfolders  # MT
+dropzone-picker-cancel = Cancel  # MT
+
+# Phase 30 — cross-platform path translation.
+translate-heading = Cross-platform compatibility  # MT
+translate-unicode-label = Unicode normalization  # MT
+translate-unicode-auto = Auto-detect destination  # MT
+translate-unicode-windows = NFC (Windows / Linux)  # MT
+translate-unicode-macos = Leave as-is (macOS / APFS)  # MT
+translate-line-endings-label = Translate line endings for text files  # MT
+translate-line-endings-allowlist = Text file extensions  # MT
+reserved-name-label = Windows reserved-name handling  # MT
+reserved-name-suffix = Append "_" (CON.txt → CON_.txt)  # MT
+reserved-name-reject = Reject and warn  # MT
+long-path-label = Use Windows long-path prefix (\?\) when over 260 chars  # MT
+long-path-hint = Some network shares and legacy tools don't honor the \?\ namespace.  # MT
+
+# Phase 31 — power-aware copying.
+power-heading = Power & State  # MT
+power-enabled = Enable power-aware rules  # MT
+power-battery-label = On battery  # MT
+power-metered-label = On metered Wi-Fi  # MT
+power-cellular-label = On cellular  # MT
+power-presentation-label = When presenting (Zoom / Teams / Keynote)  # MT
+power-fullscreen-label = When an app is fullscreen  # MT
+power-thermal-label = When CPU is thermal-throttling  # MT
+power-rule-continue = Continue at full speed  # MT
+power-rule-pause = Pause all jobs  # MT
+power-rule-cap = Cap bandwidth  # MT
+power-rule-cap-percent = Cap to a percent of current rate  # MT
+power-reason-on-battery = on battery  # MT
+power-reason-metered-network = metered network  # MT
+power-reason-cellular-network = cellular network  # MT
+power-reason-presenting = presentation mode  # MT
+power-reason-fullscreen = fullscreen app  # MT
+power-reason-thermal-throttling = CPU is throttling  # MT

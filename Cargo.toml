@@ -15,12 +15,13 @@ members = [
     "crates/copythat-sync",
     "crates/copythat-watch",
     "crates/copythat-chunk",
+    "crates/copythat-power",
     "xtask",
     "apps/copythat-ui/src-tauri",
 ]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.25.0"
 edition = "2024"
 rust-version = "1.85"
 license = "LicenseRef-AllRightsReserved"

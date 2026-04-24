@@ -1,6 +1,6 @@
 [package]
 name = "copythat-shape"
-description = "Bandwidth shaping (GCRA token bucket + time-of-day schedule + auto-throttle) for Copy That v1.0.0."
+description = "Bandwidth shaping (GCRA token bucket + time-of-day schedule + auto-throttle) for Copy That v1.25.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

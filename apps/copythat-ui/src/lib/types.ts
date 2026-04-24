@@ -537,6 +537,10 @@ export interface SettingsDto {
   scan?: ScanSettingsDto;
   /// Phase 21 — bandwidth shaping (global cap + schedule + auto-throttle).
   network: NetworkSettingsDto;
+  /// Phase 29 — drag-and-drop polish (spring-load, drag thumbnails,
+  /// invalid-target highlight). Optional on the wire so older
+  /// frontends opening a newer settings.toml don't explode.
+  dnd?: DndSettingsDto;
 }
 
 /** Phase 19a — disk-backed scan database settings. Optional in TS
@@ -662,4 +666,42 @@ export interface SyncCompletedDto {
 export interface SyncFailedDto {
   pairId: string;
   message: string;
+}
+
+// ---------------------------------------------------------------------
+// Phase 28 — tray-resident Drop Stack
+// ---------------------------------------------------------------------
+
+export interface DropStackEntryDto {
+  path: string;
+  addedAtMs: number;
+}
+
+export interface DropStackPathMissingDto {
+  path: string;
+}
+
+// ---------------------------------------------------------------------
+// Phase 29 — destination picker + drag-out staging DTOs.
+// ---------------------------------------------------------------------
+
+export interface DirChildDto {
+  name: string;
+  path: string;
+  writable: boolean;
+}
+
+export interface DragOutStagedDto {
+  paths: string[];
+  count: number;
+}
+
+/// Wire form of `copythat_settings::DndSettings`. Mirrored in
+/// `apps/copythat-ui/src-tauri/src/ipc.rs`. Governs the Phase 29
+/// spring-load + drag-thumbnail UX.
+export interface DndSettingsDto {
+  springLoadEnabled: boolean;
+  springLoadDelayMs: number;
+  showDragThumbnails: boolean;
+  highlightInvalidTargets: boolean;
 }
