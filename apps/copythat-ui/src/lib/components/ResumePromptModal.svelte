@@ -107,7 +107,11 @@
       class="modal"
       role="dialog"
       aria-labelledby="resume-title"
+      tabindex={-1}
       onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
     >
       <header>
         <h2 id="resume-title">{t("resume-prompt-title")}</h2>
