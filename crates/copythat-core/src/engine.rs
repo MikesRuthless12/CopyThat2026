@@ -1112,57 +1112,6 @@ fn detect_dst_fs_label(_dst: &Path) -> &'static str {
     "unknown"
 }
 
-/// Phase 32e — chunked read of the source file into a Vec, emitting
-/// `CopyEvent::Progress` after every chunk so the UI sees live
-/// progress during large uploads. Observes `ctrl` between chunks
-/// so cancel takes effect within a buffer-size slice.
-async fn read_src_with_progress(
-    src_path: &Path,
-    dst_path: &Path,
-    total_bytes: u64,
-    buffer_size: usize,
-    ctrl: &CopyControl,
-    events: &mpsc::Sender<CopyEvent>,
-    start: Instant,
-) -> Result<Vec<u8>, CopyError> {
-    use tokio::io::AsyncReadExt;
-
-    let mut file = match tokio::fs::File::open(src_path).await {
-        Ok(f) => f,
-        Err(e) => return Err(CopyError::from_io(src_path, dst_path, e)),
-    };
-    let mut out: Vec<u8> = Vec::with_capacity(total_bytes as usize);
-    let mut buf = vec![0u8; buffer_size];
-    let mut bytes_done: u64 = 0;
-    loop {
-        if ctrl.is_cancelled() {
-            return Err(CopyError {
-                kind: crate::error::CopyErrorKind::Interrupted,
-                src: src_path.to_path_buf(),
-                dst: dst_path.to_path_buf(),
-                raw_os_error: None,
-                message: "cancelled during cloud-sink upload".into(),
-            });
-        }
-        let n = match file.read(&mut buf).await {
-            Ok(0) => break,
-            Ok(n) => n,
-            Err(e) => return Err(CopyError::from_io(src_path, dst_path, e)),
-        };
-        out.extend_from_slice(&buf[..n]);
-        bytes_done += n as u64;
-        let rate_bps = rate_bps_from(bytes_done, start.elapsed());
-        let _ = events
-            .send(CopyEvent::Progress {
-                bytes: bytes_done,
-                total: total_bytes,
-                rate_bps,
-            })
-            .await;
-    }
-    Ok(out)
-}
-
 /// Derive bytes-per-second for `Progress` events. Zero when the
 /// elapsed window is degenerate (< 1 ms).
 fn rate_bps_from(bytes_done: u64, elapsed: std::time::Duration) -> u64 {
@@ -1200,43 +1149,41 @@ async fn copy_file_to_cloud_sink(
         })
         .await;
 
-    let _ = ctrl; // ctrl is observed between chunk reads below
+    let _ = ctrl; // cancel is observed inside the streaming body
 
     let start = Instant::now();
 
-    // Phase 32e — chunked progress reporting. Rather than reading
-    // the whole source in one shot, pull it in `opts.buffer_size`
-    // chunks and emit `CopyEvent::Progress` after each. The bytes
-    // still land in a single `Vec` and get flushed to the sink in
-    // one `put_blocking` call — full streaming through the sink
-    // (OpenDAL's writer API) lands in Phase 32f once the
-    // `CopyTarget` trait gains a streaming-writer surface.
+    // Phase 32f — route through `CloudSink::put_stream_blocking`.
+    // `CopyThatCloudSink` overrides this to open an
+    // `opendal::Operator::writer()` and stream chunks without
+    // buffering the full payload; non-OpenDAL sinks fall back to
+    // the trait default (read-into-Vec then `put_blocking`).
+    //
+    // Progress events are funneled back to the async events channel
+    // via `blocking_send` from the `spawn_blocking` worker — the
+    // engine's tokio mpsc supports this cross-runtime handoff.
     let buffer_size = opts.buffer_size.clamp(
         crate::options::MIN_BUFFER_SIZE,
         crate::options::MAX_BUFFER_SIZE,
     );
-    let bytes: Vec<u8> = match read_src_with_progress(
-        &src_path,
-        &dst_path,
-        total_bytes,
-        buffer_size,
-        &ctrl,
-        &events,
-        start,
-    )
-    .await
-    {
-        Ok(b) => b,
-        Err(err) => {
-            let _ = events.send(CopyEvent::Failed { err: err.clone() }).await;
-            return Err(err);
-        }
-    };
 
     let dst_key = dst_path.to_string_lossy().into_owned();
     let sink_for_blocking = sink.clone();
+    let src_for_blocking = src_path.clone();
+    let events_for_blocking = events.clone();
+    let start_copy = start;
+    let total_copy = total_bytes;
+
     let put_result = tokio::task::spawn_blocking(move || {
-        sink_for_blocking.put_blocking(&dst_key, &bytes)
+        let progress = |bytes_done: u64| {
+            let rate_bps = rate_bps_from(bytes_done, start_copy.elapsed());
+            let _ = events_for_blocking.blocking_send(CopyEvent::Progress {
+                bytes: bytes_done,
+                total: total_copy,
+                rate_bps,
+            });
+        };
+        sink_for_blocking.put_stream_blocking(&dst_key, &src_for_blocking, buffer_size, &progress)
     })
     .await;
 

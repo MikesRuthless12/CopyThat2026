@@ -32,21 +32,35 @@
 pub mod backend;
 pub mod credentials;
 pub mod error;
+pub mod oauth;
+pub mod oauth_pkce;
 pub mod registry;
+pub mod sftp;
 pub mod sink;
 pub mod target;
 pub mod transfer;
+pub mod verify;
 
 pub use backend::{
     AzureBlobConfig, Backend, BackendConfig, BackendKind, FtpConfig, GcsConfig, LocalFsConfig,
-    OAuthConfig, S3Config, SftpConfig, WebdavConfig, make_operator,
+    OAuthConfig, S3Config, SftpConfig, WebdavConfig, make_operator, make_target,
 };
 pub use credentials::{Credentials, CredentialsError};
 pub use error::BackendError;
+pub use oauth::{
+    OAuthDeviceCodeFlow, OAuthError, OAuthProvider, OAuthTokenResponse, TokenPollOutcome,
+    begin_device_code_flow, poll_device_code_flow, refresh_oauth_token,
+};
+pub use oauth_pkce::{
+    PkceFlow, PkceProvider, begin_pkce_flow, exchange_pkce_code, run_pkce_flow,
+    run_pkce_redirect_listener,
+};
 pub use registry::BackendRegistry;
+pub use sftp::SftpTarget;
 pub use sink::CopyThatCloudSink;
 pub use target::{CopyTarget, EntryMeta, OperatorTarget};
 pub use transfer::{copy_from_target, copy_to_target};
+pub use verify::{VerifyAlgorithm, VerifyError, VerifyOutcome, VerifySource, verify_upload};
 
 /// Re-export of `opendal` for callers that don't want to depend on it
 /// directly. The Phase 32 IPC layer leans on this to map OpenDAL's

@@ -14,7 +14,7 @@ use crate::error::BackendError;
 /// [`CopyTarget::stat`]. The shape mirrors what
 /// `copythat-history::Item` will eventually want to record for cloud
 /// objects.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EntryMeta {
     /// Path relative to the operator's root.
     pub path: String,
@@ -26,6 +26,20 @@ pub struct EntryMeta {
     /// Last-modified RFC 3339 timestamp. `None` when the backend
     /// doesn't expose mtime (FTP without `MDTM`, some SFTP servers).
     pub last_modified: Option<String>,
+    /// Phase 32g — server-reported ETag. Populated on S3-class +
+    /// Azure Blob backends; `None` elsewhere. The `verify` fast-path
+    /// uses this (when present) to skip a round-trip GET + re-hash.
+    /// The value is the raw ETag string as the backend returned it —
+    /// typically a hex-encoded MD5 on S3's default single-part
+    /// upload, a multipart-MD5-of-MD5s on MPU, or an opaque version
+    /// token for conditional requests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub etag: Option<String>,
+    /// Phase 32g — server-reported content-MD5 header (hex
+    /// encoded). Populated on Azure Blob with MD5 enabled, some S3
+    /// setups. `None` elsewhere.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_md5: Option<String>,
 }
 
 /// Async target the engine writes to or reads from. Phase 32a
@@ -54,6 +68,16 @@ pub trait CopyTarget: Send + Sync {
     /// Remove the object at `path`. No-op when the object doesn't
     /// exist (same shape as `Credentials::delete`).
     async fn delete(&self, path: &str) -> Result<(), BackendError>;
+
+    /// Phase 32f — expose the underlying OpenDAL operator when the
+    /// impl has one. Lets the `CopyThatCloudSink` adapter bypass
+    /// the `put` one-shot path and drive streaming uploads through
+    /// `opendal::Operator::writer()`. Default `None` — non-OpenDAL
+    /// impls (test fakes, custom backends) opt in when they have
+    /// an operator to share.
+    fn as_opendal_operator(&self) -> Option<&opendal::Operator> {
+        None
+    }
 }
 
 /// `CopyTarget` impl wrapping a configured [`opendal::Operator`].
@@ -81,6 +105,10 @@ impl CopyTarget for OperatorTarget {
         &self.name
     }
 
+    fn as_opendal_operator(&self) -> Option<&opendal::Operator> {
+        Some(&self.operator)
+    }
+
     async fn put(&self, path: &str, data: Bytes) -> Result<(), BackendError> {
         // opendal 0.54 takes a `Buffer`; converting Bytes is zero-copy.
         let buffer: opendal::Buffer = data.into();
@@ -106,6 +134,8 @@ impl CopyTarget for OperatorTarget {
                 is_dir: meta.mode().is_dir(),
                 size: Some(meta.content_length()),
                 last_modified: meta.last_modified().map(|t| t.to_rfc3339()),
+                etag: meta.etag().map(|s| s.trim_matches('"').to_owned()),
+                content_md5: meta.content_md5().map(|s| s.to_owned()),
             });
         }
         Ok(out)
@@ -118,6 +148,11 @@ impl CopyTarget for OperatorTarget {
                 is_dir: meta.mode().is_dir(),
                 size: Some(meta.content_length()),
                 last_modified: meta.last_modified().map(|t| t.to_rfc3339()),
+                // Phase 32g — expose server-side checksum headers.
+                // ETag comes back with S3's canonical quoting
+                // (`"<md5>"`); strip before comparing.
+                etag: meta.etag().map(|s| s.trim_matches('"').to_owned()),
+                content_md5: meta.content_md5().map(|s| s.to_owned()),
             })),
             Err(e) if e.kind() == opendal::ErrorKind::NotFound => Ok(None),
             Err(e) => Err(BackendError::OpenDal(e)),

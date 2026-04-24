@@ -21,8 +21,8 @@ use std::path::PathBuf;
 use copythat_chunk::ChunkStore;
 use copythat_history::JobSummary;
 use copythat_mount::{
-    MountBackend, MountError, MountFileKind, MountHandle, MountLayout, MountTree, NodeKind,
-    NoopBackend, ROOT_INODE, TreeInodeMap, default_backend_name, synthesize_attr,
+    ArchiveRefs, MountBackend, MountError, MountFileKind, MountHandle, MountLayout, MountTree,
+    NodeKind, NoopBackend, ROOT_INODE, TreeInodeMap, default_backend_name, synthesize_attr,
 };
 
 const PHASE_33_KEYS: &[&str] = &[
@@ -107,7 +107,7 @@ fn case3_noop_backend_drop_semantics() {
     assert_eq!(*counter.lock().expect("lock"), 0);
 
     let handle: MountHandle = backend
-        .mount(tmp.path(), MountLayout::all())
+        .mount(tmp.path(), MountLayout::all(), &ArchiveRefs::default())
         .expect("mount");
     assert!(handle.is_live());
     assert_eq!(handle.mountpoint(), tmp.path());
@@ -122,7 +122,7 @@ fn case4_explicit_unmount_then_drop_noop() {
     let backend = NoopBackend::default();
     let tmp = tempfile::tempdir().expect("tempdir");
     let handle = backend
-        .mount(tmp.path(), MountLayout::all())
+        .mount(tmp.path(), MountLayout::all(), &ArchiveRefs::default())
         .expect("mount");
     handle.unmount().expect("explicit unmount");
 
@@ -138,7 +138,11 @@ fn case5_mountpoint_validation() {
 
     // ../escape rejected.
     let err = backend
-        .mount(std::path::Path::new("../escape"), MountLayout::all())
+        .mount(
+            std::path::Path::new("../escape"),
+            MountLayout::all(),
+            &ArchiveRefs::default(),
+        )
         .expect_err("traversal rejected");
     assert!(matches!(err, MountError::UnsafeMountpoint(_)));
 
@@ -146,7 +150,7 @@ fn case5_mountpoint_validation() {
     let tmp = tempfile::tempdir().expect("tempdir");
     std::fs::write(tmp.path().join("stray"), b"hi").expect("write stray");
     let err = backend
-        .mount(tmp.path(), MountLayout::all())
+        .mount(tmp.path(), MountLayout::all(), &ArchiveRefs::default())
         .expect_err("nonempty rejected");
     assert!(matches!(err, MountError::MountpointNotEmpty(_)));
 }

@@ -67,6 +67,25 @@ workloads.
 - **Locale-driven formatting**: `Intl.NumberFormat` for bytes / percent / counts, `Intl.DisplayNames` for language pickers (each language renders in its own endonym + in the active UI locale).
 - **Reactive translation switching** — changes apply instantly across every modal, drawer, and badge without reload.
 
+### Cloud backends (Phase 32)
+
+- **12 backends via OpenDAL + one custom SFTP path**: Amazon S3, Cloudflare R2, Backblaze B2, Azure Blob, Google Cloud Storage, OneDrive, Google Drive, Dropbox, WebDAV, FTP, LocalFs — plus SFTP via a pure-Rust MIT-licensed `russh` / `russh-sftp` backend (avoids OpenDAL's GPL-blocked `services-sftp`).
+- **Settings → Remotes tab** for add / remove / test-connection; secrets live in the OS keychain (Apple Keychain / Windows Credential Manager / Secret Service / kwallet) under `copythat-cloud/<backend-name>`, never in `settings.toml`.
+- **Engine-level cloud destinations**: `copy_file` routes through `CopyOptions::cloud_sink` when the destination is remote, streaming the source in `buffer_size` chunks through `opendal::Operator::writer()` with multipart upload handled transparently (S3-class backends). Progress events fire per-chunk with running byte counts.
+- **Verify-on-remote** with four algorithms (BLAKE3, SHA-256, MD5, round-trip). The server-side checksum fast-path (ETag on S3-class, `content-md5` on Azure Blob) skips the round-trip fetch when the backend exposes a comparable hash.
+- **OAuth device-code flow** for Microsoft Graph + Google Drive + Dropbox, plus an **RFC 7636 PKCE browser-redirect flow** for providers where device-code isn't available. Refresh-token flow preserves the old refresh_token when providers (MS Graph) omit it on refresh. Loopback HTTP receiver on `127.0.0.1:<auto-port>` catches the authorize redirect.
+- **SFTP key forms**: password (default), unencrypted OpenSSH private key (`KEY\n<body>`), encrypted OpenSSH private key (`KEY_ENC\n<passphrase>\n<body>`). `known_hosts` pinning with both plain + hashed `|1|salt|hmac` entries (HMAC-SHA1 host matching). Connection pooling via an `Arc<AsyncMutex<PooledSession>>` so concurrent put / get calls reuse a live SSH channel and re-handshake lazily on error.
+- **Resume journal awareness**: `JobRecord::remote_backend_name` distinguishes cloud-dst from local-dst at startup-resume time; cross-process MPU resume is intentionally not handled (Copy That's remote-destination model is idempotent re-copy).
+
+### Mount the archive (Phase 33)
+
+- **Cross-platform read-only mount** of the Copy That snapshot history: `by-date/YYYY-MM-DD/HH-MM-SS/<job>` + `by-source/<escaped-src-root>/<timestamp>` + `by-job-id/<row-id>/<job>`. The mount exposes historical copies as plain folders — `cat` / Explorer / Finder all work.
+- **FUSE** on Linux/macOS behind `--features fuse` (pulls `fuser` 0.15, MIT). Real `fuser::Filesystem` trait impl with `lookup` / `getattr` / `readdir` / `read` consulting `TreeInodeMap` + the Phase 27 chunk store.
+- **WinFsp** on Windows behind `--features winfsp` (pulls `winfsp_wrs` 0.4, MIT — replaces the GPL-blocked `winfsp-sys`). Real `winfsp_wrs::FileSystemInterface` impl overriding `get_volume_info`, `get_security_by_name`, `open`, `close`, `read`, `read_directory`, `get_file_info`. Default SDDL (`D:P(A;;GR;;;WD)`) grants everyone generic-read.
+- **Chunk-streaming reads**: `read` callbacks walk each item's Phase 27 manifest by cursor, fetching only chunks that overlap `[offset, offset+size)` — multi-GB snapshots don't spike memory.
+- **History context menu**: *Mount snapshot* on any successful history row opens a directory picker + dispatches the mount IPC; *Settings → Advanced* has a *Mount latest on launch* toggle.
+- **USER ACTION** to validate real kernel mounts: run `cargo test -p copythat-mount --features fuse` on Linux/macOS, or `cargo test -p copythat-mount --features winfsp` on Windows (requires the WinFsp driver + LLVM libclang installed — see [`docs/ROADMAP.md`](docs/ROADMAP.md) Phase 33g for the exact `winget` commands).
+
 ### Performance
 
 - **1 MiB** is the measured optimum buffer size; all other sizes regressed in the Phase 13b sweep — see [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).

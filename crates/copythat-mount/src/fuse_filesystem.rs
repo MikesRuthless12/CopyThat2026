@@ -214,6 +214,23 @@ pub fn synthesize_attr(
     inode: u64,
     mount_mtime_unix_secs: i64,
 ) -> Option<MountFileAttr> {
+    synthesize_attr_with_size(map, inode, mount_mtime_unix_secs, None)
+}
+
+/// Phase 33f — size-aware synthesizer. `size_lookup` is consulted
+/// for job-placeholder leaves (`NodeKind::JobPlaceholder`); when
+/// `Some`, the closure returns the aggregate byte-size of the
+/// job's file set, which the caller typically computes by summing
+/// [`copythat_history::ItemRow::size`] across
+/// `History::items_for(job_row_id)` (optionally cross-checked
+/// against the Phase 27 chunk store). When `None` (or when the
+/// lookup returns `None`), leaves fall back to `size = 0`.
+pub fn synthesize_attr_with_size(
+    map: &TreeInodeMap,
+    inode: u64,
+    mount_mtime_unix_secs: i64,
+    size_lookup: Option<&dyn Fn(i64) -> Option<u64>>,
+) -> Option<MountFileAttr> {
     let entry = map.get(inode)?;
     Some(match &entry.kind {
         NodeKind::Directory => {
@@ -229,16 +246,19 @@ pub fn synthesize_attr(
                 mtime_unix_secs: mount_mtime_unix_secs,
             }
         }
-        NodeKind::JobPlaceholder { .. } => MountFileAttr {
-            ino: inode,
-            // 33e: stub out at zero bytes. 33f's chunk-streaming
-            // read path populates this from `History::items_for`.
-            size: 0,
-            kind: MountFileKind::RegularFile,
-            perm: 0o444,
-            nlink: 1,
-            mtime_unix_secs: mount_mtime_unix_secs,
-        },
+        NodeKind::JobPlaceholder { job_row_id } => {
+            let size = size_lookup
+                .and_then(|lookup| lookup(*job_row_id))
+                .unwrap_or(0);
+            MountFileAttr {
+                ino: inode,
+                size,
+                kind: MountFileKind::RegularFile,
+                perm: 0o444,
+                nlink: 1,
+                mtime_unix_secs: mount_mtime_unix_secs,
+            }
+        }
     })
 }
 
@@ -421,5 +441,50 @@ mod tests {
         let b = now_unix_secs();
         assert!(a > 0 && b > 0);
         assert!(b >= a);
+    }
+
+    #[test]
+    fn synthesize_attr_with_size_populates_job_leaves() {
+        let tree = seeded_tree();
+        let map = TreeInodeMap::from_tree(&tree);
+        let by_job_id = map.lookup(ROOT_INODE, "by-job-id").expect("by-job-id");
+        let one = map.lookup(by_job_id, "1").expect("1");
+        let leaf = map.lookup(one, "x-copy").expect("x-copy");
+
+        let lookup = |row_id: i64| -> Option<u64> {
+            match row_id {
+                1 => Some(1_048_576),
+                2 => Some(2_097_152),
+                _ => None,
+            }
+        };
+        let attr = synthesize_attr_with_size(&map, leaf, 1_700_000_000, Some(&lookup))
+            .expect("leaf attr");
+        assert_eq!(attr.size, 1_048_576);
+        assert_eq!(attr.kind, MountFileKind::RegularFile);
+    }
+
+    #[test]
+    fn synthesize_attr_with_size_falls_back_to_zero_on_unknown_job() {
+        let tree = seeded_tree();
+        let map = TreeInodeMap::from_tree(&tree);
+        let by_job_id = map.lookup(ROOT_INODE, "by-job-id").expect("by-job-id");
+        let one = map.lookup(by_job_id, "1").expect("1");
+        let leaf = map.lookup(one, "x-copy").expect("x-copy");
+        let lookup = |_: i64| -> Option<u64> { None };
+        let attr = synthesize_attr_with_size(&map, leaf, 1_700_000_000, Some(&lookup))
+            .expect("leaf attr");
+        assert_eq!(attr.size, 0);
+    }
+
+    #[test]
+    fn size_lookup_not_applied_to_directories() {
+        let tree = seeded_tree();
+        let map = TreeInodeMap::from_tree(&tree);
+        let lookup = |_: i64| -> Option<u64> { Some(999_999) };
+        let attr = synthesize_attr_with_size(&map, ROOT_INODE, 1_700_000_000, Some(&lookup))
+            .expect("root attr");
+        // Directories always report 0 regardless of the lookup.
+        assert_eq!(attr.size, 0);
     }
 }

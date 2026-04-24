@@ -9,21 +9,49 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use copythat_chunk::ChunkStore;
 use copythat_core::safety::validate_path_no_traversal;
+use copythat_history::History;
 
 use crate::error::MountError;
 use crate::handle::MountHandle;
 use crate::tree::MountLayout;
 
-/// Trait every platform backend implements. Phase 33a only ships
-/// [`NoopBackend`]; real `fuser` + `winfsp` impls land in 33b.
+/// Phase 33g — archive references passed into
+/// [`MountBackend::mount`]. Both fields are optional so test-only
+/// backends (like [`NoopBackend`]) can mount without live DBs. When
+/// the FUSE/WinFsp backends are enabled in a production build,
+/// both must be `Some` — the read callback uses them to materialise
+/// per-file byte ranges from the chunk store.
+#[derive(Clone, Default)]
+pub struct ArchiveRefs {
+    pub history: Option<Arc<History>>,
+    pub chunk_store: Option<Arc<ChunkStore>>,
+}
+
+impl std::fmt::Debug for ArchiveRefs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ArchiveRefs")
+            .field("history", &self.history.is_some())
+            .field("chunk_store", &self.chunk_store.is_some())
+            .finish()
+    }
+}
+
+/// Trait every platform backend implements. Phase 33a shipped
+/// [`NoopBackend`]; Phase 33f wired real FUSE via `fuser` behind
+/// the `fuse` feature; Phase 33g threads `ArchiveRefs` so the
+/// kernel callbacks can actually answer read requests.
 pub trait MountBackend {
     /// Mount `layout`-filtered archive content at `mountpoint`.
-    /// The returned [`MountHandle`] unmounts on Drop.
+    /// The returned [`MountHandle`] unmounts on Drop. `archive`
+    /// carries the History + ChunkStore handles the backend's
+    /// read callback needs; [`NoopBackend`] ignores it.
     fn mount(
         &self,
         mountpoint: &Path,
         layout: MountLayout,
+        archive: &ArchiveRefs,
     ) -> Result<MountHandle, MountError>;
 }
 
@@ -85,6 +113,7 @@ impl MountBackend for NoopBackend {
         &self,
         mountpoint: &Path,
         _layout: MountLayout,
+        _archive: &ArchiveRefs,
     ) -> Result<MountHandle, MountError> {
         validate_mountpoint(mountpoint)?;
         let session = NoopSession {
@@ -123,7 +152,7 @@ mod tests {
         let backend = NoopBackend::default();
         let tmp = tempfile::tempdir().expect("tempdir");
         let handle = backend
-            .mount(tmp.path(), MountLayout::all())
+            .mount(tmp.path(), MountLayout::all(), &ArchiveRefs::default())
             .expect("mount");
         drop(handle);
         assert_eq!(*backend.unmount_counter().lock().expect("lock"), 1);

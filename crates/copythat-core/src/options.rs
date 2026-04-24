@@ -413,6 +413,31 @@ pub trait CloudSink: Send + Sync + std::fmt::Debug {
     /// Upload `bytes` to `path` on the configured remote backend.
     /// Returns the number of bytes written on success.
     fn put_blocking(&self, path: &str, bytes: &[u8]) -> Result<u64, String>;
+
+    /// Phase 32f — streaming upload. Reads `source_path` in
+    /// `buffer_size` chunks and writes each chunk to the backend
+    /// without buffering the full file in memory. `on_progress` is
+    /// invoked after each chunk with the running byte count so the
+    /// engine can emit `CopyEvent::Progress`.
+    ///
+    /// Default impl reads the whole file into a Vec and delegates
+    /// to `put_blocking` — correct but not streaming.
+    /// Implementations backed by a streaming transport (e.g.,
+    /// `opendal::Operator::writer()`) should override. Returns the
+    /// number of bytes written on success.
+    fn put_stream_blocking(
+        &self,
+        path: &str,
+        source_path: &std::path::Path,
+        buffer_size: usize,
+        on_progress: &dyn Fn(u64),
+    ) -> Result<u64, String> {
+        let _ = buffer_size;
+        let bytes = std::fs::read(source_path).map_err(|e| e.to_string())?;
+        let n = bytes.len() as u64;
+        on_progress(n);
+        self.put_blocking(path, &bytes)
+    }
 }
 
 /// Bridge contract for the Phase 27 content-defined chunk store.

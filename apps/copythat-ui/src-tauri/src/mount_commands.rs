@@ -151,7 +151,11 @@ pub async fn mount_snapshot(
     let backend = NoopBackend::default();
     let mountpoint_path = PathBuf::from(&mountpoint);
     let handle = backend
-        .mount(&mountpoint_path, MountLayout::all())
+        .mount(
+            &mountpoint_path,
+            MountLayout::all(),
+            &copythat_mount::backends::ArchiveRefs::default(),
+        )
         .map_err(|e: MountError| e.to_string())?;
 
     state.mounts.insert(job_row_id, handle);
@@ -212,7 +216,11 @@ pub async fn mount_latest_on_launch(state: &AppState) {
 
     let backend = NoopBackend::default();
     let path = PathBuf::from(&mountpoint);
-    match backend.mount(&path, MountLayout::all()) {
+    match backend.mount(
+        &path,
+        MountLayout::all(),
+        &copythat_mount::backends::ArchiveRefs::default(),
+    ) {
         Ok(handle) => {
             state.mounts.insert(latest.row_id, handle);
         }
@@ -235,7 +243,7 @@ mod tests {
         let backend = NoopBackend::default();
         let tmp = tempfile::tempdir().expect("tempdir");
         let handle = backend
-            .mount(tmp.path(), MountLayout::all())
+            .mount(tmp.path(), MountLayout::all(), &copythat_mount::backends::ArchiveRefs::default())
             .expect("mount");
         registry.insert(42, handle);
         let snap = registry.snapshot();
@@ -253,13 +261,13 @@ mod tests {
         let tmp2 = tempfile::tempdir().expect("tempdir2");
 
         let h1 = backend
-            .mount(tmp1.path(), MountLayout::all())
+            .mount(tmp1.path(), MountLayout::all(), &copythat_mount::backends::ArchiveRefs::default())
             .expect("mount1");
         registry.insert(7, h1);
         assert_eq!(*counter.lock().unwrap(), 0, "first mount still live");
 
         let h2 = backend
-            .mount(tmp2.path(), MountLayout::all())
+            .mount(tmp2.path(), MountLayout::all(), &copythat_mount::backends::ArchiveRefs::default())
             .expect("mount2");
         registry.insert(7, h2);
         // Replacement dropped h1 → unmount_on_drop fired once.
@@ -277,7 +285,7 @@ mod tests {
         let backend = NoopBackend::default();
         let tmp = tempfile::tempdir().expect("tempdir");
         let handle = backend
-            .mount(tmp.path(), MountLayout::all())
+            .mount(tmp.path(), MountLayout::all(), &copythat_mount::backends::ArchiveRefs::default())
             .expect("mount");
         registry.insert(3, handle);
         let (taken, path) = registry.take(3).expect("taken");

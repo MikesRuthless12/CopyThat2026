@@ -605,6 +605,11 @@ fn entry_to_cloud_backend(
                 port: c.port,
                 username: c.username,
                 root: c.root,
+                // Phase 32h — known_hosts path isn't surfaced
+                // through the IPC DTO yet; Phase 32i adds the
+                // Settings UI for it. Defaults to trust-on-first-
+                // use for now.
+                known_hosts_path: String::new(),
             })
         }
         BackendKindChoice::Ftp => {

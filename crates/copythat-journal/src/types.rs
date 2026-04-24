@@ -42,7 +42,7 @@ pub struct CheckpointId(pub u64);
 /// so this crate does not depend on the history crate. The Tauri
 /// runner translates between the two at the boundary.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", default)]
 pub struct JobRecord {
     pub kind: String,
     pub src_root: PathBuf,
@@ -61,6 +61,18 @@ pub struct JobRecord {
     /// Files that finished (numerator). Updated by `finish_file`.
     pub files_done: u64,
     pub bytes_done: u64,
+    /// Phase 32f — when the destination is a cloud backend rather
+    /// than a local path, carries the backend's registry name so
+    /// the boot-time resume sweep can distinguish local-dst from
+    /// remote-dst jobs. For local copies this stays `None` (the
+    /// pre-32f default, preserved via `#[serde(default)]` on the
+    /// whole struct). Resume of a remote-dst job currently falls
+    /// through to "abandon + restart from scratch" because the
+    /// backend-specific partial-upload reconciliation (list the
+    /// partial MPU, resume from the last uploaded part) is the
+    /// Phase 32g follow-up.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote_backend_name: Option<String>,
 }
 
 impl JobRecord {
@@ -82,6 +94,55 @@ impl JobRecord {
             bytes_total: 0,
             files_done: 0,
             bytes_done: 0,
+            remote_backend_name: None,
+        }
+    }
+
+    /// Phase 32f — constructor for a cloud-destined job. `dst_key`
+    /// is the remote-backend key path; the caller stores it as
+    /// `dst_root` (reused field) and the `remote_backend_name`
+    /// tag flags the job as remote-dst at resume time.
+    pub fn new_remote(
+        kind: impl Into<String>,
+        src_root: impl Into<PathBuf>,
+        backend_name: impl Into<String>,
+        dst_key: impl Into<String>,
+    ) -> Self {
+        let key = dst_key.into();
+        Self {
+            kind: kind.into(),
+            src_root: src_root.into(),
+            dst_root: Some(PathBuf::from(&key)),
+            status: JobStatus::Running,
+            started_at_ms: now_ms(),
+            files_total: 0,
+            bytes_total: 0,
+            files_done: 0,
+            bytes_done: 0,
+            remote_backend_name: Some(backend_name.into()),
+        }
+    }
+
+    /// True when the destination for this job is a cloud backend
+    /// rather than a local path.
+    pub fn is_remote(&self) -> bool {
+        self.remote_backend_name.is_some()
+    }
+}
+
+impl Default for JobRecord {
+    fn default() -> Self {
+        Self {
+            kind: String::new(),
+            src_root: PathBuf::new(),
+            dst_root: None,
+            status: JobStatus::Running,
+            started_at_ms: 0,
+            files_total: 0,
+            bytes_total: 0,
+            files_done: 0,
+            bytes_done: 0,
+            remote_backend_name: None,
         }
     }
 }
@@ -260,9 +321,60 @@ mod tests {
             bytes_total: 1024,
             files_done: 2,
             bytes_done: 512,
+            remote_backend_name: None,
         };
         let s = serde_json::to_string(&before).unwrap();
         let after: JobRecord = serde_json::from_str(&s).unwrap();
         assert_eq!(before, after);
+    }
+
+    #[test]
+    fn new_remote_tags_backend_name_and_is_remote() {
+        let job = JobRecord::new_remote("copy", "/src", "prod-s3", "data/out.bin");
+        assert!(job.is_remote());
+        assert_eq!(
+            job.remote_backend_name.as_deref(),
+            Some("prod-s3")
+        );
+        assert_eq!(
+            job.dst_root.as_deref().map(|p| p.to_string_lossy().into_owned()),
+            Some("data/out.bin".to_owned())
+        );
+    }
+
+    #[test]
+    fn new_local_has_no_remote_tag() {
+        let job = JobRecord::new("copy", "/src", Some(PathBuf::from("/dst")));
+        assert!(!job.is_remote());
+        assert!(job.remote_backend_name.is_none());
+    }
+
+    #[test]
+    fn round_trip_preserves_remote_backend_name() {
+        let before = JobRecord::new_remote("copy", "/src", "s3-prod", "bucket/obj.bin");
+        let s = serde_json::to_string(&before).unwrap();
+        let after: JobRecord = serde_json::from_str(&s).unwrap();
+        assert_eq!(before, after);
+        assert_eq!(after.remote_backend_name.as_deref(), Some("s3-prod"));
+    }
+
+    #[test]
+    fn legacy_record_without_remote_field_still_deserializes() {
+        // Pre-Phase-32f records didn't carry `remote_backend_name`.
+        // `#[serde(default)]` on the struct lets them round-trip.
+        let legacy = r#"{
+            "kind": "copy",
+            "src_root": "/a",
+            "dst_root": "/b",
+            "status": "running",
+            "started_at_ms": 1700000000000,
+            "files_total": 0,
+            "bytes_total": 0,
+            "files_done": 0,
+            "bytes_done": 0
+        }"#;
+        let parsed: JobRecord = serde_json::from_str(legacy).expect("legacy parse");
+        assert!(parsed.remote_backend_name.is_none());
+        assert!(!parsed.is_remote());
     }
 }
