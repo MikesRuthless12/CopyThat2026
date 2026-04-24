@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  NSServices fragment for Copy That v1.0.0.
+  NSServices fragment for Copy That v1.25.0.
 
   Phase 16 packaging merges this array under the `NSServices` key in
-  the main app's `Copy That v1.0.0.app/Contents/Info.plist`. When the
+  the main app's `Copy That v1.25.0.app/Contents/Info.plist`. When the
   OS notices the app, the two entries appear under every app's
   "Services" submenu whenever the current pasteboard selection is a
   file path.
@@ -26,7 +26,7 @@
         <key>NSMessage</key>
         <string>copyFiles</string>
         <key>NSPortName</key>
-        <string>Copy That v1.0.0</string>
+        <string>Copy That v1.25.0</string>
         <key>NSRequiredContext</key>
         <dict>
             <!--
@@ -51,7 +51,7 @@
         <key>NSMessage</key>
         <string>moveFiles</string>
         <key>NSPortName</key>
-        <string>Copy That v1.0.0</string>
+        <string>Copy That v1.25.0</string>
         <key>NSRequiredContext</key>
         <dict/>
         <key>NSReturnTypes</key>

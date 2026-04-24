@@ -1,0 +1,78 @@
+[package]
+name = "copythat-cloud"
+description = "Phase 32 — cloud backend matrix for Copy That. Wraps OpenDAL with a typed Backend / BackendKind / CopyTarget surface and OS-keychain credential storage."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# OpenDAL is the cross-backend storage layer. Phase 32b lights the
+# remaining 8 drivers: `services-azblob` (Azure Blob), `services-gcs`
+# (Google Cloud Storage), `services-onedrive`, `services-gdrive`
+# (Google Drive), `services-dropbox`, `services-webdav`,
+# `services-sftp`, `services-ftp`. `services-fs` covers LocalFs;
+# `services-s3` covers Amazon S3 + Cloudflare R2 + Backblaze B2 + any
+# S3-compatible endpoint via the same driver. Features are listed
+# explicitly rather than via a catch-all `--all-features` so
+# `cargo deny` audits a bounded, reviewable set.
+opendal = { version = "0.54", default-features = false, features = [
+    "services-fs",
+    "services-s3",
+    "services-azblob",
+    "services-gcs",
+    "services-onedrive",
+    "services-gdrive",
+    "services-dropbox",
+    "services-webdav",
+    # `services-sftp` pulls `openssh` 0.11 which fails to build on
+    # Windows (conflicting `TryFrom<tokio::process::Child*>` impls
+    # introduced by Rust's blanket-From; tracked upstream). Kept in
+    # BackendKind + config + settings persistence; `make_operator`
+    # surfaces `BackendError::BackendNotEnabled` until the upstream
+    # fix lands or we swap to a pure-Rust SSH implementation
+    # (`russh`). Re-enable here when that resolves.
+    # "services-sftp",
+    "services-ftp",
+] }
+
+# OS keychain. Apple Keychain on macOS, Windows Credential Manager on
+# Windows, Secret Service / kwallet on Linux. MIT/Apache-2.0.
+keyring = { version = "3", default-features = false, features = [
+    "apple-native",
+    "windows-native",
+    "linux-native",
+    "sync-secret-service",
+] }
+
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt", "sync", "io-util"] }
+futures = "0.3"
+bytes = "1"
+async-trait = "0.1"
+# Phase 32b — CloudSink adapter against copythat-core's trait bound.
+copythat-core = { path = "../copythat-core", version = "1" }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "io-util",
+    "test-util",
+] }
+toml = "0.8"
+copythat-settings = { path = "../copythat-settings" }
+
+[[test]]
+name = "phase_32_cloud"
+path = "../../tests/smoke/phase_32_cloud.rs"

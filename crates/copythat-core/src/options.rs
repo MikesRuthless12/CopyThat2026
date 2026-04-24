@@ -372,6 +372,47 @@ pub struct CopyOptions {
     /// `None` disables the chunk pathway entirely; the engine behaves
     /// exactly as it did pre-Phase-27.
     pub chunk_store: Option<Arc<dyn ChunkStoreSink>>,
+    /// Phase 32 — cloud sink bridge.
+    ///
+    /// When `Some`, the engine routes destination writes through a
+    /// registered cloud backend instead of the local filesystem. The
+    /// [`CloudSink::put_blocking`] call is invoked with the full read
+    /// buffer after the source is staged; the destination path is
+    /// interpreted as a key on the remote backend (bucket root,
+    /// container root, etc.). Kept as a trait object here so the core
+    /// engine stays independent of the `opendal` + `keyring` +
+    /// `async-trait` crates pulled in by `copythat-cloud`.
+    ///
+    /// Phase 32b wires the contract + adapter
+    /// (`copythat_cloud::CopyThatCloudSink`); full streaming
+    /// integration through `copy_file` follows in a dedicated phase
+    /// once the engine's read path is refactored for non-blocking
+    /// destination IO. `None` preserves pre-Phase-32 behaviour.
+    pub cloud_sink: Option<Arc<dyn CloudSink>>,
+}
+
+/// Bridge contract for the Phase 32 cloud sink.
+///
+/// Implemented by `copythat_cloud::CopyThatCloudSink`. Kept in
+/// `copythat-core` so [`CopyOptions`] can hold a trait object without
+/// pulling `opendal` / `keyring` / `async-trait` into every crate
+/// that touches the engine's public API.
+///
+/// The single entrypoint ([`CloudSink::put_blocking`]) is
+/// synchronous-and-blocking by design. Implementations translate
+/// the call into whatever async machinery they own. The engine
+/// calls it from the tokio-runtime-owned copy task, so spinning on
+/// a `block_on` inside an implementation is not safe — implementations
+/// should run the actual IO on a dedicated runtime / thread and
+/// return its result synchronously.
+pub trait CloudSink: Send + Sync + std::fmt::Debug {
+    /// Stable display name of the backend this sink is bound to.
+    /// Used by engine events + history records.
+    fn backend_name(&self) -> &str;
+
+    /// Upload `bytes` to `path` on the configured remote backend.
+    /// Returns the number of bytes written on success.
+    fn put_blocking(&self, path: &str, bytes: &[u8]) -> Result<u64, String>;
 }
 
 /// Bridge contract for the Phase 27 content-defined chunk store.
@@ -493,6 +534,7 @@ impl Default for CopyOptions {
             meta_policy: crate::meta::MetaPolicy::default(),
             meta_ops: None,
             chunk_store: None,
+            cloud_sink: None,
         }
     }
 }

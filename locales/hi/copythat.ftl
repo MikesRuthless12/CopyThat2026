@@ -1,6 +1,6 @@
-app-name = Copy That v1.0.0
+app-name = Copy That v1.25.0
 # MT
-window-title = Copy That v1.0.0
+window-title = Copy That v1.25.0
 # MT
 shred-ssd-advisory = चेतावनी: यह लक्ष्य SSD पर है। वियर-लेवलिंग और ओवर-प्रोविजनिंग लॉजिकल ब्लॉक पते के नीचे से डेटा हटा देते हैं, इसलिए बहु-पास ओवरराइट फ्लैश मेमोरी को विश्वसनीय रूप से साफ नहीं करते। सॉलिड-स्टेट मीडिया के लिए ATA SECURE ERASE, NVMe फॉर्मैट विद सिक्योर इरेज़, या त्यागी गई कुंजी वाले फुल-डिस्क एन्क्रिप्शन को प्राथमिकता दें।
 
@@ -933,3 +933,105 @@ chunk-store-max-size = अधिकतम चंक स्टोर आकार
 chunk-store-prune = इस से पुराने चंक्स को हटाएं (दिन)  # MT
 chunk-store-savings = चंक डीडुप के माध्यम से { $gib } GiB बचाया गया  # MT
 chunk-store-disk-usage = { $chunks } चंक्स में { $size } का उपयोग  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = ड्रॉप स्टैक  # MT
+dropstack-tray-open = ड्रॉप स्टैक  # MT
+dropstack-empty-title = ड्रॉप स्टैक खाली है  # MT
+dropstack-empty-hint = एक्सप्लोरर से यहां फ़ाइलें खींचें या जॉब पंक्ति पर दाएं क्लिक करके जोड़ें।  # MT
+dropstack-add-to-stack = ड्रॉप स्टैक में जोड़ें  # MT
+dropstack-copy-all-to = सभी को कॉपी करें…  # MT
+dropstack-move-all-to = सभी को स्थानांतरित करें…  # MT
+dropstack-clear = स्टैक साफ़ करें  # MT
+dropstack-remove-row = स्टैक से हटाएं  # MT
+dropstack-path-missing-toast = { $path } हटाया गया — फ़ाइल अब मौजूद नहीं है।  # MT
+dropstack-always-on-top = ड्रॉप स्टैक को हमेशा शीर्ष पर रखें  # MT
+dropstack-show-tray-icon = Copy That ट्रे आइकन दिखाएं  # MT
+dropstack-open-on-start = ऐप स्टार्ट पर ड्रॉप स्टैक स्वचालित रूप से खोलें  # MT
+dropstack-count = { $count } पथ  # MT
+
+# Phase 29 — spring-loaded folders + native DnD polish.
+settings-dnd-heading = Drag and drop  # MT
+settings-dnd-spring-load = Spring-load folders while dragging  # MT
+settings-dnd-spring-delay = Spring-load delay (ms)  # MT
+settings-dnd-thumbnails = Show drag thumbnails  # MT
+settings-dnd-invalid-highlight = Highlight invalid drop targets  # MT
+dropzone-invalid-title = Not a valid drop target  # MT
+dropzone-invalid-readonly = Destination is read-only  # MT
+dropzone-picker-title = Choose a destination  # MT
+dropzone-picker-up = Up  # MT
+dropzone-picker-path = Current path  # MT
+dropzone-picker-root = Roots  # MT
+dropzone-picker-use-this = Use this folder  # MT
+dropzone-picker-empty = No subfolders  # MT
+dropzone-picker-cancel = Cancel  # MT
+
+# Phase 30 — cross-platform path translation.
+translate-heading = Cross-platform compatibility  # MT
+translate-unicode-label = Unicode normalization  # MT
+translate-unicode-auto = Auto-detect destination  # MT
+translate-unicode-windows = NFC (Windows / Linux)  # MT
+translate-unicode-macos = Leave as-is (macOS / APFS)  # MT
+translate-line-endings-label = Translate line endings for text files  # MT
+translate-line-endings-allowlist = Text file extensions  # MT
+reserved-name-label = Windows reserved-name handling  # MT
+reserved-name-suffix = Append "_" (CON.txt → CON_.txt)  # MT
+reserved-name-reject = Reject and warn  # MT
+long-path-label = Use Windows long-path prefix (\?\) when over 260 chars  # MT
+long-path-hint = Some network shares and legacy tools don't honor the \?\ namespace.  # MT
+
+# Phase 31 — power-aware copying.
+power-heading = Power & State  # MT
+power-enabled = Enable power-aware rules  # MT
+power-battery-label = On battery  # MT
+power-metered-label = On metered Wi-Fi  # MT
+power-cellular-label = On cellular  # MT
+power-presentation-label = When presenting (Zoom / Teams / Keynote)  # MT
+power-fullscreen-label = When an app is fullscreen  # MT
+power-thermal-label = When CPU is thermal-throttling  # MT
+power-rule-continue = Continue at full speed  # MT
+power-rule-pause = Pause all jobs  # MT
+power-rule-cap = Cap bandwidth  # MT
+power-rule-cap-percent = Cap to a percent of current rate  # MT
+power-reason-on-battery = on battery  # MT
+power-reason-metered-network = metered network  # MT
+power-reason-cellular-network = cellular network  # MT
+power-reason-presenting = presentation mode  # MT
+power-reason-fullscreen = fullscreen app  # MT
+power-reason-thermal-throttling = CPU is throttling  # MT
+
+# Phase 32 — cloud backend matrix via OpenDAL.
+remote-heading = Remote backends  # MT
+remote-add = Add backend  # MT
+remote-list-empty = No remote backends configured  # MT
+remote-test = Test connection  # MT
+remote-test-success = Connection successful  # MT
+remote-test-failed = Connection failed  # MT
+remote-remove = Remove backend  # MT
+remote-name-label = Display name  # MT
+remote-kind-label = Backend type  # MT
+remote-save = Save backend  # MT
+remote-cancel = Cancel  # MT
+backend-s3 = Amazon S3  # MT
+backend-r2 = Cloudflare R2  # MT
+backend-b2 = Backblaze B2  # MT
+backend-azure-blob = Azure Blob Storage  # MT
+backend-gcs = Google Cloud Storage  # MT
+backend-onedrive = OneDrive  # MT
+backend-google-drive = Google Drive  # MT
+backend-dropbox = Dropbox  # MT
+backend-webdav = WebDAV  # MT
+backend-sftp = SFTP  # MT
+backend-ftp = FTP  # MT
+backend-local-fs = Local filesystem  # MT
+cloud-config-bucket = Bucket  # MT
+cloud-config-region = Region  # MT
+cloud-config-endpoint = Endpoint URL  # MT
+cloud-config-root = Root path  # MT
+cloud-error-invalid-config = Backend configuration is invalid  # MT
+cloud-error-network = Network error contacting backend  # MT
+cloud-error-not-found = Object not found at the requested path  # MT
+cloud-error-permission = Permission denied by remote backend  # MT
+cloud-error-keychain = OS keychain access failed  # MT
+settings-tab-remotes = Remotes  # MT

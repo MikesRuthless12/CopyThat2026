@@ -92,6 +92,24 @@ pub struct AppState {
     /// Each entry owns a stop flag the watcher loop checks between
     /// iterations.
     pub live_mirrors: crate::live_mirror::LiveMirrorRegistry,
+    /// Phase 28 — tray-resident Drop Stack. Holds the list of
+    /// staged paths + persists JSON to
+    /// `<config-dir>/dropstack.json` on every mutation.
+    pub dropstack: crate::dropstack::DropStackRegistry,
+    /// Phase 31 — power-aware copying broadcast bus. The runner's
+    /// subscriber task consumes PowerEvents, maps them through
+    /// `PowerPoliciesSettings`, and drives pause_all / resume_all /
+    /// shape cap. Test-only `inject_power_event` IPC shares this
+    /// same bus so the smoke test can fire synthetic events through
+    /// the real end-to-end path without the OS probes.
+    pub power_bus: copythat_power::PowerBus,
+    /// Phase 32 — cloud backend matrix. Owns the in-memory
+    /// `BackendRegistry` that mirrors `RemoteSettings::backends` on
+    /// disk. The Add-backend wizard + test-connection IPC read and
+    /// write through this registry; operators are built on-demand by
+    /// `copythat_cloud::make_operator` using the persisted config +
+    /// the secret pulled from the OS keychain.
+    pub cloud_backends: Arc<copythat_cloud::BackendRegistry>,
 }
 
 impl AppState {
@@ -136,7 +154,29 @@ impl AppState {
             shape: Arc::new(Shape::new(None)),
             syncs: crate::sync_commands::SyncRegistry::new(),
             live_mirrors: crate::live_mirror::LiveMirrorRegistry::new(),
+            // Default-empty DropStack pointed at the OS config dir
+            // (or an ephemeral test path when the default resolver
+            // fails — tests override via `with_dropstack_path`).
+            dropstack: crate::dropstack::DropStackRegistry::new(
+                crate::dropstack::default_dropstack_path()
+                    .unwrap_or_else(|| std::path::PathBuf::from("dropstack.json")),
+            ),
+            // Idle bus — the runner attaches the real probes in
+            // `lib.rs::run` once the Tauri runtime is up. Tests and
+            // the smoke leave the bus idle and drive it via
+            // `inject_power_event`.
+            power_bus: copythat_power::PowerBus::new(),
+            // Phase 32 — empty registry; `lib.rs::run` hydrates it
+            // from `settings.remotes.backends` after Settings load.
+            cloud_backends: Arc::new(copythat_cloud::BackendRegistry::new()),
         }
+    }
+
+    /// Test hook — override the DropStack persistence path. Avoids
+    /// tests racing each other over the OS config dir.
+    pub fn with_dropstack_path(mut self, path: PathBuf) -> Self {
+        self.dropstack = crate::dropstack::DropStackRegistry::new(path);
+        self
     }
 
     /// Phase 20 — attach an opened `Journal` and the

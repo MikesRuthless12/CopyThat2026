@@ -1,6 +1,6 @@
-app-name = Copy That v1.0.0
+app-name = Copy That v1.25.0
 # MT
-window-title = Copy That v1.0.0
+window-title = Copy That v1.25.0
 # MT
 shred-ssd-advisory = 경고: 이 대상은 SSD에 있습니다. 웨어 레벨링과 오버프로비저닝이 논리 블록 주소 아래의 데이터를 이동시키므로, 여러 번의 덮어쓰기로는 플래시 메모리를 안정적으로 말소할 수 없습니다. 솔리드 스테이트 매체에서는 ATA SECURE ERASE, NVMe Format(보안 삭제 포함), 또는 키를 파기한 전체 디스크 암호화를 우선적으로 사용하십시오.
 
@@ -933,3 +933,105 @@ chunk-store-max-size = 청크 저장소 최대 크기  # MT
 chunk-store-prune = 다음 일수보다 오래된 청크 정리 (일)  # MT
 chunk-store-savings = 청크 중복 제거를 통해 { $gib } GiB 절약됨  # MT
 chunk-store-disk-usage = { $chunks }개 청크에 { $size } 사용 중  # MT
+
+# Phase 28 — tray-resident Drop Stack. MT-flagged drafts;
+# the authoritative English source lives in locales/en/copythat.ftl.
+dropstack-window-title = 드롭 스택  # MT
+dropstack-tray-open = 드롭 스택  # MT
+dropstack-empty-title = 드롭 스택이 비어 있습니다  # MT
+dropstack-empty-hint = 탐색기에서 파일을 여기로 끌거나 작업 행을 마우스 오른쪽 버튼으로 클릭하여 추가하세요.  # MT
+dropstack-add-to-stack = 드롭 스택에 추가  # MT
+dropstack-copy-all-to = 모두 복사…  # MT
+dropstack-move-all-to = 모두 이동…  # MT
+dropstack-clear = 스택 지우기  # MT
+dropstack-remove-row = 스택에서 제거  # MT
+dropstack-path-missing-toast = { $path }을(를) 제거했습니다 — 파일이 더 이상 존재하지 않습니다.  # MT
+dropstack-always-on-top = 드롭 스택을 항상 위에 유지  # MT
+dropstack-show-tray-icon = Copy That 트레이 아이콘 표시  # MT
+dropstack-open-on-start = 앱 시작 시 드롭 스택 자동 열기  # MT
+dropstack-count = { $count }개 경로  # MT
+
+# Phase 29 — spring-loaded folders + native DnD polish.
+settings-dnd-heading = Drag and drop  # MT
+settings-dnd-spring-load = Spring-load folders while dragging  # MT
+settings-dnd-spring-delay = Spring-load delay (ms)  # MT
+settings-dnd-thumbnails = Show drag thumbnails  # MT
+settings-dnd-invalid-highlight = Highlight invalid drop targets  # MT
+dropzone-invalid-title = Not a valid drop target  # MT
+dropzone-invalid-readonly = Destination is read-only  # MT
+dropzone-picker-title = Choose a destination  # MT
+dropzone-picker-up = Up  # MT
+dropzone-picker-path = Current path  # MT
+dropzone-picker-root = Roots  # MT
+dropzone-picker-use-this = Use this folder  # MT
+dropzone-picker-empty = No subfolders  # MT
+dropzone-picker-cancel = Cancel  # MT
+
+# Phase 30 — cross-platform path translation.
+translate-heading = Cross-platform compatibility  # MT
+translate-unicode-label = Unicode normalization  # MT
+translate-unicode-auto = Auto-detect destination  # MT
+translate-unicode-windows = NFC (Windows / Linux)  # MT
+translate-unicode-macos = Leave as-is (macOS / APFS)  # MT
+translate-line-endings-label = Translate line endings for text files  # MT
+translate-line-endings-allowlist = Text file extensions  # MT
+reserved-name-label = Windows reserved-name handling  # MT
+reserved-name-suffix = Append "_" (CON.txt → CON_.txt)  # MT
+reserved-name-reject = Reject and warn  # MT
+long-path-label = Use Windows long-path prefix (\?\) when over 260 chars  # MT
+long-path-hint = Some network shares and legacy tools don't honor the \?\ namespace.  # MT
+
+# Phase 31 — power-aware copying.
+power-heading = Power & State  # MT
+power-enabled = Enable power-aware rules  # MT
+power-battery-label = On battery  # MT
+power-metered-label = On metered Wi-Fi  # MT
+power-cellular-label = On cellular  # MT
+power-presentation-label = When presenting (Zoom / Teams / Keynote)  # MT
+power-fullscreen-label = When an app is fullscreen  # MT
+power-thermal-label = When CPU is thermal-throttling  # MT
+power-rule-continue = Continue at full speed  # MT
+power-rule-pause = Pause all jobs  # MT
+power-rule-cap = Cap bandwidth  # MT
+power-rule-cap-percent = Cap to a percent of current rate  # MT
+power-reason-on-battery = on battery  # MT
+power-reason-metered-network = metered network  # MT
+power-reason-cellular-network = cellular network  # MT
+power-reason-presenting = presentation mode  # MT
+power-reason-fullscreen = fullscreen app  # MT
+power-reason-thermal-throttling = CPU is throttling  # MT
+
+# Phase 32 — cloud backend matrix via OpenDAL.
+remote-heading = Remote backends  # MT
+remote-add = Add backend  # MT
+remote-list-empty = No remote backends configured  # MT
+remote-test = Test connection  # MT
+remote-test-success = Connection successful  # MT
+remote-test-failed = Connection failed  # MT
+remote-remove = Remove backend  # MT
+remote-name-label = Display name  # MT
+remote-kind-label = Backend type  # MT
+remote-save = Save backend  # MT
+remote-cancel = Cancel  # MT
+backend-s3 = Amazon S3  # MT
+backend-r2 = Cloudflare R2  # MT
+backend-b2 = Backblaze B2  # MT
+backend-azure-blob = Azure Blob Storage  # MT
+backend-gcs = Google Cloud Storage  # MT
+backend-onedrive = OneDrive  # MT
+backend-google-drive = Google Drive  # MT
+backend-dropbox = Dropbox  # MT
+backend-webdav = WebDAV  # MT
+backend-sftp = SFTP  # MT
+backend-ftp = FTP  # MT
+backend-local-fs = Local filesystem  # MT
+cloud-config-bucket = Bucket  # MT
+cloud-config-region = Region  # MT
+cloud-config-endpoint = Endpoint URL  # MT
+cloud-config-root = Root path  # MT
+cloud-error-invalid-config = Backend configuration is invalid  # MT
+cloud-error-network = Network error contacting backend  # MT
+cloud-error-not-found = Object not found at the requested path  # MT
+cloud-error-permission = Permission denied by remote backend  # MT
+cloud-error-keychain = OS keychain access failed  # MT
+settings-tab-remotes = Remotes  # MT

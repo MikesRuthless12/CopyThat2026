@@ -607,6 +607,188 @@ pub struct SettingsDto {
     pub scan: ScanDto,
     /// Phase 21 — bandwidth shaping (global cap + schedule + auto-throttle).
     pub network: NetworkDto,
+    /// Phase 29 — drag-and-drop polish (spring-load, drag thumbnails,
+    /// invalid-target highlight).
+    #[serde(default)]
+    pub dnd: DndDto,
+    /// Phase 30 — cross-platform path translation (Unicode NFC/NFD,
+    /// line-ending rewrite, Windows reserved-name handling, `\\?\`
+    /// long-path prefix).
+    #[serde(default)]
+    pub path_translation: PathTranslationDto,
+    /// Phase 31 — power-aware copying (battery / metered-network /
+    /// presentation / fullscreen / thermal pause-and-cap policies).
+    #[serde(default)]
+    pub power: PowerPoliciesDto,
+}
+
+/// Phase 29 — wire form of `copythat_settings::DndSettings`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DndDto {
+    pub spring_load_enabled: bool,
+    pub spring_load_delay_ms: u32,
+    pub show_drag_thumbnails: bool,
+    pub highlight_invalid_targets: bool,
+}
+
+impl Default for DndDto {
+    fn default() -> Self {
+        let defaults = copythat_settings::DndSettings::default();
+        Self {
+            spring_load_enabled: defaults.spring_load_enabled,
+            spring_load_delay_ms: defaults.spring_load_delay_ms,
+            show_drag_thumbnails: defaults.show_drag_thumbnails,
+            highlight_invalid_targets: defaults.highlight_invalid_targets,
+        }
+    }
+}
+
+/// Phase 30 — wire form of `copythat_settings::PathTranslationSettings`.
+/// Enum fields ride as short strings so older frontends silently
+/// ignore unknown values (fall back to `Default` via the `*::from_wire`
+/// helpers on the settings side).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PathTranslationDto {
+    pub enabled: bool,
+    /// `"auto" | "windows" | "macos" | "linux"`.
+    pub target_os: String,
+    /// `"auto" | "nfc" | "nfd" | "as-is"`.
+    pub unicode_normalization: String,
+    /// `"as-is" | "crlf" | "lf"`.
+    pub line_endings: String,
+    /// `"suffix" | "reject"`.
+    pub reserved_name_strategy: String,
+    /// `"win32-long-path" | "truncate" | "reject"`.
+    pub long_path_strategy: String,
+    /// Lowercase extensions (no leading dot).
+    pub line_ending_allowlist: Vec<String>,
+}
+
+impl Default for PathTranslationDto {
+    fn default() -> Self {
+        let d = copythat_settings::PathTranslationSettings::default();
+        Self {
+            enabled: d.enabled,
+            target_os: d.target_os.as_str().to_string(),
+            unicode_normalization: d.unicode_normalization.as_str().to_string(),
+            line_endings: d.line_endings.as_str().to_string(),
+            reserved_name_strategy: d.reserved_name_strategy.as_str().to_string(),
+            long_path_strategy: d.long_path_strategy.as_str().to_string(),
+            line_ending_allowlist: d.line_ending_allowlist,
+        }
+    }
+}
+
+/// Phase 31 — wire form of `copythat_settings::PowerPoliciesSettings`.
+/// Each rule is a tagged object so the frontend's `switch (kind)`
+/// renders cleanly; unknown kinds fall back to `Continue` via the
+/// `*::from_wire` helpers on the settings side.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PowerPoliciesDto {
+    pub enabled: bool,
+    pub battery: PowerRuleDto,
+    pub metered: PowerRuleDto,
+    pub cellular: PowerRuleDto,
+    pub presentation: PowerRuleDto,
+    pub fullscreen: PowerRuleDto,
+    pub thermal: ThermalRuleDto,
+}
+
+impl Default for PowerPoliciesDto {
+    fn default() -> Self {
+        let d = copythat_settings::PowerPoliciesSettings::default();
+        Self {
+            enabled: d.enabled,
+            battery: (&d.battery).into(),
+            metered: (&d.metered).into(),
+            cellular: (&d.cellular).into(),
+            presentation: (&d.presentation).into(),
+            fullscreen: (&d.fullscreen).into(),
+            thermal: (&d.thermal).into(),
+        }
+    }
+}
+
+/// Tagged-object wire for the uniform `Continue / Pause / Cap` shape.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum PowerRuleDto {
+    #[default]
+    Continue,
+    Pause,
+    Cap {
+        #[serde(rename = "bytesPerSecond")]
+        bytes_per_second: u64,
+    },
+}
+
+impl From<&copythat_settings::PowerRuleChoice> for PowerRuleDto {
+    fn from(r: &copythat_settings::PowerRuleChoice) -> Self {
+        match r {
+            copythat_settings::PowerRuleChoice::Continue => PowerRuleDto::Continue,
+            copythat_settings::PowerRuleChoice::Pause => PowerRuleDto::Pause,
+            copythat_settings::PowerRuleChoice::Cap { bytes_per_second } => PowerRuleDto::Cap {
+                bytes_per_second: *bytes_per_second,
+            },
+        }
+    }
+}
+
+impl From<&PowerRuleDto> for copythat_settings::PowerRuleChoice {
+    fn from(r: &PowerRuleDto) -> Self {
+        match r {
+            PowerRuleDto::Continue => copythat_settings::PowerRuleChoice::Continue,
+            PowerRuleDto::Pause => copythat_settings::PowerRuleChoice::Pause,
+            PowerRuleDto::Cap { bytes_per_second } => copythat_settings::PowerRuleChoice::Cap {
+                bytes_per_second: *bytes_per_second,
+            },
+        }
+    }
+}
+
+/// Thermal-specific wire — `CapPercent` carries the percent-of-
+/// current-rate knob instead of an absolute cap.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum ThermalRuleDto {
+    Continue,
+    Pause,
+    CapPercent { percent: u8 },
+}
+
+impl Default for ThermalRuleDto {
+    fn default() -> Self {
+        ThermalRuleDto::CapPercent { percent: 50 }
+    }
+}
+
+impl From<&copythat_settings::ThermalRuleChoice> for ThermalRuleDto {
+    fn from(r: &copythat_settings::ThermalRuleChoice) -> Self {
+        match r {
+            copythat_settings::ThermalRuleChoice::Continue => ThermalRuleDto::Continue,
+            copythat_settings::ThermalRuleChoice::Pause => ThermalRuleDto::Pause,
+            copythat_settings::ThermalRuleChoice::CapPercent { percent } => {
+                ThermalRuleDto::CapPercent { percent: *percent }
+            }
+        }
+    }
+}
+
+impl From<&ThermalRuleDto> for copythat_settings::ThermalRuleChoice {
+    fn from(r: &ThermalRuleDto) -> Self {
+        match r {
+            ThermalRuleDto::Continue => copythat_settings::ThermalRuleChoice::Continue,
+            ThermalRuleDto::Pause => copythat_settings::ThermalRuleChoice::Pause,
+            ThermalRuleDto::CapPercent { percent } => {
+                copythat_settings::ThermalRuleChoice::CapPercent {
+                    percent: (*percent).min(100),
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1197,6 +1379,38 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 auto_on_battery: auto_throttle_to_dto(s.network.auto_on_battery),
                 auto_on_cellular: auto_throttle_to_dto(s.network.auto_on_cellular),
             },
+            dnd: DndDto {
+                spring_load_enabled: s.dnd.spring_load_enabled,
+                spring_load_delay_ms: s.dnd.effective_spring_ms(),
+                show_drag_thumbnails: s.dnd.show_drag_thumbnails,
+                highlight_invalid_targets: s.dnd.highlight_invalid_targets,
+            },
+            path_translation: PathTranslationDto {
+                enabled: s.path_translation.enabled,
+                target_os: s.path_translation.target_os.as_str().to_string(),
+                unicode_normalization: s
+                    .path_translation
+                    .unicode_normalization
+                    .as_str()
+                    .to_string(),
+                line_endings: s.path_translation.line_endings.as_str().to_string(),
+                reserved_name_strategy: s
+                    .path_translation
+                    .reserved_name_strategy
+                    .as_str()
+                    .to_string(),
+                long_path_strategy: s.path_translation.long_path_strategy.as_str().to_string(),
+                line_ending_allowlist: s.path_translation.line_ending_allowlist.clone(),
+            },
+            power: PowerPoliciesDto {
+                enabled: s.power.enabled,
+                battery: (&s.power.battery).into(),
+                metered: (&s.power.metered).into(),
+                cellular: (&s.power.cellular).into(),
+                presentation: (&s.power.presentation).into(),
+                fullscreen: (&s.power.fullscreen).into(),
+                thermal: (&s.power.thermal).into(),
+            },
         }
     }
 }
@@ -1347,6 +1561,46 @@ impl SettingsDto {
             auto_on_metered: auto_throttle_from_dto(self.network.auto_on_metered),
             auto_on_battery: auto_throttle_from_dto(self.network.auto_on_battery),
             auto_on_cellular: auto_throttle_from_dto(self.network.auto_on_cellular),
+        };
+
+        s.dnd = copythat_settings::DndSettings {
+            spring_load_enabled: self.dnd.spring_load_enabled,
+            spring_load_delay_ms: self.dnd.spring_load_delay_ms.clamp(
+                copythat_settings::DND_MIN_SPRING_MS,
+                copythat_settings::DND_MAX_SPRING_MS,
+            ),
+            show_drag_thumbnails: self.dnd.show_drag_thumbnails,
+            highlight_invalid_targets: self.dnd.highlight_invalid_targets,
+        };
+
+        s.path_translation = copythat_settings::PathTranslationSettings {
+            enabled: self.path_translation.enabled,
+            target_os: copythat_settings::TargetOsChoice::from_wire(
+                &self.path_translation.target_os,
+            ),
+            unicode_normalization: copythat_settings::NormalizationModeChoice::from_wire(
+                &self.path_translation.unicode_normalization,
+            ),
+            line_endings: copythat_settings::LineEndingModeChoice::from_wire(
+                &self.path_translation.line_endings,
+            ),
+            reserved_name_strategy: copythat_settings::ReservedNameChoice::from_wire(
+                &self.path_translation.reserved_name_strategy,
+            ),
+            long_path_strategy: copythat_settings::LongPathChoice::from_wire(
+                &self.path_translation.long_path_strategy,
+            ),
+            line_ending_allowlist: self.path_translation.line_ending_allowlist,
+        };
+
+        s.power = copythat_settings::PowerPoliciesSettings {
+            enabled: self.power.enabled,
+            battery: (&self.power.battery).into(),
+            metered: (&self.power.metered).into(),
+            cellular: (&self.power.cellular).into(),
+            presentation: (&self.power.presentation).into(),
+            fullscreen: (&self.power.fullscreen).into(),
+            thermal: (&self.power.thermal).into(),
         };
 
         s
