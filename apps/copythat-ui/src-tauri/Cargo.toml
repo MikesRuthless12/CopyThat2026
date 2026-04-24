@@ -57,6 +57,32 @@ copythat-cloud = { path = "../../../crates/copythat-cloud", version = "1" }
 # an active NoopBackend (33b); real fuser / winfsp dispatch behind
 # the crate's feature flags lands in Phase 33c.
 copythat-mount = { path = "../../../crates/copythat-mount", version = "1" }
+# Phase 34 — enterprise audit log export + WORM mode. AppState owns
+# an `AuditRegistry` whose live `Arc<AuditSink>` is (re)built from
+# `Settings::audit` at startup + on every `update_settings` flip.
+# The runner records `JobStarted` / `JobCompleted` / `FileCopied`
+# / `FileFailed` / `CollisionResolved` / `SettingsChanged` into
+# the sink when one is active.
+copythat-audit = { path = "../../../crates/copythat-audit", version = "1" }
+# Phase 34 — process-wide tracing-subscriber registry. The audit
+# feature installs `AuditLayer` only when enabled; we still want a
+# default fmt layer for stderr dev logs so the registry is unused
+# today outside the audit path.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["registry"] }
+# Phase 34 — hostname for audit events (JobStarted/SettingsChanged
+# carry host + user). BSD-3-Clause.
+gethostname = "1"
+# Phase 34 — SHA-256 of the settings TOML serialisation for
+# SettingsChanged before/after hashes. `sha2` already in the tree
+# via `copythat-cloud`.
+sha2 = "0.10"
+hex = "0.4"
+# Phase 34 — serialise the live settings to TOML before hashing
+# them so the fingerprint is deterministic across platforms. Only
+# direct dep add in the UI crate today; settings stores via the
+# crate's own TOML round-trip.
+toml = "0.8"
 # Phase 25 — pair IDs are random v4 UUIDs generated on the Tauri
 # side at `add_sync_pair` time.
 uuid = { version = "1", features = ["v4"] }

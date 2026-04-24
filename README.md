@@ -86,6 +86,16 @@ workloads.
 - **History context menu**: *Mount snapshot* on any successful history row opens a directory picker + dispatches the mount IPC; *Settings → Advanced* has a *Mount latest on launch* toggle.
 - **USER ACTION** to validate real kernel mounts: run `cargo test -p copythat-mount --features fuse` on Linux/macOS, or `cargo test -p copythat-mount --features winfsp` on Windows (requires the WinFsp driver + LLVM libclang installed — see [`docs/ROADMAP.md`](docs/ROADMAP.md) Phase 33g for the exact `winget` commands).
 
+### Enterprise audit log (Phase 34)
+
+- **Eight typed events** — `JobStarted`, `JobCompleted`, `FileCopied`, `FileFailed`, `CollisionResolved`, `SettingsChanged`, `LoginEvent`, `UnauthorizedAccess` — are written into an append-only log sink every time the engine hits a user-visible transition.
+- **Five wire formats** ship simultaneously: **CSV** (eight-column stable header for spreadsheet forensics), **JSON-lines** (default, pipe-friendly), **Syslog RFC 5424** (structured-data block `[copythat@32473 jobId="..." user="..."]`), **ArcSight CEF v0** (`CEF:0|CopyThat|CopyThat|<ver>|<sig>|<name>|<sev>|<ext>`), and **IBM QRadar LEEF 2.0** (tab-separated extension, `LEEF:2.0|CopyThat|CopyThat|<ver>|<eventID>|<ext>`).
+- **Tamper-evident chain**: every record embeds `prev_hash = BLAKE3(previous_record_bytes)` as a hex column; one edit anywhere in the file cascades into every subsequent record's chain step. The Settings → *Verify chain* button + the Phase 36 CLI's `copythat audit verify <log>` catch single-byte tampering.
+- **WORM (write-once-read-many)** is an opt-in Settings toggle that applies the platform's append-only primitive after every create / rotate: Linux `FS_IOC_SETFLAGS | FS_APPEND_FL` (requires CAP_LINUX_IMMUTABLE), macOS `chflags(UF_APPEND)`, Windows `FILE_ATTRIBUTE_READONLY` (the richer deny-write ACE path is a Phase 36 follow-up).
+- **Rotation** rolls the log to `<path>.1` at a byte threshold (default 10 MiB, slider in Settings); the rollover re-applies the WORM attribute to the fresh file.
+- **Tracing fan-out**: `tracing_subscriber::Layer` captures any `target = "copythat::audit"` log from the rest of the workspace into the sink so ad-hoc `warn!` calls auditors care about land in the same file.
+- **Settings → Advanced → Audit log** surfaces the enable toggle, format picker, file path, rotation threshold, WORM toggle, and *Test write* + *Verify chain* buttons. The sink hot-swaps on every `update_settings` without restart.
+
 ### Performance
 
 - **1 MiB** is the measured optimum buffer size; all other sizes regressed in the Phase 13b sweep — see [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).

@@ -370,7 +370,10 @@ mod tests {
     fn code_verifier_is_long_and_url_safe() {
         let v = generate_code_verifier();
         assert!(v.len() >= 43 && v.len() <= 128, "len = {}", v.len());
-        assert!(v.chars().all(|c| c.is_ascii_alphanumeric() || "-_".contains(c)));
+        assert!(
+            v.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-_".contains(c))
+        );
     }
 
     #[test]
@@ -407,8 +410,7 @@ mod tests {
     #[test]
     fn begin_pkce_flow_composes_authorize_url_with_pkce_params() {
         let (flow, _listener) =
-            begin_pkce_flow(&PkceProvider::DROPBOX, "test-client-id", None, None)
-                .expect("begin");
+            begin_pkce_flow(&PkceProvider::DROPBOX, "test-client-id", None, None).expect("begin");
         assert!(flow.authorize_url.contains("client_id=test-client-id"));
         assert!(flow.authorize_url.contains("code_challenge_method=S256"));
         assert!(flow.authorize_url.contains("token_access_type=offline"));

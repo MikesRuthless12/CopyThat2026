@@ -526,6 +526,16 @@ pub fn resolve_collision(
     let resolved = state
         .collisions
         .resolve(id, res, apply_to_all.unwrap_or(false))?;
+    // Phase 34 — audit the user-driven resolution. No-op when audit
+    // is disabled.
+    let audit_job_id = format!("job-{}", resolved.job_id);
+    crate::audit_commands::record_collision_resolved(
+        &state.audit,
+        &audit_job_id,
+        &resolved.src,
+        &resolved.dst,
+        crate::collisions::resolution_name(&resolved.resolution),
+    );
     use tauri::Emitter;
     let _ = app.emit(
         crate::ipc::EVENT_COLLISION_RESOLVED,
@@ -902,6 +912,13 @@ pub fn update_settings(
     state: State<'_, AppState>,
 ) -> Result<crate::ipc::SettingsDto, String> {
     let next = dto.into_settings();
+    // Phase 34 — fingerprint both the prior and next settings for a
+    // SettingsChanged audit record. The write-out happens whether
+    // or not audit is enabled; the record call is a no-op when the
+    // sink is idle.
+    let prev_snapshot = state.settings_snapshot();
+    let before_hash = crate::audit_commands::settings_fingerprint(&prev_snapshot);
+    let after_hash = crate::audit_commands::settings_fingerprint(&next);
     // Persist first — we'd rather keep the old in-memory value if
     // disk write fails than lie to the user that the save succeeded.
     let path = state.settings_path.as_ref();
@@ -968,7 +985,105 @@ pub fn update_settings(
         crate::ipc::EVENT_SHAPE_RATE_CHANGED,
         build_shape_rate_dto(state.inner()),
     );
+
+    // Phase 34 — hot-swap the audit sink when the audit block
+    // changed. Rebuilds with the new config (format / path / WORM)
+    // even if only a subset changed — the brief's "seamless toggle"
+    // expectation.
+    if prev_snapshot.audit != next.audit {
+        match crate::audit_commands::build_sink(&next.audit) {
+            Ok(new_sink) => state.audit.set(new_sink),
+            Err(e) => eprintln!("[audit] rebuild sink failed: {e}"),
+        }
+    }
+    if prev_snapshot != next {
+        // Record the delta regardless of which group changed. The
+        // field name lists the top-level group name(s) affected so a
+        // compliance reviewer sees "network.mode flipped" at a glance
+        // without round-tripping the full TOML blob.
+        let field = diff_setting_groups(&prev_snapshot, &next);
+        crate::audit_commands::record_settings_changed(
+            &state.audit,
+            &field,
+            &before_hash,
+            &after_hash,
+        );
+    }
+
     Ok((&next).into())
+}
+
+/// Name the top-level settings groups whose sub-fields differ
+/// between `before` and `after`. Output is a comma-separated string
+/// (`general`, `transfer`, …, `audit`) used as
+/// `SettingsChanged.field`.
+fn diff_setting_groups(
+    before: &copythat_settings::Settings,
+    after: &copythat_settings::Settings,
+) -> String {
+    let mut groups: Vec<&'static str> = Vec::new();
+    if before.general != after.general {
+        groups.push("general");
+    }
+    if before.transfer != after.transfer {
+        groups.push("transfer");
+    }
+    if before.shell != after.shell {
+        groups.push("shell");
+    }
+    if before.secure_delete != after.secure_delete {
+        groups.push("secure_delete");
+    }
+    if before.advanced != after.advanced {
+        groups.push("advanced");
+    }
+    if before.filters != after.filters {
+        groups.push("filters");
+    }
+    if before.updater != after.updater {
+        groups.push("updater");
+    }
+    if before.scan != after.scan {
+        groups.push("scan");
+    }
+    if before.network != after.network {
+        groups.push("network");
+    }
+    if before.conflict_profiles != after.conflict_profiles {
+        groups.push("conflict_profiles");
+    }
+    if before.sync != after.sync {
+        groups.push("sync");
+    }
+    if before.chunk_store != after.chunk_store {
+        groups.push("chunk_store");
+    }
+    if before.drop_stack != after.drop_stack {
+        groups.push("drop_stack");
+    }
+    if before.dnd != after.dnd {
+        groups.push("dnd");
+    }
+    if before.path_translation != after.path_translation {
+        groups.push("path_translation");
+    }
+    if before.power != after.power {
+        groups.push("power");
+    }
+    if before.remotes != after.remotes {
+        groups.push("remotes");
+    }
+    if before.mount != after.mount {
+        groups.push("mount");
+    }
+    if before.audit != after.audit {
+        groups.push("audit");
+    }
+    if groups.is_empty() {
+        "unchanged".to_string()
+    } else {
+        groups.join(",")
+    }
 }
 
 /// Replace the live settings with `Settings::default()` and persist.

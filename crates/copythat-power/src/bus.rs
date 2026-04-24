@@ -151,9 +151,7 @@ fn emit_delta(tx: &broadcast::Sender<PowerEvent>, prev: &Snapshot, now: &Snapsho
         }
     }
     if prev.network != now.network {
-        let _ = tx.send(PowerEvent::NetworkClassChanged {
-            class: now.network,
-        });
+        let _ = tx.send(PowerEvent::NetworkClassChanged { class: now.network });
     }
     if prev.presenting != now.presenting {
         let _ = tx.send(PowerEvent::PresentationStateChanged {

@@ -69,15 +69,17 @@ fn case1_build_emits_three_views() {
         sample_job(2, r"D:\photos", r"C:\backup\photos", 1_776_781_936_000),
     ];
 
-    let tree =
-        MountTree::build(&jobs, &chunk_store, MountLayout::all()).expect("build");
+    let tree = MountTree::build(&jobs, &chunk_store, MountLayout::all()).expect("build");
     assert_eq!(tree.job_count, 2);
 
     // by-date: 2026-04-21/14-32-15/archive-copy for job 1.
     let by_date = tree
         .lookup("by-date/2026-04-21/14-32-15/archive-copy")
         .expect("by-date leaf for job 1");
-    assert!(matches!(by_date.kind, NodeKind::JobPlaceholder { job_row_id: 1 }));
+    assert!(matches!(
+        by_date.kind,
+        NodeKind::JobPlaceholder { job_row_id: 1 }
+    ));
 
     // by-source: Windows drive escaping.
     assert!(tree.lookup("by-source/C--src-project").is_some());
@@ -85,7 +87,10 @@ fn case1_build_emits_three_views() {
 
     // by-job-id: numeric, direct lookup.
     let by_id_1 = tree.lookup("by-job-id/1/archive-copy").expect("id 1");
-    assert!(matches!(by_id_1.kind, NodeKind::JobPlaceholder { job_row_id: 1 }));
+    assert!(matches!(
+        by_id_1.kind,
+        NodeKind::JobPlaceholder { job_row_id: 1 }
+    ));
 }
 
 /// Case 2 — empty history builds an empty tree without panicking.

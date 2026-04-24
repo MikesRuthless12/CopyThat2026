@@ -105,6 +105,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
         power: copythat_settings::PowerPoliciesSettings::default(),
         remotes: copythat_settings::RemoteSettings::default(),
         mount: copythat_settings::MountSettings::default(),
+        audit: copythat_settings::AuditSettings::default(),
     };
 
     before.save_to(&path).expect("save_to");
@@ -177,6 +178,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
         power: copythat_settings::PowerPoliciesSettings::default(),
         remotes: copythat_settings::RemoteSettings::default(),
         mount: copythat_settings::MountSettings::default(),
+        audit: copythat_settings::AuditSettings::default(),
     };
     assert_eq!(after, expected);
 }

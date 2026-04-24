@@ -116,6 +116,13 @@ pub struct AppState {
     /// swaps in `fuser` / `winfsp` behind the mount crate's feature
     /// flags.
     pub mounts: crate::mount_commands::MountRegistry,
+    /// Phase 34 — audit sink registry. Holds an `Arc<AuditSink>`
+    /// when `Settings::audit.enabled` is true and the open
+    /// succeeded; the runner records `JobStarted` / `JobCompleted`
+    /// / `FileCopied` / `FileFailed` / `CollisionResolved` /
+    /// `SettingsChanged` into the sink via helpers in
+    /// `audit_commands`.
+    pub audit: crate::audit_commands::AuditRegistry,
 }
 
 impl AppState {
@@ -179,6 +186,10 @@ impl AppState {
             // the user invokes `mount_snapshot` or by
             // `mount_latest_on_launch` at startup if the setting is on.
             mounts: crate::mount_commands::MountRegistry::new(),
+            // Phase 34 — idle audit registry; `lib.rs::run` builds
+            // a sink from `settings.audit` when the user has the
+            // toggle on, otherwise it stays empty.
+            audit: crate::audit_commands::AuditRegistry::new(),
         }
     }
 

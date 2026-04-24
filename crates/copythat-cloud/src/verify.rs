@@ -71,7 +71,10 @@ pub enum VerifyError {
     #[error("remote get failed: {0}")]
     RemoteGet(#[from] BackendError),
     #[error("hash mismatch: local={local_hex}, remote={remote_hex}")]
-    Mismatch { local_hex: String, remote_hex: String },
+    Mismatch {
+        local_hex: String,
+        remote_hex: String,
+    },
 }
 
 /// What the verify step actually produced.

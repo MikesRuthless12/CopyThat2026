@@ -78,7 +78,6 @@ impl ChunkStoreSink for CopyThatChunkSink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use copythat_core::ChunkStoreSink as _;
 
     #[test]
     fn sink_round_trips_manifest() {

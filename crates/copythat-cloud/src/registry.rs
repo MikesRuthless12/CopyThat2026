@@ -115,7 +115,9 @@ mod tests {
         Backend {
             name: name.into(),
             kind: BackendKind::LocalFs,
-            config: BackendConfig::LocalFs(LocalFsConfig { root: "/tmp".into() }),
+            config: BackendConfig::LocalFs(LocalFsConfig {
+                root: "/tmp".into(),
+            }),
         }
     }
 

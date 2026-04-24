@@ -23,6 +23,7 @@
 -->
 <script lang="ts">
   import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
+  import { invoke } from "@tauri-apps/api/core";
 
   import Icon from "../icons/Icon.svelte";
   import RemotesTab from "./RemotesTab.svelte";
@@ -340,6 +341,41 @@
       pushToast("error", e instanceof Error ? e.message : String(e));
     } finally {
       checking = false;
+    }
+  }
+
+  /**
+   * Phase 34 — Settings → Advanced → Audit log actions.
+   * `onAuditTestWrite` emits a synthetic LoginEvent through the live
+   * sink so the user can confirm the log file is reachable; the
+   * backend refuses when audit is disabled or the sink failed to
+   * open. `onAuditVerifyChain` recomputes the BLAKE3 chain hash end-
+   * to-end and surfaces the summary as a toast.
+   */
+  async function onAuditTestWrite() {
+    try {
+      await invoke("audit_test_write");
+      pushToast("success", "toast-audit-test-write-ok");
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onAuditVerifyChain() {
+    try {
+      const report = (await invoke("audit_verify")) as {
+        total: number;
+        matches: number;
+        mismatches: number;
+        missing: number;
+      };
+      if (report.mismatches === 0 && report.missing === 0) {
+        pushToast("success", "toast-audit-verify-ok");
+      } else {
+        pushToast("error", "toast-audit-verify-failed");
+      }
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -1037,6 +1073,95 @@
                     onchange={pushSettings}
                   />
                 </label>
+              {/if}
+
+              <h4 class="subheading">{t("settings-audit-heading")}</h4>
+              <p class="hint">{t("settings-audit-hint")}</p>
+
+              {#if settings.audit}
+                <label class="row check">
+                  <input
+                    type="checkbox"
+                    bind:checked={settings.audit.enabled}
+                    onchange={pushSettings}
+                  />
+                  <span class="label">{t("settings-audit-enable")}</span>
+                </label>
+
+                <label class="row">
+                  <span class="label">{t("settings-audit-format")}</span>
+                  <select
+                    bind:value={settings.audit.format}
+                    disabled={!settings.audit.enabled}
+                    onchange={pushSettings}
+                  >
+                    <option value="json-lines">{t("settings-audit-format-json-lines")}</option>
+                    <option value="csv">{t("settings-audit-format-csv")}</option>
+                    <option value="syslog">{t("settings-audit-format-syslog")}</option>
+                    <option value="cef">{t("settings-audit-format-cef")}</option>
+                    <option value="leef">{t("settings-audit-format-leef")}</option>
+                  </select>
+                </label>
+
+                <label class="row">
+                  <span class="label">{t("settings-audit-file-path")}</span>
+                  <input
+                    type="text"
+                    bind:value={settings.audit.filePath}
+                    placeholder={t("settings-audit-file-path-placeholder")}
+                    disabled={!settings.audit.enabled}
+                    onchange={pushSettings}
+                  />
+                </label>
+
+                <label class="row">
+                  <span class="label">{t("settings-audit-max-size")}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1048576"
+                    bind:value={settings.audit.maxSizeBytes}
+                    disabled={!settings.audit.enabled}
+                    onchange={pushSettings}
+                  />
+                </label>
+
+                <label class="row check">
+                  <input
+                    type="checkbox"
+                    checked={settings.audit.worm === "on"}
+                    disabled={!settings.audit.enabled}
+                    onchange={(e) => {
+                      if (settings && settings.audit) {
+                        settings.audit.worm = (e.currentTarget as HTMLInputElement).checked
+                          ? "on"
+                          : "off";
+                        pushSettings();
+                      }
+                    }}
+                  />
+                  <span class="label">{t("settings-audit-worm")}</span>
+                </label>
+                <p class="hint">{t("settings-audit-worm-hint")}</p>
+
+                <div class="row end">
+                  <button
+                    type="button"
+                    class="secondary"
+                    disabled={!settings.audit.enabled}
+                    onclick={onAuditTestWrite}
+                  >
+                    {t("settings-audit-test-write")}
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary"
+                    disabled={!settings.audit.enabled}
+                    onclick={onAuditVerifyChain}
+                  >
+                    {t("settings-audit-verify-chain")}
+                  </button>
+                </div>
               {/if}
 
               <div class="row end">

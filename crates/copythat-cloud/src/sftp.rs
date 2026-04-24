@@ -104,11 +104,7 @@ type PooledSession = Option<(Handle<HostKeyVerifier>, SftpSession)>;
 /// `|1|<base64-salt>|<base64-HMAC-SHA1(salt, hostname)>`. Matching
 /// requires recomputing the HMAC for each candidate form and
 /// base64-comparing the result.
-fn hashed_hostfield_matches(
-    hosts_field: &str,
-    search_plain: &str,
-    search_bracketed: &str,
-) -> bool {
+fn hashed_hostfield_matches(hosts_field: &str, search_plain: &str, search_bracketed: &str) -> bool {
     use base64::Engine;
     use hmac::{Hmac, Mac};
     use sha1::Sha1;
@@ -196,12 +192,10 @@ pub(crate) fn expected_host_key_fingerprint(
         let matches = if hosts_field.starts_with("|1|") {
             hashed_hostfield_matches(hosts_field, &search_plain, &search_bracketed)
         } else {
-            hosts_field
-                .split(',')
-                .any(|h| {
-                    let h = h.to_ascii_lowercase();
-                    h == search_plain || h == search_bracketed
-                })
+            hosts_field.split(',').any(|h| {
+                let h = h.to_ascii_lowercase();
+                h == search_plain || h == search_bracketed
+            })
         };
         if !matches {
             continue;
@@ -300,9 +294,7 @@ impl SftpTarget {
     }
 
     /// Build an authenticated SSH session + SFTP subsystem handle.
-    async fn open_session(
-        &self,
-    ) -> Result<(Handle<HostKeyVerifier>, SftpSession), BackendError> {
+    async fn open_session(&self) -> Result<(Handle<HostKeyVerifier>, SftpSession), BackendError> {
         if self.config.host.is_empty() || self.config.username.is_empty() {
             return Err(BackendError::InvalidConfig(
                 "sftp requires host + username".into(),
@@ -311,7 +303,11 @@ impl SftpTarget {
         let addr = format!(
             "{}:{}",
             self.config.host,
-            if self.config.port == 0 { 22 } else { self.config.port }
+            if self.config.port == 0 {
+                22
+            } else {
+                self.config.port
+            }
         );
         // Phase 32h — build the verifier. If `known_hosts_path` is
         // set, lift the expected fingerprint for this (host, port);
@@ -320,11 +316,13 @@ impl SftpTarget {
             expected_host_key_fingerprint(
                 std::path::Path::new(&self.config.known_hosts_path),
                 &self.config.host,
-                if self.config.port == 0 { 22 } else { self.config.port },
+                if self.config.port == 0 {
+                    22
+                } else {
+                    self.config.port
+                },
             )
-            .map_err(|e| {
-                BackendError::InvalidConfig(format!("known_hosts read: {e}"))
-            })?
+            .map_err(|e| BackendError::InvalidConfig(format!("known_hosts read: {e}")))?
         } else {
             None
         };
@@ -351,11 +349,9 @@ impl SftpTarget {
             // the prefix is the passphrase; rest is the
             // OpenSSH-format key body.
             let mut lines = body.splitn(2, '\n');
-            let passphrase = lines
-                .next()
-                .ok_or_else(|| BackendError::InvalidConfig(
-                    "sftp KEY_ENC missing passphrase".into(),
-                ))?;
+            let passphrase = lines.next().ok_or_else(|| {
+                BackendError::InvalidConfig("sftp KEY_ENC missing passphrase".into())
+            })?;
             let key_body = lines.next().ok_or_else(|| {
                 BackendError::InvalidConfig("sftp KEY_ENC missing key body".into())
             })?;
@@ -597,8 +593,16 @@ mod tests {
         let hmac_b64 = base64::engine::general_purpose::STANDARD.encode(hmac_bytes);
         let hosts_field = format!("|1|{salt_b64}|{hmac_b64}");
 
-        assert!(hashed_hostfield_matches(&hosts_field, hostname, "[example.com]:22"));
-        assert!(!hashed_hostfield_matches(&hosts_field, "other.com", "[other.com]:22"));
+        assert!(hashed_hostfield_matches(
+            &hosts_field,
+            hostname,
+            "[example.com]:22"
+        ));
+        assert!(!hashed_hostfield_matches(
+            &hosts_field,
+            "other.com",
+            "[other.com]:22"
+        ));
     }
 
     #[test]

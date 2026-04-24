@@ -1,0 +1,127 @@
+//! Phase 34 — `tracing::Layer` that fans events into the audit sink.
+//!
+//! The runner sends structured events directly (`sink.record(&evt)`)
+//! because the conversion from queue/engine state to [`AuditEvent`]
+//! needs typed fields we don't want to re-parse from
+//! `tracing::Event` metadata. The layer is a second path for ad-hoc
+//! `tracing::warn!(target: "copythat::audit", ...)` calls inside the
+//! rest of the workspace — auditors occasionally want those in the
+//! log too. Events without the `copythat::audit` target are ignored
+//! so the layer is cheap on non-matching traces.
+//!
+//! The layer translates every matching event into an
+//! [`AuditEvent::UnauthorizedAccess`] fallback form with the message
+//! payload in `attempted_action` and the level in `reason`; richer
+//! events should be emitted by the runner directly.
+
+use std::sync::Arc;
+
+use chrono::Utc;
+use tracing::{Event, Level, Subscriber, field::Visit};
+use tracing_subscriber::Layer;
+use tracing_subscriber::layer::Context;
+
+use crate::{AuditEvent, AuditSink};
+
+/// Tracing layer that forwards events whose `target` starts with
+/// `copythat::audit` into the owned [`AuditSink`].
+pub struct AuditLayer {
+    sink: Arc<AuditSink>,
+}
+
+impl AuditLayer {
+    pub fn new(sink: Arc<AuditSink>) -> Self {
+        Self { sink }
+    }
+}
+
+struct MessageVisitor {
+    message: String,
+}
+
+impl Visit for MessageVisitor {
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        if field.name() == "message" {
+            self.message.push_str(value);
+        } else {
+            if !self.message.is_empty() {
+                self.message.push(' ');
+            }
+            self.message.push_str(field.name());
+            self.message.push('=');
+            self.message.push_str(value);
+        }
+    }
+
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() == "message" {
+            use std::fmt::Write;
+            let _ = write!(&mut self.message, "{value:?}");
+        } else {
+            use std::fmt::Write;
+            if !self.message.is_empty() {
+                self.message.push(' ');
+            }
+            let _ = write!(&mut self.message, "{}={value:?}", field.name());
+        }
+    }
+}
+
+impl<S> Layer<S> for AuditLayer
+where
+    S: Subscriber,
+{
+    fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
+        let metadata = event.metadata();
+        if !metadata.target().starts_with("copythat::audit") {
+            return;
+        }
+
+        let mut visitor = MessageVisitor {
+            message: String::new(),
+        };
+        event.record(&mut visitor);
+
+        let reason = match *metadata.level() {
+            Level::ERROR => "error",
+            Level::WARN => "warn",
+            Level::INFO => "info",
+            Level::DEBUG => "debug",
+            Level::TRACE => "trace",
+        }
+        .to_string();
+
+        let evt = AuditEvent::UnauthorizedAccess {
+            user: String::new(),
+            host: gethostname::gethostname().to_string_lossy().into_owned(),
+            attempted_action: visitor.message,
+            reason,
+            ts: Utc::now(),
+        };
+        let _ = self.sink.record(&evt);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{AuditFormat, WormMode};
+    use tracing_subscriber::layer::SubscriberExt;
+
+    #[test]
+    fn tracing_event_reaches_the_sink() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.log");
+        let sink = Arc::new(AuditSink::open(&path, AuditFormat::JsonLines, WormMode::Off).unwrap());
+        let layer = AuditLayer::new(sink.clone());
+
+        let subscriber = tracing_subscriber::registry().with(layer);
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::warn!(target: "copythat::audit", "unauthorized-attempt");
+        });
+
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert!(contents.contains("unauthorized-access"));
+        assert!(contents.contains("unauthorized-attempt"));
+    }
+}

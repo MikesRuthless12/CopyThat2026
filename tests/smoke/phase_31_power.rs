@@ -135,10 +135,7 @@ fn case4_thermal_default_surfaces_cap_sentinel() {
     // so the runner can resolve "percent of current" against its
     // live shape state. This test locks the sentinel contract.
     let policies = PowerPolicies::default();
-    assert!(matches!(
-        policies.thermal,
-        ThermalPolicy::CapPercent { .. }
-    ));
+    assert!(matches!(policies.thermal, ThermalPolicy::CapPercent { .. }));
     let mut s = PowerState::default();
     apply_event(
         &mut s,
@@ -295,8 +292,7 @@ fn case9_pause_dominates_cap_across_dimensions() {
 
 #[test]
 fn case10_fluent_keys_present_in_en() {
-    let en =
-        std::fs::read_to_string(repo_root().join("locales/en/copythat.ftl")).expect("read en");
+    let en = std::fs::read_to_string(repo_root().join("locales/en/copythat.ftl")).expect("read en");
     for key in PHASE_31_KEYS {
         let needle = format!("\n{key} = ");
         assert!(

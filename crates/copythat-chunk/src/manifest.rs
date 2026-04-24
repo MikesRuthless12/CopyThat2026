@@ -79,8 +79,10 @@ pub fn ingest_bytes(
 ) -> Result<(IngestStats, Manifest)> {
     let file_hash: Blake3Hash = *blake3::hash(bytes).as_bytes();
     let cuts = chunker.chunk_bytes(bytes);
-    let mut stats = IngestStats::default();
-    stats.chunks_total = cuts.len() as u64;
+    let mut stats = IngestStats {
+        chunks_total: cuts.len() as u64,
+        ..IngestStats::default()
+    };
     let mut chunks = Vec::with_capacity(cuts.len());
     for c in &cuts {
         let slice = &bytes[c.offset as usize..(c.offset as usize + c.len as usize)];

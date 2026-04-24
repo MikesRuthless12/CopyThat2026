@@ -625,6 +625,11 @@ pub struct SettingsDto {
     /// trip cleanly when a newer UI reads them.
     #[serde(default)]
     pub mount: MountDto,
+    /// Phase 34 — audit log export + WORM mode. Marked
+    /// `#[serde(default)]` so older persisted settings round-trip
+    /// cleanly when a newer UI reads them.
+    #[serde(default)]
+    pub audit: AuditDto,
 }
 
 /// Phase 33 — wire form of `copythat_settings::MountSettings`.
@@ -649,6 +654,63 @@ impl From<MountDto> for copythat_settings::MountSettings {
         Self {
             mount_on_launch: d.mount_on_launch,
             mount_on_launch_path: d.mount_on_launch_path,
+        }
+    }
+}
+
+/// Phase 34 — wire form of `copythat_settings::AuditSettings`. The
+/// `format` + `worm` fields are kebab-case strings so the TypeScript
+/// layer can switch on them without a dedicated enum codec (matches
+/// the pattern set by `PathTranslationDto`).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditDto {
+    pub enabled: bool,
+    /// `"csv" | "json-lines" | "syslog" | "cef" | "leef"`.
+    pub format: String,
+    pub file_path: String,
+    /// `"off" | "on"`.
+    pub worm: String,
+    pub max_size_bytes: u64,
+    pub syslog_destination: String,
+}
+
+impl Default for AuditDto {
+    fn default() -> Self {
+        let d = copythat_settings::AuditSettings::default();
+        Self {
+            enabled: d.enabled,
+            format: d.format,
+            file_path: d.file_path,
+            worm: d.worm,
+            max_size_bytes: d.max_size_bytes,
+            syslog_destination: d.syslog_destination,
+        }
+    }
+}
+
+impl From<copythat_settings::AuditSettings> for AuditDto {
+    fn from(s: copythat_settings::AuditSettings) -> Self {
+        Self {
+            enabled: s.enabled,
+            format: s.format,
+            file_path: s.file_path,
+            worm: s.worm,
+            max_size_bytes: s.max_size_bytes,
+            syslog_destination: s.syslog_destination,
+        }
+    }
+}
+
+impl From<AuditDto> for copythat_settings::AuditSettings {
+    fn from(d: AuditDto) -> Self {
+        Self {
+            enabled: d.enabled,
+            format: d.format,
+            file_path: d.file_path,
+            worm: d.worm,
+            max_size_bytes: d.max_size_bytes,
+            syslog_destination: d.syslog_destination,
         }
     }
 }
@@ -1443,6 +1505,7 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 thermal: (&s.power.thermal).into(),
             },
             mount: s.mount.clone().into(),
+            audit: s.audit.clone().into(),
         }
     }
 }
@@ -1636,6 +1699,7 @@ impl SettingsDto {
         };
 
         s.mount = self.mount.into();
+        s.audit = self.audit.into();
 
         s
     }

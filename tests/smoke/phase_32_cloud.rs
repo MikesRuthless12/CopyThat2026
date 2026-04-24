@@ -114,7 +114,11 @@ fn case1_local_fs_round_trip_1mib() {
 
         target.delete("subdir/payload.bin").await.expect("delete");
         assert!(
-            target.stat("subdir/payload.bin").await.expect("stat").is_none(),
+            target
+                .stat("subdir/payload.bin")
+                .await
+                .expect("stat")
+                .is_none(),
             "delete left the object behind"
         );
     });
@@ -172,7 +176,9 @@ fn case3_registry_concurrency() {
         .add(Backend {
             name: "a".into(),
             kind: BackendKind::LocalFs,
-            config: BackendConfig::LocalFs(LocalFsConfig { root: "/tmp".into() }),
+            config: BackendConfig::LocalFs(LocalFsConfig {
+                root: "/tmp".into(),
+            }),
         })
         .expect("add a");
 
@@ -397,8 +403,8 @@ fn case8b_streaming_writer_through_real_cloud_sink() {
     use std::sync::Arc;
 
     use copythat_cloud::{
-        Backend as CloudBackend, BackendConfig, BackendKind, CopyThatCloudSink,
-        LocalFsConfig, OperatorTarget, make_operator,
+        Backend as CloudBackend, BackendConfig, BackendKind, CopyThatCloudSink, LocalFsConfig,
+        OperatorTarget, make_operator,
     };
     use copythat_core::{CloudSink, CopyControl, CopyEvent, CopyOptions, copy_file};
 
@@ -427,9 +433,7 @@ fn case8b_streaming_writer_through_real_cloud_sink() {
         };
         let op = make_operator(&backend, None).expect("operator");
         let target = Arc::new(OperatorTarget::new("streaming-test", op));
-        let sink = Arc::new(
-            CopyThatCloudSink::new(target).expect("sink runtime build"),
-        );
+        let sink = Arc::new(CopyThatCloudSink::new(target).expect("sink runtime build"));
         let opts = CopyOptions {
             cloud_sink: Some(sink.clone() as Arc<dyn CloudSink>),
             buffer_size: 1024 * 1024,
@@ -452,7 +456,10 @@ fn case8b_streaming_writer_through_real_cloud_sink() {
             } = evt
             {
                 progress_events += 1;
-                assert!(bytes >= last_bytes, "progress regressed {last_bytes} -> {bytes}");
+                assert!(
+                    bytes >= last_bytes,
+                    "progress regressed {last_bytes} -> {bytes}"
+                );
                 last_bytes = bytes;
                 let _ = rate_bps;
             }

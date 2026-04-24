@@ -71,16 +71,8 @@ pub async fn copy_file(
     // porting them to a `CloudSink` is the Phase 32e follow-up.
     // Symlinks + sparsity + verify on remote destinations land there.
     if let Some(sink) = opts.cloud_sink.clone() {
-        return copy_file_to_cloud_sink(
-            src_path,
-            dst_path,
-            opts,
-            ctrl,
-            events,
-            src_metadata,
-            sink,
-        )
-        .await;
+        return copy_file_to_cloud_sink(src_path, dst_path, opts, ctrl, events, src_metadata, sink)
+            .await;
     }
 
     // Phase 23 — sparse-file pre-flight. When the caller has wired a

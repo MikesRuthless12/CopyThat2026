@@ -254,22 +254,21 @@ fn apply_action(
             // Thermal cap uses the sentinel `0` to mean "consult the
             // live shape and scale by the policy's percent". Anything
             // else is an absolute bytes/sec cap.
-            let resolved_bps = if *bytes_per_second == 0
-                && matches!(reason, PowerReason::ThermalThrottling)
-            {
-                let percent = match snap.power.thermal {
-                    ThermalRuleChoice::CapPercent { percent } => percent.min(100) as u64,
-                    _ => 50,
+            let resolved_bps =
+                if *bytes_per_second == 0 && matches!(reason, PowerReason::ThermalThrottling) {
+                    let percent = match snap.power.thermal {
+                        ThermalRuleChoice::CapPercent { percent } => percent.min(100) as u64,
+                        _ => 50,
+                    };
+                    let current = state
+                        .shape
+                        .current_rate()
+                        .map(|r| r.bytes_per_second())
+                        .unwrap_or(u64::MAX);
+                    current.saturating_mul(percent) / 100
+                } else {
+                    *bytes_per_second
                 };
-                let current = state
-                    .shape
-                    .current_rate()
-                    .map(|r| r.bytes_per_second())
-                    .unwrap_or(u64::MAX);
-                current.saturating_mul(percent) / 100
-            } else {
-                *bytes_per_second
-            };
             if b.power_owned_pause {
                 // Moving from Pause → Cap: resume jobs, then set rate.
                 for job in state.queue.snapshot() {
@@ -398,10 +397,7 @@ fn parse_thermal_kind(s: &str) -> copythat_power::ThermalKind {
 /// and debugging tools can exercise the pause-path end-to-end
 /// without the OS FFI probes.
 #[tauri::command]
-pub fn inject_power_event(
-    event: PowerEventDto,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub fn inject_power_event(event: PowerEventDto, state: State<'_, AppState>) -> Result<(), String> {
     state.power_bus.inject(event.into_event());
     Ok(())
 }
@@ -412,10 +408,7 @@ pub fn inject_power_event(
 /// current settings and the supplied [`PowerState`]. Used by the
 /// Phase 31 smoke to assert the pure policy resolution without
 /// racing the tokio broadcast.
-pub fn compute_action_for_state(
-    state: &AppState,
-    observed: &PowerState,
-) -> PowerAction {
+pub fn compute_action_for_state(state: &AppState, observed: &PowerState) -> PowerAction {
     let snap = state.settings_snapshot();
     if !snap.power.enabled {
         return PowerAction::Continue;

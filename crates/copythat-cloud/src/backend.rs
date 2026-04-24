@@ -290,7 +290,9 @@ pub fn make_operator(
             // support for STS-issued credentials.
             if let Some(s) = secret {
                 if let Some((ak, sk)) = s.split_once('\n') {
-                    builder = builder.access_key_id(ak.trim()).secret_access_key(sk.trim());
+                    builder = builder
+                        .access_key_id(ak.trim())
+                        .secret_access_key(sk.trim());
                 } else {
                     return Err(BackendError::InvalidConfig(
                         "s3 secret bundle must be `<access_key>\\n<secret_key>`".into(),
@@ -310,8 +312,7 @@ pub fn make_operator(
             // account_name when the user didn't supply one
             // (the common case — custom endpoints are for
             // Azurite / sovereign clouds / private-link setups).
-            let default_endpoint =
-                format!("https://{}.blob.core.windows.net", cfg.account_name);
+            let default_endpoint = format!("https://{}.blob.core.windows.net", cfg.account_name);
             let endpoint = if cfg.endpoint.is_empty() {
                 default_endpoint.as_str()
             } else {
@@ -350,10 +351,11 @@ pub fn make_operator(
             Ok(opendal::Operator::new(builder)?.finish())
         }
         BackendConfig::Onedrive(cfg) => {
-            let secret =
-                secret.ok_or_else(|| BackendError::InvalidConfig(
+            let secret = secret.ok_or_else(|| {
+                BackendError::InvalidConfig(
                     "onedrive backend requires an access token in the keychain".into(),
-                ))?;
+                )
+            })?;
             let mut builder = opendal::services::Onedrive::default().access_token(secret);
             if !cfg.root.is_empty() {
                 builder = builder.root(&cfg.root);
@@ -491,7 +493,11 @@ mod tests {
         let mut sorted = keys.clone();
         sorted.sort_unstable();
         sorted.dedup();
-        assert_eq!(sorted.len(), keys.len(), "duplicate fluent key across kinds");
+        assert_eq!(
+            sorted.len(),
+            keys.len(),
+            "duplicate fluent key across kinds"
+        );
     }
 
     #[test]
@@ -516,7 +522,9 @@ mod tests {
         let backend = Backend {
             name: "broken".into(),
             kind: BackendKind::LocalFs,
-            config: BackendConfig::LocalFs(LocalFsConfig { root: String::new() }),
+            config: BackendConfig::LocalFs(LocalFsConfig {
+                root: String::new(),
+            }),
         };
         let err = make_operator(&backend, None).expect_err("must reject");
         assert!(matches!(err, BackendError::InvalidConfig(_)));
@@ -631,4 +639,3 @@ mod tests {
         }
     }
 }
-

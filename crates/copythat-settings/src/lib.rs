@@ -105,6 +105,11 @@ pub struct Settings {
     /// "mount latest snapshot on launch" toggle + the target
     /// mountpoint. Active mounts themselves are runtime-only.
     pub mount: MountSettings,
+    /// Phase 34 — audit log export + WORM mode. See [`AuditSettings`].
+    /// Off by default so a fresh install ships no log file until the
+    /// user explicitly enables the toggle in Settings → Advanced →
+    /// Audit log.
+    pub audit: AuditSettings,
 }
 
 impl Settings {
@@ -1480,9 +1485,7 @@ impl PowerRuleChoice {
 pub enum ThermalRuleChoice {
     Continue,
     Pause,
-    CapPercent {
-        percent: u8,
-    },
+    CapPercent { percent: u8 },
 }
 
 impl Default for ThermalRuleChoice {
@@ -1758,6 +1761,62 @@ pub struct MountSettings {
     /// toggle can be on without a configured path if the user is
     /// between a toggle-on + path-picker step).
     pub mount_on_launch_path: String,
+}
+
+// ---------------------------------------------------------------------
+// Phase 34 — audit log export + WORM mode (AuditSettings)
+// ---------------------------------------------------------------------
+
+/// Enterprise-grade audit-log preferences. Off by default. When on,
+/// the Tauri runner opens a [`copythat_audit::AuditSink`] at startup
+/// (or on the first `update_settings` flip) and records the
+/// brief's eight [`copythat_audit::AuditEvent`] variants.
+///
+/// `format` persists the kebab-case
+/// [`copythat_audit::AuditFormat`] identifier (`csv`, `json-lines`,
+/// `syslog`, `cef`, `leef`) — the audit crate's enum is mirrored as a
+/// string here so [`Settings`] can round-trip without taking a hard
+/// dep on `copythat-audit` (keeps the settings crate a pure preference
+/// layer, consistent with the Phase 9 / 27 pattern).
+///
+/// `worm` stores the kebab-case [`copythat_audit::WormMode`]
+/// identifier (`off` / `on`) for the same reason.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct AuditSettings {
+    /// Master toggle. Off = no sink, no log file, no tracing fan-out.
+    pub enabled: bool,
+    /// Kebab-case format identifier. Default `"json-lines"`.
+    pub format: String,
+    /// Absolute path to the audit log file. Empty = derive a default
+    /// under `<config-dir>/audit/copythat-audit.log` at sink open
+    /// time.
+    pub file_path: String,
+    /// Kebab-case WORM state (`"off"` / `"on"`). Default `"off"`.
+    /// When `on`, Copy That applies the platform's append-only flag
+    /// after every create / rotation.
+    pub worm: String,
+    /// Rotation threshold in bytes. Zero = no rotation. Default
+    /// 10 MiB.
+    pub max_size_bytes: u64,
+    /// Optional remote syslog destination (`host:port`). Phase 34
+    /// writes the file path sink only; the remote bridge is a
+    /// Phase 36 CLI follow-up. Persisted here so the Settings UI can
+    /// collect the value ahead of time.
+    pub syslog_destination: String,
+}
+
+impl Default for AuditSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            format: "json-lines".into(),
+            file_path: String::new(),
+            worm: "off".into(),
+            max_size_bytes: 10 * 1024 * 1024,
+            syslog_destination: String::new(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------

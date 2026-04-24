@@ -162,22 +162,17 @@ impl MountTree {
             let job_row_id = job.row_id;
 
             if layout.by_date {
-                let placeholder =
-                    MountNode::job_placeholder(job_label.clone(), job_row_id);
+                let placeholder = MountNode::job_placeholder(job_label.clone(), job_row_id);
                 root.insert_at(&["by-date", &date, &time], placeholder);
             }
 
             if layout.by_source {
-                let placeholder = MountNode::job_placeholder(
-                    format!("{date}--{time}"),
-                    job_row_id,
-                );
+                let placeholder = MountNode::job_placeholder(format!("{date}--{time}"), job_row_id);
                 root.insert_at(&["by-source", &escaped_source], placeholder);
             }
 
             if layout.by_job_id {
-                let placeholder =
-                    MountNode::job_placeholder(job_label, job_row_id);
+                let placeholder = MountNode::job_placeholder(job_label, job_row_id);
                 // Job ID bucket mirrors the `jobs.row_id` integer so
                 // direct lookup via `by-job-id/<N>` is O(1). Phase
                 // 33b can swap this for a UUID once the history
@@ -298,20 +293,15 @@ pub(crate) fn build_from_rows(
         let escaped_source = escape_path(src_root);
 
         if layout.by_date {
-            let placeholder =
-                MountNode::job_placeholder(job_label.clone(), *row_id);
+            let placeholder = MountNode::job_placeholder(job_label.clone(), *row_id);
             root.insert_at(&["by-date", &date, &time], placeholder);
         }
         if layout.by_source {
-            let placeholder = MountNode::job_placeholder(
-                format!("{date}--{time}"),
-                *row_id,
-            );
+            let placeholder = MountNode::job_placeholder(format!("{date}--{time}"), *row_id);
             root.insert_at(&["by-source", &escaped_source], placeholder);
         }
         if layout.by_job_id {
-            let placeholder =
-                MountNode::job_placeholder(job_label, *row_id);
+            let placeholder = MountNode::job_placeholder(job_label, *row_id);
             root.insert_at(&["by-job-id", &row_id.to_string()], placeholder);
         }
     }
@@ -341,8 +331,7 @@ mod tests {
 
     #[test]
     fn escape_path_windows_drive() {
-        let escaped =
-            escape_path(&PathBuf::from(r"C:\Users\miken\Desktop"));
+        let escaped = escape_path(&PathBuf::from(r"C:\Users\miken\Desktop"));
         assert_eq!(escaped, "C--Users-miken-Desktop");
     }
 
@@ -371,7 +360,10 @@ mod tests {
         )];
         let tree = build_from_rows(&rows, MountLayout::all());
         assert_eq!(tree.job_count, 1);
-        assert!(tree.lookup("by-date/2026-04-21/14-32-15/archive-copy").is_some());
+        assert!(
+            tree.lookup("by-date/2026-04-21/14-32-15/archive-copy")
+                .is_some()
+        );
         assert!(tree.lookup("by-source/C--src").is_some());
         assert!(tree.lookup("by-job-id/1/archive-copy").is_some());
     }

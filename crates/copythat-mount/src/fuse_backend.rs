@@ -141,15 +141,17 @@ mod fuse_body {
             .chunk_store
             .clone()
             .unwrap_or_else(|| Arc::new(chunk_placeholder()));
-        let tree = MountTree::build(&jobs, chunk_store_for_tree.as_ref(), layout)
-            .unwrap_or_else(|_| MountTree {
-                root: crate::MountNode {
-                    name: String::new(),
-                    kind: crate::NodeKind::Directory,
-                    children: BTreeMap::new(),
-                },
-                layout,
-                job_count: 0,
+        let tree =
+            MountTree::build(&jobs, chunk_store_for_tree.as_ref(), layout).unwrap_or_else(|_| {
+                MountTree {
+                    root: crate::MountNode {
+                        name: String::new(),
+                        kind: crate::NodeKind::Directory,
+                        children: BTreeMap::new(),
+                    },
+                    layout,
+                    job_count: 0,
+                }
             });
         let map = Arc::new(TreeInodeMap::from_tree(&tree));
         let fs = TreeFilesystem {
@@ -184,8 +186,7 @@ mod fuse_body {
         // one.
         let dir = std::env::temp_dir().join(format!("copythat-mount-empty-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
-        copythat_chunk::ChunkStore::open(&dir)
-            .expect("empty placeholder chunk store open")
+        copythat_chunk::ChunkStore::open(&dir).expect("empty placeholder chunk store open")
     }
 
     /// Block on a `History::search()` call on a scratch runtime
@@ -228,16 +229,14 @@ mod fuse_body {
                 reply.error(ENOENT);
                 return;
             };
-            reply.entry(&TTL, &to_fuser_attr(&attr, req.uid(), req.gid()), GENERATION);
+            reply.entry(
+                &TTL,
+                &to_fuser_attr(&attr, req.uid(), req.gid()),
+                GENERATION,
+            );
         }
 
-        fn getattr(
-            &mut self,
-            req: &Request<'_>,
-            ino: u64,
-            _fh: Option<u64>,
-            reply: ReplyAttr,
-        ) {
+        fn getattr(&mut self, req: &Request<'_>, ino: u64, _fh: Option<u64>, reply: ReplyAttr) {
             let Some(attr) = synthesize_attr(&self.map, ino, self.mount_mtime) else {
                 reply.error(ENOENT);
                 return;
@@ -257,13 +256,10 @@ mod fuse_body {
             // Prepend `.` + `..` so POSIX tools see the standard
             // directory shape. `..` points to the parent inode, or
             // back to self for the root.
-            let mut all: Vec<(u64, String, crate::NodeKind)> = Vec::with_capacity(entries.len() + 2);
+            let mut all: Vec<(u64, String, crate::NodeKind)> =
+                Vec::with_capacity(entries.len() + 2);
             all.push((ino, ".".to_owned(), crate::NodeKind::Directory));
-            let parent = self
-                .map
-                .get(ino)
-                .map(|e| e.parent)
-                .unwrap_or(ROOT_INODE);
+            let parent = self.map.get(ino).map(|e| e.parent).unwrap_or(ROOT_INODE);
             all.push((parent, "..".to_owned(), crate::NodeKind::Directory));
             all.extend(entries);
 
@@ -310,10 +306,9 @@ mod fuse_body {
                 reply.error(ENOSYS);
                 return;
             };
-            let (Some(history), Some(chunk_store)) = (
-                self.history.as_ref(),
-                self.chunk_store.as_ref(),
-            ) else {
+            let (Some(history), Some(chunk_store)) =
+                (self.history.as_ref(), self.chunk_store.as_ref())
+            else {
                 // No archive refs wired — pre-Phase-33g mount.
                 reply.error(ENOSYS);
                 return;
@@ -360,7 +355,11 @@ mod fuse_body {
             .map_err(|_| AssembleError::Io)?;
         let history = history.clone();
         let items = rt
-            .block_on(async move { history.items_for(copythat_history::JobRowId(job_row_id)).await })
+            .block_on(async move {
+                history
+                    .items_for(copythat_history::JobRowId(job_row_id))
+                    .await
+            })
             .map_err(|_| AssembleError::NotFound)?;
 
         let read_start = offset.max(0) as u64;
@@ -417,8 +416,7 @@ mod fuse_body {
     }
 
     fn to_fuser_attr(attr: &MountFileAttr, uid: u32, gid: u32) -> FileAttr {
-        let mtime =
-            UNIX_EPOCH + Duration::from_secs(attr.mtime_unix_secs.max(0) as u64);
+        let mtime = UNIX_EPOCH + Duration::from_secs(attr.mtime_unix_secs.max(0) as u64);
         let now = SystemTime::now();
         FileAttr {
             ino: attr.ino,
@@ -475,7 +473,11 @@ mod tests {
         let backend = FuseBackend::default();
         let tmp = tempfile::tempdir().expect("tempdir");
         let err = backend
-            .mount(tmp.path(), MountLayout::all(), &crate::backends::ArchiveRefs::default())
+            .mount(
+                tmp.path(),
+                MountLayout::all(),
+                &crate::backends::ArchiveRefs::default(),
+            )
             .expect_err("default build has no fuse body");
         assert!(matches!(err, MountError::BackendUnavailable(_)));
     }

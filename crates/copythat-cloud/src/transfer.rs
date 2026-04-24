@@ -130,7 +130,9 @@ mod tests {
         let target = local_target(tmp.path());
         let src = tmp.path().join("irrelevant.bin");
         tokio::fs::write(&src, b"x").await.expect("seed");
-        let err = copy_to_target(&src, &target, "").await.expect_err("must reject");
+        let err = copy_to_target(&src, &target, "")
+            .await
+            .expect_err("must reject");
         assert!(matches!(err, BackendError::InvalidConfig(_)));
     }
 

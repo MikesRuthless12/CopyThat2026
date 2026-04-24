@@ -356,7 +356,7 @@ pub async fn run_device_code_flow(
             TokenPollOutcome::Granted(tokens) => return Ok(tokens),
             TokenPollOutcome::Denied => return Err(OAuthError::Provider("access denied".into())),
             TokenPollOutcome::Expired => {
-                return Err(OAuthError::Provider("device code expired".into()))
+                return Err(OAuthError::Provider("device code expired".into()));
             }
             TokenPollOutcome::Error(e) => return Err(OAuthError::Provider(e)),
         }
@@ -369,8 +369,16 @@ mod tests {
 
     #[test]
     fn endpoints_are_configured_per_provider() {
-        assert!(OAuthProvider::MicrosoftGraph.device_code_endpoint().starts_with("https://login.microsoftonline.com"));
-        assert!(OAuthProvider::Google.device_code_endpoint().starts_with("https://oauth2.googleapis.com"));
+        assert!(
+            OAuthProvider::MicrosoftGraph
+                .device_code_endpoint()
+                .starts_with("https://login.microsoftonline.com")
+        );
+        assert!(
+            OAuthProvider::Google
+                .device_code_endpoint()
+                .starts_with("https://oauth2.googleapis.com")
+        );
         assert_eq!(OAuthProvider::Dropbox.device_code_endpoint(), "");
     }
 

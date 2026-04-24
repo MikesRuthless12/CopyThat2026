@@ -458,8 +458,8 @@ mod tests {
                 _ => None,
             }
         };
-        let attr = synthesize_attr_with_size(&map, leaf, 1_700_000_000, Some(&lookup))
-            .expect("leaf attr");
+        let attr =
+            synthesize_attr_with_size(&map, leaf, 1_700_000_000, Some(&lookup)).expect("leaf attr");
         assert_eq!(attr.size, 1_048_576);
         assert_eq!(attr.kind, MountFileKind::RegularFile);
     }
@@ -472,8 +472,8 @@ mod tests {
         let one = map.lookup(by_job_id, "1").expect("1");
         let leaf = map.lookup(one, "x-copy").expect("x-copy");
         let lookup = |_: i64| -> Option<u64> { None };
-        let attr = synthesize_attr_with_size(&map, leaf, 1_700_000_000, Some(&lookup))
-            .expect("leaf attr");
+        let attr =
+            synthesize_attr_with_size(&map, leaf, 1_700_000_000, Some(&lookup)).expect("leaf attr");
         assert_eq!(attr.size, 0);
     }
 
