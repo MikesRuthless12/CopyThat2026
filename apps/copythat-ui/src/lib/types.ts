@@ -545,12 +545,33 @@ export interface SettingsDto {
   /// toggle. Optional on the wire so older backends without the
   /// field don't break this frontend.
   mount?: MountSettingsDto;
+  /// Phase 34 — audit log export + WORM mode. Optional on the wire
+  /// so older backends without the field don't break this frontend.
+  audit?: AuditSettingsDto;
 }
 
 /** Phase 33 — wire form of `copythat_settings::MountSettings`. */
 export interface MountSettingsDto {
   mountOnLaunch: boolean;
   mountOnLaunchPath: string;
+}
+
+/** Phase 34 — wire form of `copythat_settings::AuditSettings`. */
+export type AuditFormatWire =
+  | "csv"
+  | "json-lines"
+  | "syslog"
+  | "cef"
+  | "leef";
+
+export interface AuditSettingsDto {
+  enabled: boolean;
+  format: AuditFormatWire;
+  filePath: string;
+  /** `"off" | "on"` — persist as string so forward-compat works. */
+  worm: string;
+  maxSizeBytes: number;
+  syslogDestination: string;
 }
 
 /** Phase 19a — disk-backed scan database settings. Optional in TS

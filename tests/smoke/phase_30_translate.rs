@@ -274,8 +274,8 @@ fn case6_path_translation_settings_round_trip() {
 #[test]
 fn case7_fluent_keys_present_in_en() {
     let en_path = repo_root().join("locales/en/copythat.ftl");
-    let en = fs::read_to_string(&en_path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", en_path.display()));
+    let en =
+        fs::read_to_string(&en_path).unwrap_or_else(|e| panic!("read {}: {e}", en_path.display()));
     for key in PHASE_30_KEYS {
         let needle = format!("\n{key} = ");
         assert!(

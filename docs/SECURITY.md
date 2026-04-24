@@ -276,6 +276,45 @@ sensitive flags survive a copy. The threat model:
   re-uses libc for the underlying syscalls. No new transitive
   dependencies on Windows. No new network calls.
 
+## Phase 34 — audit log export + WORM
+
+- **Tamper-evidence by chain hash.** Every line in the audit log
+  includes a `prev_hash` column with the hex-encoded BLAKE3 of the
+  previous record's bytes. Modifying any earlier line requires
+  recomputing every subsequent chain hash; `verify_chain` catches
+  single-byte edits at O(n) with no external state.
+- **WORM enforcement is opt-in per-install.** When the user enables
+  Settings → Advanced → Audit log → WORM, Copy That applies the
+  platform's append-only primitive after each create / rotation:
+  `FS_IOC_SETFLAGS | FS_APPEND_FL` on Linux (requires
+  CAP_LINUX_IMMUTABLE — surfaced as a clear error when missing),
+  `chflags(UF_APPEND)` on macOS (userspace-legal), and
+  `FILE_ATTRIBUTE_READONLY` on Windows (the richer deny-write ACE
+  path is a Phase 36 follow-up). Attempting to truncate a WORM-
+  flagged log fails at the kernel level — even for the Copy That
+  process that wrote it.
+- **Rotation preserves the prior log.** When `bytes_written ≥
+  max_size_bytes` the sink renames the file to `<path>.1`, opens a
+  fresh primary, and re-applies WORM to the new file. The rotated
+  `.1` retains its own append-only flag so a rollover cannot be
+  used as a way to evade WORM on the active file.
+- **Sink open is fail-closed.** A WORM apply error at open time
+  surfaces `AuditError::WormApply` — the runner leaves the
+  registry empty and logs the reason to stderr; no audit records
+  are dropped silently on a pretend-sink.
+- **No credential material in the log.** The
+  `SettingsChanged` record carries *hashes* (SHA-256 of the TOML
+  serialisation) of the before + after states, not the content.
+  An auditor can see that a setting changed without leaking a
+  credential that happens to live in the settings blob.
+- **No network writes in Phase 34.** The `syslog_destination`
+  field is persisted for the Phase 36 CLI's pipe-to-syslog
+  follow-up but today only the file path sink is open.
+- **`cargo deny` coverage.** The three new direct deps —
+  `csv` 1 (MIT/Apache-2.0), `nix` 0.29 (MIT, Linux-only), and
+  `gethostname` 1 (BSD-3-Clause) — are all in the permissive
+  allowlist; no exceptions added.
+
 ## Build hardening (target, post-Phase 17)
 
 - Stack probes enabled.

@@ -169,10 +169,7 @@ pub async fn mount_snapshot(
 /// Unmount the snapshot for `job_row_id`. Returns typed error when
 /// the job isn't currently mounted.
 #[tauri::command]
-pub fn unmount_snapshot(
-    job_row_id: i64,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
+pub fn unmount_snapshot(job_row_id: i64, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let (handle, _path) = state
         .mounts
         .take(job_row_id)
@@ -243,7 +240,11 @@ mod tests {
         let backend = NoopBackend::default();
         let tmp = tempfile::tempdir().expect("tempdir");
         let handle = backend
-            .mount(tmp.path(), MountLayout::all(), &copythat_mount::backends::ArchiveRefs::default())
+            .mount(
+                tmp.path(),
+                MountLayout::all(),
+                &copythat_mount::backends::ArchiveRefs::default(),
+            )
             .expect("mount");
         registry.insert(42, handle);
         let snap = registry.snapshot();
@@ -261,13 +262,21 @@ mod tests {
         let tmp2 = tempfile::tempdir().expect("tempdir2");
 
         let h1 = backend
-            .mount(tmp1.path(), MountLayout::all(), &copythat_mount::backends::ArchiveRefs::default())
+            .mount(
+                tmp1.path(),
+                MountLayout::all(),
+                &copythat_mount::backends::ArchiveRefs::default(),
+            )
             .expect("mount1");
         registry.insert(7, h1);
         assert_eq!(*counter.lock().unwrap(), 0, "first mount still live");
 
         let h2 = backend
-            .mount(tmp2.path(), MountLayout::all(), &copythat_mount::backends::ArchiveRefs::default())
+            .mount(
+                tmp2.path(),
+                MountLayout::all(),
+                &copythat_mount::backends::ArchiveRefs::default(),
+            )
             .expect("mount2");
         registry.insert(7, h2);
         // Replacement dropped h1 → unmount_on_drop fired once.
@@ -285,7 +294,11 @@ mod tests {
         let backend = NoopBackend::default();
         let tmp = tempfile::tempdir().expect("tempdir");
         let handle = backend
-            .mount(tmp.path(), MountLayout::all(), &copythat_mount::backends::ArchiveRefs::default())
+            .mount(
+                tmp.path(),
+                MountLayout::all(),
+                &copythat_mount::backends::ArchiveRefs::default(),
+            )
             .expect("mount");
         registry.insert(3, handle);
         let (taken, path) = registry.take(3).expect("taken");

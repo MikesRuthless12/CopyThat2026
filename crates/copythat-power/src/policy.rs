@@ -43,7 +43,9 @@ pub enum NetworkPolicy {
     #[default]
     Continue,
     Pause,
-    Cap { bytes_per_second: u64 },
+    Cap {
+        bytes_per_second: u64,
+    },
 }
 
 /// What to do when the host is in a known presentation mode (Zoom /
@@ -56,7 +58,9 @@ pub enum PresentationPolicy {
     /// during a Zoom call is exactly what the user is trying to avoid.
     #[default]
     Pause,
-    Cap { bytes_per_second: u64 },
+    Cap {
+        bytes_per_second: u64,
+    },
 }
 
 /// What to do when any app is fullscreen.
@@ -68,7 +72,9 @@ pub enum FullscreenPolicy {
     #[default]
     Continue,
     Pause,
-    Cap { bytes_per_second: u64 },
+    Cap {
+        bytes_per_second: u64,
+    },
 }
 
 /// What to do when the CPU is thermal-throttling.
@@ -82,7 +88,9 @@ pub enum ThermalPolicy {
     /// differ only in that `CapPercent` kicks in whenever thermal
     /// throttling is active, even at 100 %, so the runner can
     /// restore the prior rate cleanly on resolution.
-    CapPercent { percent: u8 },
+    CapPercent {
+        percent: u8,
+    },
 }
 
 impl Default for ThermalPolicy {
@@ -130,7 +138,10 @@ pub struct PowerState {
 /// idempotent — applying the same event twice leaves state unchanged.
 pub fn apply_event(state: &mut PowerState, event: &PowerEvent) {
     match event {
-        PowerEvent::BatteryStateChanged { on_battery, percent } => {
+        PowerEvent::BatteryStateChanged {
+            on_battery,
+            percent,
+        } => {
             state.on_battery = *on_battery;
             state.battery_percent = *percent;
         }
@@ -269,7 +280,10 @@ pub fn compute_action(state: &PowerState, policies: &PowerPolicies) -> PowerActi
     let mut out = PowerAction::Continue;
 
     if state.on_battery {
-        out = combine(out, policy_to_action(policies.battery, PowerReason::OnBattery));
+        out = combine(
+            out,
+            policy_to_action(policies.battery, PowerReason::OnBattery),
+        );
     }
     match state.network_class {
         NetworkClass::Metered => {

@@ -332,12 +332,11 @@ mod tests {
     fn new_remote_tags_backend_name_and_is_remote() {
         let job = JobRecord::new_remote("copy", "/src", "prod-s3", "data/out.bin");
         assert!(job.is_remote());
+        assert_eq!(job.remote_backend_name.as_deref(), Some("prod-s3"));
         assert_eq!(
-            job.remote_backend_name.as_deref(),
-            Some("prod-s3")
-        );
-        assert_eq!(
-            job.dst_root.as_deref().map(|p| p.to_string_lossy().into_owned()),
+            job.dst_root
+                .as_deref()
+                .map(|p| p.to_string_lossy().into_owned()),
             Some("data/out.bin".to_owned())
         );
     }

@@ -205,14 +205,23 @@ mod tests {
     #[tokio::test]
     async fn delete_is_idempotent() {
         let (_guard, target) = local_target();
-        target.delete("never-existed.txt").await.expect("delete-missing");
+        target
+            .delete("never-existed.txt")
+            .await
+            .expect("delete-missing");
     }
 
     #[tokio::test]
     async fn list_after_put() {
         let (_guard, target) = local_target();
-        target.put("a.bin", Bytes::from_static(b"1")).await.expect("put a");
-        target.put("b.bin", Bytes::from_static(b"22")).await.expect("put b");
+        target
+            .put("a.bin", Bytes::from_static(b"1"))
+            .await
+            .expect("put a");
+        target
+            .put("b.bin", Bytes::from_static(b"22"))
+            .await
+            .expect("put b");
         let entries = target.list("/").await.expect("list");
         let names: Vec<_> = entries.iter().map(|e| e.path.as_str()).collect();
         assert!(names.iter().any(|p| p.ends_with("a.bin")));
@@ -222,7 +231,10 @@ mod tests {
     #[tokio::test]
     async fn delete_actually_removes() {
         let (_guard, target) = local_target();
-        target.put("byebye.txt", Bytes::from_static(b"x")).await.expect("put");
+        target
+            .put("byebye.txt", Bytes::from_static(b"x"))
+            .await
+            .expect("put");
         target.delete("byebye.txt").await.expect("delete");
         assert!(target.stat("byebye.txt").await.expect("stat").is_none());
     }

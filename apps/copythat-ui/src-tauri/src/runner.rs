@@ -107,6 +107,25 @@ pub(crate) async fn run_job(job: RunJob) {
     let _ = app.emit(EVENT_JOB_STARTED, JobIdDto { id: id.as_u64() });
     emit_globals(&app, &state);
 
+    // Phase 34 — fire a `JobStarted` audit record on the active
+    // sink. No-op when audit is disabled.
+    let job_started_at = std::time::Instant::now();
+    let audit_job_id = format!("job-{}", id.as_u64());
+    let kind_wire_audit = match kind {
+        JobKind::Copy => "copy",
+        JobKind::Move => "move",
+        JobKind::Delete => "delete",
+        JobKind::SecureDelete => "secure-delete",
+        JobKind::Verify => "verify",
+    };
+    crate::audit_commands::record_job_started(
+        &state.audit,
+        &audit_job_id,
+        kind_wire_audit,
+        &src,
+        dst.as_deref(),
+    );
+
     // Phase 9 — record the job-start into the SQLite history. `None`
     // return means history is disabled (in-memory AppState or disk
     // open failed at boot); the runner still works, just without
@@ -371,20 +390,41 @@ pub(crate) async fn run_job(job: RunJob) {
 
     // Phase 9 — stamp the terminal status + final totals into the
     // history row.
-    if let Some(row) = history_row {
-        let snapshot = state.queue.get(id);
-        let total_bytes = snapshot.as_ref().map(|j| j.bytes_done).unwrap_or(0);
-        let files_ok = snapshot.as_ref().map(|j| j.files_done).unwrap_or(0);
-        let files_failed = snapshot
-            .as_ref()
-            .and_then(|j| j.files_total.checked_sub(j.files_done))
-            .unwrap_or(0);
-        if let Some(history) = &state.history {
-            let _ = history
-                .record_finish(row, terminal_status, total_bytes, files_ok, files_failed)
-                .await;
-        }
+    let snapshot_for_totals = state.queue.get(id);
+    let total_bytes = snapshot_for_totals
+        .as_ref()
+        .map(|j| j.bytes_done)
+        .unwrap_or(0);
+    let files_ok = snapshot_for_totals
+        .as_ref()
+        .map(|j| j.files_done)
+        .unwrap_or(0);
+    let files_failed = snapshot_for_totals
+        .as_ref()
+        .and_then(|j| j.files_total.checked_sub(j.files_done))
+        .unwrap_or(0);
+    if let Some(row) = history_row
+        && let Some(history) = &state.history
+    {
+        let _ = history
+            .record_finish(row, terminal_status, total_bytes, files_ok, files_failed)
+            .await;
     }
+
+    // Phase 34 — fire `JobCompleted` into the audit sink with the
+    // terminal status + the same totals history records. The ms
+    // duration is measured from the start of `run_job` so it
+    // reflects wall-clock runtime including queue-to-start latency.
+    crate::audit_commands::record_job_completed(
+        &state.audit,
+        &audit_job_id,
+        terminal_status,
+        files_ok,
+        files_failed,
+        total_bytes,
+        job_started_at.elapsed().as_millis() as u64,
+    );
+
     emit_globals(&app, &state);
 }
 
@@ -704,6 +744,19 @@ async fn forward_events(
                 if let (Some(row), Some(item)) = (history_row, current_item.take())
                     && let Some(history) = &state.history
                 {
+                    // Phase 34 — record FileCopied in the audit sink
+                    // before handing ownership of `item` to the
+                    // history row. Hash is whatever Verify emitted;
+                    // empty when `verify = None` was configured.
+                    let audit_job_id_local = format!("job-{job_id_u64}");
+                    crate::audit_commands::record_file_copied(
+                        &state.audit,
+                        &audit_job_id_local,
+                        &item.src,
+                        &item.dst,
+                        item.hash_hex.as_deref(),
+                        bytes,
+                    );
                     let entry = ItemRow {
                         job_row_id: row.as_i64(),
                         src: item.src,
@@ -716,6 +769,18 @@ async fn forward_events(
                         timestamp_ms: now_ms() as i64,
                     };
                     let _ = history.record_item(&entry).await;
+                } else {
+                    // Tree mode without history still wants the audit
+                    // file-copied record.
+                    let audit_job_id_local = format!("job-{job_id_u64}");
+                    crate::audit_commands::record_file_copied(
+                        &state.audit,
+                        &audit_job_id_local,
+                        &last_activity_src,
+                        std::path::Path::new(""),
+                        None,
+                        bytes,
+                    );
                 }
             }
             CopyEvent::TreeCompleted { bytes, files, .. } => {
@@ -747,8 +812,18 @@ async fn forward_events(
                     },
                 );
                 // Phase 9 — also record the item in history.
+                let kind_str = crate::errors::kind_name(err.kind);
+                // Phase 34 — mirror the item failure into the audit
+                // sink; active-only when the feature is enabled.
+                let audit_job_id_local = format!("job-{job_id_u64}");
+                crate::audit_commands::record_file_failed(
+                    &state.audit,
+                    &audit_job_id_local,
+                    &err.src,
+                    kind_str,
+                    &err.message,
+                );
                 if let (Some(row), Some(history)) = (history_row, state.history.clone()) {
-                    let kind_str = crate::errors::kind_name(err.kind);
                     let entry = ItemRow {
                         job_row_id: row.as_i64(),
                         src: err.src.clone(),
@@ -796,6 +871,19 @@ async fn forward_events(
                         &dst_path,
                     ) {
                         let engine_wire = crate::collisions::resolution_name(&resolved);
+                        // Phase 34 — audit the rule-auto-resolved
+                        // decision. Interactive-resolve audits live
+                        // in `commands::resolve_collision` so the
+                        // user-facing picker records with the
+                        // right attribution.
+                        let audit_job_id_local = format!("job-{job_id}");
+                        crate::audit_commands::record_collision_resolved(
+                            &state.audit,
+                            &audit_job_id_local,
+                            &src_path,
+                            &dst_path,
+                            engine_wire,
+                        );
                         let _ = app.emit(
                             crate::ipc::EVENT_COLLISION_AUTO_RESOLVED,
                             crate::ipc::CollisionAutoResolvedDto {
