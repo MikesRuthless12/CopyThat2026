@@ -1035,3 +1035,13 @@ cloud-error-not-found = Object not found at the requested path  # MT
 cloud-error-permission = Permission denied by remote backend  # MT
 cloud-error-keychain = OS keychain access failed  # MT
 settings-tab-remotes = Remotes  # MT
+
+# Phase 33 — mount as read-only filesystem.
+mount-heading = Mount snapshot  # MT
+mount-action-mount = Mount snapshot  # MT
+mount-action-unmount = Unmount  # MT
+mount-status-mounted = Mounted at { $path }  # MT
+mount-error-unsafe-mountpoint = Mountpoint path is unsafe  # MT
+mount-error-mountpoint-not-empty = Mountpoint must be an empty directory  # MT
+mount-error-backend-unavailable = Mount backend is not available on this system  # MT
+mount-error-archive-read = Archive read failed  # MT
