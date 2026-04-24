@@ -434,3 +434,91 @@ export async function dragOutStage(
 ): Promise<DragOutStagedDto> {
   return invoke<DragOutStagedDto>("drag_out_stage", { paths });
 }
+
+// ---------------------------------------------------------------------
+// Phase 32 — cloud backend matrix.
+// ---------------------------------------------------------------------
+
+/** Wire-form for a configured remote backend. Mirrors the Rust
+ *  `cloud_commands::BackendDto`. The `config` sub-object carries
+ *  kind-specific fields (bucket, region, host, etc.) as plain
+ *  strings so the wizard can keep one shared form shape. */
+export type BackendDto = {
+  name: string;
+  kind: string;
+  config: {
+    root: string;
+    bucket: string;
+    region: string;
+    endpoint: string;
+    container: string;
+    accountName: string;
+    serviceAccount: string;
+    clientId: string;
+    host: string;
+    username: string;
+    port: number;
+  };
+  enabledInBuild: boolean;
+};
+
+/** Empty backend config — used as the initial-state for the add-
+ *  backend wizard so every field is defined before submit. */
+export function emptyBackendConfig(): BackendDto["config"] {
+  return {
+    root: "",
+    bucket: "",
+    region: "",
+    endpoint: "",
+    container: "",
+    accountName: "",
+    serviceAccount: "",
+    clientId: "",
+    host: "",
+    username: "",
+    port: 0,
+  };
+}
+
+/** Response shape for `test_backend_connection`. `reason` maps to a
+ *  `cloud-error-<reason>` Fluent key. */
+export type TestConnectionResult = {
+  ok: boolean;
+  reason: string | null;
+  detail: string | null;
+};
+
+/** Enumerate every backend persisted in `settings.remotes.backends`. */
+export async function listBackends(): Promise<BackendDto[]> {
+  return invoke<BackendDto[]>("list_backends");
+}
+
+/** Insert a new backend + (optionally) save its secret to the OS keychain. */
+export async function addBackend(
+  dto: BackendDto,
+  secret: string | null,
+): Promise<BackendDto> {
+  return invoke<BackendDto>("add_backend", { dto, secret });
+}
+
+/** Overwrite an existing backend entry. Pass `null` for `secret` to
+ *  leave the stored credential untouched. */
+export async function updateBackend(
+  dto: BackendDto,
+  secret: string | null,
+): Promise<BackendDto> {
+  return invoke<BackendDto>("update_backend", { dto, secret });
+}
+
+/** Remove a backend entry + its keychain secret. */
+export async function removeBackend(name: string): Promise<void> {
+  await invoke("remove_backend", { name });
+}
+
+/** Test a live connection to `name`. Errors are reported in-band via
+ *  the returned DTO. */
+export async function testBackendConnection(
+  name: string,
+): Promise<TestConnectionResult> {
+  return invoke<TestConnectionResult>("test_backend_connection", { name });
+}

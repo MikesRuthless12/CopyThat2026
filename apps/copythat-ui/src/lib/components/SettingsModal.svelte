@@ -25,6 +25,7 @@
   import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
 
   import Icon from "../icons/Icon.svelte";
+  import RemotesTab from "./RemotesTab.svelte";
   import { i18nVersion, locale, setLocale, t } from "../i18n";
   import {
     closeSettings,
@@ -56,6 +57,7 @@
     | "advanced"
     | "updater"
     | "network"
+    | "remotes"
     | "profiles";
 
   let activeTab: TabId = $state("general");
@@ -401,7 +403,7 @@
       {:else}
         <div class="body">
           <div class="tabs" role="tablist" aria-label={t("settings-title")}>
-            {#each [["general", "settings-tab-general"], ["transfer", "settings-tab-transfer"], ["filters", "settings-tab-filters"], ["shell", "settings-tab-shell"], ["secure-delete", "settings-tab-secure-delete"], ["advanced", "settings-tab-advanced"], ["updater", "settings-tab-updater"], ["network", "settings-tab-network"], ["profiles", "settings-tab-profiles"]] as const as [id, key] (id)}
+            {#each [["general", "settings-tab-general"], ["transfer", "settings-tab-transfer"], ["filters", "settings-tab-filters"], ["shell", "settings-tab-shell"], ["secure-delete", "settings-tab-secure-delete"], ["advanced", "settings-tab-advanced"], ["updater", "settings-tab-updater"], ["network", "settings-tab-network"], ["remotes", "settings-tab-remotes"], ["profiles", "settings-tab-profiles"]] as const as [id, key] (id)}
               <button
                 type="button"
                 role="tab"
@@ -1180,6 +1182,8 @@
                   </select>
                 </label>
               {/each}
+            {:else if activeTab === "remotes"}
+              <RemotesTab />
             {:else if activeTab === "profiles"}
               <p class="hint">{t("settings-profiles-hint")}</p>
               <div class="row">

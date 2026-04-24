@@ -766,3 +766,4 @@ cloud-error-network = Network error contacting backend
 cloud-error-not-found = Object not found at the requested path
 cloud-error-permission = Permission denied by remote backend
 cloud-error-keychain = OS keychain access failed
+settings-tab-remotes = Remotes
