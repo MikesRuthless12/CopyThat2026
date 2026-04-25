@@ -520,6 +520,18 @@ impl copythat_mobile::server::RemoteControl for AppStateRemoteControl {
         Ok(())
     }
 
+    async fn get_locale(&self) -> Result<String, String> {
+        // The Tauri shell routes IPC reads through AppStateProxy
+        // which doesn't carry the live Settings handle (RwLock<>
+        // is `!Send` while held across the .await on the
+        // dispatcher). The PWA falls back to its browser-detected
+        // locale when this returns empty; the runner can plumb the
+        // real locale in via a settings snapshot once the proxy
+        // grows that field — that's a small follow-up and
+        // documented in mobile_commands.rs.
+        Ok(String::new())
+    }
+
     async fn set_keep_awake(&self, enabled: bool) -> Result<(), String> {
         // Phase 37 follow-up #2 — wired to
         // `copythat_platform::wake_lock`. Acquire on `enabled =

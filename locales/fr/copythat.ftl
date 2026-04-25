@@ -1150,3 +1150,19 @@ pair-toast-success = Paired with { $device }  # MT
 pair-toast-failed = Pairing failed: { $reason }  # MT
 push-toast-sent = Push sent to { $device }  # MT
 push-toast-failed = Push to { $device } failed: { $reason }  # MT
+
+# Phase 38 — destination dedup + reflink ladder. MT-flagged
+# English strings pending human translation; tracked in
+# docs/I18N_TODO.md.
+settings-dedup-heading = Destination dedup  # MT
+settings-dedup-hint = When the source and destination share a volume, Copy That can clone files at the filesystem level instead of copying bytes. Reflink is instant + safe; hardlink is faster but both names share state.  # MT
+settings-dedup-mode-auto = Auto ladder (reflink → hardlink → chunk → copy)  # MT
+settings-dedup-mode-reflink-only = Reflink only  # MT
+settings-dedup-mode-hardlink-aggressive = Aggressive (reflink + hardlink even on writable files)  # MT
+settings-dedup-mode-off = Disabled (always byte-copy)  # MT
+settings-dedup-hardlink-policy = Hardlink policy  # MT
+settings-dedup-prescan = Pre-scan destination tree for duplicate content  # MT
+dedup-badge-reflinked = ⚡ Reflinked  # MT
+dedup-badge-hardlinked = 🔗 Hardlinked  # MT
+dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
+dedup-badge-copied = 📋 Copied  # MT

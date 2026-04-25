@@ -29,6 +29,10 @@ slow-tests = []
 copythat-core = { path = "../copythat-core", version = "1" }
 reflink-copy = "0.1"
 thiserror = "2"
+# Phase 38 — dedup options + outcome types are TOML-persistable and
+# IPC-serialized, so serde + serde_json land in the dep graph here.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tokio = { version = "1", features = [
     "fs",
     "io-util",
@@ -70,6 +74,7 @@ zbus = { version = "5", default-features = false, features = ["tokio"] }
 [dev-dependencies]
 blake3 = "1"
 tempfile = "3"
+serde_json = "1"
 tokio = { version = "1", features = [
     "fs",
     "io-util",
@@ -95,3 +100,8 @@ path = "../../tests/smoke/phase_23_sparse.rs"
 [[test]]
 name = "phase_24_meta"
 path = "../../tests/smoke/phase_24_meta.rs"
+
+# Phase 38 smoke test — destination dedup ladder.
+[[test]]
+name = "phase_38_dedup"
+path = "../../tests/smoke/phase_38_dedup.rs"

@@ -173,6 +173,65 @@ Spin up the dev build, then run through:
 - [ ] `copythat verify <file> --algo blake3 --against <sidecar>`
       with a tampered sidecar exits 4.
 
+### 4.11a Phase 37 follow-up #2 (deferred items closed)
+
+- [ ] **First-launch onboarding modal** appears once on a fresh
+      install with no paired phone. Shows the desktop icon, the
+      install QR pointing at the deployed PWA URL, and "I have the
+      app, pair now" / "Maybe later" buttons. After dismissing,
+      the modal does not reappear on subsequent launches.
+- [ ] **Wake-lock toggle on the PWA** actually inhibits the
+      desktop's screensaver / sleep:
+      - Windows: Power → Power Options → display still on after
+        the configured idle timer.
+      - macOS: Caffeinate equivalent → display stays on until the
+        toggle is flipped off.
+      - Linux: GNOME / KDE screensaver inhibited via dbus.
+      Toggle off → screensaver resumes after the OS idle timer.
+- [ ] **Job snapshot is real.** Start a desktop copy → PWA Active
+      Jobs panel reflects the running job with real `bytes_done`,
+      `files_done`, percentage. Pause from PWA → desktop UI shows
+      the job paused. Cancel from PWA → desktop UI shows the job
+      cancelled. Reverse path also works (pause from desktop UI →
+      PWA reflects within ~5 s).
+- [ ] **Native Tauri Mobile binary** scaffold compiles when run
+      from a macOS host (`cargo tauri ios build`) or Android-SDK-
+      equipped host (`cargo tauri android build`). Verify the icon
+      matches the desktop tray icon on both home screens.
+
+### 4.11b Locale sync (Phase 38 PWA i18n)
+
+- [ ] Switch desktop language to French (Settings → General →
+      Language). Open the PWA on a paired phone. PWA UI strings
+      flip to French within one second of `Hello` completing.
+- [ ] Repeat for Japanese, Arabic (RTL), Chinese — each forces
+      the PWA to load the matching bundle. MT-flagged strings
+      fall back to English where translations are still pending
+      (documented in `docs/I18N_TODO.md`).
+
+### 4.11c Phase 38 — destination dedup ladder
+
+- [ ] **Mode = AutoLadder** + same-volume copy on a reflink-
+      capable filesystem (Btrfs / APFS / ReFS Dev Drive): per-
+      file event reports `Reflink` strategy + the file size as
+      `bytes_saved`. Total destination volume usage stays close
+      to the source's (within a few KiB of metadata overhead).
+- [ ] **Mode = AutoLadder + HardlinkPolicy = Always** on NTFS:
+      same-volume copy reports `Hardlink` per file. Touching
+      either name affects the other (because they share the
+      inode); the PWA badge surfaces the yellow warning.
+- [ ] **Mode = ReflinkOnly** on NTFS (no reflink): every file
+      reports `Copy` (fallback). No hardlinks created even when
+      hardlink_policy is Always.
+- [ ] **Mode = None** on any volume: every file reports `Skipped`;
+      the engine takes its regular `copy_file` path. Identical
+      to the pre-Phase-38 behaviour.
+- [ ] **Pre-pass scan** (when wired): tree with 50 duplicate
+      destinations + 50 unique source files lights up the modal
+      proposing 50 hardlink/reflink dedup actions. Total dst
+      volume usage after applying ≈ source size + chunk overhead
+      (not 2× the source size).
+
 ### 4.11 Mobile companion (Phase 37)
 
 - [ ] First launch shows the onboarding modal with the install QR

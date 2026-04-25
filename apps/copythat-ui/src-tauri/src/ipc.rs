@@ -1130,6 +1130,27 @@ pub struct TransferDto {
     /// when the destination FS can't accept the foreign metadata.
     #[serde(default = "default_true")]
     pub appledouble_fallback: bool,
+    /// Phase 38 — destination dedup ladder mode. Mirrors
+    /// `copythat_platform::DedupMode` wire string (`"auto-ladder"
+    /// | "reflink-only" | "hardlink-aggressive" | "off"`).
+    #[serde(default = "default_dedup_mode")]
+    pub dedup_mode: String,
+    /// Phase 38 — hardlink leg gate. Mirrors
+    /// `copythat_platform::HardlinkPolicy` wire string (`"never"
+    /// | "read-only-only" | "always"`).
+    #[serde(default = "default_dedup_hardlink_policy")]
+    pub dedup_hardlink_policy: String,
+    /// Phase 38 — pre-pass dedup scan opt-in.
+    #[serde(default)]
+    pub dedup_prescan: bool,
+}
+
+fn default_dedup_mode() -> String {
+    "off".into()
+}
+
+fn default_dedup_hardlink_policy() -> String {
+    "read-only-only".into()
 }
 
 fn default_true() -> bool {
@@ -1598,6 +1619,9 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 preserve_selinux_contexts: s.transfer.preserve_selinux_contexts,
                 preserve_resource_forks: s.transfer.preserve_resource_forks,
                 appledouble_fallback: s.transfer.appledouble_fallback,
+                dedup_mode: s.transfer.dedup_mode.clone(),
+                dedup_hardlink_policy: s.transfer.dedup_hardlink_policy.clone(),
+                dedup_prescan: s.transfer.dedup_prescan,
             },
             shell: ShellDto {
                 context_menu_enabled: s.shell.context_menu_enabled,
@@ -1788,6 +1812,9 @@ impl SettingsDto {
         s.transfer.preserve_selinux_contexts = self.transfer.preserve_selinux_contexts;
         s.transfer.preserve_resource_forks = self.transfer.preserve_resource_forks;
         s.transfer.appledouble_fallback = self.transfer.appledouble_fallback;
+        s.transfer.dedup_mode = self.transfer.dedup_mode;
+        s.transfer.dedup_hardlink_policy = self.transfer.dedup_hardlink_policy;
+        s.transfer.dedup_prescan = self.transfer.dedup_prescan;
 
         s.shell.context_menu_enabled = self.shell.context_menu_enabled;
         s.shell.intercept_default_copy = self.shell.intercept_default_copy;

@@ -890,3 +890,20 @@ pair-toast-success = Paired with { $device }
 pair-toast-failed = Pairing failed: { $reason }
 push-toast-sent = Push sent to { $device }
 push-toast-failed = Push to { $device } failed: { $reason }
+
+# Phase 38 — aggregate destination dedup + reflink fallback ladder.
+# Settings → Transfer → Dedup panel + per-job-row badges (⚡
+# Reflinked / 🔗 Hardlinked / 🧩 Chunk-shared / 📋 Copied) +
+# pre-pass dedup-scan modal.
+settings-dedup-heading = Destination dedup
+settings-dedup-hint = When the source and destination share a volume, Copy That can clone files at the filesystem level instead of copying bytes. Reflink is instant + safe; hardlink is faster but both names share state.
+settings-dedup-mode-auto = Auto ladder (reflink → hardlink → chunk → copy)
+settings-dedup-mode-reflink-only = Reflink only
+settings-dedup-mode-hardlink-aggressive = Aggressive (reflink + hardlink even on writable files)
+settings-dedup-mode-off = Disabled (always byte-copy)
+settings-dedup-hardlink-policy = Hardlink policy
+settings-dedup-prescan = Pre-scan destination tree for duplicate content
+dedup-badge-reflinked = ⚡ Reflinked
+dedup-badge-hardlinked = 🔗 Hardlinked
+dedup-badge-chunk-shared = 🧩 Chunk-shared
+dedup-badge-copied = 📋 Copied

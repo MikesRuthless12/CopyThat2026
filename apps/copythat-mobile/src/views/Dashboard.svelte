@@ -8,6 +8,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
 
+  import { applyDesktopLocale } from "../i18n";
   import type { PeerLink } from "../peer";
   import type {
     HistoryRow,
@@ -89,6 +90,17 @@
         phone_pubkey_hex: "00".repeat(32),
         device_label: "phone",
       });
+      // Phase 38 — pull the desktop's selected locale so the PWA
+      // mirrors it. Fire-and-forget; on error we keep the
+      // browser-detected locale.
+      try {
+        const locResp = await link.send({ kind: "get_locale" });
+        if (locResp.kind === "locale") {
+          applyDesktopLocale(locResp.bcp47);
+        }
+      } catch (e) {
+        console.warn("get_locale", e);
+      }
     } catch (e) {
       console.error("hello", e);
     }

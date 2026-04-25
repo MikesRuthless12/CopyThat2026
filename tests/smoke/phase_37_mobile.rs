@@ -150,6 +150,7 @@ fn case05_remote_command_response_round_trip() {
         },
         RemoteCommand::Goodbye,
         RemoteCommand::SetKeepAwake { enabled: true },
+        RemoteCommand::GetLocale,
     ];
     for cmd in cases {
         let s = serde_json::to_string(&cmd).unwrap();
@@ -235,6 +236,7 @@ fn case05_remote_command_response_round_trip() {
         RemoteResponse::ServerShuttingDown {
             reason: "user closed the desktop window".into(),
         },
+        RemoteResponse::Locale { bcp47: "fr".into() },
     ];
     for resp in resp_cases {
         let s = serde_json::to_string(&resp).unwrap();

@@ -451,6 +451,10 @@ export interface TransferSettingsDto {
   preserveSelinuxContexts: boolean;
   /// Phase 24 — preserve macOS resource forks + Finder info.
   preserveResourceForks: boolean;
+  /** Phase 38 — destination dedup ladder mode. */
+  dedupMode?: string;
+  dedupHardlinkPolicy?: string;
+  dedupPrescan?: boolean;
   /// Phase 24 — fall back to AppleDouble sidecar on incompatible
   /// destination filesystems.
   appledoubleFallback: boolean;

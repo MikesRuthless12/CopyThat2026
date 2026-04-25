@@ -69,6 +69,7 @@
 
 #![allow(unsafe_code)] // Justified per-module: every fast path is a raw FFI call.
 
+pub mod dedup;
 mod dispatcher;
 mod helpers;
 mod hook;
@@ -79,6 +80,7 @@ mod reflink_path;
 pub mod sparse;
 pub mod wake_lock;
 
+pub use dedup::{DedupMode, DedupOptions, DedupOutcome, DedupStrategy, HardlinkPolicy, try_dedup};
 pub use dispatcher::fast_copy;
 pub use helpers::{
     DEFAULT_HDD_CONCURRENCY, filesystem_name, free_space_bytes, is_ssd, recommend_concurrency,

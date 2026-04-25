@@ -36,7 +36,8 @@ export type RemoteCommand =
       verify: string | null;
     }
   | { kind: "goodbye" }
-  | { kind: "set_keep_awake"; enabled: boolean };
+  | { kind: "set_keep_awake"; enabled: boolean }
+  | { kind: "get_locale" };
 
 export interface JobSummary {
   jobId: string;
@@ -108,4 +109,5 @@ export type RemoteResponse =
   | { kind: "job_loading"; job_id: string; message: string }
   | { kind: "job_ready"; job_id: string }
   | { kind: "job_state_changed"; job_id: string; state: string }
-  | { kind: "server_shutting_down"; reason: string };
+  | { kind: "server_shutting_down"; reason: string }
+  | { kind: "locale"; bcp47: string };

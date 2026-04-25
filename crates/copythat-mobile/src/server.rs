@@ -81,6 +81,11 @@ pub enum RemoteCommand {
     /// glue lives in `copythat-platform` (Phase 37 follow-up); the
     /// IPC + setting land here.
     SetKeepAwake { enabled: bool },
+    /// PWA queries the desktop for its current BCP-47 locale tag
+    /// (`"en"`, `"fr"`, `"pt-BR"`, …). The PWA loads the matching
+    /// translation bundle so the phone UI stays in sync with the
+    /// desktop's selected language. Reply: `RemoteResponse::Locale`.
+    GetLocale,
 }
 
 /// Collision-resolution action the phone replies with. Mirrors the
@@ -198,6 +203,9 @@ pub enum RemoteResponse {
     /// explicit "Desktop exited — reconnect when Copy That is
     /// running" screen instead of a generic disconnect.
     ServerShuttingDown { reason: String },
+    /// Reply to `GetLocale`. Empty string = "auto-detect"; the PWA
+    /// falls back to its own browser locale in that case.
+    Locale { bcp47: String },
 }
 
 /// Per-job summary in `RemoteResponse::Jobs`. Mirrors the shape the
@@ -264,6 +272,9 @@ pub trait RemoteControl: Send + Sync {
     /// platform syscall lives in `copythat-platform`; this trait
     /// method is a thin shim the Tauri shell wires up.
     async fn set_keep_awake(&self, enabled: bool) -> Result<(), String>;
+    /// Phase 38 — return the desktop's current BCP-47 locale tag
+    /// so the PWA can load the matching translation bundle.
+    async fn get_locale(&self) -> Result<String, String>;
 }
 
 /// Dispatch a single decoded [`RemoteCommand`] through a
@@ -302,6 +313,10 @@ pub async fn dispatch<C: RemoteControl + ?Sized>(cmd: RemoteCommand, ctl: &C) ->
         } => map_unit(ctl.start_copy(sources, destination, verify).await),
         RemoteCommand::Goodbye => RemoteResponse::Ok,
         RemoteCommand::SetKeepAwake { enabled } => map_unit(ctl.set_keep_awake(enabled).await),
+        RemoteCommand::GetLocale => match ctl.get_locale().await {
+            Ok(bcp47) => RemoteResponse::Locale { bcp47 },
+            Err(message) => RemoteResponse::Error { message },
+        },
     }
 }
 
