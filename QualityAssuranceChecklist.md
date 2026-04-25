@@ -54,15 +54,57 @@ limited time.
 
 - [ ] Run **`/ultrareview`** on the release branch. Review every
       finding the agents surface; resolve high-severity issues
-      before tagging.
+      before tagging. **Phase 38-followup-3** prep doc lives at
+      `docs/SECURITY_REVIEW_PREP.md` — read it before kicking off
+      the run so the agents focus on the right sub-phases.
 - [ ] `cargo deny check advisories` clean (see §1) — re-audit
       every `[advisories] ignore` entry. Any pre-existing entry
       whose upstream chain has shipped a fix gets removed.
+- [ ] **Phase 17b** — `cargo audit` runs on every push (ci.yml
+      `cargo-audit:` job). Confirm the `--ignore` list mirrors
+      `deny.toml`'s `[advisories] ignore` block exactly; the
+      `phase_17b_supply_chain` smoke trips on drift.
+- [ ] **Phase 17b** — `cargo vet` runs on every push (ci.yml
+      `cargo-vet:` job). Confirm the imports in
+      `supply-chain/config.toml` (Mozilla / Google / Embark /
+      Bytecode Alliance / Zcash) still resolve.
 - [ ] `cargo run -p copythat-cli --bin copythat -- verify <sample>
       --algo blake3` round-trips on a known-good file.
 - [ ] Path-safety tests run: `cargo test -p copythat-core
       --test phase_17_security` (rejects `..` traversal at the
       engine boundary).
+- [ ] **Phase 17c** — symlink-race regression: `cargo test -p
+      copythat-core --test phase_17c_symlink_race`. The Unix-gated
+      `copy_file_rejects_post_check_symlink_swap_unix` only fires
+      on Linux/macOS — run there explicitly.
+- [ ] **Phase 17d** — privilege-separation helper smoke: `cargo
+      test -p copythat-helper`. Confirm the `Hello` handshake +
+      capability-denied + path-rejection paths all surface the
+      right typed responses.
+- [ ] **Phase 17d (manual)** — drive the `retry_elevated` IPC
+      with a permission-denied source: an unprivileged Copy That
+      copy of a system-owned file should surface
+      `err-permission-denied` (today the helper runs in-process; a
+      future body fill spawns it via UAC / sudo / polkit and the
+      OS consent dialog must appear before the elevated retry runs).
+- [ ] **Phase 17e** — IPC argument audit smoke: `cargo test -p
+      copythat-ui --test phase_17e_ipc_audit`. The
+      `commands_rs_path_args_pass_through_the_gate` test walks
+      `commands.rs` and trips the build if a new path-typed
+      `#[tauri::command]` lands without the gate.
+- [ ] **Phase 17f** — log-content scrub: `cargo test -p
+      copythat-audit --test phase_17f_logging_scrub`. Then
+      manually grep production stderr after a 1 GiB copy:
+      `cargo run -p copythat-ui 2>&1 | grep -E '(/[^/ ]+){2,}'`
+      should return nothing — user paths never reach stderr.
+- [ ] **Phase 17g** — binary hardening tripwire: `cargo test -p
+      copythat-cli --test phase_17g_hardening`. Confirm the
+      release build actually gets the flags by inspecting the
+      Linux binary: `readelf -d target/release/copythat | grep
+      -E '(BIND_NOW|RELRO)'` should return non-empty rows.
+- [ ] **Phase 17h** — `/security-review` cloud pass (see §3 top
+      bullet). User-triggered + billable; not part of the
+      automated harness.
 - [ ] **Phase 37 mobile-companion sanity:**
   - [ ] `MobileSettings::desktop_peer_id` is randomized — distinct
         across two fresh installs.
@@ -209,6 +251,91 @@ Spin up the dev build, then run through:
       fall back to English where translations are still pending
       (documented in `docs/I18N_TODO.md`).
 
+### 4.11d Phase 8 partials (Phase 38-followup-3)
+
+- [ ] **Settings → General → Error prompt style** dropdown shows
+      both `Modal` and `Drawer` options; switching to `Drawer`
+      makes the next per-file error appear in the corner panel
+      rather than blocking the queue. Switching back to `Modal`
+      restores the blocking dialog. Choice survives a Settings
+      modal close + reopen and an app restart.
+- [ ] **Collision modal → Quick hash (SHA-256)** button: drag a
+      file onto a destination that already has an identically-
+      named file → modal opens → tap the SHA-256 button on each
+      side → both digests render within a second. Confirm: a
+      file modified 1 byte produces a different digest than its
+      sibling.
+- [ ] **Retry with elevated permissions** button on the error
+      modal: stage a copy of a system-protected file (e.g.
+      `C:\Windows\System32\drivers\etc\hosts`) → engine surfaces
+      `err-permission-denied` → tap "Retry with elevated
+      permissions" → today the helper runs in-process and the
+      retry surfaces the same OS-level permission error
+      (`err-permission-denied`); the future UAC / sudo / polkit
+      body fill must show the OS consent dialog first and only
+      then attempt the elevated copy.
+
+### 4.11e Phase 31b — real OS power probes (Phase 38-followup-3)
+
+- [ ] **Windows presentation mode**: enable Focus Assist
+      (Settings → System → Notifications → Focus assist → Off →
+      Alarms only). Start a 1 GiB cross-volume copy with
+      `PresentationPolicy = Pause`. Confirm: the engine pauses
+      within 5 s of Focus Assist flipping on; resumes when it
+      flips off.
+- [ ] **Windows fullscreen mode**: launch a fullscreen game or
+      a fullscreen Direct3D video. Same assertion — the engine
+      pauses while D3D fullscreen is active, resumes when you
+      Alt-Tab out.
+- [ ] **Linux DBus screensaver**: enable presentation inhibit
+      via `dbus-send --session --print-reply
+      --dest=org.freedesktop.ScreenSaver
+      /org/freedesktop/ScreenSaver
+      org.freedesktop.ScreenSaver.Inhibit string:test
+      string:'qa pass'`. Confirm: the engine pauses if the
+      policy is set to Pause; resumes when the cookie is
+      released via `UnInhibit`.
+- [ ] **macOS** — presentation/fullscreen probe stays a stub on
+      this release. The PowerPolicy dropdown should still let
+      the user pick `Pause` for documentation purposes; the
+      engine simply never sees a "presenting" event today.
+
+### 4.11f Phase 14d — scheduled jobs (Phase 38-followup-2)
+
+- [ ] **CLI render — Windows**: `copythat schedule --spec
+      sample.toml` on Windows produces a `schtasks /Create`
+      command line. Copy-paste it into an elevated cmd.exe →
+      `schtasks /Query /TN "CopyThat Scheduled Job"` shows the
+      task. Cleanup: `schtasks /Delete /TN "CopyThat Scheduled
+      Job" /F`.
+- [ ] **CLI render — macOS**: `copythat schedule --spec
+      sample.toml --host macos` produces a launchd plist. Drop
+      it into `~/Library/LaunchAgents/` →
+      `launchctl bootstrap gui/<uid> ~/Library/LaunchAgents/
+      app.copythat.scheduled-job.plist` → at the next configured
+      interval the job fires.
+- [ ] **CLI render — Linux**: `copythat schedule --spec
+      sample.toml --host linux` produces a systemd .service +
+      .timer pair. Drop into `~/.config/systemd/user/` →
+      `systemctl --user daemon-reload` → `systemctl --user
+      enable --now copythat-scheduled-job.timer` → check
+      `journalctl --user-unit copythat-scheduled-job.service`
+      for an execution at the next OnCalendar tick.
+- [ ] **Phase 17a guard**: `copythat schedule --spec spec.toml`
+      where `spec.toml` references a `..`-laden source rejects
+      with `err-path-escape` and exit code 2.
+
+### 4.11g Phase 14f — queue-while-locked (Phase 38-followup-2)
+
+- [ ] **Volume arrival**: stage a copy whose destination root is
+      an unmounted external drive. Plug the drive in →
+      `copythat queue --watch` (when the CLI subcommand lands)
+      surfaces `VolumeArrival { root }` and proceeds. Plugged-
+      out re-fires `VolumeDeparture`.
+- [ ] **Cancellation**: while `copythat queue --watch` is
+      running, kill the process with Ctrl-C → exits within 2 s
+      regardless of poll interval.
+
 ### 4.11c Phase 38 — destination dedup ladder
 
 - [ ] **Mode = AutoLadder** + same-volume copy on a reflink-
@@ -274,6 +401,28 @@ Spin up the dev build, then run through:
       Phase 13b.
 - [ ] Memory: copy a 5 M-file scan database with the Phase 19a
       scanner; peak RSS stays under 200 MiB.
+- [ ] **Phase 13c gating** — run `cargo test -p copythat-platform
+      --test phase_13c_parallel`. Confirm the parallel-chunk
+      path stays env-var-gated by default. To re-bench parallel
+      vs single-stream on new hardware:
+      `COPYTHAT_PARALLEL_CHUNKS=4 ./target/release/xtask.exe
+      bench-vs` and compare against the prior single-stream
+      run. **If parallel beats single by ≥10 % across every
+      C→C / C→D / C→E scenario**, update
+      `crates/copythat-platform/src/native/parallel.rs::requested_chunks`
+      to default-on and rerun the smoke. Otherwise keep
+      single-stream as default.
+- [ ] **Phase 13c — research vs reality** — the COMPETITOR-TEST.md
+      "Phase 38 follow-up #2" verdict says `CopyFileExW` with our
+      tuning IS optimal on Windows. Re-confirm with a 10 GiB
+      C→C and C→E pass; numbers should land within ±5 % of the
+      last committed table.
+- [ ] **Phase 17g — fat LTO release time**: `cargo build
+      --release -p copythat-cli -p copythat-ui` should still
+      complete inside the GitHub Actions 45 min cap on
+      `windows-latest`. If LTO blows the budget, downgrade to
+      `lto = "thin"` and document the regression in
+      `docs/SECURITY.md`.
 
 ## 6. Cross-platform
 
@@ -365,3 +514,76 @@ instead — useful for the per-phase review pass before merging into
 
 The review is **user-triggered and billed**; nothing in the local
 toolchain can launch it automatically.
+
+---
+
+## Appendix — automating this checklist after merge
+
+Three categories, ranked by effort:
+
+### Already fully automated (run via cargo / xtask)
+
+- §1 static analysis — `cargo fmt --all -- --check`, `cargo
+  clippy --workspace --all-targets -- -D warnings`,
+  `cargo deny check`, `pnpm svelte-check`, `pnpm tsc --noEmit`.
+- §2 per-crate test suites — `cargo test -p <crate>` per crate;
+  the smoke matrix runs via `cargo test --workspace`.
+- §3 security gates — `cargo audit` + `cargo vet` (Phase 17b),
+  the Phase 17b/c/d/e/f/g smoke tests, `xtask i18n-lint`.
+- §5 perf + benchmarks — `xtask bench-ci` + `xtask bench-vs`.
+- §9 packaging + signing — the `release.yml` workflow on tag.
+
+A future `xtask qa-automate` subcommand can run all of the above
+and emit a single pass/fail report. ~1 day of work; most of the
+plumbing already exists in `xtask/src/{bench.rs,main.rs}`.
+
+### Automatable via Playwright + tauri-driver (deferred since Phase 29)
+
+Every checkbox in §4 (`Manual UI golden path`) that involves
+clicking a button, dragging a file, or watching a modal can be
+driven by a Playwright test once the tauri-driver harness is
+standing. The harness setup is the work; once it's there, each
+§4 checkbox becomes one Playwright test file. ~3 days of setup;
+adds ~4 minutes to the CI matrix.
+
+After the harness exists, **a Claude Code session can drive
+every §4 checkbox from the workspace** without the user having
+to click anything — same as the Rust smoke tests today.
+
+### Needs Anthropic Computer Use API or physical hardware
+
+A small set of checks involve physical state that no headless
+agent can simulate:
+
+- §4.5 cross-volume sync — needs an actually-mounted second
+  volume.
+- §6 cross-platform — needs Linux + macOS + Windows hosts. The
+  GitHub Actions matrix already covers this for tests + builds;
+  manual UI golden path on each OS needs human eyes (or a
+  Computer Use session per OS).
+- §7 edge cases — VSS (locked Excel file), AC unplug, bandwidth
+  shaping under real network. The engine paths are smoke-tested,
+  but the *physical signal* (Excel really has the file open, AC
+  really got pulled) needs the host machine.
+
+Anthropic's **Computer Use API** can drive a real desktop's
+mouse + keyboard from a Claude session — same model class, but
+the agent talks screen-recognition + UI-actuation instead of
+shell + filesystem. It's a separate billing channel from Claude
+Code (you'd run it through the Anthropic API directly). When it
+makes sense to spend on it: full dress-rehearsal of §4 + §6 +
+§7 right before a release tag. For day-to-day QA, the
+Playwright harness above covers 90 % of §4 and is much cheaper.
+
+### Recommended sequence after merge
+
+1. Ship the `xtask qa-automate` subcommand. One command runs
+   §1 + §2 + §3 + §5 + §9 — call it from `release.yml` as a
+   blocking gate before tagging.
+2. Stand up the Playwright + tauri-driver harness (Phase 29
+   deferred item). Migrate §4 checkboxes one at a time as
+   their underlying flow stabilises.
+3. Reserve Computer Use sessions for the pre-tag dress
+   rehearsal on every supported OS. Once-per-release cadence
+   keeps the spend bounded.
+

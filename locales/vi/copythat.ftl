@@ -171,6 +171,8 @@ err-path-escape = Đường dẫn bị từ chối — chứa đoạn thư mục
 # MT
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
+err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+# MT
 err-io-other = Lỗi I/O không xác định
 err-sparseness-mismatch = Không thể duy trì bố cục thưa tại đích  # MT
 

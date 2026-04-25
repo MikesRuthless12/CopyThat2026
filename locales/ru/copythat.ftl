@@ -171,6 +171,8 @@ err-path-escape = Путь отклонён — содержит переход�
 # MT
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
+err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+# MT
 err-io-other = Неизвестная ошибка ввода-вывода
 err-sparseness-mismatch = Не удалось сохранить разреженную структуру в месте назначения  # MT
 

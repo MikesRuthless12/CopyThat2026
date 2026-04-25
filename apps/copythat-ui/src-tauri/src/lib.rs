@@ -258,6 +258,7 @@ pub fn run() {
             commands::clear_error_log,
             commands::error_log_export,
             commands::retry_elevated,
+            commands::quick_hash_for_collision,
             // Phase 9 — SQLite history surface.
             commands::history_search,
             commands::history_items,

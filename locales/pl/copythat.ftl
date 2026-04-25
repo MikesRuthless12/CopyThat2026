@@ -171,6 +171,8 @@ err-path-escape = Ścieżka odrzucona — zawiera segmenty katalogu nadrzędnego
 # MT
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
+err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+# MT
 err-io-other = Nieznany błąd we/wy
 err-sparseness-mismatch = Nie udało się zachować układu rozrzedzonego w miejscu docelowym  # MT
 

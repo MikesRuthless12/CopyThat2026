@@ -171,6 +171,8 @@ err-path-escape = Pad geweigerd — bevat bovenliggende map-segmenten (..) of on
 # MT
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
+err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+# MT
 err-io-other = Onbekende I/O-fout
 err-sparseness-mismatch = Sparse-indeling kon niet behouden blijven op bestemming  # MT
 

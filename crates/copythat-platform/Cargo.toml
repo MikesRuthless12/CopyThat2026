@@ -58,6 +58,9 @@ windows-sys = { version = "0.59", features = [
     # Phase 37 follow-up #2 — `SetThreadExecutionState` for the
     # mobile companion's "Keep desktop awake" toggle.
     "Win32_System_Power",
+    # Phase 31b — `SHQueryUserNotificationState` for the
+    # presentation / fullscreen probe.
+    "Win32_UI_Shell",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -105,3 +108,12 @@ path = "../../tests/smoke/phase_24_meta.rs"
 [[test]]
 name = "phase_38_dedup"
 path = "../../tests/smoke/phase_38_dedup.rs"
+
+# Phase 13c — parallel multi-chunk copy gating tripwire. Asserts
+# the env-var-gated path stays opt-in (single-stream wins on every
+# measured topology), the min-file-size threshold + default chunk
+# count haven't drifted, and the regression conclusions are
+# documented in COMPETITOR-TEST.md.
+[[test]]
+name = "phase_13c_parallel"
+path = "../../tests/smoke/phase_13c_parallel.rs"

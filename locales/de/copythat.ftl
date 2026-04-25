@@ -171,6 +171,8 @@ err-path-escape = Pfad abgelehnt — enthält übergeordnete Verzeichnissegmente
 # MT
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
+err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+# MT
 err-io-other = Unbekannter E/A-Fehler
 err-sparseness-mismatch = Sparse-Layout konnte am Ziel nicht beibehalten werden  # MT
 
