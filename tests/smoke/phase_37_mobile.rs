@@ -1,31 +1,30 @@
-//! Phase 37 smoke — desktop-side mobile companion foundation.
+//! Phase 37 smoke — desktop-side mobile companion (PeerJS edition).
 //!
-//! Five cases covering the protocol primitives + the in-process
-//! HTTP pairing handshake:
+//! Six cases covering the protocol primitives + the wire vocabulary:
 //!
 //! 1. Pairing-token URL round-trips through `to_url` + `parse`
 //!    without losing a byte.
-//! 2. SAS fingerprint is deterministic + identical on both sides
-//!    of an X25519 ECDH exchange (the human reads the same 4
-//!    emojis on phone and desktop).
-//! 3. QR encoder produces a valid PNG signature + an `IDAT` chunk.
-//! 4. End-to-end pairing handshake against a live `PairServer`:
-//!    the smoke test plays the phone, sends `/pair/begin` then
-//!    `/pair/complete`, asserts the desktop committed a
-//!    `PairingRecord` matching the announced label + push target.
-//! 5. All 15 Phase 37 Fluent keys present in every one of the 18
+//! 2. SAS fingerprint is deterministic + sensitive to either
+//!    pubkey changing (so an attacker who substitutes one of the
+//!    keys produces different emojis on at least one screen).
+//! 3. QR encoder produces a valid PNG signature + an `IDAT` chunk
+//!    given a `cthat-pair://<peer-id>?sas=…` URL.
+//! 4. `mint_peer_id` yields distinct ids on consecutive calls.
+//! 5. `RemoteCommand` + `RemoteResponse` round-trip through serde
+//!    for every variant the data channel currently carries.
+//! 6. All Phase 37 Fluent keys present in every one of the 18
 //!    locales.
 
 use std::fs;
 use std::path::PathBuf;
 
 use copythat_mobile::pairing::{
-    PAIRING_FINGERPRINT_BYTES, PAIRING_TOKEN_BYTES, PairingToken, SasFingerprint,
-    sas_fingerprint_from_shared_secret, shared_secret_from_token,
+    PAIRING_SAS_SEED_BYTES, PairingToken, SasFingerprint, sas_fingerprint, sas_fingerprint_to_emoji,
 };
-use copythat_mobile::{PairServer, PushTarget, generate_qr_png};
-use serde_json::json;
-use x25519_dalek::{PublicKey, StaticSecret};
+use copythat_mobile::server::{
+    CollisionAction, HistoryRow, JobSummary, RemoteCommand, RemoteResponse,
+};
+use copythat_mobile::{generate_qr_png, mint_peer_id};
 
 const PHASE_37_KEYS: &[&str] = &[
     "settings-mobile-heading",
@@ -52,55 +51,48 @@ const LOCALES: &[&str] = &[
 
 #[test]
 fn case01_token_url_round_trips() {
-    let mut secret_bytes = [0u8; 32];
-    getrandom::fill(&mut secret_bytes).unwrap();
-    let secret = StaticSecret::from(secret_bytes);
-    let pubkey = PublicKey::from(&secret);
-
-    let token = PairingToken::new("desktop.lan", 51234, &pubkey).expect("mint");
+    let token = PairingToken::new("DESKTOP-PEER-XYZ").expect("mint");
     let url = token.to_url();
-    assert!(url.starts_with("cthat-pair://"));
     let parsed = PairingToken::parse(&url).expect("parse");
-    assert_eq!(parsed.host, token.host);
-    assert_eq!(parsed.port, token.port);
-    assert_eq!(parsed.token_bytes.len(), PAIRING_TOKEN_BYTES);
-    assert_eq!(parsed.fingerprint_bytes.len(), PAIRING_FINGERPRINT_BYTES);
+    assert_eq!(parsed.peer_id, token.peer_id);
+    assert_eq!(parsed.sas_seed.len(), PAIRING_SAS_SEED_BYTES);
     assert_eq!(parsed, token);
+    assert!(url.starts_with("cthat-pair://"));
+    assert!(url.contains("?sas="));
 }
 
 #[test]
-fn case02_sas_matches_on_both_sides_of_dh() {
-    let mut a = [0u8; 32];
-    let mut b = [0u8; 32];
-    getrandom::fill(&mut a).unwrap();
-    getrandom::fill(&mut b).unwrap();
-    let alice = StaticSecret::from(a);
-    let bob = StaticSecret::from(b);
-    let alice_pub = PublicKey::from(&alice);
-    let bob_pub = PublicKey::from(&bob);
+fn case02_sas_changes_when_either_pubkey_changes() {
+    let seed = [0xAA; 32];
+    let desktop_pub = [1u8; 32];
+    let phone_pub = [2u8; 32];
 
-    let (alice_secret, alice_sas) = shared_secret_from_token(&alice, &bob_pub);
-    let (bob_secret, bob_sas) = shared_secret_from_token(&bob, &alice_pub);
+    let baseline = sas_fingerprint(&seed, &desktop_pub, &phone_pub);
+    // Re-deriving with the same inputs must produce the same SAS —
+    // this is the property the user relies on when they read both
+    // screens.
+    let again = sas_fingerprint(&seed, &desktop_pub, &phone_pub);
+    assert_eq!(baseline, again);
 
-    assert_eq!(alice_secret, bob_secret, "shared secret diverged");
-    assert_eq!(alice_sas, bob_sas, "SAS fingerprint diverged");
+    // Swapping either pubkey must change the SAS so an attacker
+    // who substitutes one of them stands out visually.
+    let mut tampered_phone = phone_pub;
+    tampered_phone[0] ^= 0xFF;
+    let with_tampered_phone = sas_fingerprint(&seed, &desktop_pub, &tampered_phone);
+    assert_ne!(baseline, with_tampered_phone);
 
-    let direct = sas_fingerprint_from_shared_secret(&alice_secret);
-    assert_eq!(direct, alice_sas);
+    let mut tampered_desktop = desktop_pub;
+    tampered_desktop[0] ^= 0xFF;
+    let with_tampered_desktop = sas_fingerprint(&seed, &tampered_desktop, &phone_pub);
+    assert_ne!(baseline, with_tampered_desktop);
 
-    let glyphs = alice_sas.as_emoji_string();
-    assert_eq!(
-        glyphs.split_whitespace().count(),
-        4,
-        "expected 4 SAS emojis, got `{glyphs}`"
-    );
+    let glyphs = sas_fingerprint_to_emoji(&baseline);
+    assert_eq!(glyphs.len(), 4);
 }
 
 #[test]
 fn case03_qr_encoder_emits_valid_png() {
-    let secret = StaticSecret::from([0xAB; 32]);
-    let pubkey = PublicKey::from(&secret);
-    let token = PairingToken::new("phone.local", 9000, &pubkey).expect("mint");
+    let token = PairingToken::new("phone-connect-target").expect("mint");
     let png = generate_qr_png(&token.to_url(), 4).expect("qr");
     assert!(
         png.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]),
@@ -110,100 +102,147 @@ fn case03_qr_encoder_emits_valid_png() {
     assert!(png.windows(4).any(|w| w == b"IEND"), "missing IEND chunk");
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn case04_full_pairing_handshake_round_trips() {
-    let (mut server, token) = PairServer::default().start().await.expect("start");
-    let addr = server.addr();
-
-    // Phone side: mint our own X25519 keypair.
-    let mut phone_secret_bytes = [0u8; 32];
-    getrandom::fill(&mut phone_secret_bytes).unwrap();
-    let phone_secret = StaticSecret::from(phone_secret_bytes);
-    let phone_public = PublicKey::from(&phone_secret);
-
-    let token_b32 = base32::encode(base32::Alphabet::Crockford, &token.token_bytes);
-
-    let client = reqwest::Client::new();
-    let begin = client
-        .post(format!("http://{addr}/pair/begin"))
-        .json(&json!({
-            "phone_pubkey": hex_encode(phone_public.as_bytes()),
-            "device_label": "Mike's iPhone",
-            "token": token_b32,
-        }))
-        .send()
-        .await
-        .expect("/pair/begin send");
-    assert_eq!(begin.status(), 200);
-    let begin_body: serde_json::Value = begin.json().await.expect("/pair/begin json");
-    let desktop_pub_hex = begin_body["desktop_pubkey"]
-        .as_str()
-        .expect("desktop_pubkey");
-    let desktop_pub_bytes = hex_decode(desktop_pub_hex).expect("hex decode");
-    let desktop_pub: [u8; 32] = desktop_pub_bytes.try_into().expect("len 32");
-    let desktop_pub = PublicKey::from(desktop_pub);
-
-    // Server should now expose the SAS fingerprint to the desktop UI.
-    let server_sas = server
-        .pending_sas()
-        .await
-        .expect("server has a pending pair");
-    let phone_shared = phone_secret.diffie_hellman(&desktop_pub);
-    let phone_sas = sas_fingerprint_from_shared_secret(phone_shared.as_bytes());
-    assert_eq!(server_sas, phone_sas, "SAS divergence end-to-end");
-
-    // Phone side: the human matches the SAS, then completes the
-    // handshake with an FCM token + "phone says paired".
-    let push_target = PushTarget::Fcm {
-        token: "fake-fcm-token".into(),
-    };
-    let complete = client
-        .post(format!("http://{addr}/pair/complete"))
-        .json(&json!({
-            "token": token_b32,
-            "push_target": push_target,
-        }))
-        .send()
-        .await
-        .expect("/pair/complete send");
-    assert_eq!(complete.status(), 200);
-    let complete_body: serde_json::Value = complete.json().await.expect("/pair/complete json");
-    assert_eq!(complete_body["paired"], serde_json::Value::Bool(true));
-
-    let record = server.committed().await.expect("commit landed");
-    assert_eq!(record.label, "Mike's iPhone");
-    assert_eq!(record.phone_public_key, *phone_public.as_bytes());
-    assert!(record.push_target.is_some());
-
-    server.shutdown().await.expect("shutdown");
-
-    let _ = SasFingerprint([0; 4]); // ensure type re-exports compile
+#[test]
+fn case04_mint_peer_id_yields_distinct_ids() {
+    let a = mint_peer_id().expect("a");
+    let b = mint_peer_id().expect("b");
+    assert_ne!(a, b);
+    assert!(!a.is_empty());
+    // Crockford-base32 of 20 bytes is 32 chars, no padding.
+    assert_eq!(a.len(), 32);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn case05_unauthorized_token_is_rejected() {
-    let (mut server, _token) = PairServer::default().start().await.expect("start");
-    let addr = server.addr();
+#[test]
+fn case05_remote_command_response_round_trip() {
+    // Spot-check one variant per command shape so a serde rename
+    // breaks the test, plus the streaming GlobalsTick that the PWA
+    // home screen subscribes to for live stats.
+    let cases: Vec<RemoteCommand> = vec![
+        RemoteCommand::Hello {
+            phone_pubkey_hex: "ab".repeat(32),
+            device_label: "Mike's iPhone".into(),
+        },
+        RemoteCommand::ListJobs,
+        RemoteCommand::PauseJob {
+            job_id: "j1".into(),
+        },
+        RemoteCommand::ResumeJob {
+            job_id: "j1".into(),
+        },
+        RemoteCommand::CancelJob {
+            job_id: "j1".into(),
+        },
+        RemoteCommand::ResolveCollision {
+            prompt_id: "p1".into(),
+            action: CollisionAction::OverwriteAll,
+        },
+        RemoteCommand::Globals,
+        RemoteCommand::RecentHistory { limit: 25 },
+        RemoteCommand::RerunHistory { row_id: 42 },
+        RemoteCommand::SecureDelete {
+            paths: vec!["C:/secret.bin".into()],
+            method: "dod3".into(),
+        },
+        RemoteCommand::StartCopy {
+            sources: vec!["C:/src".into()],
+            destination: "D:/dst".into(),
+            verify: Some("blake3".into()),
+        },
+        RemoteCommand::Goodbye,
+        RemoteCommand::SetKeepAwake { enabled: true },
+    ];
+    for cmd in cases {
+        let s = serde_json::to_string(&cmd).unwrap();
+        let back: RemoteCommand = serde_json::from_str(&s).unwrap();
+        assert_eq!(cmd, back, "command round-trip failed: {s}");
+    }
 
-    let mut phone_secret_bytes = [0u8; 32];
-    getrandom::fill(&mut phone_secret_bytes).unwrap();
-    let phone_secret = StaticSecret::from(phone_secret_bytes);
-    let phone_public = PublicKey::from(&phone_secret);
+    let resp_cases: Vec<RemoteResponse> = vec![
+        RemoteResponse::HelloAck { paired: true },
+        RemoteResponse::Jobs {
+            jobs: vec![JobSummary {
+                job_id: "j1".into(),
+                kind: "copy".into(),
+                state: "running".into(),
+                src: "C:/src".into(),
+                dst: "D:/dst".into(),
+                bytes_done: 1024,
+                bytes_total: 4096,
+                rate_bps: 800_000,
+            }],
+        },
+        RemoteResponse::History {
+            rows: vec![HistoryRow {
+                row_id: 7,
+                kind: "copy".into(),
+                status: "succeeded".into(),
+                started_at_ms: 1_700_000_000_000,
+                finished_at_ms: Some(1_700_000_010_000),
+                src_root: "C:/src".into(),
+                dst_root: "D:/dst".into(),
+                total_bytes: 1_048_576,
+                files_ok: 12,
+                files_failed: 0,
+            }],
+        },
+        RemoteResponse::Ok,
+        RemoteResponse::Error {
+            message: "boom".into(),
+        },
+        RemoteResponse::JobProgress {
+            job_id: "j1".into(),
+            bytes_done: 100,
+            bytes_total: 200,
+            rate_bps: 5_000_000,
+        },
+        RemoteResponse::JobCompleted {
+            job_id: "j1".into(),
+            bytes: 4_096,
+        },
+        RemoteResponse::JobFailed {
+            job_id: "j1".into(),
+            reason: "permission denied".into(),
+        },
+        RemoteResponse::GlobalsTick {
+            bytes_done: 1_000_000,
+            bytes_total: 5_000_000,
+            files_done: 5,
+            files_total: 25,
+            rate_bps: 12_000_000,
+            copy_files: 3,
+            move_files: 1,
+            secure_delete_files: 1,
+        },
+        RemoteResponse::FileTick {
+            job_id: "j1".into(),
+            action: "copying".into(),
+            src: "C:/src/big.iso".into(),
+            dst: "D:/dst/big.iso".into(),
+            bytes_done: 8_388_608,
+            bytes_total: 16_777_216,
+        },
+        RemoteResponse::JobLoading {
+            job_id: "j1".into(),
+            message: "Scanning source tree…".into(),
+        },
+        RemoteResponse::JobReady {
+            job_id: "j1".into(),
+        },
+        RemoteResponse::JobStateChanged {
+            job_id: "j1".into(),
+            state: "paused".into(),
+        },
+        RemoteResponse::ServerShuttingDown {
+            reason: "user closed the desktop window".into(),
+        },
+    ];
+    for resp in resp_cases {
+        let s = serde_json::to_string(&resp).unwrap();
+        let back: RemoteResponse = serde_json::from_str(&s).unwrap();
+        assert_eq!(resp, back, "response round-trip failed: {s}");
+    }
 
-    let client = reqwest::Client::new();
-    let begin = client
-        .post(format!("http://{addr}/pair/begin"))
-        .json(&json!({
-            "phone_pubkey": hex_encode(phone_public.as_bytes()),
-            "device_label": "Attacker",
-            "token": base32::encode(base32::Alphabet::Crockford, &[0u8; 32]),
-        }))
-        .send()
-        .await
-        .expect("send");
-    assert_eq!(begin.status(), 401, "wrong token must be rejected");
-
-    server.shutdown().await.expect("shutdown");
+    let _ = SasFingerprint([0; 4]);
 }
 
 #[test]
@@ -223,31 +262,6 @@ fn case06_phase_37_fluent_keys_present_in_every_locale() {
             );
         }
     }
-}
-
-// ---------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------
-
-fn hex_encode(bytes: &[u8]) -> String {
-    let mut s = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
-        use std::fmt::Write;
-        let _ = write!(&mut s, "{b:02x}");
-    }
-    s
-}
-
-fn hex_decode(s: &str) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 {
-        return None;
-    }
-    let mut out = Vec::with_capacity(s.len() / 2);
-    for i in 0..(s.len() / 2) {
-        let pair = &s[i * 2..i * 2 + 2];
-        out.push(u8::from_str_radix(pair, 16).ok()?);
-    }
-    Some(out)
 }
 
 fn locate_locales_dir() -> Option<PathBuf> {

@@ -68,6 +68,16 @@ copythat-audit = { path = "../../../crates/copythat-audit", version = "1" }
 # runner builds a `CopyThatCryptHook` from `Settings::crypt` and
 # attaches it to every queued job's `CopyOptions::transform`.
 copythat-crypt = { path = "../../../crates/copythat-crypt", version = "1" }
+# Phase 37 follow-up — desktop-side mobile companion. AppState owns
+# a MobileRegistry; `mobile_commands` IPC handlers spin up the
+# pair-server, return the QR PNG bytes, complete the SAS, and
+# dispatch APNs / FCM pushes when a job finishes.
+copythat-mobile = { path = "../../../crates/copythat-mobile", version = "1" }
+# Phase 37 follow-up — `RemoteControl` is async-trait. The impl
+# in `mobile_commands.rs` re-applies the macro on the impl block,
+# so the host crate needs the dep too.
+async-trait = "0.1"
+base32 = "0.5"
 # Phase 35 — `secrecy::SecretString` wraps the passphrase from the
 # Settings → Encryption prompt so it never leaks into debug / serde
 # output.
