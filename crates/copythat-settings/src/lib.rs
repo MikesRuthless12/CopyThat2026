@@ -115,6 +115,15 @@ pub struct Settings {
     /// behaviour change until the user explicitly opts in via
     /// Settings → Transfer. See [`CryptSettings`].
     pub crypt: CryptSettings,
+    /// Phase 37 — mobile-companion pairing + push-notification
+    /// settings. Off by default; the runner only spins up the
+    /// pair-server when the user toggles `pair_enabled` in Settings
+    /// → Mobile. See [`MobileSettings`]. Provider credentials
+    /// (`apns_p8_pem` / `fcm_service_account_json`) are stored
+    /// here for now; the Phase 37 follow-up that wires the
+    /// keychain-backed APNs / FCM signers will move them to the OS
+    /// keychain.
+    pub mobile: MobileSettings,
 }
 
 impl Settings {
@@ -1869,6 +1878,91 @@ impl Default for CryptSettings {
             compression_extra_deny: Vec::new(),
         }
     }
+}
+
+// ---------------------------------------------------------------------
+// Phase 37 — mobile companion (MobileSettings)
+// ---------------------------------------------------------------------
+
+/// Persisted mobile-companion preferences. Mirrors
+/// `copythat_mobile::MobileSettings` but with stringly-typed fields
+/// so this crate stays free of the reqwest / x25519 dep tree the
+/// mobile crate carries. The Tauri runner converts on demand.
+///
+/// Off by default — a fresh install ships with `pair_enabled =
+/// false` and the runner skips registering the desktop peer-id
+/// with PeerJS until the user flips the toggle on in Settings →
+/// Mobile.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct MobileSettings {
+    /// Master toggle for new-device enrolment. While `true`, the
+    /// Settings → Mobile panel shows the pairing QR + accepts new
+    /// pairing handshakes.
+    pub pair_enabled: bool,
+    /// "Always connect to mobile app" — when `true`, the runner
+    /// auto-registers the persisted `desktop_peer_id` with the
+    /// PeerJS broker on every launch so already-paired phones can
+    /// connect anytime the desktop is running.
+    pub auto_connect: bool,
+    /// PeerJS broker URL. Empty string means the public default
+    /// (`0.peerjs.com`); production deployments override with a
+    /// self-hosted broker.
+    pub peerjs_broker: String,
+    /// Stable PeerJS peer-id the desktop registers under. Minted
+    /// once via `copythat_mobile::mint_peer_id` and persisted so
+    /// already-paired phones can reconnect without re-pairing.
+    pub desktop_peer_id: String,
+    /// Persisted records of every device that has completed
+    /// pairing.
+    pub pairings: Vec<MobilePairingEntry>,
+    /// PEM-encoded `.p8` ECDSA P-256 private key Apple issues for
+    /// APNs token-based authentication. Empty string disables APNs
+    /// pushes. The Phase 37 follow-up moves this to the OS keychain;
+    /// holding it in TOML in the meantime keeps the runner wiring
+    /// simple while the per-platform keychain helpers ship.
+    pub apns_p8_pem: String,
+    /// Apple-issued team identifier (10 chars).
+    pub apns_team_id: String,
+    /// Apple-issued key identifier (10 chars).
+    pub apns_key_id: String,
+    /// Google service-account JSON for FCM HTTP v1. Empty string
+    /// disables FCM pushes.
+    pub fcm_service_account_json: String,
+}
+
+/// One persisted pairing record. Mirrors
+/// `copythat_mobile::PairingRecord`; the binary X25519 public key is
+/// hex-encoded so settings TOML stays human-readable + cross-tool
+/// compatible.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct MobilePairingEntry {
+    pub label: String,
+    /// Lowercase hex-encoded 32-byte X25519 public key.
+    pub phone_public_key_hex: String,
+    /// Unix-epoch seconds when the pairing was committed.
+    pub paired_at: i64,
+    /// Optional push target. Schema mirrors
+    /// `copythat_mobile::PushTarget`'s tagged-enum wire form.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub push_target: Option<MobilePushTarget>,
+}
+
+/// Tagged push-target sub-record persisted in the `pairings` array.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum MobilePushTarget {
+    Apns {
+        token: String,
+    },
+    Fcm {
+        token: String,
+    },
+    /// Smoke-test only.
+    StubEndpoint {
+        url: String,
+    },
 }
 
 // ---------------------------------------------------------------------

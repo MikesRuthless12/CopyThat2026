@@ -641,6 +641,118 @@ pub struct SettingsDto {
     /// round-trip cleanly when a newer UI reads them.
     #[serde(default)]
     pub crypt: CryptDto,
+    /// Phase 37 — mobile companion (pairing + push). Marked
+    /// `#[serde(default)]` so older persisted settings round-trip
+    /// cleanly when a newer UI reads them.
+    #[serde(default)]
+    pub mobile: MobileDto,
+}
+
+/// Phase 37 — wire form of `copythat_settings::MobileSettings`.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileDto {
+    pub pair_enabled: bool,
+    pub auto_connect: bool,
+    pub peerjs_broker: String,
+    pub desktop_peer_id: String,
+    pub pairings: Vec<MobilePairingEntryDto>,
+    pub apns_p8_pem: String,
+    pub apns_team_id: String,
+    pub apns_key_id: String,
+    pub fcm_service_account_json: String,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobilePairingEntryDto {
+    pub label: String,
+    pub phone_public_key_hex: String,
+    pub paired_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub push_target: Option<MobilePushTargetDto>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum MobilePushTargetDto {
+    Apns { token: String },
+    Fcm { token: String },
+    StubEndpoint { url: String },
+}
+
+impl From<copythat_settings::MobileSettings> for MobileDto {
+    fn from(s: copythat_settings::MobileSettings) -> Self {
+        Self {
+            pair_enabled: s.pair_enabled,
+            auto_connect: s.auto_connect,
+            peerjs_broker: s.peerjs_broker,
+            desktop_peer_id: s.desktop_peer_id,
+            pairings: s.pairings.into_iter().map(Into::into).collect(),
+            apns_p8_pem: s.apns_p8_pem,
+            apns_team_id: s.apns_team_id,
+            apns_key_id: s.apns_key_id,
+            fcm_service_account_json: s.fcm_service_account_json,
+        }
+    }
+}
+
+impl From<MobileDto> for copythat_settings::MobileSettings {
+    fn from(d: MobileDto) -> Self {
+        Self {
+            pair_enabled: d.pair_enabled,
+            auto_connect: d.auto_connect,
+            peerjs_broker: d.peerjs_broker,
+            desktop_peer_id: d.desktop_peer_id,
+            pairings: d.pairings.into_iter().map(Into::into).collect(),
+            apns_p8_pem: d.apns_p8_pem,
+            apns_team_id: d.apns_team_id,
+            apns_key_id: d.apns_key_id,
+            fcm_service_account_json: d.fcm_service_account_json,
+        }
+    }
+}
+
+impl From<copythat_settings::MobilePairingEntry> for MobilePairingEntryDto {
+    fn from(s: copythat_settings::MobilePairingEntry) -> Self {
+        Self {
+            label: s.label,
+            phone_public_key_hex: s.phone_public_key_hex,
+            paired_at: s.paired_at,
+            push_target: s.push_target.map(Into::into),
+        }
+    }
+}
+
+impl From<MobilePairingEntryDto> for copythat_settings::MobilePairingEntry {
+    fn from(d: MobilePairingEntryDto) -> Self {
+        Self {
+            label: d.label,
+            phone_public_key_hex: d.phone_public_key_hex,
+            paired_at: d.paired_at,
+            push_target: d.push_target.map(Into::into),
+        }
+    }
+}
+
+impl From<copythat_settings::MobilePushTarget> for MobilePushTargetDto {
+    fn from(s: copythat_settings::MobilePushTarget) -> Self {
+        match s {
+            copythat_settings::MobilePushTarget::Apns { token } => Self::Apns { token },
+            copythat_settings::MobilePushTarget::Fcm { token } => Self::Fcm { token },
+            copythat_settings::MobilePushTarget::StubEndpoint { url } => Self::StubEndpoint { url },
+        }
+    }
+}
+
+impl From<MobilePushTargetDto> for copythat_settings::MobilePushTarget {
+    fn from(d: MobilePushTargetDto) -> Self {
+        match d {
+            MobilePushTargetDto::Apns { token } => Self::Apns { token },
+            MobilePushTargetDto::Fcm { token } => Self::Fcm { token },
+            MobilePushTargetDto::StubEndpoint { url } => Self::StubEndpoint { url },
+        }
+    }
 }
 
 /// Phase 33 — wire form of `copythat_settings::MountSettings`.
@@ -1585,6 +1697,7 @@ impl From<&copythat_settings::Settings> for SettingsDto {
             mount: s.mount.clone().into(),
             audit: s.audit.clone().into(),
             crypt: s.crypt.clone().into(),
+            mobile: s.mobile.clone().into(),
         }
     }
 }
@@ -1780,6 +1893,7 @@ impl SettingsDto {
         s.mount = self.mount.into();
         s.audit = self.audit.into();
         s.crypt = self.crypt.into();
+        s.mobile = self.mobile.into();
 
         s
     }
