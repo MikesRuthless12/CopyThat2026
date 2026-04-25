@@ -1131,3 +1131,21 @@ cli-config-set = Set { $key } = { $value }  # MT
 cli-config-reset = Reset { $key } to default  # MT
 cli-config-unknown-key = Unknown config key: { $key }  # MT
 cli-completions-emitted = Shell completions for { $shell } printed to stdout  # MT
+
+# Phase 37 — desktop-side mobile companion. MT-flagged English
+# strings pending human translation; tracked in docs/I18N_TODO.md.
+settings-mobile-heading = Mobile companion  # MT
+settings-mobile-hint = Pair an iPhone or Android phone to browse history, kick off saved profiles and Phase 36 jobspecs, and receive completion notifications.  # MT
+settings-mobile-pair-toggle = Allow new pairings  # MT
+settings-mobile-pair-active = Pair-server active — scan the QR with the Copy That mobile app  # MT
+settings-mobile-pair-button = Start pairing  # MT
+settings-mobile-revoke-button = Revoke  # MT
+settings-mobile-no-pairings = No paired devices yet  # MT
+settings-mobile-pair-port = Bind port (0 = pick a free one)  # MT
+pair-sas-prompt = Both screens should show the same four emojis. Tap Match if they agree.  # MT
+pair-sas-confirm = Match  # MT
+pair-sas-reject = Mismatch — cancel  # MT
+pair-toast-success = Paired with { $device }  # MT
+pair-toast-failed = Pairing failed: { $reason }  # MT
+push-toast-sent = Push sent to { $device }  # MT
+push-toast-failed = Push to { $device } failed: { $reason }  # MT

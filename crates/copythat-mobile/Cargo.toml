@@ -1,0 +1,111 @@
+[package]
+name = "copythat-mobile"
+description = "Phase 37 — desktop-side mobile companion: pairing protocol (QR + SAS), local-network axum server, push-notification dispatch, persistent pairing records. The actual iOS / Android Tauri Mobile target lands in a Phase 37 follow-up that runs from a macOS host (iOS) and a workstation with the Android SDK installed (Android)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Phase 37 — local-network HTTP server for the desktop side of the
+# pairing handshake. axum 0.8 keeps the request graph type-safe and
+# composes cleanly with the same tokio runtime the engine + Tauri
+# shell already use. MIT.
+axum = { version = "0.8", default-features = false, features = [
+    "http1",
+    "json",
+    "tokio",
+] }
+# Phase 37 — async TLS for the pair-server. rustls keeps OpenSSL out
+# of the dep tree; aws-lc-rs is the constant-time crypto provider
+# Tauri 2 already pulls in (the same provider age Phase 35 picked).
+# MIT/Apache-2.0/ISC.
+rustls = { version = "0.23", default-features = false, features = [
+    "aws-lc-rs",
+    "tls12",
+] }
+# Phase 37 — X25519 ECDH for the pairing key exchange. Same crypto
+# `age` already brings in transitively; explicit dep here keeps the
+# pairing protocol surface visible. BSD-3-Clause.
+x25519-dalek = { version = "2", default-features = false, features = [
+    "static_secrets",
+    "zeroize",
+] }
+# Phase 37 — SHA-256 for the SAS fingerprint and the wire-format
+# token check. MIT/Apache-2.0.
+sha2 = "0.10"
+# Phase 37 — pairing tokens are base32 (Crockford alphabet for
+# clean QR rendering). MIT/Apache-2.0.
+base32 = "0.5"
+# Phase 37 — QR encoder for the pairing payload. Pure Rust, MIT.
+qrcodegen = "1"
+# Phase 37 — secure random for pairing secrets + ephemeral keypair
+# nonces. The workspace already pulls getrandom transitively; the
+# explicit dep here makes the random surface auditable.
+# MIT/Apache-2.0.
+getrandom = "0.3"
+# Phase 37 — push notifications HTTP client. Reuses the same
+# rustls-only stack as copythat-cloud so we don't drag OpenSSL into
+# the dep tree. MIT/Apache-2.0.
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
+# Phase 37 — `Identity` keypair zeroize on drop for any secret
+# material. MIT/Apache-2.0.
+zeroize = "1"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# Phase 37 — `NotifyDispatcher` trait carries `async fn`. Pinned to
+# the same major axum already brings in transitively. MIT/Apache-2.0.
+async-trait = "0.1"
+tokio = { version = "1", features = [
+    "macros",
+    "net",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+toml = "0.8"
+serde_json = "1"
+# Phase 37 smoke test plays the phone side end-to-end; dev-deps
+# below mirror the production-side stack so the test source can
+# import them directly without going through copythat-mobile's
+# internals. All MIT/Apache-2.0/BSD-3 — same allowlist as the
+# regular deps.
+x25519-dalek = { version = "2", default-features = false, features = [
+    "static_secrets",
+    "zeroize",
+] }
+getrandom = "0.3"
+base32 = "0.5"
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
+tokio = { version = "1", features = [
+    "macros",
+    "net",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+    "test-util",
+    "io-util",
+] }
+
+[[test]]
+name = "phase_37_mobile"
+path = "../../tests/smoke/phase_37_mobile.rs"
