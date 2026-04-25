@@ -106,6 +106,13 @@ workloads.
 - **Decryption is symmetric**: `copythat_crypt::decrypted_reader` accepts a passphrase, X25519 secret key, or SSH private key — same `Identity` bag, same age-format input. The runner's auto-decrypt-on-copy-FROM-`.age` flow lands in a Phase 35 follow-up.
 - **Settings → Transfer → Encryption + Compression** carries the mode pickers, recipients-file path, and the level slider. The passphrase modal flow (collect at copy-start, hold in `secrecy::SecretString` for the duration of the run) is deferred to a Phase 35 follow-up — today the runner falls back to plain copy when the user selects `passphrase` mode and logs the reason.
 
+### Mobile companion (Phase 37 — desktop-side foundation)
+
+- **Pairing protocol.** Settings → Mobile shows a QR code; the phone scans it and pairs over the local network. URL grammar `cthat-pair://<host>:<port>?token=<base32-256>&fingerprint=<base32-256>` carries the random pairing secret + the SHA-256 fingerprint of the desktop's ephemeral X25519 public key.
+- **SAS short-authentication-string verification.** Both desktop and phone derive the same four emojis from a SHA-256 of the X25519 shared secret; the user reads them off both screens and taps "Match" on the phone before the long-term keypair commits. Defeats LAN MITM attempts that don't have the matching X25519 secret.
+- **Push notifications via APNs (iOS) and FCM (Android).** `NotifyDispatcher` async-trait drives an `HttpDispatcher` that POSTs against the provider endpoints. Real provider-token signing (APNs ed25519 JWT, FCM Google service account JWT) lands in the Phase 37 follow-up; the call surface is wired today.
+- **The actual iOS + Android Tauri Mobile target** (Xcode build for iPhone / iPad, Android emulator + APK) and the Settings → Mobile Svelte panel are documented as a Phase 37 follow-up — both need build hosts that aren't available from the desktop-only workstation today (macOS for iOS, Android SDK for the emulator).
+
 ### `copythat` CLI (Phase 36)
 
 - **`copythat <SUBCOMMAND>`** — a real command-line interface suitable for CI/CD pipelines, automation scripts, and headless servers. Top-level commands: `copy`, `move`, `sync`, `shred`, `verify`, `history`, `stack`, `remote`, `mount`, `audit`, `plan`, `apply`, `version`, `config`, and `completions`.

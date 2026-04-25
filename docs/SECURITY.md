@@ -370,6 +370,48 @@ sensitive flags survive a copy. The threat model:
   x25519-dalek, scrypt, sha2, hmac, hkdf) are all RustCrypto-
   ecosystem MIT/Apache-2.0.
 
+## Phase 37 — desktop-side mobile companion
+
+Phase 37 introduces a local-network pair-server on the desktop. The
+trust boundary expands in three narrow ways, each gated by a
+deliberate design choice:
+
+- **Pair-server visibility.** The server binds to `127.0.0.1` for
+  the Phase 37 smoke test and follow-up local development; the LAN
+  bind happens behind an explicit Settings → Mobile toggle that the
+  runner reads at server-start time, never auto-on. The bound port
+  is randomized (OS-picked ephemeral) and every `/pair/*` route
+  rejects requests whose 256-bit token doesn't match the QR-encoded
+  one with `401 UNAUTHORIZED`. Token compare is constant-time.
+
+- **Pairing protocol.** The QR carries a 256-bit random pairing
+  token + the SHA-256 fingerprint of the desktop's ephemeral X25519
+  public key. The phone scans the QR while physically near the
+  desktop — no remote attacker can observe both at once. After the
+  X25519 Diffie-Hellman exchange, both sides derive a four-emoji
+  Short Authentication String from `SHA-256(shared_secret)[0..4]`;
+  the user reads the four glyphs off both screens and taps "Match"
+  on the phone before the long-term keypair commits. A LAN MITM
+  attacker cannot forge a public key whose Diffie-Hellman product
+  produces the same four emojis without breaking X25519 — 32 bits
+  of human-verifiable entropy is enough to make any online MITM
+  stand out the moment the user looks at both screens.
+
+- **Push-notification dispatch.** `NotifyDispatcher` async-trait
+  drives an HTTP POST against a per-target URL (APNs, FCM, or an
+  arbitrary `StubEndpoint` for tests). The Phase 37 default
+  `HttpDispatcher` posts unsigned bodies — sufficient for the smoke
+  test's localhost mock, NOT sufficient for production. Real APNs
+  ed25519 JWT and FCM Google service-account JWT signing land in
+  the Phase 37 follow-up; until that ships, the runner is wired to
+  refuse production push targets at config-validation time.
+
+What Phase 37 deliberately does not change: no mobile-as-source /
+sync-to-photo-library / e2e-encrypted file transfer surfaces are
+opened. Those need a file-provider extension on iOS and scoped
+storage on Android, which dramatically expand the trust boundary;
+they're documented as Phase 41+ work.
+
 ## Phase 36 — `copythat` CLI surface
 
 The Phase 36 CLI changes the trust boundary in two narrow ways:
