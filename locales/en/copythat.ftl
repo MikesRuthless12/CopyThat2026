@@ -767,6 +767,7 @@ cloud-error-not-found = Object not found at the requested path
 cloud-error-permission = Permission denied by remote backend
 cloud-error-keychain = OS keychain access failed
 settings-tab-remotes = Remotes
+settings-tab-mobile = Mobile
 
 # Phase 33 — mount Copy That's chunk store + history archive as a
 # read-only filesystem (FUSE / WinFsp). Surfaced by the History tab

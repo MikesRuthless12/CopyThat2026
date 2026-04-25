@@ -1035,6 +1035,7 @@ cloud-error-not-found = Object not found at the requested path  # MT
 cloud-error-permission = Permission denied by remote backend  # MT
 cloud-error-keychain = OS keychain access failed  # MT
 settings-tab-remotes = Remotes  # MT
+settings-tab-mobile = Mobile  # MT
 
 # Phase 33 — mount as read-only filesystem.
 mount-heading = Mount snapshot  # MT

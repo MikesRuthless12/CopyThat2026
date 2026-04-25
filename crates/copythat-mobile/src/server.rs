@@ -1,373 +1,353 @@
-//! Local-network pair server.
+//! Remote-control message vocabulary.
 //!
-//! The runner spins this up while the user has Settings → Mobile
-//! open. The server exposes two routes:
+//! Phase 37 pivots away from a hand-rolled axum LAN pair-server in
+//! favour of a PeerJS WebRTC data channel. The desktop's Tauri
+//! webview boots a PeerJS client (registered under
+//! `MobileSettings::desktop_peer_id`), accepts incoming connections
+//! from paired phones, and dispatches each `RemoteCommand` arriving
+//! on the data channel to the appropriate Tauri command. The data-
+//! channel transport runs over WebRTC's DTLS, so confidentiality and
+//! integrity are handled at the transport layer; this crate only
+//! defines the message vocabulary plus a typed `RemoteResponse`
+//! envelope.
 //!
-//! * `POST /pair/begin` — phone announces itself with its X25519
-//!   public key + an optional `device_label`. The desktop replies
-//!   with its own ephemeral X25519 public key. Both sides derive
-//!   the shared secret and SAS fingerprint; the desktop renders the
-//!   4-emoji SAS and waits for the human-side "match" tap.
-//! * `POST /pair/complete` — phone sends the user-confirmed pairing
-//!   token back. The desktop persists the [`PairingRecord`] and
-//!   shuts the server down.
-//!
-//! The TLS cert is ephemeral and pinned by fingerprint at scan-time
-//! — no PKI, no domain validation. Real cert generation lands in a
-//! Phase 37 follow-up that pulls in `rcgen`; today the server runs
-//! plain HTTP on the loopback address (`127.0.0.1`) so the smoke
-//! test can exercise the protocol end-to-end without TLS plumbing.
-//! Production binds to the LAN interface with TLS once the cert
-//! generation lands.
+//! The runtime that actually implements the [`RemoteControl`] trait
+//! lives in `apps/copythat-ui/src-tauri/src/mobile_commands.rs`.
+//! The phone-side PWA that drives this protocol lives in
+//! `apps/copythat-mobile/`.
 
-use std::net::SocketAddr;
-use std::sync::Arc;
-
-use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::post};
 use serde::{Deserialize, Serialize};
-use tokio::net::TcpListener;
-use tokio::sync::{Mutex, oneshot};
-use tokio::task::JoinHandle;
 
-use crate::pairing::{
-    PAIRING_TOKEN_BYTES, PairingRecord, PairingToken, SasFingerprint, shared_secret_from_token,
-};
-
-/// Top-level error surface for the pair server.
-#[derive(Debug, thiserror::Error)]
-pub enum PairServerError {
-    #[error("bind 127.0.0.1:{port}: {source}")]
-    Bind {
-        port: u16,
-        #[source]
-        source: std::io::Error,
+/// Envelope wrapping every request the phone sends. Tagged enum on
+/// the wire — `{"kind":"list_jobs"}` /
+/// `{"kind":"pause_job","job_id":"…"}` etc.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RemoteCommand {
+    /// `Hello` is the first message a freshly-connected phone sends.
+    /// Carries the phone's long-term X25519 public key (hex) + the
+    /// human label the user typed during the pairing modal. Desktop
+    /// looks the device up in `MobileSettings::pairings`; on a
+    /// match the data channel transitions from "pairing" to
+    /// "authenticated" and subsequent commands are accepted.
+    Hello {
+        phone_pubkey_hex: String,
+        device_label: String,
     },
-    #[error("axum serve: {0}")]
-    Serve(String),
-    #[error("server already stopped")]
-    AlreadyStopped,
+    /// List active engine jobs (running / paused / queued / failed).
+    ListJobs,
+    /// Pause a running job by id.
+    PauseJob { job_id: String },
+    /// Resume a paused job.
+    ResumeJob { job_id: String },
+    /// Cancel a job (graceful — engine emits a `Failed` event with
+    /// `Cancelled` kind).
+    CancelJob { job_id: String },
+    /// Resolve an open collision prompt. Mirrors the desktop modal:
+    /// `overwrite` / `overwrite_all` / `skip` / `skip_all` /
+    /// `rename` / `keep_both`.
+    ResolveCollision {
+        prompt_id: String,
+        action: CollisionAction,
+    },
+    /// Read the current global counters (running bytes / files /
+    /// rate). Bridge target for the home-screen widget.
+    Globals,
+    /// Read the last `limit` history rows.
+    RecentHistory { limit: u32 },
+    /// Re-run a history row as a fresh job.
+    RerunHistory { row_id: i64 },
+    /// Start a secure-delete job against a list of paths.
+    SecureDelete { paths: Vec<String>, method: String },
+    /// Start a copy job. Mirrors the GUI's `start_copy` IPC.
+    StartCopy {
+        sources: Vec<String>,
+        destination: String,
+        verify: Option<String>,
+    },
+    /// Phone-side Exit button. Tells the desktop to drop this peer
+    /// from its active-connection set so the next time the PWA
+    /// reopens it has to rehandshake. The desktop replies with `Ok`
+    /// and closes the data channel; the PeerJS client on the PWA
+    /// side disconnects from the signaling broker.
+    Goodbye,
+    /// Phone-side toggle that asks the desktop to inhibit screen
+    /// sleep / screensaver while the connection is live. When
+    /// `enabled = true` the desktop calls the platform wake-lock
+    /// API (`SetThreadExecutionState` on Windows,
+    /// `IOPMAssertionCreateWithName` on macOS,
+    /// `org.freedesktop.ScreenSaver.Inhibit` on Linux). When
+    /// `false` it releases the assertion. The OS-level wake-lock
+    /// glue lives in `copythat-platform` (Phase 37 follow-up); the
+    /// IPC + setting land here.
+    SetKeepAwake { enabled: bool },
 }
 
-/// Shared server state accessible from inside the route handlers.
-#[derive(Clone)]
-struct ServerState {
-    inner: Arc<Mutex<ServerInner>>,
+/// Collision-resolution action the phone replies with. Mirrors the
+/// GUI's modal options.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CollisionAction {
+    Overwrite,
+    OverwriteAll,
+    Skip,
+    SkipAll,
+    Rename,
+    KeepBoth,
 }
 
-struct ServerInner {
-    /// Desktop's ephemeral X25519 secret. Re-minted per server run.
-    desktop_secret: x25519_dalek::StaticSecret,
-    /// The `PairingToken` the runner advertised on the QR.
-    expected_token: PairingToken,
-    /// Set after `/pair/begin` completes. Drives the SAS panel.
-    pending: Option<PendingPair>,
-    /// Set after `/pair/complete` succeeds. The runner reads this
-    /// out before stopping the server.
-    committed: Option<PairingRecord>,
+/// What the desktop sends back. Tagged enum so the PWA's switch
+/// statement covers every variant.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RemoteResponse {
+    /// Reply to `Hello` — `paired = true` means the device's
+    /// public key matched a `MobileSettings::pairings` entry and
+    /// subsequent commands will be dispatched. `false` means
+    /// re-enrolment is required.
+    HelloAck { paired: bool },
+    /// Reply to `ListJobs`.
+    Jobs { jobs: Vec<JobSummary> },
+    /// Reply to `Globals`.
+    Globals {
+        bytes_done: u64,
+        bytes_total: u64,
+        files_done: u64,
+        files_total: u64,
+        rate_bps: u64,
+    },
+    /// Reply to `RecentHistory`.
+    History { rows: Vec<HistoryRow> },
+    /// Generic ack — used by pause / resume / cancel / resolve-
+    /// collision / shred / rerun / start_copy when the action
+    /// committed successfully.
+    Ok,
+    /// Generic error — surfaces back to the PWA as a toast.
+    Error { message: String },
+    /// Streaming live progress: the desktop pushes these on the data
+    /// channel without a matching request whenever a job ticks. The
+    /// PWA's job list updates in place.
+    JobProgress {
+        job_id: String,
+        bytes_done: u64,
+        bytes_total: u64,
+        rate_bps: u64,
+    },
+    /// Streaming completion notification.
+    JobCompleted { job_id: String, bytes: u64 },
+    /// Streaming failure notification.
+    JobFailed { job_id: String, reason: String },
+    /// Streaming live globals tick. The desktop emits one of these
+    /// per ~250 ms while at least one job is running so the PWA's
+    /// home screen can render the aggregate percentage + the
+    /// per-operation file counters without polling.
+    GlobalsTick {
+        bytes_done: u64,
+        bytes_total: u64,
+        files_done: u64,
+        files_total: u64,
+        rate_bps: u64,
+        /// Counters split by job kind. The PWA's stats panel
+        /// renders one row per non-zero entry.
+        copy_files: u64,
+        move_files: u64,
+        secure_delete_files: u64,
+    },
+    /// Streaming per-file event. Emitted on every engine
+    /// `Started` / `Progress` / `Completed` / `FileError` so the
+    /// PWA's "Live files" panel can show exactly what's mid-flight
+    /// — the user sees individual filenames scroll by as the
+    /// desktop processes the tree.
+    FileTick {
+        job_id: String,
+        /// `"scanning" | "copying" | "moving" | "verifying" |
+        /// "shredding" | "completed" | "failed"` — what the engine
+        /// is doing to this file right now.
+        action: String,
+        src: String,
+        dst: String,
+        bytes_done: u64,
+        bytes_total: u64,
+    },
+    /// "Job is initialising" notification. Fires on `start_copy`,
+    /// `rerun_history`, and any other path where the engine has to
+    /// scan + enumerate before per-file work begins. The PWA's
+    /// dashboard locks every control button until the matching
+    /// `JobReady` event lands so the user can't fire conflicting
+    /// commands during the load phase.
+    JobLoading { job_id: String, message: String },
+    /// Inverse of `JobLoading` — the engine has finished the scan
+    /// + enumeration and is ready to accept user input again.
+    JobReady { job_id: String },
+    /// Streaming pause/cancel-from-desktop notification. When the
+    /// user pauses or cancels a job from the desktop UI, the runner
+    /// pushes one of these to every connected phone so the PWA's
+    /// job list mirrors the state change without polling. The
+    /// reverse path (PWA pauses → desktop pauses) flows through
+    /// the regular `PauseJob` / `CancelJob` request → `Ok` reply.
+    JobStateChanged {
+        job_id: String,
+        /// Stable wire string: `"running"` / `"paused"` / `"cancelled"`
+        /// / `"failed"` / `"completed"`. PWA's switch maps to UI
+        /// state.
+        state: String,
+    },
+    /// Desktop is exiting (user closed the window, OS shutdown,
+    /// crash recovery). Streamed to every connected phone right
+    /// before the data channel closes so the PWA can render an
+    /// explicit "Desktop exited — reconnect when Copy That is
+    /// running" screen instead of a generic disconnect.
+    ServerShuttingDown { reason: String },
 }
 
-#[derive(Debug, Clone)]
-struct PendingPair {
-    phone_public: x25519_dalek::PublicKey,
-    label: String,
-    sas: SasFingerprint,
+/// Per-job summary in `RemoteResponse::Jobs`. Mirrors the shape the
+/// GUI renders in `JobRow.svelte` so the PWA can re-use the same
+/// styling.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobSummary {
+    pub job_id: String,
+    pub kind: String,
+    pub state: String,
+    pub src: String,
+    pub dst: String,
+    pub bytes_done: u64,
+    pub bytes_total: u64,
+    pub rate_bps: u64,
 }
 
-/// Public handle the runner holds while the server is alive.
-pub struct PairServerHandle {
-    addr: SocketAddr,
-    state: ServerState,
-    join: Option<JoinHandle<Result<(), PairServerError>>>,
-    shutdown_tx: Option<oneshot::Sender<()>>,
+/// History row summary in `RemoteResponse::History`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryRow {
+    pub row_id: i64,
+    pub kind: String,
+    pub status: String,
+    pub started_at_ms: i64,
+    pub finished_at_ms: Option<i64>,
+    pub src_root: String,
+    pub dst_root: String,
+    pub total_bytes: u64,
+    pub files_ok: u64,
+    pub files_failed: u64,
 }
 
-impl PairServerHandle {
-    /// LAN address the server actually bound to (with the picked port).
-    pub fn addr(&self) -> SocketAddr {
-        self.addr
-    }
+/// Async-trait the Tauri shell implements. Each method runs against
+/// the live `AppState`. Callers that aren't authenticated never
+/// reach this trait — the PeerJS dispatcher in
+/// `apps/copythat-ui/src/lib/peer.ts` checks the `Hello` payload
+/// against `MobileSettings::pairings` before forwarding subsequent
+/// `RemoteCommand`s.
+#[async_trait::async_trait]
+pub trait RemoteControl: Send + Sync {
+    async fn list_jobs(&self) -> Result<Vec<JobSummary>, String>;
+    async fn pause_job(&self, job_id: &str) -> Result<(), String>;
+    async fn resume_job(&self, job_id: &str) -> Result<(), String>;
+    async fn cancel_job(&self, job_id: &str) -> Result<(), String>;
+    async fn resolve_collision(
+        &self,
+        prompt_id: &str,
+        action: CollisionAction,
+    ) -> Result<(), String>;
+    async fn globals(&self) -> Result<RemoteResponse, String>;
+    async fn recent_history(&self, limit: u32) -> Result<Vec<HistoryRow>, String>;
+    async fn rerun_history(&self, row_id: i64) -> Result<(), String>;
+    async fn secure_delete(&self, paths: Vec<String>, method: &str) -> Result<(), String>;
+    async fn start_copy(
+        &self,
+        sources: Vec<String>,
+        destination: String,
+        verify: Option<String>,
+    ) -> Result<(), String>;
+    /// Phase 37 — toggle the OS wake-lock so the desktop won't
+    /// sleep / screensaver while a phone is paired in. The
+    /// platform syscall lives in `copythat-platform`; this trait
+    /// method is a thin shim the Tauri shell wires up.
+    async fn set_keep_awake(&self, enabled: bool) -> Result<(), String>;
+}
 
-    /// Read the latest SAS fingerprint announced by a `/pair/begin`
-    /// caller. `None` means no phone has announced yet.
-    pub async fn pending_sas(&self) -> Option<SasFingerprint> {
-        self.state
-            .inner
-            .lock()
-            .await
-            .pending
-            .as_ref()
-            .map(|p| p.sas)
-    }
-
-    /// Read out a successful pairing record once the phone has
-    /// finished `/pair/complete`. The server caller is expected to
-    /// poll this and call [`Self::shutdown`] when it's `Some`.
-    pub async fn committed(&self) -> Option<PairingRecord> {
-        self.state.inner.lock().await.committed.clone()
-    }
-
-    /// Cooperative shutdown. Idempotent.
-    pub async fn shutdown(&mut self) -> Result<(), PairServerError> {
-        if let Some(tx) = self.shutdown_tx.take() {
-            let _ = tx.send(());
+/// Dispatch a single decoded [`RemoteCommand`] through a
+/// [`RemoteControl`] implementation, returning the matching
+/// [`RemoteResponse`]. The PeerJS adapter in the Tauri webview
+/// handles JSON encoding + decoding around this entry point.
+pub async fn dispatch<C: RemoteControl + ?Sized>(cmd: RemoteCommand, ctl: &C) -> RemoteResponse {
+    match cmd {
+        RemoteCommand::Hello { .. } => RemoteResponse::HelloAck { paired: true },
+        RemoteCommand::ListJobs => match ctl.list_jobs().await {
+            Ok(jobs) => RemoteResponse::Jobs { jobs },
+            Err(message) => RemoteResponse::Error { message },
+        },
+        RemoteCommand::PauseJob { job_id } => map_unit(ctl.pause_job(&job_id).await),
+        RemoteCommand::ResumeJob { job_id } => map_unit(ctl.resume_job(&job_id).await),
+        RemoteCommand::CancelJob { job_id } => map_unit(ctl.cancel_job(&job_id).await),
+        RemoteCommand::ResolveCollision { prompt_id, action } => {
+            map_unit(ctl.resolve_collision(&prompt_id, action).await)
         }
-        if let Some(handle) = self.join.take() {
-            handle
-                .await
-                .map_err(|e| PairServerError::Serve(format!("join: {e}")))??;
+        RemoteCommand::Globals => match ctl.globals().await {
+            Ok(resp) => resp,
+            Err(message) => RemoteResponse::Error { message },
+        },
+        RemoteCommand::RecentHistory { limit } => match ctl.recent_history(limit).await {
+            Ok(rows) => RemoteResponse::History { rows },
+            Err(message) => RemoteResponse::Error { message },
+        },
+        RemoteCommand::RerunHistory { row_id } => map_unit(ctl.rerun_history(row_id).await),
+        RemoteCommand::SecureDelete { paths, method } => {
+            map_unit(ctl.secure_delete(paths, &method).await)
         }
-        Ok(())
+        RemoteCommand::StartCopy {
+            sources,
+            destination,
+            verify,
+        } => map_unit(ctl.start_copy(sources, destination, verify).await),
+        RemoteCommand::Goodbye => RemoteResponse::Ok,
+        RemoteCommand::SetKeepAwake { enabled } => map_unit(ctl.set_keep_awake(enabled).await),
     }
 }
 
-/// Construction-time builder for the pair server.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct PairServer {
-    /// Port to bind on. `0` lets the OS pick a free ephemeral port,
-    /// which is what the runner uses by default.
-    pub port: u16,
+fn map_unit(r: Result<(), String>) -> RemoteResponse {
+    match r {
+        Ok(()) => RemoteResponse::Ok,
+        Err(message) => RemoteResponse::Error { message },
+    }
 }
 
-impl PairServer {
-    /// Spawn the server. Returns once the listener is bound + the
-    /// route handlers are wired. The caller wraps the returned
-    /// [`PairingToken`] in a QR via [`crate::generate_qr_png`].
-    pub async fn start(self) -> Result<(PairServerHandle, PairingToken), PairServerError> {
-        let host = "127.0.0.1";
-        let listener = TcpListener::bind((host, self.port))
-            .await
-            .map_err(|source| PairServerError::Bind {
-                port: self.port,
-                source,
-            })?;
-        let addr = listener
-            .local_addr()
-            .map_err(|source| PairServerError::Bind {
-                port: self.port,
-                source,
-            })?;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        // Mint the desktop's ephemeral keypair + the pairing token
-        // the runner advertises on the QR.
-        let mut desktop_secret_bytes = [0u8; 32];
-        getrandom::fill(&mut desktop_secret_bytes)
-            .map_err(|e| PairServerError::Serve(format!("getrandom: {e}")))?;
-        let desktop_secret = x25519_dalek::StaticSecret::from(desktop_secret_bytes);
-        let desktop_public = x25519_dalek::PublicKey::from(&desktop_secret);
-        let token = PairingToken::new(host, addr.port(), &desktop_public)
-            .map_err(|e| PairServerError::Serve(format!("token mint: {e}")))?;
-
-        let state = ServerState {
-            inner: Arc::new(Mutex::new(ServerInner {
-                desktop_secret,
-                expected_token: token.clone(),
-                pending: None,
-                committed: None,
-            })),
+    #[test]
+    fn remote_command_round_trips_through_serde() {
+        let cmd = RemoteCommand::PauseJob {
+            job_id: "abc-123".into(),
         };
-
-        let app = Router::new()
-            .route("/pair/begin", post(handle_pair_begin))
-            .route("/pair/complete", post(handle_pair_complete))
-            .with_state(state.clone());
-
-        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-        let join = tokio::spawn(async move {
-            let server = axum::serve(listener, app).with_graceful_shutdown(async move {
-                let _ = shutdown_rx.await;
-            });
-            server
-                .await
-                .map_err(|e| PairServerError::Serve(e.to_string()))
-        });
-
-        Ok((
-            PairServerHandle {
-                addr,
-                state,
-                join: Some(join),
-                shutdown_tx: Some(shutdown_tx),
-            },
-            token,
-        ))
-    }
-}
-
-// ---------------------------------------------------------------------
-// Wire types
-// ---------------------------------------------------------------------
-
-#[derive(Debug, Clone, Deserialize)]
-struct BeginRequest {
-    /// Hex-encoded 32-byte X25519 public key the phone owns.
-    phone_pubkey: String,
-    /// Phone-side device label. The desktop persists this if the
-    /// pairing commits.
-    device_label: String,
-    /// 64-character base32 token from the QR. Both sides MUST agree
-    /// before the server admits a pairing attempt.
-    token: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct BeginResponse {
-    /// Hex-encoded 32-byte X25519 public key the desktop minted at
-    /// server start. The phone derives the SAS fingerprint from
-    /// `dh(phone_secret, this)` and shows the user the same 4
-    /// emojis the desktop is showing.
-    desktop_pubkey: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct CompleteRequest {
-    token: String,
-    /// Optional APNs / FCM token the phone is offering up.
-    push_target: Option<crate::notify::PushTarget>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct CompleteResponse {
-    paired: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct ErrorResponse {
-    error: String,
-}
-
-// ---------------------------------------------------------------------
-// Handlers
-// ---------------------------------------------------------------------
-
-async fn handle_pair_begin(
-    State(state): State<ServerState>,
-    Json(req): Json<BeginRequest>,
-) -> impl IntoResponse {
-    let mut inner = state.inner.lock().await;
-    if !token_matches(&inner.expected_token, &req.token) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorResponse {
-                error: "pairing token mismatch".into(),
-            }),
-        )
-            .into_response();
+        let s = serde_json::to_string(&cmd).unwrap();
+        let back: RemoteCommand = serde_json::from_str(&s).unwrap();
+        assert_eq!(cmd, back);
     }
 
-    let phone_pub = match decode_pubkey(&req.phone_pubkey) {
-        Ok(k) => k,
-        Err(e) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: format!("phone_pubkey: {e}"),
-                }),
-            )
-                .into_response();
-        }
-    };
-
-    let (_shared, sas) = shared_secret_from_token(&inner.desktop_secret, &phone_pub);
-    inner.pending = Some(PendingPair {
-        phone_public: phone_pub,
-        label: req.device_label,
-        sas,
-    });
-
-    let desktop_pub = x25519_dalek::PublicKey::from(&inner.desktop_secret);
-    let resp = BeginResponse {
-        desktop_pubkey: hex_encode(desktop_pub.as_bytes()),
-    };
-    (StatusCode::OK, Json(resp)).into_response()
-}
-
-async fn handle_pair_complete(
-    State(state): State<ServerState>,
-    Json(req): Json<CompleteRequest>,
-) -> impl IntoResponse {
-    let mut inner = state.inner.lock().await;
-    if !token_matches(&inner.expected_token, &req.token) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(ErrorResponse {
-                error: "pairing token mismatch".into(),
-            }),
-        )
-            .into_response();
+    #[test]
+    fn collision_action_serializes_snake_case() {
+        let s = serde_json::to_string(&CollisionAction::OverwriteAll).unwrap();
+        assert_eq!(s, "\"overwrite_all\"");
     }
 
-    let pending = match inner.pending.as_ref() {
-        Some(p) => p.clone(),
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "no pending pair-begin to complete".into(),
-                }),
-            )
-                .into_response();
-        }
-    };
-
-    let now_secs = chrono_now_secs();
-    let record = PairingRecord {
-        label: pending.label,
-        phone_public_key: *pending.phone_public.as_bytes(),
-        paired_at: now_secs,
-        push_target: req.push_target,
-    };
-    inner.committed = Some(record);
-    let resp = CompleteResponse { paired: true };
-    (StatusCode::OK, Json(resp)).into_response()
-}
-
-// ---------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------
-
-fn token_matches(expected: &PairingToken, supplied_b32: &str) -> bool {
-    let Some(decoded) = base32::decode(base32::Alphabet::Crockford, supplied_b32) else {
-        return false;
-    };
-    decoded.len() == PAIRING_TOKEN_BYTES && constant_time_eq(&decoded, &expected.token_bytes)
-}
-
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
+    #[test]
+    fn remote_response_jobs_round_trip() {
+        let resp = RemoteResponse::Jobs {
+            jobs: vec![JobSummary {
+                job_id: "j1".into(),
+                kind: "copy".into(),
+                state: "running".into(),
+                src: "C:/src".into(),
+                dst: "D:/dst".into(),
+                bytes_done: 1024,
+                bytes_total: 4096,
+                rate_bps: 800_000,
+            }],
+        };
+        let s = serde_json::to_string(&resp).unwrap();
+        let back: RemoteResponse = serde_json::from_str(&s).unwrap();
+        assert_eq!(resp, back);
     }
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
-}
-
-fn decode_pubkey(hex: &str) -> Result<x25519_dalek::PublicKey, &'static str> {
-    if hex.len() != 64 {
-        return Err("expected 64 hex characters");
-    }
-    let mut bytes = [0u8; 32];
-    for i in 0..32 {
-        let pair = &hex[i * 2..i * 2 + 2];
-        bytes[i] = u8::from_str_radix(pair, 16).map_err(|_| "non-hex char")?;
-    }
-    Ok(x25519_dalek::PublicKey::from(bytes))
-}
-
-fn hex_encode(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
-        use std::fmt::Write;
-        let _ = write!(&mut out, "{b:02x}");
-    }
-    out
-}
-
-fn chrono_now_secs() -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }

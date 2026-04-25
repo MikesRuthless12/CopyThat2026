@@ -46,6 +46,7 @@ pub mod i18n;
 pub mod icon;
 pub mod ipc;
 pub mod live_mirror;
+pub mod mobile_commands;
 pub mod mount_commands;
 pub mod power;
 pub mod reveal;
@@ -355,6 +356,15 @@ pub fn run() {
             audit_commands::audit_verify_file,
             // Phase 35 — encryption + compression status surface.
             crypt_commands::crypt_status,
+            // Phase 37 follow-up — mobile pairing + push +
+            // PeerJS data-channel command dispatcher.
+            mobile_commands::mobile_pair_start,
+            mobile_commands::mobile_pair_status,
+            mobile_commands::mobile_pair_commit,
+            mobile_commands::mobile_pair_stop,
+            mobile_commands::mobile_revoke,
+            mobile_commands::mobile_send_test_push,
+            mobile_commands::mobile_handle_remote_command,
         ])
         .setup(move |app| {
             // Phase 16 / 28 — tray icon + menu. Visible regardless
