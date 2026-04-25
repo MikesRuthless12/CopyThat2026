@@ -39,6 +39,20 @@ tokio = { version = "1", features = [
 [target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
 raw-cpuid = "11"
 
+# Phase 31b — Windows presentation / fullscreen FFI lives in
+# `copythat-platform::presence`, the only crate in the workspace
+# allowed to carry unsafe code. We re-export through the safe
+# `is_in_presentation_mode` / `is_in_fullscreen_mode` helpers.
+[target.'cfg(target_os = "windows")'.dependencies]
+copythat-platform = { path = "../copythat-platform", version = "1" }
+
+# Phase 31b — Linux DBus ScreenSaver Inhibit probe via zbus 5.
+# zbus is already a workspace dep through copythat-platform's
+# wake_lock module; reuse keeps the dep graph + license review
+# unchanged.
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+
 [dev-dependencies]
 tokio = { version = "1", features = [
     "macros",
@@ -59,3 +73,12 @@ copythat-settings = { path = "../copythat-settings", version = "1" }
 [[test]]
 name = "phase_31_power"
 path = "../../tests/smoke/phase_31_power.rs"
+
+# Phase 31b — real OS presentation/fullscreen probes via
+# `copythat_platform::presence` (Windows) and `zbus::blocking`
+# (Linux). Smoke confirms the callable surface on every host
+# without panicking; per-OS branches assert the public enum / DBus
+# fallback contracts.
+[[test]]
+name = "phase_31b_real_probes"
+path = "../../tests/smoke/phase_31b_real_probes.rs"

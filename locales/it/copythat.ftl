@@ -171,6 +171,8 @@ err-path-escape = Percorso rifiutato — contiene segmenti di cartella superiore
 # MT
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
+err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+# MT
 err-io-other = Errore I/O sconosciuto
 err-sparseness-mismatch = Layout sparso non preservato sulla destinazione  # MT
 

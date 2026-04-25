@@ -108,11 +108,9 @@ impl BatteryProbe for RealBatteryProbe {
 // Stub probes — return the "nothing adverse" reading by default
 // ---------------------------------------------------------------------
 
-/// Presentation probe stub — always reports "not presenting". The
-/// real OS probes (Windows `SHQueryUserNotificationState`, macOS
-/// `IOPMAssertion`, Linux DBus ScreenSaver) land in Phase 31b; until
-/// then the stub lets every downstream consumer compile against the
-/// real trait surface.
+/// Presentation probe stub — always reports "not presenting".
+/// Used as the cross-platform fallback when the per-OS probe
+/// can't initialise (no DBus session on Linux headless, etc.).
 pub struct StubPresentationProbe;
 
 impl PresentationProbe for StubPresentationProbe {
@@ -129,6 +127,111 @@ impl FullscreenProbe for StubFullscreenProbe {
         false
     }
 }
+
+// ---------------------------------------------------------------------
+// Phase 31b — real OS-specific presentation / fullscreen probes.
+// ---------------------------------------------------------------------
+
+/// Windows presentation probe — routes through
+/// [`copythat_platform::presence::is_in_presentation_mode`] so the
+/// raw `SHQueryUserNotificationState` FFI call lives in the only
+/// crate where unsafe is allowed. Returns `true` when the OS
+/// reports `QUNS_PRESENTATION_MODE` or
+/// `QUNS_RUNNING_D3D_FULL_SCREEN` — the two states the Phase 31
+/// `PresentationPolicy::Pause` default acts on.
+#[cfg(target_os = "windows")]
+pub struct RealPresentationProbe;
+
+#[cfg(target_os = "windows")]
+impl PresentationProbe for RealPresentationProbe {
+    fn is_presenting(&self) -> bool {
+        copythat_platform::presence::is_in_presentation_mode()
+    }
+}
+
+/// Windows fullscreen probe — strict subset of presentation mode;
+/// only fires on `QUNS_RUNNING_D3D_FULL_SCREEN`.
+#[cfg(target_os = "windows")]
+pub struct RealFullscreenProbe;
+
+#[cfg(target_os = "windows")]
+impl FullscreenProbe for RealFullscreenProbe {
+    fn is_fullscreen(&self) -> bool {
+        copythat_platform::presence::is_in_fullscreen_mode()
+    }
+}
+
+/// Linux presentation probe — queries the
+/// `org.freedesktop.ScreenSaver` interface via DBus. When any
+/// process holds an active inhibit cookie (Zoom, OBS, full-screen
+/// video), the screensaver reports inhibited and we treat that as
+/// "the user is presenting / focused". Falls back to "not
+/// presenting" on DBus session unavailable (headless run, missing
+/// session bus).
+///
+/// Uses zbus's `blocking` API surface so the probe call site
+/// doesn't need to thread a tokio runtime through to keep
+/// parity with the unit-struct constructors of the other
+/// `Real*Probe` types.
+#[cfg(target_os = "linux")]
+pub struct RealPresentationProbe;
+
+#[cfg(target_os = "linux")]
+impl PresentationProbe for RealPresentationProbe {
+    fn is_presenting(&self) -> bool {
+        let conn = match zbus::blocking::Connection::session() {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
+        let proxy = match zbus::blocking::Proxy::new(
+            &conn,
+            "org.freedesktop.ScreenSaver",
+            "/org/freedesktop/ScreenSaver",
+            "org.freedesktop.ScreenSaver",
+        ) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+        proxy.call::<_, _, bool>("GetActive", &()).unwrap_or(false)
+    }
+}
+
+/// Linux fullscreen probe — same DBus call as presentation. The
+/// distinction (presentation vs fullscreen) is meaningful on
+/// Windows where `SHQueryUserNotificationState` separates the two,
+/// but on Linux the same `GetActive` answer covers both.
+#[cfg(target_os = "linux")]
+pub struct RealFullscreenProbe;
+
+#[cfg(target_os = "linux")]
+impl FullscreenProbe for RealFullscreenProbe {
+    fn is_fullscreen(&self) -> bool {
+        RealPresentationProbe.is_presenting()
+    }
+}
+
+/// macOS presentation probe — keeps the stub for now. The Apple
+/// equivalent is `IOPMAssertionCopyProperties` filtering for the
+/// `kIOPMAssertionTypeNoDisplaySleep` family; the FFI is documented
+/// at <https://developer.apple.com/documentation/iokit/iopmassertion>
+/// and the pure-Rust binding lives in `core-foundation` (already a
+/// workspace dep via Phase 37 follow-up #2's `copythat-mobile`).
+/// Wiring the real probe lands in a Phase 31c follow-up where a
+/// macOS dev box is on hand to confirm the assertion-name match.
+#[cfg(target_os = "macos")]
+pub type RealPresentationProbe = StubPresentationProbe;
+
+#[cfg(target_os = "macos")]
+pub type RealFullscreenProbe = StubFullscreenProbe;
+
+/// Other platforms (FreeBSD, OpenBSD, etc.) fall through to the
+/// stub. Adding a real probe is a per-OS body fill against the
+/// same trait.
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+pub type RealPresentationProbe = StubPresentationProbe;
+
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+pub type RealFullscreenProbe = StubFullscreenProbe;
 
 /// Thermal probe stub — always reports "not throttling, unknown
 /// kind". Phase 31 ships the x86 `raw-cpuid` hook behind the

@@ -21,6 +21,7 @@ members = [
     "crates/copythat-audit",
     "crates/copythat-crypt",
     "crates/copythat-cli",
+    "crates/copythat-helper",
     "crates/copythat-mobile",
     "xtask",
     "apps/copythat-ui/src-tauri",

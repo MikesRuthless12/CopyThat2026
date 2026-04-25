@@ -102,6 +102,18 @@ impl ErrorRegistry {
         id
     }
 
+    /// Phase 17d / Phase 8 follow-up — peek at the (src, dst) pair
+    /// for a pending error without consuming the registry entry.
+    /// `retry_elevated` calls this to discover the paths it needs
+    /// to hand to the helper before it has decided what action to
+    /// resolve the prompt with.
+    pub fn pending_paths(&self, id: u64) -> Option<(PathBuf, PathBuf)> {
+        let pending = self.inner.pending.lock().expect("error registry poisoned");
+        pending
+            .get(&id)
+            .map(|p| (p.err.src.clone(), p.err.dst.clone()))
+    }
+
     /// Look up a prior "Skip all of this kind" decision for the
     /// given job. The runner consults this *before* registering a
     /// fresh prompt so a cached decision short-circuits the UX.

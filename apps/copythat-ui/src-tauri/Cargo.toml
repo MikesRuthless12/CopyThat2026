@@ -73,6 +73,9 @@ copythat-crypt = { path = "../../../crates/copythat-crypt", version = "1" }
 # pair-server, return the QR PNG bytes, complete the SAS, and
 # dispatch APNs / FCM pushes when a job finishes.
 copythat-mobile = { path = "../../../crates/copythat-mobile", version = "1" }
+# Phase 17d — privilege-separated helper. Used by retry_elevated and
+# (future) shell-extension install/uninstall flows.
+copythat-helper = { path = "../../../crates/copythat-helper", version = "1" }
 # Phase 37 follow-up — `RemoteControl` is async-trait. The impl
 # in `mobile_commands.rs` re-applies the macro on the impl block,
 # so the host crate needs the dep too.

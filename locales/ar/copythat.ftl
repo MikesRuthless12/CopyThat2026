@@ -171,6 +171,8 @@ err-path-escape = تم رفض المسار — يحتوي على مقاطع ال
 # MT
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
+err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+# MT
 err-io-other = خطأ إدخال/إخراج غير معروف
 err-sparseness-mismatch = لا يمكن الحفاظ على تخطيط الملف المتناثر في الوجهة  # MT
 

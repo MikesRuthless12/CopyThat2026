@@ -183,6 +183,7 @@ err-interrupted = Operation interrupted
 err-verify-failed = Post-copy verification failed
 err-path-escape = Path rejected — contains parent-directory (..) segments or illegal bytes
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
 err-sparseness-mismatch = Sparse layout could not be preserved on destination
 err-io-other = Unknown I/O error
 

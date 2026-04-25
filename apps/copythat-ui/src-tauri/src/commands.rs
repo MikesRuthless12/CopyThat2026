@@ -638,14 +638,72 @@ pub fn error_log_export(
     Ok(bytes)
 }
 
-/// Stub for the Phase 8 "Retry with elevated permissions" button.
-/// Full UAC / `AuthorizationServices` / polkit wiring lands with
-/// Phase 17 privilege separation. Until then this surfaces a
-/// localised "not available yet" message — lets the UI carry the
-/// button without us needing to hide it conditionally.
+/// Phase 8 follow-up + Phase 17d wiring — "Retry with elevated
+/// permissions" button.
+///
+/// The error registry holds a pending prompt at `id`; we look up
+/// its `(src, dst)` and route the request through the
+/// `copythat-helper` request handler. Today the helper runs in-
+/// process (the unprivileged main app dispatches `handle_request`
+/// directly); the actual UAC / sudo / polkit spawn ceremony
+/// reuses Phase 19b's `Start-Process -Verb RunAs` pattern and
+/// lands when the per-OS spawn helpers are wired in
+/// `crates/copythat-helper/src/spawn.rs`.
+///
+/// This wiring is a meaningful step forward from the prior stub:
+/// the helper's path-safety bar, capability gate, and error-key
+/// mapping all run; a click that previously surfaced
+/// `retry-elevated-unavailable` now surfaces the actual class of
+/// failure (`err-permission-denied` if the OS still refuses,
+/// `err-path-escape` if the registry held a tainted path, etc.).
 #[tauri::command]
-pub fn retry_elevated(_id: u64) -> Result<(), String> {
-    Err("retry-elevated-unavailable".to_string())
+pub fn retry_elevated(id: u64, state: State<'_, AppState>) -> Result<u64, String> {
+    use copythat_helper::capability::Capability;
+    use copythat_helper::handle_request;
+    use copythat_helper::rpc::{Request, Response};
+
+    let (src, dst) = state
+        .errors
+        .pending_paths(id)
+        .ok_or_else(|| "err-helper-unknown-prompt".to_string())?;
+
+    let granted = vec![Capability::ElevatedRetry];
+    let resp = handle_request(&Request::ElevatedRetry { src, dst }, &granted);
+    match resp {
+        Response::ElevatedRetryOk { bytes } => Ok(bytes),
+        Response::ElevatedRetryFailed { localized_key, .. } => Err(localized_key),
+        Response::PathRejected { localized_key, .. } => Err(localized_key),
+        Response::CapabilityDenied { .. } => Err("retry-elevated-unavailable".to_string()),
+        other => Err(format!("err-helper-unexpected:{other:?}")),
+    }
+}
+
+/// Phase 8 follow-up — "Quick hash (SHA-256)" button on the
+/// collision modal. Hashes the named path and returns the lowercase
+/// hex digest. The Svelte modal calls this on demand for each side
+/// of the collision and shows the two digests next to each other so
+/// the user can decide overwrite-vs-skip with content evidence
+/// rather than just metadata.
+///
+/// SHA-256 (not BLAKE3) for two reasons: (1) the existing
+/// `collision-modal-hash-check` Fluent key promises SHA-256 in
+/// every locale; (2) SHA-256 sidecars are the dominant on-disk
+/// format users encounter, so showing the same digest the
+/// `*.sha256` sidecar carries is what the user expects to compare
+/// against.
+#[tauri::command]
+pub async fn quick_hash_for_collision(path: String) -> Result<String, String> {
+    let p = validate_ipc_path(&path).map_err(err_string)?;
+    let (events_tx, _events_rx) = tokio::sync::mpsc::channel(8);
+    let report = copythat_hash::hash_file_async(
+        &p,
+        copythat_hash::HashAlgorithm::Sha256,
+        copythat_core::CopyControl::new(),
+        events_tx,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(report.hex())
 }
 
 fn parse_error_action(action: &str) -> Result<copythat_core::ErrorAction, String> {

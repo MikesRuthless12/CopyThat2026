@@ -171,6 +171,8 @@ err-path-escape = Chemin rejeté — contient des segments de répertoire parent
 # MT
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
+err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+# MT
 err-io-other = Erreur d'E/S inconnue
 err-sparseness-mismatch = La disposition clairsemée n'a pas pu être préservée sur la destination  # MT
 

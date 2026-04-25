@@ -1,0 +1,52 @@
+[package]
+name = "copythat-helper"
+description = "Phase 17d — privilege-separated helper. Holds the elevated paths the main UI process never touches: shell-extension install/uninstall, hardware secure-erase, elevated-retry on a permission-denied copy. Spawned via OS-native UAC / sudo / polkit; speaks JSON-RPC over a per-launch random pipe / Unix socket."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "copythat_helper"
+
+[[bin]]
+name = "copythat-helper"
+path = "src/bin/helper.rs"
+
+[dependencies]
+# Phase 17d shares the lexical safety bar with the main app — every
+# IPC argument that names a path passes through Phase 17a's
+# validate_path_no_traversal before the helper acts on it.
+copythat-core = { path = "../copythat-core", version = "1" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# Cryptographically-random pipe/socket name. Already in the
+# workspace via copythat-cloud's PKCE flow.
+getrandom = "0.3"
+# Hex-encode the random suffix the named pipe uses. Already in
+# the workspace via Phase 32 cloud verify.
+hex = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "io-util", "fs", "net", "time", "sync"] }
+# Phase 8 follow-up smoke uses copythat-hash for the SHA-256 round-trip.
+copythat-hash = { path = "../copythat-hash", version = "1" }
+
+[[test]]
+name = "phase_17d_helper"
+path = "../../tests/smoke/phase_17d_helper.rs"
+
+# Phase 8 follow-up — elevated-retry routed through the Phase 17d
+# helper, SHA-256 quick-hash IPC for the collision modal, and the
+# drawer-mode toggle locale-key tripwire.
+[[test]]
+name = "phase_08_partials"
+path = "../../tests/smoke/phase_08_partials.rs"

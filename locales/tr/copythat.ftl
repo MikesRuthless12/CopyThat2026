@@ -171,6 +171,8 @@ err-path-escape = Yol reddedildi — üst dizin (..) parçaları veya geçersiz 
 # MT
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
+err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+# MT
 err-io-other = Bilinmeyen G/Ç hatası
 err-sparseness-mismatch = Hedefte seyrek düzen korunamadı  # MT
 
