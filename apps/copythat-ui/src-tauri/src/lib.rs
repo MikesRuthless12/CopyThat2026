@@ -365,6 +365,8 @@ pub fn run() {
             mobile_commands::mobile_revoke,
             mobile_commands::mobile_send_test_push,
             mobile_commands::mobile_handle_remote_command,
+            mobile_commands::mobile_onboarding_qr,
+            mobile_commands::mobile_onboarding_dismiss,
         ])
         .setup(move |app| {
             // Phase 16 / 28 — tray icon + menu. Visible regardless

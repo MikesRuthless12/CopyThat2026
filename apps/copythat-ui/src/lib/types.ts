@@ -376,6 +376,7 @@ export interface GeneralSettingsDto {
   clipboardWatcherEnabled: boolean;
   /** Phase 20 — silent re-enqueue of unfinished jobs at startup. */
   autoResumeInterrupted: boolean;
+  mobileOnboardingDismissed?: boolean;
 }
 
 /** Phase-post-12 — fired when the clipboard watcher sees new files land

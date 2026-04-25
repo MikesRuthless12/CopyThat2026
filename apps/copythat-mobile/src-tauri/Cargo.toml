@@ -1,0 +1,30 @@
+[package]
+name = "copythat-mobile-app"
+description = "Phase 37 follow-up #2 — Tauri Mobile binary for the Copy That mobile companion. Wraps the Vite + Svelte 5 PWA in `apps/copythat-mobile/` for users who prefer a native iOS / Android install over the browser-add-to-home-screen path."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "copythat_mobile_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[[bin]]
+name = "copythat-mobile-app"
+path = "src/main.rs"
