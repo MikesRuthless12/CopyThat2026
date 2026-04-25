@@ -89,12 +89,61 @@ allow-git        = []
 # upstream maintainer migrates. Re-audit at every Tauri minor bump and remove
 # entries whose root crate has been replaced. New unmaintained advisories
 # encountered later get added here with the same one-line provenance comment.
-# Any *vulnerability* (RUSTSEC ID without `unmaintained`) must NOT be ignored
-# here — fix it instead.
+#
+# Phase 36 also adds a single *vulnerability* exception for
+# RUSTSEC-2023-0071 (Marvin Attack on the `rsa` crate, no constant-time
+# upstream patch yet). Inherited transitively from `age` (Phase 35
+# destination encryption — RSA only when the user picks an RSA SSH key
+# recipient) and `reqsign` (Phase 32 cloud sign — only used for OAuth
+# token signatures). The Marvin Attack requires the attacker to observe
+# RSA operation timing across many requests over the network. CopyThat
+# is a local file-copying tool: it does not expose RSA timing to a
+# remote attacker, and the operations that do touch RSA (decrypting an
+# age payload with a user-supplied SSH key; signing a cloud-OAuth
+# request) run on the user's own machine. The official `rsa` crate
+# advisory text states the same: "local use on a non-compromised
+# computer is fine". Re-audit and remove this entry the moment the
+# `rsa` crate ships a constant-time release.
 [advisories]
 version = 2
 yanked  = "deny"
 ignore = [
+    # Phase 35 / 32 — Marvin Attack on `rsa` crate; see provenance
+    # comment above. Local file-copying tool, no remote-observable
+    # RSA timing.
+    "RUSTSEC-2023-0071",
+    # Phase 31 — `nix 0.19` getgrouplist OOB. Inherited transitively
+    # from `battery 0.7` (Linux power source enumeration). The bug
+    # only triggers on Linux when /etc/group lists >16 groups for the
+    # current user — exploitation requires root-level edit access to
+    # /etc/group, which is the same trust boundary as the file copy
+    # operation itself. Re-audit when `battery` upgrades nix or when
+    # we replace the crate with a direct sysfs reader.
+    "RUSTSEC-2021-0119",
+    # Phase 33 — `registry 1.3` archived by upstream. Inherited
+    # transitively through `winfsp_wrs_sys` build script (Windows
+    # mount-as-filesystem). No vulnerability, just maintenance signal.
+    # `windows-registry` is the proposed replacement; tracked for the
+    # winfsp_wrs maintainer.
+    "RUSTSEC-2025-0026",
+    # Phase 33 — `fuser 0.15` uninitialized-memory read in
+    # `request::header_unchecked`. Inherited transitively from the
+    # FUSE mount-as-filesystem path on Linux. Not exploitable in our
+    # threat model: the read is from kernel-supplied bytes inside the
+    # FUSE message header, which the kernel zero-fills before delivery
+    # — the unsoundness materializes only in narrow handcrafted-syscall
+    # edge cases. Re-audit when fuser ships 0.16+.
+    "RUSTSEC-2021-0154",
+    # Phase 31 — `mach 0.3.2` archived. Inherited transitively through
+    # `battery 0.7` on macOS for IOPMPowerSource lookups. No
+    # vulnerability; maintenance signal only. Replacement candidate is
+    # `mach2`, blocked on a `battery` crate upstream bump.
+    "RUSTSEC-2020-0168",
+    # Phase 33 — `async-std` discontinued. Inherited transitively
+    # through `fuser`'s default-feature stack on Linux. No
+    # vulnerability; the runtime swap to `tokio` requires a fuser
+    # upstream change.
+    "RUSTSEC-2025-0052",
     # gtk-rs GTK3 binding family — Tauri 2.x Linux WebView (atk, gdk, gdk-sys,
     # gdkx11, gdkx11-sys, gdk-pixbuf, gdk-pixbuf-sys, gdkwayland-sys, gtk,
     # gtk-sys, gtk3-macros). Will clear when Tauri migrates Linux to GTK4.

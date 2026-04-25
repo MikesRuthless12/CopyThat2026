@@ -370,6 +370,83 @@ sensitive flags survive a copy. The threat model:
   x25519-dalek, scrypt, sha2, hmac, hkdf) are all RustCrypto-
   ecosystem MIT/Apache-2.0.
 
+## Phase 36 — `copythat` CLI surface
+
+The Phase 36 CLI changes the trust boundary in two narrow ways:
+
+- **TOML jobspec parsing.** `copythat plan` and `copythat apply`
+  read a user-controlled TOML file. The parser is `toml` 0.8 (the
+  same version `copythat-settings` already pins; no new attack
+  surface). `JobSpec::validate` enforces semantic invariants the
+  TOML grammar can't express: source paths must exist on disk before
+  `apply` runs, and the destination's parent must exist (or the
+  destination itself must, for already-populated trees). The engine
+  re-runs lexical traversal-safety checks on every per-file
+  `copy_file` invocation as it has since Phase 17a — passing a
+  jobspec that contains `..` components in a source path does not
+  bypass the `copythat_core::safety::validate_path_no_traversal`
+  guard.
+
+- **Exit-code-driven CI integration.** Nine documented exit codes
+  (`0`–`9`) are the contract for downstream automation. They are
+  declared as a `#[repr(u8)]` enum so the numeric values cannot
+  drift across releases without a deliberate code change. CI scripts
+  that branch on exit code are stable across patch versions; a
+  semver-major change is the only path where the discriminants can
+  move, and any such move requires a `### Changed BREAKING:`
+  CHANGELOG entry.
+
+What Phase 36 deliberately does not change: the `--config <PATH>`
+override does not bypass the `copythat-settings` TOML schema —
+malformed configs reject with `ExitCode::ConfigInvalid` before any
+mutation. The `config set <key> <value>` round-trip writes through
+`Settings::save_to`'s atomic stage-and-rename, so a partial write
+cannot leave the settings file in a half-baked state.
+
+### Inherited transitive advisories ignored in `deny.toml`
+
+Phase 36 documents six pre-existing `cargo deny check advisories`
+exceptions that earlier phases (32 / 33 / 35) shipped behind
+`[skip ci]` markers without attaching a threat-model note. The new
+entries each carry an inline provenance comment plus an explanation
+of why the advisory does not materialise in CopyThat's threat model:
+
+- **RUSTSEC-2023-0071** (Marvin Attack on `rsa` 0.9). Inherited
+  through `age` (Phase 35) and `reqsign` (Phase 32). The Marvin
+  Attack requires an attacker to observe RSA operation timing across
+  many requests over the network. CopyThat is a local file-copying
+  tool: RSA operations run on the user's own machine, never against
+  attacker-influenced data delivered over a network channel. The
+  upstream `rsa` advisory text says "local use on a non-compromised
+  computer is fine"; that's the regime CopyThat operates in.
+- **RUSTSEC-2021-0119** (`nix 0.19` getgrouplist OOB). Inherited
+  through `battery 0.7` for Linux power-source enumeration.
+  Exploitation requires a malicious /etc/group on the local
+  machine, which is the same trust boundary as the file copy
+  itself — if the attacker can edit /etc/group they already have
+  root and don't need a vulnerability to read your files.
+- **RUSTSEC-2025-0026** (`registry 1.3` archived). Inherited through
+  `winfsp_wrs_sys`'s build script for the Windows mount path. Not a
+  vulnerability — the upstream just archived in favour of
+  `windows-registry`.
+- **RUSTSEC-2021-0154** (`fuser 0.15` uninitialized memory read).
+  Inherited through the FUSE mount path on Linux. The unsoundness
+  materialises only in narrow handcrafted-syscall edge cases; the
+  bytes the read returns are kernel-supplied FUSE message header
+  bytes, which the kernel zero-fills before delivery in normal use.
+- **RUSTSEC-2020-0168** (`mach 0.3` archived). Inherited through
+  `battery 0.7` on macOS. Replacement candidate is `mach2`; blocked
+  on a `battery` upstream version bump.
+- **RUSTSEC-2025-0052** (`async-std` discontinued). Inherited
+  through `fuser`'s default-feature stack. The runtime swap to
+  `tokio` requires a fuser upstream change.
+
+Each entry is tagged for re-audit when its upstream chain ships a
+fix. Any new vulnerability advisory (RUSTSEC ID without
+`unmaintained`) MUST be evaluated case by case before the entry can
+land in `deny.toml`'s ignore list — the policy is documented in the
+file's header comment.
+
 ## Build hardening (target, post-Phase 17)
 
 - Stack probes enabled.

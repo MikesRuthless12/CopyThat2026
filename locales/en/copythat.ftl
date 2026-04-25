@@ -843,3 +843,29 @@ crypt-toast-passphrase-required = Encryption needs a passphrase before the copy 
 crypt-toast-passphrase-set = Encryption passphrase captured
 crypt-footer-encrypted-badge = 🔒 Encrypted (age)
 crypt-footer-compressed-badge = 📦 Compressed (zstd)
+
+# Phase 36 — copythat CLI surface. Documented exit codes + the
+# user-facing strings for plan/apply/verify/config. Help text stays
+# in English (engineering accessibility) but error / info / status
+# strings are localized so a localized desktop installation surfaces
+# CLI errors in the same language as the GUI.
+cli-help-tagline = Copy That CLI — byte-exact file copy, sync, verify and audit for CI/CD pipelines.
+cli-help-exit-codes = Exit codes: 0 success, 1 error, 2 pending, 3 collision, 4 verify-fail, 5 net, 6 perm, 7 disk-full, 8 cancel, 9 config.
+cli-error-bad-args = copy/move requires at least one source and a destination
+cli-error-unknown-algo = Unknown verify algorithm: { $algo }
+cli-error-missing-spec = --spec is required for plan/apply
+cli-error-spec-parse = Failed to parse jobspec { $path }: { $reason }
+cli-error-spec-empty-sources = Jobspec source list is empty
+cli-info-shape-recorded = Bandwidth shape "{ $rate }" recorded; enforcement is plumbed via copythat-shape
+cli-info-stub-deferred = { $command } is staged for the Phase 36 follow-up wiring
+cli-plan-summary = Plan: { $actions } action(s), { $bytes } byte(s); { $already_done } already in place
+cli-plan-pending = Plan reports pending actions; rerun with `apply` to execute
+cli-plan-already-done = Plan reports nothing to do (idempotent)
+cli-apply-success = Apply finished without errors
+cli-apply-failed = Apply finished with one or more errors
+cli-verify-ok = Verify ok: { $algo } { $digest }
+cli-verify-failed = Verify FAILED for { $path } ({ $algo })
+cli-config-set = Set { $key } = { $value }
+cli-config-reset = Reset { $key } to default
+cli-config-unknown-key = Unknown config key: { $key }
+cli-completions-emitted = Shell completions for { $shell } printed to stdout
