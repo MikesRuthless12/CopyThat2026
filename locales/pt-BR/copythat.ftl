@@ -1108,3 +1108,26 @@ crypt-toast-passphrase-required = Encryption needs a passphrase before the copy 
 crypt-toast-passphrase-set = Encryption passphrase captured  # MT
 crypt-footer-encrypted-badge = 🔒 Encrypted (age)  # MT
 crypt-footer-compressed-badge = 📦 Compressed (zstd)  # MT
+
+# Phase 36 — copythat CLI. MT-flagged English strings pending human
+# translation; tracked in docs/I18N_TODO.md.
+cli-help-tagline = Copy That CLI — byte-exact file copy, sync, verify and audit for CI/CD pipelines.  # MT
+cli-help-exit-codes = Exit codes: 0 success, 1 error, 2 pending, 3 collision, 4 verify-fail, 5 net, 6 perm, 7 disk-full, 8 cancel, 9 config.  # MT
+cli-error-bad-args = copy/move requires at least one source and a destination  # MT
+cli-error-unknown-algo = Unknown verify algorithm: { $algo }  # MT
+cli-error-missing-spec = --spec is required for plan/apply  # MT
+cli-error-spec-parse = Failed to parse jobspec { $path }: { $reason }  # MT
+cli-error-spec-empty-sources = Jobspec source list is empty  # MT
+cli-info-shape-recorded = Bandwidth shape "{ $rate }" recorded; enforcement is plumbed via copythat-shape  # MT
+cli-info-stub-deferred = { $command } is staged for the Phase 36 follow-up wiring  # MT
+cli-plan-summary = Plan: { $actions } action(s), { $bytes } byte(s); { $already_done } already in place  # MT
+cli-plan-pending = Plan reports pending actions; rerun with `apply` to execute  # MT
+cli-plan-already-done = Plan reports nothing to do (idempotent)  # MT
+cli-apply-success = Apply finished without errors  # MT
+cli-apply-failed = Apply finished with one or more errors  # MT
+cli-verify-ok = Verify ok: { $algo } { $digest }  # MT
+cli-verify-failed = Verify FAILED for { $path } ({ $algo })  # MT
+cli-config-set = Set { $key } = { $value }  # MT
+cli-config-reset = Reset { $key } to default  # MT
+cli-config-unknown-key = Unknown config key: { $key }  # MT
+cli-completions-emitted = Shell completions for { $shell } printed to stdout  # MT

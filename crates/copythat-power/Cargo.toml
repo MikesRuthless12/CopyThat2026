@@ -52,7 +52,7 @@ tempfile = "3"
 # Phase 31 smoke exercises the TOML round-trip of
 # `PowerPoliciesSettings`. Dev-only so the power crate's release
 # graph stays independent of `copythat-settings`.
-copythat-settings = { path = "../copythat-settings" }
+copythat-settings = { path = "../copythat-settings", version = "1" }
 
 # Phase 31 smoke test lives at the workspace root so it's easy to find
 # alongside the other phase smokes.
