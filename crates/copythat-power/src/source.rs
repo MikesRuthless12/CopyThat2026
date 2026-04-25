@@ -161,13 +161,25 @@ impl FullscreenProbe for RealFullscreenProbe {
     }
 }
 
-/// Linux presentation probe — queries the
-/// `org.freedesktop.ScreenSaver` interface via DBus. When any
-/// process holds an active inhibit cookie (Zoom, OBS, full-screen
-/// video), the screensaver reports inhibited and we treat that as
-/// "the user is presenting / focused". Falls back to "not
-/// presenting" on DBus session unavailable (headless run, missing
-/// session bus).
+/// Linux presentation probe — queries `org.gnome.SessionManager`'s
+/// `IsInhibited(flags)` method to detect when any application has
+/// asked the session to suppress idle/screensaver actions (the
+/// signal Zoom, OBS, video players use when the user is actively
+/// presenting / watching content). Flag `8` is "Inhibit the session
+/// being marked as idle" per the GNOME API.
+///
+/// The earlier shape called `org.freedesktop.ScreenSaver.GetActive`,
+/// which returns *the screensaver itself is currently displayed* —
+/// i.e. the user is AFK. That's the inverse of the policy intent:
+/// we want to detect *user is busy and shouldn't be interrupted*,
+/// not *user has stepped away*. `GetActive` would surface true
+/// exactly when it's safe to copy aggressively, and false when we
+/// should pause.
+///
+/// On non-GNOME desktops `IsInhibited` will fail to resolve and the
+/// probe returns `false` (no signal — fail-safe to "not presenting"
+/// which mirrors macOS's stub default). Per-DE coverage (KDE
+/// PowerDevil, sway/Wayland inhibit) is a Phase 31c follow-up.
 ///
 /// Uses zbus's `blocking` API surface so the probe call site
 /// doesn't need to thread a tokio runtime through to keep
@@ -185,21 +197,27 @@ impl PresentationProbe for RealPresentationProbe {
         };
         let proxy = match zbus::blocking::Proxy::new(
             &conn,
-            "org.freedesktop.ScreenSaver",
-            "/org/freedesktop/ScreenSaver",
-            "org.freedesktop.ScreenSaver",
+            "org.gnome.SessionManager",
+            "/org/gnome/SessionManager",
+            "org.gnome.SessionManager",
         ) {
             Ok(p) => p,
             Err(_) => return false,
         };
-        proxy.call::<_, _, bool>("GetActive", &()).unwrap_or(false)
+        // Flag 8 — "Inhibit the session being marked as idle". This is
+        // what GNOME apps raise during fullscreen video / presentations
+        // / screen sharing.
+        proxy
+            .call::<_, _, bool>("IsInhibited", &(8u32))
+            .unwrap_or(false)
     }
 }
 
-/// Linux fullscreen probe — same DBus call as presentation. The
-/// distinction (presentation vs fullscreen) is meaningful on
-/// Windows where `SHQueryUserNotificationState` separates the two,
-/// but on Linux the same `GetActive` answer covers both.
+/// Linux fullscreen probe — same inhibit-aware DBus call as
+/// presentation. The distinction (presentation vs fullscreen) is
+/// meaningful on Windows where `SHQueryUserNotificationState`
+/// separates the two; on Linux any session-idle inhibit covers
+/// both signal cases.
 #[cfg(target_os = "linux")]
 pub struct RealFullscreenProbe;
 

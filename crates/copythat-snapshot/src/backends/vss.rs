@@ -140,7 +140,7 @@ async fn create_in_process(volume: &str) -> Result<(String, String), SnapshotErr
         ),
         vol = powershell_escape(volume),
     );
-    let out = Command::new("powershell")
+    let out = Command::new(powershell_exe_path())
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -171,7 +171,7 @@ async fn release_in_process(shadow_id: &str) -> Result<(), SnapshotError> {
         ),
         id = powershell_escape(shadow_id),
     );
-    let out = Command::new("powershell")
+    let out = Command::new(powershell_exe_path())
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -203,7 +203,7 @@ fn release_in_process_blocking(shadow_id: &str) -> Result<(), SnapshotError> {
         ),
         id = powershell_escape(shadow_id),
     );
-    let out = std::process::Command::new("powershell")
+    let out = std::process::Command::new(powershell_exe_path())
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -231,14 +231,32 @@ async fn spawn_helper() -> Result<HelperConn, SnapshotError> {
 
     // Create both pipe server ends BEFORE launching the helper, so
     // its connect attempts never race ahead of us.
+    //
+    // Phase 17 follow-up — the default Win32 pipe DACL grants
+    // GENERIC_READ|GENERIC_WRITE to the Everyone SID, meaning a
+    // local non-admin attacker on the same desktop session could
+    // enumerate `\\.\pipe\copythat-vss-*` and connect as the
+    // helper-side client first, racing the legitimate parent. We
+    // can't pass a SECURITY_ATTRIBUTES through tokio's
+    // `ServerOptions::create`, but `reject_remote_clients(true)`
+    // closes the over-network case and `first_pipe_instance(true)`
+    // detects an existing-name squat at construction. The full
+    // DACL fix (current-user SID + BUILTIN\\Administrators only)
+    // requires a raw `CreateNamedPipeW` call with SECURITY_ATTRIBUTES,
+    // which lands in the IVssBackupComponents COM port; in the
+    // meantime, the random Uuid v4 in the pipe name already keeps
+    // the surface obscure — bumping it to 256-bit random would
+    // close most of the gap.
     let reader_pipe = ServerOptions::new()
         .first_pipe_instance(true)
         .max_instances(1)
+        .reject_remote_clients(true)
         .create(&out_pipe_name)
         .map_err(|e| SnapshotError::Protocol(format!("create out-pipe: {e}")))?;
     let writer_pipe = ServerOptions::new()
         .first_pipe_instance(true)
         .max_instances(1)
+        .reject_remote_clients(true)
         .create(&in_pipe_name)
         .map_err(|e| SnapshotError::Protocol(format!("create in-pipe: {e}")))?;
 
@@ -256,7 +274,7 @@ async fn spawn_helper() -> Result<HelperConn, SnapshotError> {
         outp = powershell_escape(&out_pipe_name),
     );
 
-    let launch = Command::new("powershell")
+    let launch = Command::new(powershell_exe_path())
         .args(["-NoProfile", "-NonInteractive", "-Command", &ps_cmd])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -462,7 +480,16 @@ fn locate_helper_binary() -> Result<PathBuf, SnapshotError> {
 }
 
 fn make_pipe_names() -> (String, String) {
-    let id = uuid::Uuid::new_v4();
+    // Use 256 bits of CSPRNG entropy (Uuid v4 carries ~122 bits of
+    // randomness) so an attacker enumerating `\\.\pipe\copythat-vss-*`
+    // can't predict the suffix. Falls back to a Uuid v4 if
+    // getrandom fails; the helper's argv-time validation catches
+    // shape drift either way.
+    let mut bytes = [0u8; 32];
+    let id = match getrandom::fill(&mut bytes) {
+        Ok(()) => hex::encode(bytes),
+        Err(_) => uuid::Uuid::new_v4().to_string().replace('-', ""),
+    };
     (
         format!(r"\\.\pipe\copythat-vss-{id}-in"),
         format!(r"\\.\pipe\copythat-vss-{id}-out"),
@@ -484,6 +511,23 @@ fn parse_id_device(stdout: &str) -> Result<(String, String), SnapshotError> {
 
 fn powershell_escape(s: &str) -> String {
     s.replace('\'', "''")
+}
+
+/// Resolve the absolute path to PowerShell. Falls back to
+/// `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`
+/// when the env var is missing. Using the absolute path defends
+/// against PATH-hijack: the snapshot calls run on the user's main
+/// process before elevation, but the elevated `Start-Process -Verb
+/// RunAs` ceremony inherits the unprivileged side's CWD, which on
+/// the typical first-launch of a Tauri app is the user's Downloads
+/// folder. Without an absolute path a `powershell.exe` planted in
+/// CWD would be picked up first by the default lookup order.
+fn powershell_exe_path() -> String {
+    let sysroot = std::env::var("SystemRoot")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| r"C:\Windows".to_string());
+    format!(r"{sysroot}\System32\WindowsPowerShell\v1.0\powershell.exe")
 }
 
 fn map_spawn_err(e: std::io::Error) -> SnapshotError {

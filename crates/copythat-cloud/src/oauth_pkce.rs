@@ -169,15 +169,20 @@ pub fn run_pkce_redirect_listener(
     listener
         .set_nonblocking(false)
         .map_err(|e| OAuthError::Http(format!("set blocking: {e}")))?;
-    if let Some(t) = timeout {
-        // The listener has no timeout knob; the accepted stream does.
-        // Fall back to signalling via a separate thread if needed.
-        let _ = t;
-    }
 
     let (mut stream, _peer) = listener
         .accept()
         .map_err(|e| OAuthError::Http(format!("accept: {e}")))?;
+
+    // Honour the timeout on the accepted stream — a hostile local
+    // process can race-connect to the loopback port (the port is
+    // randomised but enumerable) and hold the socket open
+    // indefinitely without sending a request line, wedging the
+    // PKCE flow forever. With a default 120 s read timeout the
+    // user can cancel and retry.
+    let stream_timeout = timeout.unwrap_or_else(|| Duration::from_secs(120));
+    let _ = stream.set_read_timeout(Some(stream_timeout));
+    let _ = stream.set_write_timeout(Some(stream_timeout));
 
     // Parse the HTTP request line only: `GET /?code=...&state=... HTTP/1.1`.
     let mut reader = BufReader::new(
@@ -243,13 +248,20 @@ pub async fn exchange_pkce_code(
         .send()
         .await?;
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(OAuthError::Provider(format!("token exchange: {body}")));
+        // The full provider response body could echo the
+        // client_id, code_verifier, or — on misconfigured providers
+        // — the access_token itself. Surface only the status code
+        // so the rendered error never includes secret-bearing
+        // bytes.
+        let status_code = resp.status().as_u16();
+        return Err(OAuthError::Provider(format!(
+            "token endpoint returned status {status_code}"
+        )));
     }
     let tokens: OAuthTokenResponse = resp
         .json()
         .await
-        .map_err(|e| OAuthError::Parse(format!("token decode: {e}")))?;
+        .map_err(|_| OAuthError::Parse("token-response decode failed".into()))?;
     Ok(tokens)
 }
 
@@ -262,7 +274,13 @@ pub async fn run_pkce_flow(
     scope_override: Option<&str>,
 ) -> Result<OAuthTokenResponse, OAuthError> {
     let (flow, listener) = begin_pkce_flow(provider, client_id, scope_override, None)?;
-    let _ = webbrowser::open(&flow.authorize_url);
+    // Same scheme allow-list as the device-code flow — refuse
+    // anything other than https:// before handing to the OS shell.
+    if let Ok(parsed) = url::Url::parse(&flow.authorize_url) {
+        if parsed.scheme() == "https" {
+            let _ = webbrowser::open(&flow.authorize_url);
+        }
+    }
     // Accept the redirect on the calling thread — the dedicated
     // tokio runtime in `CopyThatCloudSink::run_on_dedicated_thread`
     // isn't needed here because `run_pkce_redirect_listener` is

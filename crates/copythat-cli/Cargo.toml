@@ -47,6 +47,9 @@ tokio = { version = "1", features = [
 copythat-core = { path = "../copythat-core", version = "1" }
 copythat-hash = { path = "../copythat-hash", version = "1" }
 copythat-settings = { path = "../copythat-settings", version = "1" }
+# Phase 38 follow-up — `copythat copy --shape RATE` wires through
+# Shape + CopyThatShapeSink so the CLI honours bandwidth caps.
+copythat-shape = { path = "../copythat-shape", version = "1" }
 # Phase 36 — `copythat history` reads the same SQLite table as the GUI.
 copythat-history = { path = "../copythat-history", version = "1" }
 # Phase 36 — UTC timestamps in the JSON event stream. Workspace already

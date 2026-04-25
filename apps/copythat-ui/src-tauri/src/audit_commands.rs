@@ -17,6 +17,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use crate::ipc_safety::{err_string, validate_ipc_path};
 use chrono::Utc;
 use copythat_audit::{
     AuditError, AuditEvent, AuditFormat, AuditSink, RotationPolicy, WormMode, is_worm_supported,
@@ -260,8 +261,11 @@ pub fn audit_verify(
 /// log path isn't the one in Settings.
 #[tauri::command]
 pub fn audit_verify_file(path: String, format: String) -> Result<AuditVerifyDto, String> {
+    // Phase 17e — every other path-typed Tauri command runs through
+    // this gate; audit verification was the lone exception.
+    let p = validate_ipc_path(&path).map_err(err_string)?;
     let fmt = AuditFormat::parse(&format).unwrap_or_default();
-    let report = copythat_audit::verify_chain(Path::new(&path), fmt).map_err(|e| e.to_string())?;
+    let report = copythat_audit::verify_chain(&p, fmt).map_err(|e| e.to_string())?;
     Ok(AuditVerifyDto {
         total: report.total,
         matches: report.matches,

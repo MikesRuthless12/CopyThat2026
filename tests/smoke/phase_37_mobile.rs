@@ -51,7 +51,7 @@ const LOCALES: &[&str] = &[
 
 #[test]
 fn case01_token_url_round_trips() {
-    let token = PairingToken::new("DESKTOP-PEER-XYZ").expect("mint");
+    let token = PairingToken::new("DESKTOP-PEER-XYZ", [0xAB; 32]).expect("mint");
     let url = token.to_url();
     let parsed = PairingToken::parse(&url).expect("parse");
     assert_eq!(parsed.peer_id, token.peer_id);
@@ -92,7 +92,7 @@ fn case02_sas_changes_when_either_pubkey_changes() {
 
 #[test]
 fn case03_qr_encoder_emits_valid_png() {
-    let token = PairingToken::new("phone-connect-target").expect("mint");
+    let token = PairingToken::new("phone-connect-target", [0xCD; 32]).expect("mint");
     let png = generate_qr_png(&token.to_url(), 4).expect("qr");
     assert!(
         png.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]),

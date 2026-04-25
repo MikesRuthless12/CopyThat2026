@@ -92,6 +92,35 @@ pub fn validate_sidecar_relpath(p: &Path) -> std::io::Result<()> {
             ));
         }
     }
+    // The on-disk sidecar format is `<hex>  <path>\n`. A path
+    // containing a literal newline / carriage-return lets an attacker
+    // smuggle a forged second entry past `sha256sum -c`; a NUL would
+    // truncate the path mid-entry and confuse downstream parsers.
+    // Reject both up front.
+    let s = p.to_string_lossy();
+    if s.bytes().any(|b| matches!(b, b'\n' | b'\r' | 0)) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "sidecar entry contains a newline, carriage-return, or NUL byte",
+        ));
+    }
+    // POSIX does not parse `\` as a path separator, so a Unix-side
+    // sidecar can carry a Windows-traversal payload like
+    // `..\..\..\Windows\System32\drivers\etc\hosts` as a single
+    // literal filename. When the sidecar travels to a Windows host
+    // and `sha256sum -c` (or a TeraCopy-style verifier) reads it,
+    // `\` becomes a separator and the verifier escapes the job
+    // root. On Windows, [`display_forward`] already converts `\` →
+    // `/` before writing; on non-Windows hosts the conversion is a
+    // no-op, so reject embedded backslashes here to keep the
+    // on-disk format portable.
+    #[cfg(not(windows))]
+    if s.contains('\\') {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "sidecar entry contains a backslash; sidecar paths must use forward slashes",
+        ));
+    }
     Ok(())
 }
 

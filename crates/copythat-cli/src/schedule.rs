@@ -70,6 +70,16 @@ pub enum ScheduleSpec {
 impl ScheduleSpec {
     /// Parse a free-form schedule string from `jobspec.schedule.cron`.
     pub fn parse(raw: &str) -> Result<Self, ScheduleError> {
+        // Reject any control character (newline / carriage-return /
+        // NUL) up front — a cron string with an embedded newline
+        // would smuggle a forged second stanza past systemd's
+        // `OnCalendar=` line and break schtasks/launchd parsing.
+        // Tabs are allowed because `split_whitespace` treats them as
+        // field separators; any other 0x00–0x1F / 0x7F char is a
+        // crafted payload, not a real schedule.
+        if raw.chars().any(|c| c.is_control() && c != '\t') {
+            return Err(ScheduleError::UnsupportedCron(raw.to_string()));
+        }
         let trimmed = raw.trim();
         match trimmed {
             "@hourly" => Ok(Self::Hourly),
@@ -237,6 +247,26 @@ fn quote_for_shell(p: &Path) -> String {
     format!("'{escaped}'")
 }
 
+/// Escape a string for inclusion as XML `#PCDATA` (between tags).
+/// Covers all five XML 1.0 predefined entities so a path containing
+/// `<`, `>`, `&`, `'`, or `"` produces a well-formed plist instead
+/// of one that breaks parsing or — worse — injects a fake key/value
+/// pair that overrides the surrounding stanza.
+fn xml_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '\'' => out.push_str("&apos;"),
+            '"' => out.push_str("&quot;"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 fn schtasks_freq_args(schedule: &ScheduleSpec) -> Vec<String> {
     match schedule {
         ScheduleSpec::Hourly => vec!["/SC".into(), "HOURLY".into()],
@@ -304,38 +334,81 @@ fn render_launchd_plist(spec: &JobSpec, spec_path: &Path, schedule: &ScheduleSpe
         ScheduleSpec::Daily => "    <key>StartCalendarInterval</key>\n    <dict>\n        <key>Hour</key><integer>3</integer>\n        <key>Minute</key><integer>0</integer>\n    </dict>".to_string(),
         ScheduleSpec::Weekly => "    <key>StartCalendarInterval</key>\n    <dict>\n        <key>Weekday</key><integer>0</integer>\n        <key>Hour</key><integer>3</integer>\n        <key>Minute</key><integer>0</integer>\n    </dict>".to_string(),
         ScheduleSpec::Cron(raw) => {
-            format!("    <!-- TODO: translate cron `{raw}` to a StartCalendarInterval dict -->\n    <key>StartCalendarInterval</key>\n    <dict>\n        <key>Hour</key><integer>3</integer>\n        <key>Minute</key><integer>0</integer>\n    </dict>")
+            format!(
+                "    <!-- TODO: translate cron `{cron}` to a StartCalendarInterval dict -->\n    <key>StartCalendarInterval</key>\n    <dict>\n        <key>Hour</key><integer>3</integer>\n        <key>Minute</key><integer>0</integer>\n    </dict>",
+                cron = xml_escape(raw),
+            )
         }
     };
     let _ = spec; // job kind is encoded in the spec_path; nothing else to do here yet
     format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n    <key>Label</key>\n    <string>app.copythat.scheduled-job</string>\n    <key>ProgramArguments</key>\n    <array>\n        <string>/usr/local/bin/copythat</string>\n        <string>apply</string>\n        <string>--spec</string>\n        <string>{spec_path}</string>\n    </array>\n{interval_xml}\n</dict>\n</plist>\n",
-        spec_path = spec_path.to_string_lossy().replace('&', "&amp;"),
+        spec_path = xml_escape(&spec_path.to_string_lossy()),
     )
 }
 
 fn render_systemd_user(spec: &JobSpec, spec_path: &Path, schedule: &ScheduleSpec) -> String {
-    let on_calendar = match schedule {
-        ScheduleSpec::Hourly => "hourly".to_string(),
-        ScheduleSpec::Daily => "daily".to_string(),
-        ScheduleSpec::Weekly => "weekly".to_string(),
-        ScheduleSpec::Cron(raw) => {
-            // systemd's OnCalendar accepts a richer grammar than 5-
-            // field cron, but a literal cron string is one of the
-            // documented inputs. Pass it through; semantic validation
-            // surfaces from `systemd-analyze calendar` at install
-            // time.
-            raw.clone()
-        }
+    // Translate the schedule into a systemd `OnCalendar=` value.
+    // systemd accepts the named shortcuts (`hourly`, `daily`,
+    // `weekly`) directly. For 5-field cron we translate the simple
+    // `M H * * *` form to `*-*-* HH:MM:00`; anything more elaborate
+    // gets emitted as a commented-out hint with `daily` as the live
+    // default — passing raw cron syntax on `OnCalendar=` would make
+    // the unit fail to load at `systemctl daemon-reload`.
+    let (on_calendar, cron_note) = match schedule {
+        ScheduleSpec::Hourly => ("hourly".to_string(), None),
+        ScheduleSpec::Daily => ("daily".to_string(), None),
+        ScheduleSpec::Weekly => ("weekly".to_string(), None),
+        ScheduleSpec::Cron(raw) => match cron_to_oncalendar(raw) {
+            Some(translated) => (translated, Some(format!("# Translated from cron `{raw}`."))),
+            None => (
+                "daily".to_string(),
+                Some(format!(
+                    "# WARNING: cron `{raw}` could not be translated to systemd's OnCalendar grammar.\n# Falling back to `daily` (03:00 user-local). Replace the OnCalendar= line with a\n# `systemd-analyze calendar`-validated expression before enabling.",
+                )),
+            ),
+        },
     };
     let exec = format!(
         "/usr/bin/copythat apply --spec {}",
         quote_for_shell(spec_path)
     );
     let _ = spec;
+    let note_block = cron_note
+        .as_deref()
+        .map(|n| format!("{n}\n"))
+        .unwrap_or_default();
+    // Emit the two unit files separated by an unambiguous boundary
+    // marker so a user (or a downstream `--install` wrapper) can split
+    // them apart deterministically. Each marker names the on-disk
+    // path the stanza belongs in. The whole output is one String for
+    // the existing `RenderedSchedule.body` shape.
     format!(
-        "# .service\n[Unit]\nDescription=Copy That scheduled job\n\n[Service]\nType=oneshot\nExecStart={exec}\n\n# .timer (drop next to the .service)\n[Unit]\nDescription=Copy That scheduled job timer\n\n[Timer]\nOnCalendar={on_calendar}\nPersistent=true\nUnit=copythat-scheduled-job.service\n\n[Install]\nWantedBy=timers.target\n"
+        "# ===== ~/.config/systemd/user/copythat-scheduled-job.service =====\n[Unit]\nDescription=Copy That scheduled job\n\n[Service]\nType=oneshot\nExecStart={exec}\n\n# ===== ~/.config/systemd/user/copythat-scheduled-job.timer =====\n{note_block}[Unit]\nDescription=Copy That scheduled job timer\n\n[Timer]\nOnCalendar={on_calendar}\nPersistent=true\nUnit=copythat-scheduled-job.service\n\n[Install]\nWantedBy=timers.target\n"
     )
+}
+
+/// Translate the `M H * * *` subset of 5-field cron to systemd's
+/// `OnCalendar=` grammar. Returns `None` for any cron expression
+/// that uses ranges, lists, steps, day/month/weekday filters, or
+/// non-numeric tokens — those need a hand-written `OnCalendar=`
+/// expression that this renderer doesn't try to synthesise.
+fn cron_to_oncalendar(raw: &str) -> Option<String> {
+    let parts: Vec<&str> = raw.split_whitespace().collect();
+    if parts.len() != 5 {
+        return None;
+    }
+    // Day-of-month, month, day-of-week must all be `*` for the
+    // simple translation; anything else needs a richer expression.
+    if parts[2] != "*" || parts[3] != "*" || parts[4] != "*" {
+        return None;
+    }
+    let minute: u32 = parts[0].parse().ok()?;
+    let hour: u32 = parts[1].parse().ok()?;
+    if minute > 59 || hour > 23 {
+        return None;
+    }
+    Some(format!("*-*-* {hour:02}:{minute:02}:00"))
 }
 
 #[cfg(test)]

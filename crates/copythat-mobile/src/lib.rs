@@ -72,10 +72,11 @@ pub use notify::{
 };
 pub use pairing::{
     PAIRING_SAS_SEED_BYTES, PAIRING_SCHEME, PairingError, PairingRecord, PairingToken,
-    SAS_EMOJI_SLOTS, SasFingerprint, generate_qr_png, mint_peer_id, sas_fingerprint,
-    sas_fingerprint_to_emoji,
+    SAS_EMOJI_SLOTS, SasFingerprint, generate_qr_png, mint_desktop_keypair, mint_peer_id,
+    sas_fingerprint, sas_fingerprint_to_emoji,
 };
 pub use server::{
-    CollisionAction, HistoryRow, JobSummary, RemoteCommand, RemoteControl, RemoteResponse, dispatch,
+    CollisionAction, HistoryRow, JobSummary, RemoteCommand, RemoteControl, RemoteResponse,
+    SessionAuth, dispatch, dispatch_with_auth,
 };
-pub use settings::MobileSettings;
+pub use settings::{MobileSettings, validate_peerjs_broker};

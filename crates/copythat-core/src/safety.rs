@@ -75,6 +75,16 @@ pub enum PathSafetyError {
     /// hands us `String`, so we guard explicitly.
     #[error("path contains a NUL byte")]
     NulByte,
+
+    /// The path contains a control character (newline, carriage
+    /// return, NEL, etc.) other than tab. Renderers that interpolate
+    /// paths into line-oriented formats (schtasks `:: comment`
+    /// lines, audit-log JSON-Lines, sidecar `<hex>  <relpath>` lines,
+    /// systemd unit fields) treat newlines as record terminators —
+    /// a path with an embedded `\n` becomes an injection vector
+    /// even when no `..` is present.
+    #[error("path contains a control character")]
+    ControlChar,
 }
 
 impl PathSafetyError {
@@ -85,6 +95,7 @@ impl PathSafetyError {
             Self::ParentTraversal { .. } => "err-path-escape",
             Self::Empty => "err-destination-empty",
             Self::NulByte => "err-path-escape",
+            Self::ControlChar => "err-path-escape",
         }
     }
 }
@@ -99,19 +110,32 @@ pub fn validate_path_no_traversal(path: &Path) -> Result<(), PathSafetyError> {
     }
     // NUL-byte check via the platform-specific bytes view. On
     // Windows OsStr is WTF-16 so we inspect the u16 units; on
-    // Unix the raw bytes include potential embedded NULs.
+    // Unix the raw bytes include potential embedded NULs. The
+    // same scan rejects any control character (0x00–0x1F / 0x7F)
+    // other than tab — a newline / CR / NEL anywhere in the path
+    // is an injection vector for downstream line-oriented sinks.
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
-        if path.as_os_str().as_bytes().contains(&0) {
-            return Err(PathSafetyError::NulByte);
+        for &b in path.as_os_str().as_bytes() {
+            if b == 0 {
+                return Err(PathSafetyError::NulByte);
+            }
+            if b != b'\t' && (b < 0x20 || b == 0x7F) {
+                return Err(PathSafetyError::ControlChar);
+            }
         }
     }
     #[cfg(windows)]
     {
         use std::os::windows::ffi::OsStrExt;
-        if path.as_os_str().encode_wide().any(|u| u == 0) {
-            return Err(PathSafetyError::NulByte);
+        for u in path.as_os_str().encode_wide() {
+            if u == 0 {
+                return Err(PathSafetyError::NulByte);
+            }
+            if u != 0x09 && (u < 0x20 || u == 0x7F) {
+                return Err(PathSafetyError::ControlChar);
+            }
         }
     }
     for comp in path.components() {

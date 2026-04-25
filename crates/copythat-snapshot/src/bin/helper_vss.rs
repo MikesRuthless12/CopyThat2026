@@ -82,6 +82,13 @@ mod windows_main {
         // ugly at scale.
         let mut owned: Vec<String> = Vec::new();
 
+        // Bound consecutive malformed-JSON lines so a hijacked pipe
+        // peer can't keep an elevated helper alive (and its owned
+        // shadow copies mounted) indefinitely by streaming
+        // garbage. Exit after MAX_BAD requests in a row; reset the
+        // counter on every successful parse.
+        const MAX_BAD: u32 = 5;
+        let mut consecutive_bad: u32 = 0;
         loop {
             let mut line = String::new();
             let n = match reader.read_line(&mut line).await {
@@ -97,10 +104,20 @@ mod windows_main {
                 break;
             }
             let req: Request = match serde_json::from_str(line.trim()) {
-                Ok(r) => r,
+                Ok(r) => {
+                    consecutive_bad = 0;
+                    r
+                }
                 Err(e) => {
+                    consecutive_bad = consecutive_bad.saturating_add(1);
                     let resp = Response::err(format!("bad request: {e}"));
                     let _ = write_response(&mut writer, &resp).await;
+                    if consecutive_bad >= MAX_BAD {
+                        eprintln!(
+                            "copythat-helper-vss: {consecutive_bad} consecutive malformed requests, exiting"
+                        );
+                        break;
+                    }
                     continue;
                 }
             };
@@ -198,6 +215,18 @@ mod windows_main {
     }
 
     fn create_shadow(volume: &str) -> Result<(String, String), String> {
+        // Validate the volume identifier before interpolation. The
+        // pipe peer is the unprivileged caller (or, in a future
+        // squat-attack scenario, an attacker — see the snapshot
+        // helper review). Allow only the canonical Windows
+        // drive-root shape `[A-Z]:\`; reject anything else with a
+        // typed error so the elevated WMI call never sees a
+        // crafted argument.
+        if !is_valid_drive_root(volume) {
+            return Err(format!(
+                "refusing to shadow non-drive-root volume {volume:?}; expected `X:\\\\`"
+            ));
+        }
         // PowerShell's Win32_ShadowCopy::Create is the same path the
         // in-process elevated code uses. Having both paths share the
         // one syscall-shape keeps the "works on one platform, works
@@ -214,7 +243,14 @@ mod windows_main {
             ),
             vol = ps_escape(volume),
         );
-        let out = std::process::Command::new("powershell")
+        // Absolute path defends against PATH hijack: the helper
+        // inherits CWD from the elevation spawn (typically the
+        // Tauri app's CWD, which on first launch can be the user's
+        // Downloads folder). Windows' default lookup includes CWD
+        // before %SystemRoot%\System32, so a `powershell.exe`
+        // dropped into Downloads would otherwise execute at High
+        // integrity.
+        let out = std::process::Command::new(powershell_exe())
             .args(["-NoProfile", "-NonInteractive", "-Command", &script])
             .output()
             .map_err(|e| format!("spawn powershell: {e}"))?;
@@ -236,6 +272,17 @@ mod windows_main {
     }
 
     fn release_shadow(shadow_id: &str) -> Result<(), String> {
+        // Reject anything that isn't the WMI GUID shape
+        // `{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}` (case
+        // insensitive). Defence-in-depth: even if a crafted pipe
+        // peer slipped a script-fragment-bearing string past the
+        // ps_escape doubling (which only handles `'`, not
+        // newlines), the GUID shape leaves no room for one.
+        if !is_valid_guid_brace(shadow_id) {
+            return Err(format!(
+                "refusing to release non-GUID shadow_id {shadow_id:?}"
+            ));
+        }
         let script = format!(
             concat!(
                 "$ErrorActionPreference='Stop';",
@@ -245,7 +292,7 @@ mod windows_main {
             ),
             id = ps_escape(shadow_id),
         );
-        let out = std::process::Command::new("powershell")
+        let out = std::process::Command::new(powershell_exe())
             .args(["-NoProfile", "-NonInteractive", "-Command", &script])
             .output()
             .map_err(|e| format!("spawn powershell: {e}"))?;
@@ -258,6 +305,51 @@ mod windows_main {
                 String::from_utf8_lossy(&out.stderr).trim()
             ))
         }
+    }
+
+    /// Resolve the absolute path to PowerShell. Falls back to
+    /// `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`
+    /// when the env var is missing.
+    fn powershell_exe() -> String {
+        let sysroot = std::env::var("SystemRoot")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| r"C:\Windows".to_string());
+        format!(
+            r"{sysroot}\System32\WindowsPowerShell\v1.0\powershell.exe"
+        )
+    }
+
+    /// Reject anything not matching `[A-Za-z]:\` exactly.
+    fn is_valid_drive_root(s: &str) -> bool {
+        let bytes = s.as_bytes();
+        bytes.len() == 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && bytes[2] == b'\\'
+    }
+
+    /// Accept `{` + 32 hex digits with 4 hyphens + `}` (Win32
+    /// `Win32_ShadowCopy.ID` shape). Hyphen positions are 8/4/4/4/12.
+    fn is_valid_guid_brace(s: &str) -> bool {
+        let bytes = s.as_bytes();
+        if bytes.len() != 38 {
+            return false;
+        }
+        if bytes[0] != b'{' || bytes[37] != b'}' {
+            return false;
+        }
+        for (i, &b) in bytes[1..37].iter().enumerate() {
+            let want_hyphen = matches!(i, 8 | 13 | 18 | 23);
+            if want_hyphen {
+                if b != b'-' {
+                    return false;
+                }
+            } else if !b.is_ascii_hexdigit() {
+                return false;
+            }
+        }
+        true
     }
 
     fn ps_escape(s: &str) -> String {

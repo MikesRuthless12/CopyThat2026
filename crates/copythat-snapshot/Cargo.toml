@@ -47,6 +47,11 @@ tokio = { version = "1", features = [
 ] }
 tracing = "0.1"
 uuid = { version = "1", features = ["v4"] }
+# Phase 17 follow-up — 256-bit pipe-name suffix via getrandom +
+# hex-encode for the named-pipe handshake. Fall-back to Uuid v4
+# when getrandom fails.
+getrandom = "0.3"
+hex = "0.4"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

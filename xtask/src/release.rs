@@ -122,10 +122,15 @@ where
     cmd.arg("--bundles").arg(bundles);
 
     // Ad-hoc codesign on macOS — the dash identity keeps Gatekeeper
-    // satisfied without requiring a paid Apple Developer cert. No-op
-    // on Windows / Linux, but Tauri sniffs the env var at bundle
-    // time regardless of host so we always set it.
-    cmd.env("APPLE_SIGNING_IDENTITY", "-");
+    // satisfied without requiring a paid Apple Developer cert. Only
+    // set on macOS hosts (or when the target explicitly is darwin);
+    // setting it unconditionally on Linux/Windows risks tripping
+    // future Tauri logic that reads the var even when not signing.
+    let target = args.target.as_deref().unwrap_or("");
+    let needs_apple_signing = cfg!(target_os = "macos") || target.contains("darwin");
+    if needs_apple_signing {
+        cmd.env("APPLE_SIGNING_IDENTITY", "-");
+    }
     cmd.stdout(Stdio::inherit()).stderr(Stdio::inherit());
 
     eprintln!(

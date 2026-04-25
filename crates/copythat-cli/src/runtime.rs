@@ -11,10 +11,11 @@ use crate::cli::{Cli, Cmd};
 use crate::commands;
 use crate::output::{OutputMode, OutputWriter};
 
-/// Build a single-threaded tokio runtime with the engine's default
-/// IO + time features enabled. Single-threaded keeps the CLI's
-/// scheduler footprint small; the engine's per-file copy still runs
-/// in `spawn_blocking` for CPU-bound work like verify.
+/// Build a small multi-threaded tokio runtime (2 workers) with the
+/// engine's default IO + time features enabled. Two workers keeps
+/// the CLI's scheduler footprint small while still letting the
+/// engine's per-file copy run async tasks alongside any
+/// `spawn_blocking` work like verify hashing.
 fn build_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()

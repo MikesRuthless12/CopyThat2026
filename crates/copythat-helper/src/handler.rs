@@ -15,6 +15,7 @@
 //! (`bin/helper.rs`) so this module is unit-testable without a
 //! pipe.
 
+use copythat_core::safety::no_follow_open_flags;
 use copythat_core::validate_path_no_traversal;
 
 use crate::capability::{Capability, check};
@@ -45,9 +46,15 @@ pub fn handle_request(request: &Request, granted: &[Capability]) -> Response {
     match request {
         Request::Hello { version } => {
             if *version == crate::rpc::PROTOCOL_VERSION {
-                Response::HelloOk {
-                    version: crate::rpc::PROTOCOL_VERSION,
-                    session_id: session_id(),
+                match session_id() {
+                    Ok(sid) => Response::HelloOk {
+                        version: crate::rpc::PROTOCOL_VERSION,
+                        session_id: sid,
+                    },
+                    Err(e) => Response::Failed {
+                        localized_key: "err-randomness-unavailable".to_string(),
+                        message: format!("session-id mint failed: {e}"),
+                    },
                 }
             } else {
                 Response::ProtocolMismatch {
@@ -89,13 +96,24 @@ fn handle_elevated_retry(src: &std::path::Path, dst: &std::path::Path) -> Respon
         };
     }
 
-    match std::fs::copy(src, dst) {
+    // Phase 17c — refuse to follow a symlink at `src`. `std::fs::copy`
+    // would silently follow whatever the link points at, which under
+    // an elevated token means an attacker who can swap `src` for a
+    // symlink between the unprivileged main app's path validation and
+    // the helper's copy can read any file the elevated token can. Open
+    // src with O_NOFOLLOW (Unix) / FILE_FLAG_OPEN_REPARSE_POINT
+    // (Windows), then byte-copy into dst.
+    match copy_no_follow(src, dst) {
         Ok(bytes) => Response::ElevatedRetryOk { bytes },
         Err(e) => {
-            let key = match e.kind() {
-                std::io::ErrorKind::PermissionDenied => "err-permission-denied",
-                std::io::ErrorKind::NotFound => "err-not-found",
-                _ => "err-io-other",
+            let key = if copythat_core::safety::is_no_follow_rejection(&e) {
+                "err-path-escape"
+            } else {
+                match e.kind() {
+                    std::io::ErrorKind::PermissionDenied => "err-permission-denied",
+                    std::io::ErrorKind::NotFound => "err-not-found",
+                    _ => "err-io-other",
+                }
             };
             Response::ElevatedRetryFailed {
                 localized_key: key.to_string(),
@@ -103,6 +121,55 @@ fn handle_elevated_retry(src: &std::path::Path, dst: &std::path::Path) -> Respon
             }
         }
     }
+}
+
+/// Open both `src` and `dst` with the platform's no-follow flag set,
+/// then stream src's bytes into dst. Returns the number of bytes
+/// copied. Refuses to follow a symlink at *either* end so an
+/// attacker who races a symlink onto the destination path between
+/// the caller's lexical validation and this open can't redirect an
+/// elevated write to a victim file (e.g. `/etc/sudoers`,
+/// `C:\Windows\System32\drivers\etc\hosts`). The src side closes the
+/// equivalent read-redirect race.
+///
+/// Today the helper runs in-process at the unprivileged caller's
+/// privilege level — but the per-OS spawn helper (Phase 17d body
+/// fill) will activate this trust boundary, and the no-follow flag
+/// must already be there when it does.
+fn copy_no_follow(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<u64> {
+    use std::io::{Read, Write};
+
+    let flags = no_follow_open_flags();
+    let mut src_opts = std::fs::OpenOptions::new();
+    src_opts.read(true);
+    let mut dst_opts = std::fs::OpenOptions::new();
+    dst_opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        src_opts.custom_flags(flags as i32);
+        dst_opts.custom_flags(flags as i32);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        src_opts.custom_flags(flags);
+        dst_opts.custom_flags(flags);
+    }
+    let mut sf = src_opts.open(src)?;
+    let mut df = dst_opts.open(dst)?;
+    let mut buf = [0u8; 64 * 1024];
+    let mut total: u64 = 0;
+    loop {
+        let n = sf.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        df.write_all(&buf[..n])?;
+        total = total.saturating_add(n as u64);
+    }
+    df.flush()?;
+    Ok(total)
 }
 
 fn handle_install_shell_extension(target: ShellExtensionKind) -> Response {
@@ -116,20 +183,21 @@ fn handle_install_shell_extension(target: ShellExtensionKind) -> Response {
             ),
         };
     }
-    // The actual install lands in a per-OS body fill — Windows
-    // `RegCreateKeyExW` against HKLM, macOS plist write into
-    // `/Library/PreferencePanes/`, Linux symlink into the
-    // distro's `nautilus-python` extensions dir. None of those
-    // are pure-Rust without an unsafe block (Windows) or a shell
-    // out (Linux). The Phase 17d helper ships the dispatch layer
-    // + capability gate; the per-OS body fills land alongside
-    // the corresponding shell-extension manifest changes in
-    // `crates/copythat-shellext/`. For now the handler returns
-    // success on the install with a documented "scaffold" note —
-    // the caller surface (`copythat-ui`'s `install_shell_extension`
-    // IPC) is not wired into the production menu yet, so this
-    // stub is exercised only by tests + by future bodies.
-    Response::ShellExtensionInstalled { target }
+    // The per-OS body fills (Windows `RegCreateKeyExW` against HKLM,
+    // macOS plist write under `/Library/PreferencePanes/`, Linux
+    // symlink into the distro's extensions dir) are not yet
+    // implemented. Returning `ShellExtensionInstalled` here would lie
+    // to the caller — the UI would flip to "installed" while the
+    // registry/plist/symlink remained absent. Surface as
+    // `ShellExtensionUnsupported` with a clear "scaffold" reason so
+    // the caller treats it as a no-op until the body fill lands.
+    Response::ShellExtensionUnsupported {
+        target,
+        reason: format!(
+            "{} install scaffolded but not yet implemented — the per-OS body fill (Phase 17d follow-up) lands alongside the shell-extension manifest changes in `crates/copythat-shellext/`",
+            target.wire_label()
+        ),
+    }
 }
 
 fn handle_uninstall_shell_extension(target: ShellExtensionKind) -> Response {
@@ -143,23 +211,29 @@ fn handle_uninstall_shell_extension(target: ShellExtensionKind) -> Response {
             ),
         };
     }
-    Response::ShellExtensionUninstalled { target }
+    // Symmetric with install — until the per-OS body fill lands the
+    // helper cannot honestly claim to have uninstalled anything.
+    Response::ShellExtensionUnsupported {
+        target,
+        reason: format!(
+            "{} uninstall scaffolded but not yet implemented — the per-OS body fill (Phase 17d follow-up) lands alongside `crates/copythat-shellext/`",
+            target.wire_label()
+        ),
+    }
 }
 
-fn session_id() -> String {
+fn session_id() -> Result<String, std::io::Error> {
     let mut bytes = [0u8; 16];
-    if getrandom::fill(&mut bytes).is_err() {
-        // Fallback: incorporate the system time so the session-id
-        // is at least mildly distinct even if getrandom failed
-        // (which would itself be a serious problem worth surfacing
-        // in tests).
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or_default();
-        return format!("ts-{nanos}");
-    }
-    hex::encode(bytes)
+    // Phase 17d — fail closed when CSPRNG entropy is unavailable.
+    // The previous fallback synthesised a `ts-{nanos}` id from the
+    // wall clock, giving an attacker who can observe (or roughly
+    // approximate) the time-of-spawn a directly-guessable session
+    // token. If a future caller branches replay-protection or
+    // capability-correlation on the session id, that fallback
+    // becomes a forgery primitive against an elevated helper.
+    getrandom::fill(&mut bytes)
+        .map_err(|e| std::io::Error::other(format!("getrandom failed: {e}")))?;
+    Ok(hex::encode(bytes))
 }
 
 #[cfg(test)]

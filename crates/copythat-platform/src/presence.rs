@@ -25,8 +25,15 @@
 pub fn is_in_presentation_mode() -> bool {
     #[cfg(target_os = "windows")]
     {
-        windows_impl::query() == Some(QunsState::Presentation)
-            || windows_impl::query() == Some(QunsState::RunningD3dFullScreen)
+        // Single query — calling SHQueryUserNotificationState twice
+        // and OR-ing the results would let the OS-reported state flip
+        // between the two reads, producing a torn classification (the
+        // first call could report Presentation while the second
+        // reports AcceptsNotifications).
+        matches!(
+            windows_impl::query(),
+            Some(QunsState::Presentation) | Some(QunsState::RunningD3dFullScreen)
+        )
     }
     #[cfg(not(target_os = "windows"))]
     {

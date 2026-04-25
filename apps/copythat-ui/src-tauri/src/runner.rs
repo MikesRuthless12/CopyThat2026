@@ -136,12 +136,20 @@ pub(crate) async fn run_job(job: RunJob) {
 
     let app_for_events = app.clone();
     let state_for_events = state.clone();
+    // Per-job counter the forward_events task increments on every
+    // `CopyEvent::FileError`. Shared via Arc so `run_job` can read
+    // the final tally for `record_finish` instead of deriving it
+    // from `files_total - files_done` (which mis-counts on
+    // cancellation / early abort).
+    let files_failed_counter = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let files_failed_counter_for_events = files_failed_counter.clone();
     let forwarder = tokio::spawn(forward_events(
         app_for_events,
         state_for_events,
         id,
         rx,
         history_row,
+        files_failed_counter_for_events,
     ));
 
     let mut copy_opts_with_verify = copy_opts;
@@ -425,10 +433,21 @@ pub(crate) async fn run_job(job: RunJob) {
         .as_ref()
         .map(|j| j.files_done)
         .unwrap_or(0);
-    let files_failed = snapshot_for_totals
-        .as_ref()
-        .and_then(|j| j.files_total.checked_sub(j.files_done))
-        .unwrap_or(0);
+    // Use the per-file FileError counter we accumulated in
+    // `forward_events` rather than `files_total - files_done`. The
+    // subtraction was wrong on cancelled jobs and on early aborts:
+    // a cancellation at 10/100 done with 0 errors would record
+    // `files_failed = 90` even though the engine never reached
+    // those files. The atomic is bumped on every CopyEvent::FileError;
+    // the engine fires one of those per file failure.
+    let mut files_failed = files_failed_counter.load(std::sync::atomic::Ordering::Relaxed);
+    // Single-file failure: the engine doesn't fire FileError for the
+    // top-level Failed event (that goes out as the outer Result),
+    // so add 1 when the job terminated as failed and no per-file
+    // failure was already recorded.
+    if terminal_status == "failed" && files_failed == 0 {
+        files_failed = 1;
+    }
     if let Some(row) = history_row
         && let Some(history) = &state.history
     {
@@ -479,6 +498,7 @@ async fn forward_events(
     id: JobId,
     mut rx: mpsc::Receiver<CopyEvent>,
     history_row: Option<JobRowId>,
+    files_failed: std::sync::Arc<std::sync::atomic::AtomicU64>,
 ) {
     let mut last_files_total: u64 = 0;
     let mut last_bytes_total: u64 = 0;
@@ -495,10 +515,18 @@ async fn forward_events(
     // later; this is just so Started-before-first-TreeProgress
     // doesn't regress the counter.
     let mut tree_files_started: u64 = 0;
+    // The shared `files_failed` atomic is bumped from the
+    // `CopyEvent::FileError` branch; `run_job` reads it after the
+    // engine returns to populate `record_finish`.
     // Phase 9 — per-file history bookkeeping. `Started` sets the
     // in-flight item; `VerifyCompleted` stashes its hash;
-    // `Completed` flushes it as a successful row. `FileError`
-    // records a failure row directly.
+    // `Completed` flushes it as a successful row. NOTE: in tree
+    // mode with `tree_concurrency > 1`, `Started`/`Completed` can
+    // interleave across files, so this single slot tracks "most
+    // recent Started" — adequate for single-file mode and for
+    // tree mode at concurrency=1, best-effort at higher
+    // concurrency. A proper fix needs `Completed` to carry `src`
+    // (engine-API change pending).
     let mut current_item: Option<ItemInFlight> = None;
 
     // Phase 13d — per-file UI activity feed. Monotonic `seq` gives
@@ -820,6 +848,7 @@ async fn forward_events(
                 // Per-file failure absorbed by the engine's error
                 // policy (Skip / exhausted RetryN). Log it and keep
                 // going; the tree continues.
+                files_failed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 state.errors.log_auto(id.as_u64(), &err);
                 // Flip the row to an error icon in the live list.
                 activity_seq += 1;

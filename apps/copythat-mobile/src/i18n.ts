@@ -9,7 +9,7 @@
 // minimal — only what the PWA UI actually shows. The desktop's
 // `locales/<code>/copythat.ftl` carries the full localization set.
 
-import { writable, type Readable, type Writable } from "svelte/store";
+import { derived, get, writable, type Readable, type Writable } from "svelte/store";
 
 export type Locale =
   | "en"
@@ -123,15 +123,30 @@ function detectBrowserLocale(): Locale {
   return (match as Locale) ?? "en";
 }
 
-/// Translation lookup. Falls back to the English bundle when the
-/// active locale doesn't have the key yet (typical for MT-flagged
-/// translations that haven't been human-reviewed).
-export function t(key: keyof typeof BUNDLES.en): string {
-  let active: Locale = "en";
-  const unsub = localeStore.subscribe((v) => {
-    active = v;
-  });
-  unsub();
+type TranslateKey = keyof typeof BUNDLES.en;
+
+function lookup(active: Locale, key: TranslateKey): string {
   const bundle = BUNDLES[active];
   return bundle[key] ?? BUNDLES.en[key] ?? key;
+}
+
+/// Reactive translator store. Components subscribe with
+/// `$translator("dashboard.bytes")` and Svelte re-runs the
+/// expression whenever `localeStore` changes — so flipping the
+/// locale at runtime (via `applyDesktopLocale`) updates every
+/// translated string in place.
+export const translator: Readable<(key: TranslateKey) => string> = derived(
+  localeStore,
+  (active) => (key: TranslateKey) => lookup(active, key),
+);
+
+/// One-shot translation lookup. Reads the current locale via
+/// `get(localeStore)` (no subscribe-then-unsubscribe dance); the
+/// previous shape leaked the closed-over `active` variable as a
+/// stale snapshot that never updated when the locale changed.
+/// Components that need reactive re-rendering should use
+/// `$translator(key)` instead. `t()` is fine for non-reactive
+/// callers (one-time toast text, console diagnostics, etc.).
+export function t(key: TranslateKey): string {
+  return lookup(get(localeStore), key);
 }

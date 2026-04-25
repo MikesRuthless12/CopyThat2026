@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use copythat_core::{CopyOptions, JobKind, validate_path_no_traversal};
+use copythat_core::{CopyOptions, JobKind};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::ipc::{CopyOptionsDto, FileIconDto, JobDto};
@@ -83,27 +83,27 @@ async fn enqueue(
     if sources.is_empty() {
         return Err("err-source-required".to_string());
     }
-    let dst_root = PathBuf::from(destination.trim());
-    if dst_root.as_os_str().is_empty() {
-        return Err("err-destination-empty".to_string());
-    }
-    // Phase 17a — reject traversal (`..`) + NUL-byte paths at the
-    // IPC boundary, before a job is even allocated. The engine runs
-    // the same lexical check as a depth-2 guard; this one lets the
-    // UI surface a human-readable error without creating a history
-    // row for the rejected attempt.
-    if let Err(e) = validate_path_no_traversal(&dst_root) {
-        // Phase 17f — `e` could embed the rejected path's bytes in
-        // its display. Log only the localized key so stderr stays
-        // path-free.
-        tracing::debug!(
-            target: "copythat::ipc",
-            kind = ?kind,
-            err_key = e.localized_key(),
-            "destination rejected by lexical safety guard",
-        );
-        return Err(e.localized_key().to_string());
-    }
+    // Phase 17e — route the destination through the IPC gate so
+    // U+FFFD-laden strings (lossy WTF-16 → UTF-8 coercion at the
+    // Tauri serde boundary) are rejected before any history row.
+    // The earlier shape did `PathBuf::from(destination.trim())` then
+    // `validate_path_no_traversal`, which catches `..` + NUL but
+    // skips the encoding check; an attacker who could land a
+    // U+FFFD payload would slip past `start_copy` even though
+    // `destination_free_bytes` (and every other path-typed command)
+    // rejects it.
+    let dst_root = match crate::ipc_safety::validate_ipc_path(&destination) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::debug!(
+                target: "copythat::ipc",
+                kind = ?kind,
+                err_key = e.localized_key(),
+                "destination rejected at IPC gate",
+            );
+            return Err(e.localized_key().to_string());
+        }
+    };
 
     // Phase 12: per-enqueue `CopyOptionsDto` overrides come from the
     // frontend's drop-dialog and still win (highest precedence);
@@ -126,32 +126,32 @@ async fn enqueue(
         None
     };
 
-    let srcs: Vec<PathBuf> = sources
-        .into_iter()
-        .map(|raw| PathBuf::from(raw.trim()))
-        .filter(|p| !p.as_os_str().is_empty())
+    // Phase 17e — same gate the destination went through. Filter
+    // out fully-empty entries (a stray empty drag-drop payload
+    // shouldn't take down the whole batch), then validate the
+    // remainder through the IPC gate which adds the U+FFFD encoding
+    // check on top of `..`/NUL. If every entry filtered out, surface
+    // `err-source-empty`.
+    let raw_srcs: Vec<&str> = sources
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
         .collect();
-    if srcs.is_empty() {
+    if raw_srcs.is_empty() {
         return Err("err-source-empty".to_string());
     }
-    // Phase 17a — same guard as the destination: any source path
-    // carrying `..` or NUL bytes is a crafted IPC payload, not a
-    // legitimate drag-drop. Reject the whole batch so the UI
-    // doesn't get half-queued, half-rejected state.
-    for s in &srcs {
-        if let Err(e) = validate_path_no_traversal(s) {
-            // Phase 17f — log the rejection class only, never the
-            // path body.
+    let srcs: Vec<PathBuf> = match crate::ipc_safety::validate_ipc_paths(&raw_srcs) {
+        Ok(v) => v,
+        Err(e) => {
             tracing::debug!(
                 target: "copythat::ipc",
                 kind = ?kind,
                 err_key = e.localized_key(),
-                "source rejected by lexical safety guard",
+                "source rejected at IPC gate",
             );
-            let _ = s;
             return Err(e.localized_key().to_string());
         }
-    }
+    };
     Ok(enqueue_jobs(
         &app,
         state.inner(),
@@ -657,7 +657,7 @@ pub fn error_log_export(
 /// failure (`err-permission-denied` if the OS still refuses,
 /// `err-path-escape` if the registry held a tainted path, etc.).
 #[tauri::command]
-pub fn retry_elevated(id: u64, state: State<'_, AppState>) -> Result<u64, String> {
+pub async fn retry_elevated(id: u64, state: State<'_, AppState>) -> Result<u64, String> {
     use copythat_helper::capability::Capability;
     use copythat_helper::handle_request;
     use copythat_helper::rpc::{Request, Response};
@@ -667,8 +667,18 @@ pub fn retry_elevated(id: u64, state: State<'_, AppState>) -> Result<u64, String
         .pending_paths(id)
         .ok_or_else(|| "err-helper-unknown-prompt".to_string())?;
 
-    let granted = vec![Capability::ElevatedRetry];
-    let resp = handle_request(&Request::ElevatedRetry { src, dst }, &granted);
+    // Run the helper dispatch on the blocking pool. `handle_request`
+    // performs `std::fs::open` + a synchronous byte loop in
+    // `copy_no_follow`; in a future phase it will block on a UAC /
+    // sudo / polkit consent prompt for seconds at a time. Doing
+    // that on the Tauri runtime thread would freeze every other
+    // IPC command pinned to the same worker.
+    let resp = tokio::task::spawn_blocking(move || {
+        let granted = vec![Capability::ElevatedRetry];
+        handle_request(&Request::ElevatedRetry { src, dst }, &granted)
+    })
+    .await
+    .map_err(|e| format!("err-helper-join:{e}"))?;
     match resp {
         Response::ElevatedRetryOk { bytes } => Ok(bytes),
         Response::ElevatedRetryFailed { localized_key, .. } => Err(localized_key),
@@ -694,7 +704,13 @@ pub fn retry_elevated(id: u64, state: State<'_, AppState>) -> Result<u64, String
 #[tauri::command]
 pub async fn quick_hash_for_collision(path: String) -> Result<String, String> {
     let p = validate_ipc_path(&path).map_err(err_string)?;
-    let (events_tx, _events_rx) = tokio::sync::mpsc::channel(8);
+    let (events_tx, mut events_rx) = tokio::sync::mpsc::channel(8);
+    // Drain the progress channel concurrently — if we kept the rx
+    // alive without reading it, the bounded sender would block
+    // indefinitely once the 9th progress event tried to enqueue,
+    // and `hash_file_async` would never return on files large
+    // enough to emit > 8 events.
+    let drain = tokio::spawn(async move { while events_rx.recv().await.is_some() {} });
     let report = copythat_hash::hash_file_async(
         &p,
         copythat_hash::HashAlgorithm::Sha256,
@@ -703,6 +719,9 @@ pub async fn quick_hash_for_collision(path: String) -> Result<String, String> {
     )
     .await
     .map_err(|e| e.to_string())?;
+    // Sender drops when `hash_file_async` returns, ending the
+    // drain task; await it so we don't leak the join handle.
+    let _ = drain.await;
     Ok(report.hex())
 }
 

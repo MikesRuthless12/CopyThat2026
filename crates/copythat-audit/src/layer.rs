@@ -50,8 +50,17 @@ struct MessageVisitor {
 /// `secret` / `token` / `api_key` cover credential surfaces that
 /// pass through the audit layer's reach.
 fn is_sensitive_field(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    // Exact-match list: catches the common credential / PII field
+    // names that pass through `tracing` events. Keeping exact
+    // matches (rather than substring) avoids over-redacting benign
+    // field names like `author`, `session_state`, `spinner`, etc.
+    // The list is wider than the original — supplementing the
+    // engine's `body|bytes|chunk` content scrubs with credential
+    // names lifted from the OAuth / SSH / push-cert / pairing /
+    // mobile-key / SAS surfaces this codebase touches.
     matches!(
-        name,
+        lower.as_str(),
         "body"
             | "bytes"
             | "chunk"
@@ -59,8 +68,36 @@ fn is_sensitive_field(name: &str) -> bool {
             | "passphrase"
             | "secret"
             | "token"
+            | "access_token"
+            | "refresh_token"
+            | "session_token"
             | "api_key"
             | "api-key"
+            | "apikey"
+            | "private_key"
+            | "privatekey"
+            | "secret_key"
+            | "secretkey"
+            | "authorization"
+            | "auth_token"
+            | "bearer"
+            | "cookie"
+            | "credential"
+            | "credentials"
+            | "csrf"
+            | "csrf_token"
+            | "salt"
+            | "mnemonic"
+            | "seed"
+            | "pin"
+            | "pin_code"
+            | "fingerprint"
+            | "client_secret"
+            | "service_account"
+            | "p8"
+            | "p8_pem"
+            | "kid"
+            | "sas"
     )
 }
 

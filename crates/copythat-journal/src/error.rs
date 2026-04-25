@@ -45,6 +45,14 @@ pub enum JournalError {
     /// panic the runner at boot.
     #[error("journal codec error: {0}")]
     Codec(String),
+
+    /// The journal file was written by a newer build with a higher
+    /// schema version than this binary knows about. Refusing to
+    /// load is safer than re-interpreting the rows under the old
+    /// shape — `dst_path` semantics or `JobStatus` variants could
+    /// have drifted.
+    #[error("journal schema error: {0}")]
+    Schema(String),
 }
 
 impl From<redb::Error> for JournalError {

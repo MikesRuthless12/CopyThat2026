@@ -82,18 +82,30 @@ pub struct PairingToken {
     /// both sides so a stale QR can't be re-used after the user
     /// dismissed the pairing window.
     pub sas_seed: [u8; PAIRING_SAS_SEED_BYTES],
+    /// Desktop's long-term X25519 public key (32 bytes). Mixed into
+    /// the SAS hash and used by the phone's `Hello` signature
+    /// chain. Carried in the QR URL alongside the seed so the
+    /// phone has every input it needs to compute the SAS without
+    /// an extra round-trip through PeerJS — and so the SAS the
+    /// user visually verifies actually binds to the desktop's real
+    /// keypair instead of a value the WebView could forge.
+    pub desktop_pubkey: [u8; 32],
 }
 
 impl PairingToken {
     /// Mint a fresh pairing token. The caller supplies the desktop's
-    /// PeerJS peer-id (registered ahead of time with the signaling
-    /// server); this function generates the SAS seed.
-    pub fn new(peer_id: impl Into<String>) -> Result<Self, PairingError> {
+    /// PeerJS peer-id and long-term X25519 public key; this function
+    /// generates the SAS seed.
+    pub fn new(
+        peer_id: impl Into<String>,
+        desktop_pubkey: [u8; 32],
+    ) -> Result<Self, PairingError> {
         let mut sas_seed = [0u8; PAIRING_SAS_SEED_BYTES];
         getrandom::fill(&mut sas_seed).map_err(|e| PairingError::Random(e.to_string()))?;
         Ok(Self {
             peer_id: peer_id.into(),
             sas_seed,
+            desktop_pubkey,
         })
     }
 
@@ -101,10 +113,11 @@ impl PairingToken {
     /// off the QR.
     pub fn to_url(&self) -> String {
         format!(
-            "{scheme}{peer}?sas={seed}",
+            "{scheme}{peer}?sas={seed}&dpk={dpk}",
             scheme = PAIRING_SCHEME,
             peer = self.peer_id,
             seed = base32::encode(Alphabet::Crockford, &self.sas_seed),
+            dpk = base32::encode(Alphabet::Crockford, &self.desktop_pubkey),
         )
     }
 
@@ -124,15 +137,44 @@ impl PairingToken {
         }
 
         let mut sas_b32: Option<&str> = None;
+        let mut dpk_b32: Option<&str> = None;
+        let mut seen_sas = 0u32;
+        let mut seen_dpk = 0u32;
         for kv in query.split('&') {
             let Some((k, v)) = kv.split_once('=') else {
                 continue;
             };
             if k == "sas" {
+                seen_sas = seen_sas.saturating_add(1);
                 sas_b32 = Some(v);
+            } else if k == "dpk" {
+                seen_dpk = seen_dpk.saturating_add(1);
+                dpk_b32 = Some(v);
             }
         }
+        // Reject pairing URLs with more than one `sas=` parameter.
+        // The previous shape silently kept the *last* value, so a
+        // crafted URL like `?sas=<honest>&sas=<attacker>` would
+        // pair against the attacker's seed — and since
+        // `mobile_pair_commit` historically did not enforce SAS
+        // confirmation either, the attacker-supplied SAS could
+        // smuggle the user past the visual emoji check.
+        if seen_sas > 1 {
+            return Err(PairingError::BadFieldLength {
+                field: "sas",
+                actual: seen_sas as usize,
+                expected: 1,
+            });
+        }
+        if seen_dpk > 1 {
+            return Err(PairingError::BadFieldLength {
+                field: "dpk",
+                actual: seen_dpk as usize,
+                expected: 1,
+            });
+        }
         let sas_b32 = sas_b32.ok_or(PairingError::MissingQueryParam("sas"))?;
+        let dpk_b32 = dpk_b32.ok_or(PairingError::MissingQueryParam("dpk"))?;
 
         let sas_vec = base32::decode(Alphabet::Crockford, sas_b32)
             .ok_or(PairingError::BadBase32 { field: "sas" })?;
@@ -145,10 +187,22 @@ impl PairingToken {
                     actual: sas_vec.len(),
                     expected: PAIRING_SAS_SEED_BYTES,
                 })?;
+        let dpk_vec = base32::decode(Alphabet::Crockford, dpk_b32)
+            .ok_or(PairingError::BadBase32 { field: "dpk" })?;
+        let desktop_pubkey: [u8; 32] =
+            dpk_vec
+                .clone()
+                .try_into()
+                .map_err(|_| PairingError::BadFieldLength {
+                    field: "dpk",
+                    actual: dpk_vec.len(),
+                    expected: 32,
+                })?;
 
         Ok(Self {
             peer_id: peer_id.to_string(),
             sas_seed,
+            desktop_pubkey,
         })
     }
 }
@@ -347,13 +401,35 @@ pub fn mint_peer_id() -> Result<String, PairingError> {
     Ok(base32::encode(Alphabet::Crockford, &bytes))
 }
 
+/// Phase 38 follow-up — mint a fresh X25519 keypair for the
+/// desktop's long-term pairing identity. The previous pairing
+/// flow accepted a desktop pubkey from the WebView (untrusted) and
+/// the PWA shipped a hardcoded all-zero key, so every "paired"
+/// device collided on the same identity, defeating the SAS as a
+/// MITM defence. Now the desktop owns its own keypair, persisted
+/// in the OS keychain alongside other secrets.
+///
+/// Returns `(secret_bytes_32, public_bytes_32)`. Callers are
+/// expected to persist the secret out of band (keychain) and
+/// expose only the public bytes to the PWA / settings panel.
+pub fn mint_desktop_keypair() -> Result<([u8; 32], [u8; 32]), PairingError> {
+    use x25519_dalek::{PublicKey, StaticSecret};
+    let mut secret_bytes = [0u8; 32];
+    getrandom::fill(&mut secret_bytes).map_err(|e| PairingError::Random(e.to_string()))?;
+    let secret = StaticSecret::from(secret_bytes);
+    let public = PublicKey::from(&secret);
+    let secret_out: [u8; 32] = secret.to_bytes();
+    let public_out: [u8; 32] = public.to_bytes();
+    Ok((secret_out, public_out))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn token_round_trips_through_url() {
-        let token = PairingToken::new("DESKTOP-PEER-ID-12345").expect("mint");
+        let token = PairingToken::new("DESKTOP-PEER-ID-12345", [7u8; 32]).expect("mint");
         let url = token.to_url();
         let parsed = PairingToken::parse(&url).expect("parse");
         assert_eq!(parsed, token);
@@ -403,7 +479,7 @@ mod tests {
 
     #[test]
     fn qr_png_is_a_valid_png_signature() {
-        let token = PairingToken::new("test-peer").expect("mint");
+        let token = PairingToken::new("test-peer", [9u8; 32]).expect("mint");
         let png = generate_qr_png(&token.to_url(), 4).expect("qr");
         assert!(png.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]));
         assert!(png.windows(4).any(|w| w == b"IDAT"));

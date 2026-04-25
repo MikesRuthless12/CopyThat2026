@@ -44,8 +44,9 @@ pub(crate) async fn create(src_path: &Path) -> Result<SnapshotHandle, SnapshotEr
     let name = format!("copythat-{}", uuid::Uuid::new_v4());
     let snap_spec = format!("{dataset}@{name}");
 
-    let out = Command::new("zfs")
+    let out = Command::new("/sbin/zfs")
         .arg("snapshot")
+        .arg("--")
         .arg(&snap_spec)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -78,8 +79,15 @@ pub(crate) async fn create(src_path: &Path) -> Result<SnapshotHandle, SnapshotEr
 }
 
 pub(crate) async fn release(c: Cleanup) -> Result<(), SnapshotError> {
-    let out = Command::new("zfs")
+    // Use absolute /sbin/zfs (avoids `$PATH` hijacks in user
+    // shells) and insert `--` so a dataset spec accidentally
+    // beginning with `-` (or a hostile `zfs list` returning a
+    // crafted name from a fake `zfs` binary on PATH) cannot be
+    // interpreted as flags — `-r`/`-f` would otherwise turn this
+    // into a recursive force-destroy.
+    let out = Command::new("/sbin/zfs")
         .arg("destroy")
+        .arg("--")
         .arg(&c.dataset_snapshot)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -138,7 +146,11 @@ fn map_spawn_err(e: std::io::Error) -> SnapshotError {
 /// available or no dataset covers the path.
 fn find_zfs_dataset(path: &Path) -> Option<(String, PathBuf)> {
     let canon = path.canonicalize().ok()?;
-    let output = std::process::Command::new("zfs")
+    // Absolute path defends against a `~/.local/bin/zfs` shim that
+    // could otherwise return a crafted `<name>\t<mp>` line whose
+    // dataset name begins with `-` and gets interpreted as a flag
+    // by downstream `zfs destroy`.
+    let output = std::process::Command::new("/sbin/zfs")
         .arg("list")
         .arg("-H")
         .arg("-o")

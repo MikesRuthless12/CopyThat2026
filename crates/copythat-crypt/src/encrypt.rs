@@ -73,12 +73,20 @@ where
 
     Ok(EncryptionSink {
         inner: Some(writer),
+        finish_error: None,
     })
 }
 
 /// Owns the age `StreamWriter` and flushes the MAC on drop.
 pub struct EncryptionSink<W: Write> {
     inner: Option<age::stream::StreamWriter<W>>,
+    /// Set when the implicit `Drop` path's `finish()` returned an
+    /// error. Callers that prefer the implicit-close shape can
+    /// inspect this *before* the sink drops to surface a truncated
+    /// MAC — without it the engine would believe the copy succeeded
+    /// while the file on disk has a half-written authentication
+    /// tag, breaking any verify-then-delete-source workflow.
+    finish_error: Option<String>,
 }
 
 impl<W: Write> EncryptionSink<W> {
@@ -91,6 +99,15 @@ impl<W: Write> EncryptionSink<W> {
         writer
             .finish()
             .map_err(|e| CryptError::AgeEncrypt(e.to_string()))
+    }
+
+    /// Did the implicit `Drop` path's `finish()` return an error?
+    /// Always `None` when the caller used [`EncryptionSink::finish`]
+    /// explicitly. Callers that wrap the sink in higher-level
+    /// pipelines should check this before claiming the encrypted
+    /// stream is durable.
+    pub fn drop_error(&self) -> Option<&str> {
+        self.finish_error.as_deref()
     }
 }
 
@@ -113,11 +130,18 @@ impl<W: Write> Write for EncryptionSink<W> {
 impl<W: Write> Drop for EncryptionSink<W> {
     fn drop(&mut self) {
         // Drop without `finish()` — write the MAC anyway so the
-        // inner bytes form a valid age file. The Result is ignored
-        // (Drop can't return it) but any error would have already
-        // surfaced on the preceding `write_all` call.
+        // inner bytes form a valid age file. Drop can't return a
+        // Result, but a `finish()` failure here means the on-disk
+        // ciphertext has a truncated / unwritten authentication tag
+        // — every subsequent decrypt will fail with `AgeDecrypt`,
+        // and a "verify-then-delete-source" workflow would silently
+        // delete the only intact copy. Stash the error string so
+        // the caller can poll `drop_error()` before treating the
+        // copy as successful.
         if let Some(writer) = self.inner.take() {
-            let _ = writer.finish();
+            if let Err(e) = writer.finish() {
+                self.finish_error = Some(e.to_string());
+            }
         }
     }
 }

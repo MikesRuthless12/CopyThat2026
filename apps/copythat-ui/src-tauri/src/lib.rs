@@ -194,7 +194,20 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        // Phase 17 follow-up — the Tauri updater plugin is
+        // disabled until release infra ships. Previously the
+        // `[plugins.updater]` block in `tauri.conf.json` carried a
+        // placeholder ed25519 pubkey + an endpoint pointed at an
+        // unowned domain, while `bundle.createUpdaterArtifacts` was
+        // already false. Loading the plugin in that state was a
+        // foot-gun: the moment a future contributor flipped
+        // `createUpdaterArtifacts: true` without replacing the
+        // pubkey, the unsigned-update window would open. Re-enable
+        // when the keypair lands and the manifest endpoint is
+        // owned. (`crates/copythat-ui/src/updater.rs` still
+        // contains the manifest-prefetch + 24h-throttle helper for
+        // when the plugin returns.)
+        // .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(app_state)
         .on_window_event(|window, event| {
             match event {

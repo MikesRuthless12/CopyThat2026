@@ -439,6 +439,15 @@ pub const WINDOWS_MAX_PATH: usize = 260;
 ///   in [`translate_path`] is responsible for rejecting them.
 pub fn apply_long_path_prefix(path: &Path) -> PathBuf {
     let s = path.to_string_lossy();
+    // Refuse to wrap a `..`-laden path: the `\\?\` namespace turns
+    // off Win32 path normalisation, so `..` would survive into the
+    // kernel-resolved path and escape the lexical-traversal guard
+    // that fires before this prefix is applied. Caller sees the
+    // unprefixed path and the engine's metadata pre-flight will
+    // reject it with the normal Phase 17a error.
+    if s.contains("..") {
+        return path.to_path_buf();
+    }
     if s.starts_with(r"\\?\") {
         return path.to_path_buf();
     }
@@ -490,9 +499,15 @@ pub fn translate_path(
     // 1. Unicode normalization on the filename component.
     let (normalized, _changed) = normalize_name(&filename_str, policy, effective_target);
 
-    // 2. Reserved-name handling on Windows targets.
-    let adjusted = if effective_target == TargetOs::Windows && is_reserved_windows_name(&normalized)
-    {
+    // 2. Reserved-name handling. Apply unconditionally regardless
+    // of `effective_target` — a Linux-generated tree containing
+    // `CON.txt` / `LPT1.log` that is later mounted on Windows
+    // (zip archive, network share, removable drive) would
+    // otherwise resolve those names to console / serial-port
+    // devices when the Windows-side reader opens them. The cost
+    // on a non-Windows-native dst is one underscore per pathological
+    // filename and zero behaviour change for the typical case.
+    let adjusted = if is_reserved_windows_name(&normalized) {
         match policy.reserved_name_strategy {
             ReservedNameStrategy::Suffix => apply_reserved_suffix(&normalized),
             ReservedNameStrategy::Reject => {
@@ -666,7 +681,13 @@ mod tests {
     }
 
     #[test]
-    fn translate_path_reserved_only_on_windows() {
+    fn translate_path_reserved_applied_regardless_of_target_os() {
+        // Phase 17 follow-up — reserved-name handling now fires
+        // even when target_os is Linux, because a Linux-side dst
+        // can later be mounted on Windows (zip / network share /
+        // removable drive) and a literal `CON.txt` would resolve
+        // to the console device. The Reject strategy therefore
+        // refuses on Linux too.
         let src = PathBuf::from("/src/CON.txt");
         let dst_root = PathBuf::from("/out");
         let policy = PathPolicy {
@@ -674,9 +695,25 @@ mod tests {
             reserved_name_strategy: ReservedNameStrategy::Reject,
             ..PathPolicy::default()
         };
-        // On Linux, `CON.txt` is just a filename; no rewrite, no error.
+        let err = translate_path(&src, &dst_root, &policy).unwrap_err();
+        assert!(matches!(err, TranslateError::ReservedName { .. }));
+    }
+
+    #[test]
+    fn translate_path_reserved_suffix_on_linux_target() {
+        // Default strategy is Suffix — verify the Linux target
+        // also gets the underscore appended.
+        let src = PathBuf::from("/src/LPT1.txt");
+        let dst_root = PathBuf::from("/out");
+        let policy = PathPolicy {
+            target_os: TargetOs::Linux,
+            reserved_name_strategy: ReservedNameStrategy::Suffix,
+            ..PathPolicy::default()
+        };
         let out = translate_path(&src, &dst_root, &policy).unwrap();
-        assert_eq!(out.file_name().unwrap().to_string_lossy(), "CON.txt");
+        let name = out.file_name().unwrap().to_string_lossy().into_owned();
+        assert_ne!(name, "LPT1.txt");
+        assert!(name.starts_with("LPT1") || name.starts_with("LPT1_"));
     }
 
     #[test]

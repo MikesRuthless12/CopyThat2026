@@ -59,6 +59,15 @@ pub enum SyncError {
     /// to the UI.
     #[error("sync cancelled by caller")]
     Cancelled,
+
+    /// A relpath the sync layer was about to operate on contained
+    /// `..`, control characters, or a Windows drive prefix — any of
+    /// which would let an attacker who can write the
+    /// `.copythat-sync.db` baseline plant a key that escapes the
+    /// pair root. The engine refuses to delete / rename / copy the
+    /// offending entry; a future sync round will skip it again.
+    #[error("sync refused unsafe relpath: {0}")]
+    UnsafeRelpath(String),
 }
 
 impl From<redb::Error> for SyncError {

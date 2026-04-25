@@ -173,6 +173,7 @@ pub(crate) async fn parallel_chunk_copy(
     let events_for_progress = events.clone();
     let progress_task = {
         let cancelled = cancelled.clone();
+        let ctrl_for_progress = ctrl.clone();
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(super::PROGRESS_MIN_INTERVAL);
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -180,6 +181,19 @@ pub(crate) async fn parallel_chunk_copy(
             let mut last_emit_bytes: u64 = 0;
             loop {
                 ticker.tick().await;
+                // While paused, every worker is busy-sleeping at 20 ms;
+                // the bytes counter is frozen and there's nothing
+                // useful to emit. Skip until pause clears or cancel
+                // fires — keeps the emitter from burning a wakeup
+                // every 50 ms forever on an indefinitely-paused job.
+                if ctrl_for_progress.is_paused() {
+                    if cancelled.load(Ordering::Relaxed)
+                        || ctrl_for_progress.is_cancelled()
+                    {
+                        break;
+                    }
+                    continue;
+                }
                 let bytes = bytes_for_progress.load(Ordering::Relaxed);
                 if bytes.saturating_sub(last_emit_bytes) >= super::PROGRESS_MIN_BYTES {
                     let elapsed = started.elapsed();

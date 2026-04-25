@@ -33,6 +33,14 @@
 //!    the path on without re-running the bench.
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+/// Process-global lock the env-var-touching tests acquire before
+/// flipping `COPYTHAT_PARALLEL_CHUNKS`. cargo runs tests in parallel
+/// by default; without this lock two tests that set/clear the same
+/// var would race and produce intermittent failures whose root cause
+/// (the env var, not the parallel-copy logic) is hard to spot.
+static ENV_VAR_LOCK: Mutex<()> = Mutex::new(());
 
 fn repo_root() -> PathBuf {
     let here = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -111,11 +119,15 @@ fn requested_chunks_stays_off_below_threshold() {
 
 #[test]
 fn requested_chunks_default_is_4_for_large_files() {
+    let _guard = ENV_VAR_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     // Clear any inherited override before testing the default
     // (env var inheritance is per-process; tests within one binary
     // share the process so we strip first).
-    // SAFETY: single-threaded test isolation around env var; the
-    // following set/remove pair is sequenced by `&mut self`.
+    // SAFETY: ENV_VAR_LOCK serialises every test that touches this
+    // env var, so the set/remove pair is the only mutation in
+    // flight while the guard is held.
     unsafe {
         std::env::remove_var("COPYTHAT_PARALLEL_CHUNKS");
     }
@@ -126,6 +138,11 @@ fn requested_chunks_default_is_4_for_large_files() {
 
 #[test]
 fn requested_chunks_zero_or_one_disables_via_env() {
+    let _guard = ENV_VAR_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    // SAFETY: serialised by ENV_VAR_LOCK; see the
+    // `requested_chunks_default_is_4_for_large_files` comment.
     unsafe {
         std::env::set_var("COPYTHAT_PARALLEL_CHUNKS", "0");
     }
@@ -148,6 +165,10 @@ fn requested_chunks_zero_or_one_disables_via_env() {
 
 #[test]
 fn requested_chunks_clamps_to_2_through_16() {
+    let _guard = ENV_VAR_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    // SAFETY: serialised by ENV_VAR_LOCK.
     unsafe {
         std::env::set_var("COPYTHAT_PARALLEL_CHUNKS", "32");
     }

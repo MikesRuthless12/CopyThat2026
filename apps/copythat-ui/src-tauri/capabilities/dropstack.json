@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "dropstack",
+  "description": "Narrow capability set for the tray-resident Drop Stack window. The dropstack webview only needs to enumerate / mutate the in-memory Drop Stack registry, dispatch its accumulated paths into copy/move jobs via the existing IPC, and listen for the live `dropstack-changed` / activity events. Permissions intentionally exclude `core:webview:allow-create-webview-window` and other reach the main window has so a future content-injection bug in dropstack.html can't pivot to spawning new webviews or accessing tray / menu surfaces the parent owns.",
+  "windows": ["dropstack"],
+  "permissions": [
+    "core:event:default",
+    "core:window:default",
+    "core:webview:default",
+    "dialog:default"
+  ]
+}

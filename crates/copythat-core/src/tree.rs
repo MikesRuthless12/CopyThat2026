@@ -880,7 +880,11 @@ async fn copy_tree_inner(
 
     // Directory times last, deepest-first so setting a parent's
     // mtime doesn't get invalidated by a later file-copy into its
-    // children.
+    // children. Each set_file_times runs on the blocking pool;
+    // collect the join handles into a JoinSet so a single failure
+    // (missing dir, EPERM, ENOTSUP on a sandbox FS) surfaces as a
+    // FileError event rather than silently disappearing into a
+    // discarded `let _`.
     if opts.preserve_directory_times {
         all_dirs.sort_by_key(|(_, dst)| std::cmp::Reverse(dst.components().count()));
         for (src, dst) in all_dirs {
@@ -890,9 +894,35 @@ async fn copy_tree_inner(
             };
             let atime = FileTime::from_last_access_time(&src_md);
             let mtime = FileTime::from_last_modification_time(&src_md);
-            let _ =
-                tokio::task::spawn_blocking(move || filetime::set_file_times(&dst, atime, mtime))
-                    .await;
+            let dst_for_err = dst.clone();
+            let src_for_err = src.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                filetime::set_file_times(&dst, atime, mtime)
+            })
+            .await;
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    let _ = events
+                        .send(CopyEvent::FileError {
+                            err: CopyError::from_io(&src_for_err, &dst_for_err, e),
+                        })
+                        .await;
+                }
+                Err(join_err) => {
+                    let _ = events
+                        .send(CopyEvent::FileError {
+                            err: CopyError::from_io(
+                                &src_for_err,
+                                &dst_for_err,
+                                std::io::Error::other(format!(
+                                    "preserve-dir-times join: {join_err}"
+                                )),
+                            ),
+                        })
+                        .await;
+                }
+            }
         }
     }
 

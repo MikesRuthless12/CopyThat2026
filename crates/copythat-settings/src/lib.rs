@@ -1756,6 +1756,13 @@ pub struct SftpBackendConfig {
     pub port: u16,
     pub username: String,
     pub root: String,
+    /// Path to an OpenSSH-format `known_hosts` file. Empty falls
+    /// back to `$HOME/.ssh/known_hosts` at IPC time. With a
+    /// missing/empty file the backend's host-key verifier returns
+    /// `Ok(true)` for any presented key (silent TOFU); the
+    /// fallback closes that gap on every host that has the
+    /// standard OpenSSH layout.
+    pub known_hosts_path: String,
 }
 
 impl Default for SftpBackendConfig {
@@ -1765,6 +1772,7 @@ impl Default for SftpBackendConfig {
             port: 22,
             username: String::new(),
             root: String::new(),
+            known_hosts_path: String::new(),
         }
     }
 }

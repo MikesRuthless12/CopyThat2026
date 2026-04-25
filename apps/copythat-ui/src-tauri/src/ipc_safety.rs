@@ -100,7 +100,9 @@ impl std::error::Error for IpcError {}
 impl From<PathSafetyError> for IpcError {
     fn from(value: PathSafetyError) -> Self {
         match value {
-            PathSafetyError::ParentTraversal { .. } | PathSafetyError::NulByte => Self::PathEscape,
+            PathSafetyError::ParentTraversal { .. }
+            | PathSafetyError::NulByte
+            | PathSafetyError::ControlChar => Self::PathEscape,
             PathSafetyError::Empty => Self::EmptyPath,
         }
     }

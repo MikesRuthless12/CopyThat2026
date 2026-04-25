@@ -116,16 +116,15 @@ fn build_encryption_policy(settings: &CryptSettings) -> Result<Option<Encryption
     match settings.encryption_mode.to_ascii_lowercase().as_str() {
         "off" | "" => Ok(None),
         "passphrase" => {
-            // Passphrase entry is deferred — the UI's future Phase
-            // 35-follow-up will prompt the user + stash the
-            // secret in the OS keychain. Today we refuse to enable
-            // passphrase mode silently; the runner logs and treats
-            // encryption as off.
-            eprintln!(
-                "[crypt] passphrase encryption requires the Settings → Encryption modal to \
-                 collect the passphrase at copy-start; treating as off for now"
-            );
-            Ok(None)
+            // Passphrase entry is deferred (the prompt + keychain
+            // stash lands in a Phase 35 follow-up). Until then, fail
+            // closed: returning `Ok(None)` here would silently
+            // downgrade an explicit user request for "encrypt with
+            // passphrase" into a plaintext copy, leaving every file
+            // at the destination in the clear with no error
+            // surfaced. Refuse to start the job until the body fill
+            // lands.
+            Err("err-encryption-passphrase-not-yet-supported".to_string())
         }
         "recipients" => {
             if settings.recipients_file.trim().is_empty() {

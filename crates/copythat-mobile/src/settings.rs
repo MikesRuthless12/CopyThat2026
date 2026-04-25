@@ -62,6 +62,57 @@ impl MobileSettings {
     }
 }
 
+/// Validate a PeerJS broker URL/host before the PWA's PeerJS
+/// adapter dials it. Empty = use the upstream default. Otherwise
+/// require a bare hostname or `https://`-only URL — refuse
+/// `http://`, custom schemes, embedded paths/queries, and any
+/// shape that could let a settings-import payload route the
+/// signaling channel through an attacker-controlled server.
+///
+/// Returns `Ok(())` when the broker is acceptable, `Err(reason)`
+/// otherwise.
+pub fn validate_peerjs_broker(raw: &str) -> Result<(), String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    // Reject obvious URL-injection shapes: control chars, embedded
+    // whitespace, path/query/fragment characters, user-info `@`,
+    // backslash, embedded NUL.
+    if trimmed
+        .chars()
+        .any(|c| c.is_control() || c.is_whitespace() || matches!(c, '@' | '\\' | '?' | '#' | '<' | '>' | '"' | '\''))
+    {
+        return Err("peerjs_broker contains forbidden characters".into());
+    }
+    // Two acceptable shapes: a bare hostname (no scheme) or an
+    // explicit `https://` URL whose authority matches a hostname.
+    if let Some(rest) = trimmed.strip_prefix("https://") {
+        let host = rest.split('/').next().unwrap_or("");
+        if host.is_empty() || host.contains(':') && !host.split(':').nth(1).map(|p| p.chars().all(|c| c.is_ascii_digit())).unwrap_or(false) {
+            return Err("peerjs_broker https URL has malformed authority".into());
+        }
+        Ok(())
+    } else if trimmed.contains("://") {
+        Err("peerjs_broker scheme must be https:// (got something else)".into())
+    } else {
+        // Bare hostname: must look like a hostname (alnum, hyphen,
+        // dot, optional `:port`). Reject `..` to avoid relative
+        // paths slipping through.
+        if trimmed.contains("..") {
+            return Err("peerjs_broker hostname cannot contain `..`".into());
+        }
+        for c in trimmed.chars() {
+            if !(c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':')) {
+                return Err(format!(
+                    "peerjs_broker contains illegal character {c:?}"
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

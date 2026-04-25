@@ -160,7 +160,13 @@ where
     let mut last_state: Vec<bool> = roots.iter().map(|r| probe.is_reachable(r)).collect();
 
     let started_at = Instant::now();
-    loop {
+    // Break the inter-poll wait into short slices so cancellation
+    // latency stays bounded (the §4.11g requirement is ≤ 2 s, and a
+    // typical poll_interval is 5 s — sleeping the whole interval
+    // would miss the bound). 100 ms ticks give effectively-immediate
+    // cancellation while keeping the per-second wakeup count to ~10.
+    const CANCEL_TICK: Duration = Duration::from_millis(100);
+    'outer: loop {
         if cancel.is_cancelled() {
             break;
         }
@@ -169,7 +175,20 @@ where
                 break;
             }
         }
-        std::thread::sleep(options.poll_interval);
+        let mut waited = Duration::ZERO;
+        while waited < options.poll_interval {
+            if cancel.is_cancelled() {
+                break 'outer;
+            }
+            if let Some(budget) = options.max_run_time {
+                if started_at.elapsed() >= budget {
+                    break 'outer;
+                }
+            }
+            let slice = (options.poll_interval - waited).min(CANCEL_TICK);
+            std::thread::sleep(slice);
+            waited += slice;
+        }
         if cancel.is_cancelled() {
             break;
         }

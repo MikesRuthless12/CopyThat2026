@@ -9,6 +9,7 @@
   import { onDestroy, onMount } from "svelte";
 
   import { applyDesktopLocale } from "../i18n";
+  import { getOrMintPhoneIdentity } from "../identity";
   import type { PeerLink } from "../peer";
   import type {
     HistoryRow,
@@ -85,9 +86,23 @@
 
   async function hello() {
     try {
+      // Use this phone's persistent identity (32 bytes minted on
+      // first launch + stored in localStorage) so the desktop can
+      // match against `MobileSettings::pairings`. The previous
+      // `"00".repeat(32)` shape collided every device on the same
+      // identity, defeating the pairing record entirely.
+      let phonePubkeyHex: string;
+      try {
+        phonePubkeyHex = getOrMintPhoneIdentity();
+      } catch {
+        // Storage / crypto unavailable — fall back to a per-session
+        // value the desktop will reject as not-paired. Better than
+        // sending the all-zero key the previous shape did.
+        phonePubkeyHex = "00".repeat(32);
+      }
       await link.send({
         kind: "hello",
-        phone_pubkey_hex: "00".repeat(32),
+        phone_pubkey_hex: phonePubkeyHex,
         device_label: "phone",
       });
       // Phase 38 — pull the desktop's selected locale so the PWA

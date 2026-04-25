@@ -188,8 +188,17 @@ impl JobDto {
             files_total: job.files_total,
             rate_bps: 0,
             eta_seconds: None,
-            started_at_ms: job.started_at.map(|_| now_ms()),
-            finished_at_ms: job.finished_at.map(|_| now_ms()),
+            // Convert the `Instant` to a wall-clock unix-ms by
+            // subtracting `elapsed()` from `now_ms()`. The previous
+            // shape returned `now_ms()` unconditionally, so the UI
+            // always rendered "started 1s ago" no matter how long
+            // ago the job actually started.
+            started_at_ms: job
+                .started_at
+                .map(|i| now_ms().saturating_sub(i.elapsed().as_millis() as u64)),
+            finished_at_ms: job
+                .finished_at
+                .map(|i| now_ms().saturating_sub(i.elapsed().as_millis() as u64)),
             last_error: job.last_error.as_ref().map(|e| e.message.clone()),
         }
     }
@@ -1796,7 +1805,17 @@ impl SettingsDto {
         s.general.auto_resume_interrupted = self.general.auto_resume_interrupted;
         s.general.mobile_onboarding_dismissed = self.general.mobile_onboarding_dismissed;
 
-        s.transfer.buffer_size_bytes = self.transfer.buffer_size_bytes as usize;
+        // Clamp at the IPC boundary so a hand-edited DTO (or a
+        // future panel that forgets to clamp on the UI side) can't
+        // persist a buffer size below the engine's 64 KiB floor or
+        // above the 16 MiB ceiling. The engine's `effective_buffer_size`
+        // would otherwise be the only line of defence and the
+        // raw value would round-trip back into TOML at whatever
+        // garbage the caller supplied.
+        const MIN_BUF: u64 = 64 * 1024;
+        const MAX_BUF: u64 = 16 * 1024 * 1024;
+        let clamped_buf = self.transfer.buffer_size_bytes.clamp(MIN_BUF, MAX_BUF);
+        s.transfer.buffer_size_bytes = clamped_buf as usize;
         s.transfer.verify = parse_verify(&self.transfer.verify);
         s.transfer.concurrency = parse_concurrency(&self.transfer.concurrency);
         s.transfer.reflink = parse_reflink(&self.transfer.reflink);
