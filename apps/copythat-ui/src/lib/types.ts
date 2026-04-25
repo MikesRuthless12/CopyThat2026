@@ -552,7 +552,36 @@ export interface SettingsDto {
   /// wire so older backends without the field don't break this
   /// frontend.
   crypt?: CryptSettingsDto;
+  /// Phase 37 — mobile companion (pairing + push). Optional on the
+  /// wire so older backends without the field don't break this
+  /// frontend.
+  mobile?: MobileSettingsDto;
 }
+
+/** Phase 37 — wire form of `copythat_settings::MobileSettings`. */
+export interface MobileSettingsDto {
+  pairEnabled: boolean;
+  autoConnect: boolean;
+  peerjsBroker: string;
+  desktopPeerId: string;
+  pairings: MobilePairingEntryDto[];
+  apnsP8Pem: string;
+  apnsTeamId: string;
+  apnsKeyId: string;
+  fcmServiceAccountJson: string;
+}
+
+export interface MobilePairingEntryDto {
+  label: string;
+  phonePublicKeyHex: string;
+  pairedAt: number;
+  pushTarget?: MobilePushTargetDto;
+}
+
+export type MobilePushTargetDto =
+  | { kind: "apns"; token: string }
+  | { kind: "fcm"; token: string }
+  | { kind: "stub_endpoint"; url: string };
 
 /** Phase 35 — wire form of `copythat_settings::CryptSettings`. */
 export type EncryptionModeWire = "off" | "passphrase" | "recipients";

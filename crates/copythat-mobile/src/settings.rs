@@ -1,30 +1,52 @@
-//! Settings types persisted into the `copythat-settings` TOML root.
+//! Runtime mobile-companion settings shape.
 //!
-//! `copythat-settings::MobileSettings` re-exports this struct so the
-//! Tauri shell can round-trip it through the same `Settings` blob
-//! every other phase already uses. Keeping the shape here means the
-//! mobile crate owns its own schema; the settings crate carries the
-//! pointer.
+//! Mirrored on disk by `copythat-settings::MobileSettings` (stringly
+//! typed so the settings crate stays free of axum / rustls /
+//! reqwest). The Tauri runner converts via
+//! [`crate::settings_bridge`].
 
 use serde::{Deserialize, Serialize};
 
 use crate::pairing::PairingRecord;
 
 /// Top-level mobile settings. Off by default — a fresh install
-/// ships with no pair-server listening until the user opens
-/// Settings → Mobile and explicitly toggles pairing on.
+/// ships with `pair_enabled = false` and the runner skips
+/// registering the desktop peer-id with PeerJS until the user
+/// flips the toggle on in Settings → Mobile.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct MobileSettings {
-    /// Master toggle. While `true`, the runner can spin up the
-    /// pair-server on demand from the Settings panel.
+    /// Master toggle for new-device enrolment. When `true`, the
+    /// Settings → Mobile panel shows the pairing QR + accepts new
+    /// pairing handshakes. Off by default so a fresh install
+    /// ships with no possibility of unintended pairings.
     pub pair_enabled: bool,
-    /// Bind port. `0` (the default) lets the OS pick a free
-    /// ephemeral port at server start.
-    pub bind_port: u16,
+    /// "Always connect to mobile app" — when `true`, the runner
+    /// registers the persisted `desktop_peer_id` with the PeerJS
+    /// broker every time Copy That launches, so already-paired
+    /// phones can connect anytime the desktop is running.
+    ///
+    /// **Auto-connect requires at least one paired device.** If
+    /// `auto_connect = true` but `pairings` is empty, the runner
+    /// surfaces the first-launch onboarding flow (install QR +
+    /// "Pair a phone first" prompt) instead of registering with
+    /// the broker — there's no point announcing a peer-id that
+    /// nothing on the LAN is going to dial. Flipping the toggle
+    /// on with no pairings doesn't auto-register; the desktop
+    /// shows the callout, the user installs the PWA + completes
+    /// the pairing handshake, and from then on every launch
+    /// auto-connects.
+    pub auto_connect: bool,
+    /// PeerJS broker URL. Empty string means the public default
+    /// (`0.peerjs.com`); production deployments override with a
+    /// self-hosted broker.
+    pub peerjs_broker: String,
+    /// Stable PeerJS peer-id the desktop registers under.
+    /// Persisted across launches so already-paired phones can
+    /// reconnect without re-pairing.
+    pub desktop_peer_id: String,
     /// Persisted records of every device that has completed
-    /// pairing. The user can revoke entries individually from the
-    /// Settings panel.
+    /// pairing.
     pub pairings: Vec<PairingRecord>,
 }
 
@@ -48,7 +70,9 @@ mod tests {
     fn round_trips_through_toml() {
         let s = MobileSettings {
             pair_enabled: true,
-            bind_port: 0,
+            auto_connect: true,
+            peerjs_broker: "0.peerjs.com".into(),
+            desktop_peer_id: "DESKTOP-PEER-12345".into(),
             pairings: vec![PairingRecord {
                 label: "Mike's iPhone".into(),
                 phone_public_key: [7u8; 32],

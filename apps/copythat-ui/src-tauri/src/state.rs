@@ -123,6 +123,12 @@ pub struct AppState {
     /// `SettingsChanged` into the sink via helpers in
     /// `audit_commands`.
     pub audit: crate::audit_commands::AuditRegistry,
+    /// Phase 37 — mobile-pairing registry. Holds the in-flight
+    /// `PairServerHandle` while Settings → Mobile shows the QR; the
+    /// runner spins it up via `mobile_pair_start` and tears it down
+    /// via `mobile_pair_stop` (or when a successful pairing
+    /// commits).
+    pub mobile: crate::mobile_commands::MobileRegistry,
 }
 
 impl AppState {
@@ -190,6 +196,9 @@ impl AppState {
             // a sink from `settings.audit` when the user has the
             // toggle on, otherwise it stays empty.
             audit: crate::audit_commands::AuditRegistry::new(),
+            // Phase 37 — idle mobile registry; the user spins the
+            // pair-server up on demand from Settings → Mobile.
+            mobile: crate::mobile_commands::MobileRegistry::new(),
         }
     }
 

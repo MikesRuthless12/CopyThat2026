@@ -1,66 +1,62 @@
 //! `copythat-mobile` — Phase 37 desktop-side mobile companion.
 //!
-//! Goal: a phone (iOS or Android) running the future Tauri Mobile
-//! target can pair with the desktop over the local network, browse
-//! the Phase 9 history (read-only), trigger Phase 12 saved profiles
-//! plus Phase 36 TOML jobspecs, and receive APNs / FCM push events
+//! Goal: a phone running the Copy That mobile PWA can pair with the
+//! desktop over a PeerJS WebRTC data channel, browse the Phase 9
+//! history (read-only), trigger Phase 12 saved profiles plus Phase
+//! 36 TOML jobspecs, drive every active job (pause / resume /
+//! cancel / resolve collision), and receive APNs / FCM push events
 //! when those jobs finish.
 //!
-//! This crate is the **desktop side** of that contract:
+//! # Architecture
 //!
-//! - [`pairing`] — `cthat-pair://` token format, SAS-emoji
-//!   fingerprint, X25519 key exchange, [`PairingRecord`] storage
-//!   types.
-//! - [`server`] — minimal axum 0.8 router that exposes the pair-
-//!   begin / pair-complete handshake on a local-network port. The
-//!   Tauri runner spins this up while Settings → Mobile shows the
-//!   QR code; the server stops the moment the user closes the
-//!   Settings panel or a successful pairing lands.
-//! - [`notify`] — APNs / FCM push dispatch primitives. Real
-//!   provider-token signing (APNs ed25519 JWT, FCM Google service
-//!   account) is intentionally deferred to a Phase 37 follow-up;
-//!   the call surface is wired here so the runner can hand off a
-//!   `PushTarget` without depending on the provider crates today.
-//! - [`settings`] — `MobileSettings` sub-struct that persists into
-//!   the existing `copythat-settings::Settings` TOML root via the
-//!   wire bridge in `copythat-settings::mobile`.
+//! - **Pairing transport.** PeerJS over WebRTC, signaling through
+//!   the public PeerJS broker. The desktop registers a stable peer
+//!   ID (persisted in [`MobileSettings::desktop_peer_id`]) and the
+//!   phone scans a QR carrying `cthat-pair://<peer-id>?sas=<seed>`.
+//!   The data channel runs over DTLS so confidentiality + integrity
+//!   are handled at the transport layer; this crate only owns the
+//!   message vocabulary.
+//! - **PWA distribution.** The phone-side app lives in
+//!   `apps/copythat-mobile/` (Vite + Svelte 5 + peerjs). Users
+//!   "Add to Home Screen" from their browser — no App Store
+//!   gatekeeping. The PWA manifest reuses the desktop's `icon.png`
+//!   so the home-screen icon matches the desktop tray.
+//! - **Push.** APNs ES256 + FCM RS256 JWT signers in [`notify`]
+//!   for completion notifications when the data channel is asleep.
 //!
-//! # What this crate does NOT contain
+//! # Module layout
 //!
-//! - The iOS / Android Tauri Mobile binary. Building the iOS target
-//!   needs Xcode on a macOS host; the Android target needs the
-//!   Android SDK + an emulator. Both are documented as a Phase 37
-//!   follow-up in `CopyThat2026-Build-Prompts-Guide2.md`.
-//! - The Settings → Mobile Svelte panel. Lives in
-//!   `apps/copythat-ui/src/lib/components/settings/MobilePanel.svelte`
-//!   in the Phase 37 follow-up; the Tauri IPC commands the panel
-//!   calls are stubbed in `apps/copythat-ui/src-tauri/src/mobile.rs`
-//!   (also follow-up).
-//! - Live progress events streamed back to the phone. The same
-//!   `CopyEvent` mpsc channel the GUI consumes is the source; a
-//!   bridge that forwards selected events to the paired mobile lands
-//!   in the follow-up alongside the actual mobile UI.
+//! - [`pairing`] — `cthat-pair://` token grammar, four-emoji SAS
+//!   derivation, peer-id minting, QR PNG encoder.
+//! - [`server`] — over-the-wire `RemoteCommand` / `RemoteResponse`
+//!   vocabulary + the [`server::RemoteControl`] async trait the
+//!   Tauri shell implements.
+//! - [`notify`] — APNs / FCM JWT signers + `HttpDispatcher`.
+//! - [`settings`] — runtime `MobileSettings` shape.
+//! - [`settings_bridge`] — converts between the persistence shape
+//!   in `copythat-settings::MobileSettings` and the runtime shape
+//!   here.
 //!
-//! # Threat model
+//! # What the Phase 37 follow-up shipped
 //!
-//! - Pairing happens on a single LAN. The QR code carries the host
-//!   IP, the random port, a 256-bit pairing token (base32), and the
-//!   server's TLS fingerprint. The phone must scan the QR while
-//!   physically near the desktop — no remote attacker can guess the
-//!   token + reach the loopback-bound or LAN-bound port in the
-//!   ~60-second pairing window.
-//! - Both sides verify the SAS fingerprint (4 emojis) before the
-//!   X25519 long-term keypair is finalized. Any MITM on the LAN
-//!   would have to forge an X25519 public key whose SHA-256
-//!   fingerprint produces the same 4 emojis the desktop is showing
-//!   — 32 bits of fingerprint entropy makes online MITM obvious.
-//! - After pairing, every request from the phone is signed against
-//!   the long-term shared secret; replay is blocked by a monotonic
-//!   nonce on each side.
-//! - Mobile-as-source / sync-to-photos / e2e-encrypted file transfer
-//!   are intentionally OUT OF SCOPE for Phase 37 — those need a
-//!   file-provider extension on iOS and scoped storage on Android,
-//!   which add an order of magnitude of platform-specific surface.
+//! - PeerJS pairing-token URL grammar with deterministic SAS
+//!   round-trip on both sides of the data channel.
+//! - APNs ES256 + FCM RS256 JWT signers + `HttpDispatcher` with
+//!   per-target auth header.
+//! - `MobileSettings` wired into `copythat-settings::Settings`
+//!   under `mobile`, with a settings-bridge round-trip.
+//! - `RemoteControl` async-trait + `RemoteCommand` /
+//!   `RemoteResponse` vocabulary covering job listing, pause /
+//!   resume / cancel, collision resolution, globals, history
+//!   browse + rerun, secure delete, and start-copy.
+//!
+//! # What's still open
+//!
+//! - Phone-side authentication beyond DTLS — currently the
+//!   `Hello` handshake only checks the device's long-term X25519
+//!   public key against `MobileSettings::pairings`. A signed
+//!   nonce challenge lands in a follow-up if the threat model
+//!   tightens (rogue browser tab on the same WebRTC connection).
 
 #![forbid(unsafe_code)]
 
@@ -68,11 +64,18 @@ pub mod notify;
 pub mod pairing;
 pub mod server;
 pub mod settings;
+pub mod settings_bridge;
 
-pub use notify::{NotifyDispatcher, PushPayload, PushReceipt, PushSendError, PushTarget};
-pub use pairing::{
-    PAIRING_SCHEME, PairingError, PairingRecord, PairingToken, SasFingerprint, generate_qr_png,
-    sas_fingerprint_from_shared_secret, sas_fingerprint_to_emoji, shared_secret_from_token,
+pub use notify::{
+    ApnsSigner, FcmSigner, HttpDispatcher, NotifyDispatcher, PushPayload, PushReceipt,
+    PushSendError, PushSigner, PushTarget,
 };
-pub use server::{PairServer, PairServerError, PairServerHandle};
+pub use pairing::{
+    PAIRING_SAS_SEED_BYTES, PAIRING_SCHEME, PairingError, PairingRecord, PairingToken,
+    SAS_EMOJI_SLOTS, SasFingerprint, generate_qr_png, mint_peer_id, sas_fingerprint,
+    sas_fingerprint_to_emoji,
+};
+pub use server::{
+    CollisionAction, HistoryRow, JobSummary, RemoteCommand, RemoteControl, RemoteResponse, dispatch,
+};
 pub use settings::MobileSettings;
