@@ -169,6 +169,8 @@ err-verify-failed = Verificação pós-cópia falhou
 # MT
 err-path-escape = Caminho rejeitado — contém segmentos de diretório pai (..) ou bytes ilegais
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
 err-io-other = Erro de E/S desconhecido
 err-sparseness-mismatch = Não foi possível preservar layout esparso no destino  # MT
 

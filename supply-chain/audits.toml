@@ -1,0 +1,24 @@
+
+# Local audit rows for crates not covered by the imported feeds in
+# `config.toml`. Each row is a hand-written attestation that a
+# specific version of a specific dep is safe to deploy.
+#
+# Phase 17b ships this file empty by design — the imported Mozilla /
+# Google / Embark / Bytecode Alliance / Zcash feeds already cover the
+# vast majority of CopyThat's transitive deps. Per-crate rows land
+# here only when:
+#   1. A new dep lands that none of the imported feeds audit, and
+#   2. We do not want to wait for an upstream feed update before
+#      tagging a release.
+#
+# Format: see https://mozilla.github.io/cargo-vet/audit-entries.html
+#
+# Example row (uncomment and customise when adding a hand-audit):
+#
+#   [[audits.foo-crate]]
+#   version = "1.2.3"
+#   who = "Mike Weaver <mythodikalone@gmail.com>"
+#   criteria = "safe-to-deploy"
+#   notes = "Reviewed src/lib.rs + src/parser.rs end-to-end. No
+#            unsafe blocks. No network or filesystem calls outside
+#            the documented test fixture path."

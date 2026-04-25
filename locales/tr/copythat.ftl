@@ -169,6 +169,8 @@ err-verify-failed = Kopya sonrası doğrulama başarısız
 # MT
 err-path-escape = Yol reddedildi — üst dizin (..) parçaları veya geçersiz baytlar içeriyor
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
 err-io-other = Bilinmeyen G/Ç hatası
 err-sparseness-mismatch = Hedefte seyrek düzen korunamadı  # MT
 

@@ -9,6 +9,7 @@ pub(crate) mod history;
 pub(crate) mod mount;
 pub(crate) mod plan;
 pub(crate) mod remote;
+pub(crate) mod schedule;
 pub(crate) mod shred;
 pub(crate) mod stack;
 pub(crate) mod sync;

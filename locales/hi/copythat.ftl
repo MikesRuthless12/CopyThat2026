@@ -169,6 +169,8 @@ err-verify-failed = प्रतिलिपि के बाद सत्या
 # MT
 err-path-escape = पथ अस्वीकृत — मूल-निर्देशिका (..) खंड या अवैध बाइट्स शामिल हैं
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
 err-io-other = अज्ञात I/O त्रुटि
 err-sparseness-mismatch = गंतव्य पर स्पार्स लेआउट संरक्षित नहीं किया जा सका  # MT
 

@@ -322,3 +322,12 @@ path = "../../../tests/smoke/phase_28_dropstack.rs"
 [[test]]
 name = "phase_29_dnd"
 path = "../../../tests/smoke/phase_29_dnd.rs"
+
+# Phase 17e — IPC argument audit + canonicalisation. Exercises
+# `ipc_safety::validate_ipc_path*`, asserts every locale carries the
+# new `err-path-invalid-encoding` Fluent key, and walks
+# `commands.rs` to confirm every path-typed `#[tauri::command]`
+# routes through one of the gate helpers (drift tripwire).
+[[test]]
+name = "phase_17e_ipc_audit"
+path = "../../../tests/smoke/phase_17e_ipc_audit.rs"

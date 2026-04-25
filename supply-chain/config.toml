@@ -1,0 +1,74 @@
+
+# `cargo vet` — supply-chain trust audit configuration.
+#
+# Phase 17b ships this file as the contract between the workspace
+# and the third-party crates it pulls in. Every direct dep in
+# `Cargo.toml` (and every transitive dep that lands when those
+# resolve) must be either:
+#
+#  - **vetted** — a signed audit row in `audits.toml`, or
+#  - **trusted** — a signed audit row in one of the imported third-
+#    party audit feeds (Mozilla / Google / Embark below), or
+#  - **exempted** — temporarily allow-listed in the `[exemptions]`
+#    block while the audit backlog catches up.
+#
+# Tagged releases (see `.github/workflows/release.yml`) require the
+# tree to be `cargo vet`-clean (zero exemptions, zero unvetted
+# deps). The CI `cargo-vet` job runs on every push but currently
+# uses `continue-on-error: true` so the backlog of uncovered deps
+# does not red-X unrelated PRs.
+
+[cargo-vet]
+version = "0.10"
+
+# Trusted third-party audit feeds. Each import is the upstream's
+# `audits.toml` published at a stable URL; cargo-vet downloads + caches
+# the file and treats every audit row in it as locally vetted.
+#
+# Mozilla / Google / Embark / Bytecode Alliance are the four widest
+# Rust supply-chain audit corpora; layering them gives us coverage
+# of most popular crates without having to write the audit rows
+# ourselves. Other ecosystems (e.g. embedded HAL crates) we'll
+# audit row-by-row in `audits.toml`.
+
+[imports.bytecode-alliance]
+url = "https://raw.githubusercontent.com/bytecodealliance/wasmtime/main/supply-chain/audits.toml"
+
+[imports.embark-studios]
+url = "https://raw.githubusercontent.com/EmbarkStudios/rust-ecosystem/main/audits.toml"
+
+[imports.google]
+url = "https://raw.githubusercontent.com/google/supply-chain/main/audits.toml"
+
+[imports.mozilla]
+url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
+
+[imports.zcash]
+url = "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/audits.toml"
+
+# Per-crate review policy.
+#
+# `safe-to-deploy` — the default. Says the audited version is safe to
+#                    ship to end users.
+# `safe-to-run`    — looser; says the version is safe to run during
+#                    the build (e.g. proc-macros) but the same version
+#                    might not be safe to ship.
+# `does-not-implement-crypto` — for crates that look like crypto from
+#                                their name but aren't.
+#
+# We default to `safe-to-deploy` workspace-wide; per-crate overrides
+# go in `[policy.<crate-name>]` blocks below.
+
+[policy.copythat-core]
+audit-as-crates-io = false  # workspace-internal, not on crates.io
+
+[policy.copythat-cli]
+audit-as-crates-io = false
+
+[policy.copythat-platform]
+audit-as-crates-io = false
+
+# All other workspace crates inherit the same `audit-as-crates-io =
+# false` via the `publish = false` workspace flag in Cargo.toml; they
+# are not on crates.io so cargo-vet should not look for them in any
+# audit feed.

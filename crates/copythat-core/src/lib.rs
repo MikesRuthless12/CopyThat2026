@@ -145,7 +145,10 @@ pub use options::{
     TreeOptions,
 };
 pub use queue::{Job, JobId, JobKind, JobState, Queue, QueueEvent};
-pub use safety::{PathSafetyError, validate_all, validate_path_no_traversal};
+pub use safety::{
+    PathSafetyError, is_no_follow_rejection, is_within_root, no_follow_open_flags, validate_all,
+    validate_path_no_traversal,
+};
 pub use sparse::{ByteRange, DenseOnlySparseOps, SparseOps, SparsenessMismatch, allocated_bytes};
 pub use translate::{
     LineEnding, LineEndingMode, LongPathStrategy, NormalizationMode, PathPolicy,

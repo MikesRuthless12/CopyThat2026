@@ -169,6 +169,8 @@ err-verify-failed = Verifikasi pasca-salin gagal
 # MT
 err-path-escape = Jalur ditolak — berisi segmen direktori induk (..) atau byte ilegal
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
 err-io-other = Kesalahan I/O tidak dikenal
 err-sparseness-mismatch = Tata letak sparse tidak dapat dipertahankan di tujuan  # MT
 

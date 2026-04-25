@@ -169,6 +169,8 @@ err-verify-failed = コピー後の検証に失敗しました
 # MT
 err-path-escape = パスは拒否されました — 親ディレクトリ（..）セグメントまたは無効なバイトが含まれています
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
 err-io-other = 不明な I/O エラー
 err-sparseness-mismatch = 宛先でスパースレイアウトを保持できませんでした  # MT
 

@@ -157,6 +157,112 @@ pub fn is_within_root(candidate: &Path, root: &Path) -> std::io::Result<bool> {
     Ok(c.starts_with(r))
 }
 
+/// Phase 17c — symlink-race / TOCTOU hardening flags for opening a
+/// regular file. Returns the per-OS open flag the engine `OR`s into
+/// its `OpenOptions::custom_flags` call. On Linux + macOS that's
+/// `O_NOFOLLOW` (`0x20000` on Linux glibc, `0x100` on macOS / BSD
+/// libc); on Windows it's `FILE_FLAG_OPEN_REPARSE_POINT` (`0x00200000`)
+/// so the call resolves to the reparse-point descriptor rather than
+/// silently following an attacker-supplied symlink target.
+///
+/// The intent: even if the engine's metadata pre-flight saw a regular
+/// file, a racing `rename(2)` between then and the `open(2)` could swap
+/// in a symlink pointing at a victim file (`/etc/passwd`,
+/// `C:\Windows\System32\…`). With these flags set the open returns
+/// `ELOOP` (Unix) / `ERROR_CANT_ACCESS_FILE` (Windows) instead of
+/// silently following the swapped symlink.
+///
+/// Usage shape:
+///
+/// ```ignore
+/// use std::os::unix::fs::OpenOptionsExt; // or windows::fs::OpenOptionsExt
+/// let mut opts = std::fs::OpenOptions::new();
+/// opts.read(true);
+/// #[cfg(any(target_os = "linux", target_os = "macos"))]
+/// opts.custom_flags(copythat_core::safety::no_follow_open_flags() as i32);
+/// #[cfg(windows)]
+/// opts.custom_flags(copythat_core::safety::no_follow_open_flags());
+/// let f = opts.open(&path)?;
+/// ```
+///
+/// On unsupported targets the function returns `0` so callers can
+/// unconditionally `OR` it in without `cfg` gates.
+#[inline]
+pub const fn no_follow_open_flags() -> u32 {
+    #[cfg(target_os = "linux")]
+    {
+        // O_NOFOLLOW on Linux glibc / musl. Validated against
+        // <fcntl.h> on Ubuntu 22.04, Fedora 40, Alpine 3.19.
+        0x20000
+    }
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly"
+    ))]
+    {
+        // O_NOFOLLOW on Apple platforms + BSD libcs.
+        0x100
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // FILE_FLAG_OPEN_REPARSE_POINT — Windows opens the reparse
+        // point itself rather than following its target.
+        0x00200000
+    }
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly",
+        target_os = "windows"
+    )))]
+    {
+        0
+    }
+}
+
+/// Classification of an `io::Error` as the "rejected because the
+/// open target is a symlink / reparse point" outcome of
+/// [`no_follow_open_flags`]. Lets callers downgrade the
+/// hardening-imposed failure into a copy-symlink fallback when the
+/// caller's policy permits, without having to match raw OS error
+/// codes inline.
+///
+/// On Unix the kernel returns `ELOOP` (40 on Linux, 62 on macOS /
+/// BSD) when `O_NOFOLLOW` rejects a symlink at open time. On Windows
+/// the runtime returns `ERROR_CANT_ACCESS_FILE` (1920) when
+/// `FILE_FLAG_OPEN_REPARSE_POINT` is set on a non-reparse target;
+/// when the target is a symlink and a non-symlink-aware caller
+/// reads bytes off the descriptor, NTFS returns
+/// `ERROR_INVALID_FUNCTION` (1) on the read. We treat both Windows
+/// codes as "no-follow rejection" so the engine can respond to both
+/// symptoms uniformly.
+pub fn is_no_follow_rejection(err: &std::io::Error) -> bool {
+    match err.raw_os_error() {
+        #[cfg(target_os = "linux")]
+        Some(40) => true, // ELOOP
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        ))]
+        Some(62) => true, // ELOOP on Apple / BSD
+        #[cfg(target_os = "windows")]
+        Some(1920) | Some(1) => true,
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

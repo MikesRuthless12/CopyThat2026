@@ -1668,6 +1668,14 @@ fn libc_ebusy() -> i32 {
 /// — log files being written, loaded DLLs, Office documents with an
 /// exclusive lock). Unix kernels don't block reads on open files,
 /// so this compiles down to a plain `File::open` there.
+///
+/// Phase 17c — the open call also sets `O_NOFOLLOW` (Unix) /
+/// `FILE_FLAG_OPEN_REPARSE_POINT` (Windows) via
+/// [`crate::safety::no_follow_open_flags`] so a symlink-swap race
+/// between the engine's metadata pre-flight and this open can't
+/// silently redirect the read to a victim file. Symlink copies
+/// take the [`copy_symlink`] path before this function is reached,
+/// so any symlink the engine sees here is unexpected and rejected.
 async fn open_src_with_retry(src: &Path) -> std::io::Result<File> {
     #[cfg(windows)]
     {
@@ -1677,10 +1685,17 @@ async fn open_src_with_retry(src: &Path) -> std::io::Result<File> {
         // while we read — matches what `robocopy /B` would use in
         // backup semantics mode.
         const SHARE_ALL: u32 = 0x1 | 0x2 | 0x4;
+        // Phase 17c — refuse silently following a reparse point.
+        // Combined with Phase 17a's lexical guard, this closes the
+        // race where the source is swapped for a symlink between the
+        // engine's pre-flight stat and this open.
+        let no_follow = crate::safety::no_follow_open_flags();
         let mut last_err: Option<std::io::Error> = None;
         for attempt in 0..3u32 {
             let mut opts = std::fs::OpenOptions::new();
-            opts.read(true).share_mode(SHARE_ALL);
+            opts.read(true)
+                .share_mode(SHARE_ALL)
+                .custom_flags(no_follow);
             let res = {
                 let path = src.to_path_buf();
                 tokio::task::spawn_blocking(move || opts.open(&path)).await
@@ -1709,7 +1724,25 @@ async fn open_src_with_retry(src: &Path) -> std::io::Result<File> {
             )
         }))
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // Phase 17c — O_NOFOLLOW closes the source-side symlink swap
+        // race. The metadata pre-flight rejects symlinks before the
+        // engine reaches this helper; if a swap snuck a symlink in
+        // between then and now, the kernel returns ELOOP and we fail
+        // the copy with a typed `is_no_follow_rejection` error rather
+        // than silently following.
+        let no_follow = crate::safety::no_follow_open_flags() as i32;
+        let mut opts = std::fs::OpenOptions::new();
+        opts.read(true).custom_flags(no_follow);
+        let path = src.to_path_buf();
+        let std_file = tokio::task::spawn_blocking(move || opts.open(&path))
+            .await
+            .map_err(|e| std::io::Error::other(format!("join: {e}")))??;
+        Ok(File::from_std(std_file))
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         File::open(src).await
     }

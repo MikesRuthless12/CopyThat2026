@@ -45,6 +45,7 @@ pub mod global_paste;
 pub mod i18n;
 pub mod icon;
 pub mod ipc;
+pub mod ipc_safety;
 pub mod live_mirror;
 pub mod mobile_commands;
 pub mod mount_commands;

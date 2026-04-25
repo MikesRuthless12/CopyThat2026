@@ -169,6 +169,8 @@ err-verify-failed = 复制后校验失败
 # MT
 err-path-escape = 路径被拒绝 — 包含父目录（..）段或非法字节
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
 err-io-other = 未知 I/O 错误
 err-sparseness-mismatch = 无法在目标保留稀疏布局  # MT
 

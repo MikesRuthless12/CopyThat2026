@@ -40,9 +40,20 @@ onward. Each later phase will extend this document.
   Unlicense, Unicode-DFS-2016, Zlib, MPL-2.0. GPL / AGPL / SSPL / BUSL /
   CC-BY-NC and any other non-permissive license fails the CI build.
 - `cargo deny check` runs on every push and pull request.
-- `cargo audit` will be added in Phase 17 to catch RustSec advisories.
-- `cargo vet` will be added in Phase 17 to require trust audits before
-  upgrading dependencies.
+- `cargo audit` runs on every push (Phase 17b) — fails the build on
+  Critical/High advisories. The shared `--ignore` list mirrors the
+  `[advisories] ignore` block in `deny.toml`, so the two surfaces
+  stay in lockstep.
+- `cargo vet` runs on every push (Phase 17b) with imports of the
+  Mozilla / Google / Embark / Bytecode Alliance / Zcash audit feeds.
+  Tagged releases require a vet-clean tree; the `cargo-vet` CI job
+  runs `continue-on-error: true` on `main` while the audit backlog
+  catches up, then flips to blocking ahead of the v1.0 tag.
+- Direct dependencies in `Cargo.toml` are pinned to a major-version
+  spec (e.g. `version = "1"`) and the workspace resolver routes
+  every transitive dep through `Cargo.lock`. Lockfile diffs are
+  reviewed on every PR — surprise crate substitutions surface in
+  the diff.
 
 ## Code-execution boundaries (target, post-Phase 17)
 
@@ -489,14 +500,29 @@ fix. Any new vulnerability advisory (RUSTSEC ID without
 land in `deny.toml`'s ignore list — the policy is documented in the
 file's header comment.
 
-## Build hardening (target, post-Phase 17)
+## Build hardening (Phase 17g — shipped)
 
-- Stack probes enabled.
-- Windows: Control Flow Guard (`/guard:cf`).
-- macOS arm64: PAC + BTI.
-- Linux: full RELRO + BIND_NOW.
-- No `unsafe` code without an explicit `// SAFETY:` comment that the
-  reviewer signed off on.
+- **Workspace `[profile.release]`** carries `lto = "fat"`,
+  `codegen-units = 1`, `strip = "symbols"`, and `panic = "abort"`.
+  Fat LTO + 1 codegen unit collapse cross-crate dead code so
+  unreachable gadgets don't ship in the binary; `panic = "abort"`
+  removes the unwinder so a panic from inside an `unsafe` block
+  cannot be caught and resumed.
+- **Linux** — `crates/copythat-cli/build.rs` and
+  `apps/copythat-ui/src-tauri/build.rs` emit
+  `-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack`. RELRO + BIND_NOW
+  write-protect the GOT after relocation; `noexecstack` keeps
+  the stack non-executable on toolchains that downgraded the
+  default.
+- **Windows** — MSVC ships `/guard:cf` (Control Flow Guard) by
+  default; `docs/SIGNING_UPGRADE.md` calls out the
+  `/INTEGRITYCHECK` flag that pairs with the optional Azure
+  Trusted Signing upgrade.
+- **macOS arm64** — PAC + BTI are automatic on the Apple linker
+  bundled with Xcode 14+ on the GitHub-hosted runners.
+- No `unsafe` code outside `crates/copythat-platform`. Every hit
+  there carries a `// SAFETY:` comment a reviewer signed off on
+  (enforced by `rg -t rust 'unsafe'` in §1 of the QA checklist).
 
 ## What we will not do
 

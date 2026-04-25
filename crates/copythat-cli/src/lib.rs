@@ -50,6 +50,8 @@ use std::process::ExitCode as ProcessExitCode;
 pub mod commands;
 pub mod jobspec;
 pub mod output;
+pub mod schedule;
+pub mod volume_watch;
 
 mod cli;
 mod runtime;

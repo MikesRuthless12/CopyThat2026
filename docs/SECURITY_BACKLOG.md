@@ -17,31 +17,62 @@ losing track. Each item is sized small enough to ship as its own PR.
       `err-path-escape` Fluent key in all 18 locales. Smoke test
       `tests/smoke/phase_17_security.rs` (6 cases).
 
+- [x] **17b — Dependency + supply-chain audit.** `cargo-audit` +
+      `cargo-vet` CI jobs (`.github/workflows/ci.yml`); audit
+      `--ignore` list mirrors `deny.toml`. `supply-chain/config.toml`
+      imports the Mozilla / Google / Embark / Bytecode Alliance /
+      Zcash audit feeds. Smoke test
+      `tests/smoke/phase_17b_supply_chain.rs` (5 cases).
+
+- [x] **17c — Symlink-race / TOCTOU hardening.** Engine source-side
+      open path sets `O_NOFOLLOW` (Unix) / `FILE_FLAG_OPEN_REPARSE_POINT`
+      (Windows) via `safety::no_follow_open_flags`. New
+      `safety::is_no_follow_rejection` classifier so callers can
+      distinguish a hardening rejection from generic I/O.
+      `safety::is_within_root` retained for jail-style consumers.
+      Smoke test `tests/smoke/phase_17c_symlink_race.rs` (4 cases on
+      every host + 1 Unix-gated race regression).
+
+- [x] **17e — IPC argument audit + canonicalisation.** New
+      `apps/copythat-ui/src-tauri/src/ipc_safety.rs` module — typed
+      `IpcError` enum + `validate_ipc_path` / `validate_ipc_paths`
+      / `validate_ipc_path_ref` helpers. Every path-typed
+      `#[tauri::command]` in `commands.rs` (start_copy / start_move
+      / file_icon / reveal_in_folder / destination_free_bytes /
+      path_total_bytes / path_metadata / path_sizes_individual /
+      enumerate_tree_files / list_directory / drag_out_stage /
+      thumbnail_for / error_log_export / history_export_csv /
+      export_profile / import_profile) calls the gate. New Fluent
+      key `err-path-invalid-encoding` across all 18 locales (706
+      keys total). Smoke test
+      `tests/smoke/phase_17e_ipc_audit.rs` (8 cases) walks
+      commands.rs for drift.
+
+- [x] **17f — Logging & content-scrubbing audit.**
+      `copythat-audit::layer::AuditLayer::MessageVisitor` drops
+      fields named `body` / `bytes` / `chunk` / `password` /
+      `passphrase` / `secret` / `token` / `api_key` /
+      `api-key` before they reach the sink (no redacted marker
+      either — even the field name is information leakage).
+      `copythat-hash::sidecar::validate_sidecar_relpath` rejects
+      absolute / `..`-laden entries before writing the sidecar
+      file. `eprintln!` calls in the IPC layer migrated to
+      `tracing::debug!(target: "copythat::ipc", …)` so production
+      builds don't surface user paths on stderr. Smoke test
+      `tests/smoke/phase_17f_logging_scrub.rs` (7 cases).
+
+- [x] **17g — Binary hardening flags.** Workspace
+      `[profile.release]` upgraded to `lto = "fat"`; kept
+      `panic = "abort"` + `codegen-units = 1` + `strip = "symbols"`.
+      New `crates/copythat-cli/build.rs` + existing
+      `apps/copythat-ui/src-tauri/build.rs` emit
+      `-Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack` on Linux
+      targets. Windows `/guard:cf` stays automatic on MSVC;
+      macOS arm64 PAC + BTI stay automatic on the Apple linker.
+      `docs/SECURITY.md` updated to mark Phase 17g as shipped.
+      Smoke test `tests/smoke/phase_17g_hardening.rs` (5 cases).
+
 ## Deferred (open)
-
-### 17b — Dependency + supply-chain audit
-
-- Add `cargo audit` to CI (RustSec advisories — fail on High/Critical).
-- Add `cargo vet` with the Mozilla + Google + Embark trust imports;
-  require vet-clean for tagged releases.
-- Pin direct dependencies in `Cargo.toml` via the workspace resolver
-  and record the policy in `docs/SECURITY.md`.
-- Decision: include `cargo deny advisories` (already runs on every
-  push via the existing `cargo-deny` job) as the floor; `cargo audit`
-  is added as a richer second pass that surfaces yanks + maintainer
-  warnings the deny job can miss.
-
-### 17c — Symlink-race / TOCTOU hardening
-
-- Switch the engine's `tokio::fs::File::open` calls to
-  `OpenOptions::custom_flags(libc::O_NOFOLLOW)` on Linux/macOS so a
-  symlink swapped in mid-copy doesn't redirect to a victim file.
-- On Windows use `FILE_FLAG_OPEN_REPARSE_POINT` plus
-  `GetFinalPathNameByHandleW` to verify the resolved path is still
-  inside the user-chosen staging root.
-- Add `safety::is_within_root` (already drafted in Phase 17a) as the
-  post-resolution boundary check; pair it with a regression smoke
-  test that races a symlink swap against the open.
 
 ### 17d — Privilege separation (`copythat-helper`)
 
@@ -57,39 +88,8 @@ losing track. Each item is sized small enough to ship as its own PR.
 - Helper exits as soon as the elevated operation completes. Audit
   every IPC argument with the same lexical safety bar as the main
   app, plus a fresh capability check.
-
-### 17e — IPC argument audit + canonicalisation
-
-- Walk every Tauri `#[tauri::command]` and confirm the path-typed
-  arguments pass through `validate_path_no_traversal` (Phase 17a) AND
-  a per-command capability check.
-- Reject non-UTF-8 paths on POSIX; on Windows accept WTF-16 via
-  `OsStr` and convert lossily only for log lines.
-- Add a typed `IpcError` enum so the frontend never receives an
-  ad-hoc `String` message that conceals the underlying classification.
-
-### 17f — Logging & content scrubbing audit
-
-- `tracing` filter rule that drops any field named `body` / `bytes` /
-  `chunk` / `password` regardless of level.
-- Hash sidecars (`*.sha256` / `*.b3` etc., shipped in Phase 3) must
-  use job-root-relative paths only — confirm with a smoke test that
-  asserts no absolute path leaks into the on-disk format.
-- Move `eprintln!` debug calls in the IPC layer behind a
-  `tracing::debug!` macro so production builds don't surface user
-  paths on stderr.
-
-### 17g — Binary hardening flags
-
-- Cargo: keep `panic = "abort"` (already set in workspace
-  `[profile.release]`); add `lto = "fat"` for release.
-- Linux build script: pass `-C link-args=-Wl,-z,now -Wl,-z,relro`.
-- Windows: rely on the MSVC toolchain's default `/guard:cf`; add a
-  reminder in `docs/SIGNING_UPGRADE.md` that the upgrade to a paid
-  cert also unlocks `/INTEGRITYCHECK`.
-- macOS arm64: PAC + BTI are automatic with the current Apple linker
-  on the GitHub-hosted runners; add a smoke test that asserts the
-  produced binary has the expected `LC_VERSION_MIN_MACOSX` entries.
+- Phase 19b's `copythat-helper-vss` is the narrow precedent — same
+  named-pipe + RAII-release shape, scoped to a single workstream.
 
 ### 17h — `/security-review` skill pass
 
@@ -97,9 +97,10 @@ losing track. Each item is sized small enough to ship as its own PR.
   and triage every High/Critical into a fix-forward PR; log Medium /
   Low findings as new entries in this file under the relevant
   sub-phase.
-- The Phase 17 prompt's first workstream is precisely this; deferred
-  to once 17b–17g land so the skill has a more representative
-  attack surface to review.
+- User-triggered + billable run; the harness can't fire it
+  automatically. With 17b / 17c / 17e / 17f / 17g shipped, the
+  attack surface this pass reviews is now closer to its post-1.0
+  shape — the next manual run is well-positioned.
 
 ## Cross-cutting decisions
 

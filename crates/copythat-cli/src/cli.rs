@@ -113,6 +113,11 @@ pub enum Cmd {
     Plan(PlanArgs),
     /// Read a TOML jobspec and execute it. Idempotent — re-runs are no-ops.
     Apply(PlanArgs),
+    /// Phase 14d — render a per-OS scheduler stanza from a jobspec
+    /// containing a `[schedule]` block. Prints the stanza + the
+    /// suggested install path; the user pastes it into their
+    /// schtasks / launchd / systemd config.
+    Schedule(ScheduleArgs),
     /// Print version metadata.
     Version(VersionArgs),
     /// Get / set / reset values in the persistent settings file.
@@ -244,6 +249,31 @@ pub struct PlanArgs {
     /// Path to the jobspec TOML file.
     #[arg(long, value_name = "PATH", required = true)]
     pub spec: PathBuf,
+}
+
+/// `copythat schedule --spec <PATH> [--host <linux|macos|windows>]`.
+///
+/// Defaults `--host` to the current host; the override exists so a
+/// user on Linux can still render a Windows schtasks stanza for an
+/// offline NAS, etc.
+#[derive(Args, Debug, Clone)]
+pub struct ScheduleArgs {
+    /// Path to the jobspec TOML file. Must declare a `[schedule]`
+    /// block; sources + destination must be absolute.
+    #[arg(long, value_name = "PATH", required = true)]
+    pub spec: PathBuf,
+
+    /// Override the host OS the stanza is rendered for. Defaults to
+    /// the current platform.
+    #[arg(long, value_enum, value_name = "OS")]
+    pub host: Option<ScheduleHostKind>,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum ScheduleHostKind {
+    Windows,
+    MacOs,
+    Linux,
 }
 
 #[derive(Args, Debug, Clone)]

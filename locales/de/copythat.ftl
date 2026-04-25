@@ -169,6 +169,8 @@ err-verify-failed = Prüfung nach Kopie fehlgeschlagen
 # MT
 err-path-escape = Pfad abgelehnt — enthält übergeordnete Verzeichnissegmente (..) oder ungültige Bytes
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
 err-io-other = Unbekannter E/A-Fehler
 err-sparseness-mismatch = Sparse-Layout konnte am Ziel nicht beibehalten werden  # MT
 

@@ -43,6 +43,7 @@ pub(crate) fn dispatch(cli: Cli) -> ExitCode {
             Cmd::Audit(args) => commands::audit::run(&cli.global, args, writer.clone()).await,
             Cmd::Plan(args) => commands::plan::run(&cli.global, args, writer.clone(), false).await,
             Cmd::Apply(args) => commands::plan::run(&cli.global, args, writer.clone(), true).await,
+            Cmd::Schedule(args) => commands::schedule::run(&cli.global, args, writer.clone()).await,
             Cmd::Version(_) => commands::version::run(&cli.global, writer.clone()).await,
             Cmd::Config(args) => commands::config::run(&cli.global, args, writer.clone()).await,
             Cmd::Completions(args) => commands::completions::run(args).await,

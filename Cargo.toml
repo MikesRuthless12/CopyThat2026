@@ -48,10 +48,20 @@ unsafe_code = "warn"
 all = { level = "warn", priority = -1 }
 
 [profile.release]
-lto = "thin"
+# Phase 17g — binary hardening. `lto = "fat"` lets the optimizer drop
+# more dead control-flow paths than the default thin LTO, shrinking the
+# attack surface (fewer unreachable gadgets); `codegen-units = 1` is the
+# matching tradeoff (slower link, smaller + more inline-able binary).
+# `panic = "abort"` keeps `_Unwind_*` frames out of release builds, so a
+# panic from inside an unsafe block cannot be caught and resumed.
+lto = "fat"
 codegen-units = 1
 strip = "symbols"
 panic = "abort"
+# Linux RELRO/NOW (`-Wl,-z,relro -Wl,-z,now`), Windows /guard:cf, and
+# macOS PAC+BTI flags live in the per-target build.rs scripts in the
+# crates that ship binaries (apps/copythat-ui/src-tauri,
+# crates/copythat-cli) so the workspace profile stays portable.
 
 [profile.dev]
 opt-level = 0

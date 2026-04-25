@@ -169,6 +169,8 @@ err-verify-failed = Перевірка після копіювання не вд
 # MT
 err-path-escape = Шлях відхилено — містить сегменти батьківського каталогу (..) або заборонені байти
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
 err-io-other = Невідома помилка вводу/виводу
 err-sparseness-mismatch = Не вдалося зберегти розріджений макет у цільовому  # MT
 

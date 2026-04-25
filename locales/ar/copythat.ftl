@@ -169,6 +169,8 @@ err-verify-failed = فشل التحقق بعد النسخ
 # MT
 err-path-escape = تم رفض المسار — يحتوي على مقاطع الدليل الأصلي (..) أو بايتات غير مسموح بها
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
 err-io-other = خطأ إدخال/إخراج غير معروف
 err-sparseness-mismatch = لا يمكن الحفاظ على تخطيط الملف المتناثر في الوجهة  # MT
 

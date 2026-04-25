@@ -68,7 +68,19 @@ windows-sys = { version = "0.59", features = [
 
 [dev-dependencies]
 tempfile = "3"
+# Phase 17f smoke exercises hash sidecar relpath enforcement across
+# crate boundaries. Dev-only — not part of the audit crate's runtime.
+copythat-hash = { path = "../copythat-hash", version = "1" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs"] }
 
 [[test]]
 name = "phase_34_audit"
 path = "../../tests/smoke/phase_34_audit.rs"
+
+# Phase 17f — logging + content-scrubbing audit. Asserts the audit
+# layer drops sensitive fields, sidecar writers reject absolute /
+# `..` paths, and the IPC layer no longer prints user paths via
+# eprintln (commands.rs source-grep tripwire).
+[[test]]
+name = "phase_17f_logging_scrub"
+path = "../../tests/smoke/phase_17f_logging_scrub.rs"

@@ -169,6 +169,8 @@ err-verify-failed = 복사 후 확인 실패
 # MT
 err-path-escape = 경로 거부됨 — 상위 디렉터리(..) 세그먼트 또는 잘못된 바이트 포함
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
 err-io-other = 알 수 없는 I/O 오류
 err-sparseness-mismatch = 대상에서 스파스 레이아웃을 보존할 수 없습니다  # MT
 

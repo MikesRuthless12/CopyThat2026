@@ -169,6 +169,8 @@ err-verify-failed = Weryfikacja po kopiowaniu nieudana
 # MT
 err-path-escape = Ścieżka odrzucona — zawiera segmenty katalogu nadrzędnego (..) lub niedozwolone bajty
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
 err-io-other = Nieznany błąd we/wy
 err-sparseness-mismatch = Nie udało się zachować układu rozrzedzonego w miejscu docelowym  # MT
 

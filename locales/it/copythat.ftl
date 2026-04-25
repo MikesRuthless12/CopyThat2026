@@ -169,6 +169,8 @@ err-verify-failed = Verifica post-copia fallita
 # MT
 err-path-escape = Percorso rifiutato — contiene segmenti di cartella superiore (..) o byte non validi
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
 err-io-other = Errore I/O sconosciuto
 err-sparseness-mismatch = Layout sparso non preservato sulla destinazione  # MT
 
