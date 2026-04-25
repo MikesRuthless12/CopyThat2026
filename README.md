@@ -106,6 +106,15 @@ workloads.
 - **Decryption is symmetric**: `copythat_crypt::decrypted_reader` accepts a passphrase, X25519 secret key, or SSH private key — same `Identity` bag, same age-format input. The runner's auto-decrypt-on-copy-FROM-`.age` flow lands in a Phase 35 follow-up.
 - **Settings → Transfer → Encryption + Compression** carries the mode pickers, recipients-file path, and the level slider. The passphrase modal flow (collect at copy-start, hold in `secrecy::SecretString` for the duration of the run) is deferred to a Phase 35 follow-up — today the runner falls back to plain copy when the user selects `passphrase` mode and logs the reason.
 
+### `copythat` CLI (Phase 36)
+
+- **`copythat <SUBCOMMAND>`** — a real command-line interface suitable for CI/CD pipelines, automation scripts, and headless servers. Top-level commands: `copy`, `move`, `sync`, `shred`, `verify`, `history`, `stack`, `remote`, `mount`, `audit`, `plan`, `apply`, `version`, `config`, and `completions`.
+- **Stable JSON-Lines output** via `--json` — one tagged JSON object per line on `stdout` with twelve canonical event kinds (`job_started` / `job_progress` / `job_completed` / `job_failed` / `plan_action` / `plan_summary` / `version` / `config_value` / `verify_ok` / `verify_failed` / `info` / `error`). Every line carries a UTC `ts` field, so `jq -r 'select(.kind=="job_progress")' < log.ndjson` pipes work out of the box.
+- **Nine documented exit codes** — `0` success, `1` generic error, `2` pending actions (plan), `3` collisions unresolved, `4` verify failed, `5` network unreachable, `6` permission denied, `7` disk full, `8` user canceled, `9` config invalid. Surfaced as a `#[repr(u8)]` enum so the numeric values cannot drift between releases.
+- **Declarative TOML jobspec** drives `plan` (no-mutation; reports the action list and exits 2 with pending) and `apply` (runs the same plan; idempotent — re-runs on a finished tree exit 0 with zero new actions). Spec layout: `[job] kind / source / destination / verify / shape / preserve / collisions`, plus `[retry]` and an optional `[schedule]`.
+- **Shell completions** for bash / zsh / fish / pwsh / elvish via `copythat completions <SHELL>`. Redirect `stdout` to the shell's per-user completion location; the CLI itself never writes files.
+- **Stub commands for cross-cutting features** (sync / shred / stack / remote / mount / audit) accept the same flag surface the GUI uses so scripts written today don't break when the wiring lands in a follow-up phase. Each stub exits `1` and emits a clearly-labelled `cli-info-stub-deferred` JSON event.
+
 ### Performance
 
 - **1 MiB** is the measured optimum buffer size; all other sizes regressed in the Phase 13b sweep — see [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
