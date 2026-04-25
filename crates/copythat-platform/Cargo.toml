@@ -51,7 +51,21 @@ windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_Storage_FileSystem",
     "Win32_System_IO",
+    # Phase 37 follow-up #2 — `SetThreadExecutionState` for the
+    # mobile companion's "Keep desktop awake" toggle.
+    "Win32_System_Power",
 ] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Phase 37 follow-up #2 — IOPMAssertionCreateWithName for the
+# mobile companion's "Keep desktop awake" toggle. MIT/Apache-2.0.
+core-foundation-sys = "0.8"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Phase 37 follow-up #2 — `org.freedesktop.ScreenSaver.Inhibit` for
+# the mobile companion's "Keep desktop awake" toggle. Pure-Rust
+# dbus client. MIT.
+zbus = { version = "5", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
 blake3 = "1"

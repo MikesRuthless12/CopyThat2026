@@ -154,6 +154,76 @@ fn canned_args(key: &str) -> HashMap<&'static str, String> {
         "mount-toast-failed" => {
             m.insert("reason", "mountpoint not empty".to_string());
         }
+        // Phase 35 — encryption + compression toast placeables.
+        "compress-footer-savings" => {
+            m.insert("original", "256 MiB".to_string());
+            m.insert("compressed", "84 MiB".to_string());
+            m.insert("percent", "67".to_string());
+        }
+        "compress-savings-toast" => {
+            m.insert("percent", "67".to_string());
+            m.insert("bytes", "172 MiB".to_string());
+        }
+        "crypt-toast-recipients-loaded" => {
+            m.insert("count", "3".to_string());
+        }
+        "crypt-toast-recipients-error" => {
+            m.insert("reason", "key not found".to_string());
+        }
+        // Phase 36 — CLI placeables.
+        "cli-error-unknown-algo" => {
+            m.insert("algo", "blake3".to_string());
+        }
+        "cli-error-spec-parse" => {
+            m.insert("path", "C:/jobs/copy.toml".to_string());
+            m.insert("reason", "missing required field `kind`".to_string());
+        }
+        "cli-info-shape-recorded" => {
+            m.insert("rate", "10MB/s".to_string());
+        }
+        "cli-info-stub-deferred" => {
+            m.insert("command", "sync".to_string());
+        }
+        "cli-plan-summary" => {
+            m.insert("actions", "3".to_string());
+            m.insert("bytes", "1.2 MiB".to_string());
+            m.insert("already_done", "1".to_string());
+        }
+        "cli-verify-ok" => {
+            m.insert("algo", "blake3".to_string());
+            m.insert("digest", "abc123".to_string());
+        }
+        "cli-verify-failed" => {
+            m.insert("path", "C:/data/big.iso".to_string());
+            m.insert("algo", "blake3".to_string());
+        }
+        "cli-config-set" => {
+            m.insert("key", "transfer.buffer_size".to_string());
+            m.insert("value", "1048576".to_string());
+        }
+        "cli-config-reset" => {
+            m.insert("key", "transfer.buffer_size".to_string());
+        }
+        "cli-config-unknown-key" => {
+            m.insert("key", "nope".to_string());
+        }
+        "cli-completions-emitted" => {
+            m.insert("shell", "bash".to_string());
+        }
+        // Phase 37 — mobile companion toast placeables.
+        "pair-toast-success" => {
+            m.insert("device", "Mike's iPhone".to_string());
+        }
+        "pair-toast-failed" => {
+            m.insert("reason", "user canceled".to_string());
+        }
+        "push-toast-sent" => {
+            m.insert("device", "Mike's iPhone".to_string());
+        }
+        "push-toast-failed" => {
+            m.insert("device", "Mike's iPhone".to_string());
+            m.insert("reason", "APNs 401".to_string());
+        }
         _ => {}
     }
     m

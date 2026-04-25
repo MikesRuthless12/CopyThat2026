@@ -222,6 +222,54 @@ pub async fn mobile_pair_stop(state: tauri::State<'_, AppState>) -> Result<(), S
     Ok(())
 }
 
+/// Phase 37 follow-up #2 — mint the install-QR PNG the
+/// first-launch onboarding modal renders. The QR encodes a public
+/// PWA URL that, when the phone scans it with the camera, opens the
+/// PWA in the system browser. The PWA's manifest then offers "Add
+/// to Home Screen" so the user installs it without going through
+/// an App Store.
+///
+/// `pwa_url` is the deployed PWA URL — empty string falls back to a
+/// placeholder that points to the GitHub repo (suitable for dev
+/// builds where the PWA isn't yet hosted).
+#[tauri::command]
+pub fn mobile_onboarding_qr(pwa_url: Option<String>) -> Result<MobileOnboardingDto, String> {
+    let url = pwa_url.filter(|s| !s.is_empty()).unwrap_or_else(|| {
+        "https://github.com/MikesRuthless12/CopyThat2026#mobile-companion".to_string()
+    });
+    let png = generate_qr_png(&url, 8).map_err(|e| format!("qr: {e}"))?;
+    Ok(MobileOnboardingDto {
+        url,
+        qr_png_base64: base64::engine::general_purpose::STANDARD.encode(png),
+    })
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileOnboardingDto {
+    pub url: String,
+    pub qr_png_base64: String,
+}
+
+/// Mark the onboarding modal as dismissed so it doesn't reappear on
+/// subsequent launches. Settings → Mobile is always available for
+/// re-pairing regardless.
+#[tauri::command]
+pub fn mobile_onboarding_dismiss(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let snapshot = {
+        let mut settings = state
+            .settings
+            .write()
+            .map_err(|e| format!("settings rw poisoned: {e}"))?;
+        settings.general.mobile_onboarding_dismissed = true;
+        settings.clone()
+    };
+    snapshot
+        .save_to(&state.settings_path)
+        .map_err(|e| format!("save settings: {e}"))?;
+    Ok(())
+}
+
 /// Drop a paired device by hex pubkey.
 #[tauri::command]
 pub fn mobile_revoke(state: tauri::State<'_, AppState>, pubkey_hex: String) -> Result<(), String> {
@@ -255,6 +303,8 @@ pub async fn mobile_handle_remote_command(
     let ctl = AppStateRemoteControl {
         state: AppStateProxy {
             globals: state.globals.clone(),
+            wake_lock: state.wake_lock.clone(),
+            queue: state.queue.clone(),
         },
     };
     let resp = dispatch(cmd, &ctl).await;
@@ -368,6 +418,8 @@ fn decode_pubkey_hex(s: &str) -> Result<[u8; 32], String> {
 #[derive(Clone)]
 struct AppStateProxy {
     globals: Arc<std::sync::atomic::AtomicU64>,
+    wake_lock: Arc<std::sync::Mutex<Option<copythat_platform::WakeLock>>>,
+    queue: copythat_core::Queue,
 }
 
 struct AppStateRemoteControl {
@@ -377,24 +429,25 @@ struct AppStateRemoteControl {
 #[async_trait::async_trait]
 impl copythat_mobile::server::RemoteControl for AppStateRemoteControl {
     async fn list_jobs(&self) -> Result<Vec<JobSummary>, String> {
-        // The Phase 37 follow-up surface is wire-complete; the
-        // actual job-enumeration walk lives in the Phase 37
-        // follow-up follow-up that wires `Queue::all_jobs` into a
-        // typed snapshot. For today the data channel returns an
-        // empty list — exercises the round-trip without locking
-        // production behavior to a UI shape that may still evolve.
-        Ok(Vec::new())
+        let snapshot = self.state.queue.snapshot();
+        Ok(snapshot.into_iter().map(job_to_summary).collect())
     }
 
-    async fn pause_job(&self, _job_id: &str) -> Result<(), String> {
+    async fn pause_job(&self, job_id: &str) -> Result<(), String> {
+        let id = lookup_job_id(&self.state.queue, job_id)?;
+        self.state.queue.pause_job(id);
         Ok(())
     }
 
-    async fn resume_job(&self, _job_id: &str) -> Result<(), String> {
+    async fn resume_job(&self, job_id: &str) -> Result<(), String> {
+        let id = lookup_job_id(&self.state.queue, job_id)?;
+        self.state.queue.resume_job(id);
         Ok(())
     }
 
-    async fn cancel_job(&self, _job_id: &str) -> Result<(), String> {
+    async fn cancel_job(&self, job_id: &str) -> Result<(), String> {
+        let id = lookup_job_id(&self.state.queue, job_id)?;
+        self.state.queue.cancel_job(id);
         Ok(())
     }
 
@@ -411,16 +464,42 @@ impl copythat_mobile::server::RemoteControl for AppStateRemoteControl {
             .state
             .globals
             .load(std::sync::atomic::Ordering::Relaxed);
+        let snapshot = self.state.queue.snapshot();
+        let mut bytes_done = 0u64;
+        let mut bytes_total = 0u64;
+        let mut files_done = 0u64;
+        let mut files_total = 0u64;
+        let mut rate_bps = 0u64;
+        for job in &snapshot {
+            bytes_done = bytes_done.saturating_add(job.bytes_done);
+            bytes_total = bytes_total.saturating_add(job.bytes_total);
+            files_done = files_done.saturating_add(job.files_done);
+            files_total = files_total.saturating_add(job.files_total);
+            if let Some(started) = job.started_at {
+                let secs = started.elapsed().as_secs_f64();
+                if secs > 0.0 {
+                    let r = (job.bytes_done as f64) / secs;
+                    rate_bps = rate_bps.saturating_add(r.max(0.0) as u64);
+                }
+            }
+        }
         Ok(RemoteResponse::Globals {
-            bytes_done: 0,
-            bytes_total: 0,
-            files_done: 0,
-            files_total: 0,
-            rate_bps: 0,
+            bytes_done,
+            bytes_total,
+            files_done,
+            files_total,
+            rate_bps,
         })
     }
 
     async fn recent_history(&self, _limit: u32) -> Result<Vec<HistoryRow>, String> {
+        // History rows surface through `copythat_history::History`
+        // which lives behind an `Option<History>` on AppState. We
+        // don't carry the handle on AppStateProxy yet so the PWA's
+        // history panel stays empty for now; the wire surface is
+        // exercised end-to-end by the smoke. Real plumbing lands
+        // in a tiny follow-up that adds `history: Option<History>`
+        // to AppStateProxy alongside this method.
         Ok(Vec::new())
     }
 
@@ -441,13 +520,26 @@ impl copythat_mobile::server::RemoteControl for AppStateRemoteControl {
         Ok(())
     }
 
-    async fn set_keep_awake(&self, _enabled: bool) -> Result<(), String> {
-        // Platform wake-lock plumbing lives in `copythat-platform`
-        // (Phase 37 follow-up). For today the call no-ops so the
-        // PWA's setting toggle is wire-complete; the OS-level
-        // assertion lands alongside the actual `SetThreadExecutionState`
-        // / `IOPMAssertion` / `org.freedesktop.ScreenSaver.Inhibit`
-        // calls.
+    async fn set_keep_awake(&self, enabled: bool) -> Result<(), String> {
+        // Phase 37 follow-up #2 — wired to
+        // `copythat_platform::wake_lock`. Acquire on `enabled =
+        // true`, release on `enabled = false`. Idempotent — flipping
+        // on while already held is a no-op.
+        let mut slot = self
+            .state
+            .wake_lock
+            .lock()
+            .map_err(|e| format!("wake_lock poisoned: {e}"))?;
+        if enabled {
+            if slot.is_none() {
+                match copythat_platform::acquire_keep_awake() {
+                    Ok(lock) => *slot = Some(lock),
+                    Err(e) => return Err(format!("wake-lock acquire: {e}")),
+                }
+            }
+        } else {
+            slot.take(); // Drop releases.
+        }
         Ok(())
     }
 }
@@ -455,3 +547,71 @@ impl copythat_mobile::server::RemoteControl for AppStateRemoteControl {
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct UnusedShimToKeepWireDtoInScope(copythat_settings::MobilePushTarget);
+
+// ---------------------------------------------------------------------
+// Queue snapshot helpers (Phase 37 follow-up #2)
+// ---------------------------------------------------------------------
+
+/// Convert a `copythat_core::Job` snapshot into the wire
+/// `JobSummary` the PWA renders.
+fn job_to_summary(job: copythat_core::Job) -> JobSummary {
+    let kind = match job.kind {
+        copythat_core::JobKind::Copy => "copy",
+        copythat_core::JobKind::Move => "move",
+        copythat_core::JobKind::Delete => "delete",
+        copythat_core::JobKind::SecureDelete => "secure-delete",
+        copythat_core::JobKind::Verify => "verify",
+    };
+    let state = match job.state {
+        copythat_core::JobState::Pending => "pending",
+        copythat_core::JobState::Running => "running",
+        copythat_core::JobState::Paused => "paused",
+        copythat_core::JobState::Cancelled => "cancelled",
+        copythat_core::JobState::Succeeded => "completed",
+        copythat_core::JobState::Failed => "failed",
+    };
+    let rate_bps = job
+        .started_at
+        .map(|s| {
+            let secs = s.elapsed().as_secs_f64();
+            if secs > 0.0 {
+                ((job.bytes_done as f64) / secs).max(0.0) as u64
+            } else {
+                0
+            }
+        })
+        .unwrap_or(0);
+    JobSummary {
+        job_id: job.id.as_u64().to_string(),
+        kind: kind.into(),
+        state: state.into(),
+        src: job.src.display().to_string(),
+        dst: job
+            .dst
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default(),
+        bytes_done: job.bytes_done,
+        bytes_total: job.bytes_total,
+        rate_bps,
+    }
+}
+
+/// Walk the queue snapshot and return the matching `JobId`. The
+/// PWA sends the id as a u64 stringified (`"123"`); we look it up
+/// against `JobId::as_u64()` rather than constructing a `JobId` from
+/// a raw u64 since the public constructor lives on `Queue::add`.
+fn lookup_job_id(
+    queue: &copythat_core::Queue,
+    target: &str,
+) -> Result<copythat_core::JobId, String> {
+    let want: u64 = target
+        .parse()
+        .map_err(|_| format!("invalid job id `{target}`"))?;
+    queue
+        .snapshot()
+        .into_iter()
+        .find(|j| j.id.as_u64() == want)
+        .map(|j| j.id)
+        .ok_or_else(|| format!("no active job with id {want}"))
+}
