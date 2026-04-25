@@ -869,3 +869,23 @@ cli-config-set = Set { $key } = { $value }
 cli-config-reset = Reset { $key } to default
 cli-config-unknown-key = Unknown config key: { $key }
 cli-completions-emitted = Shell completions for { $shell } printed to stdout
+
+# Phase 37 — desktop-side mobile companion. Settings → Mobile panel
+# strings + the SAS-confirmation modal + push-notification toasts.
+# The actual mobile UI lives in the Phase 37 follow-up Tauri Mobile
+# target; the phone displays its own localized SAS prompt.
+settings-mobile-heading = Mobile companion
+settings-mobile-hint = Pair an iPhone or Android phone to browse history, kick off saved profiles and Phase 36 jobspecs, and receive completion notifications.
+settings-mobile-pair-toggle = Allow new pairings
+settings-mobile-pair-active = Pair-server active — scan the QR with the Copy That mobile app
+settings-mobile-pair-button = Start pairing
+settings-mobile-revoke-button = Revoke
+settings-mobile-no-pairings = No paired devices yet
+settings-mobile-pair-port = Bind port (0 = pick a free one)
+pair-sas-prompt = Both screens should show the same four emojis. Tap Match if they agree.
+pair-sas-confirm = Match
+pair-sas-reject = Mismatch — cancel
+pair-toast-success = Paired with { $device }
+pair-toast-failed = Pairing failed: { $reason }
+push-toast-sent = Push sent to { $device }
+push-toast-failed = Push to { $device } failed: { $reason }
