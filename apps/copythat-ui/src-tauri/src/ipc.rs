@@ -1078,6 +1078,10 @@ pub struct GeneralDto {
     pub clipboard_watcher_enabled: bool,
     /// Phase 20 — silent re-enqueue of unfinished jobs at startup.
     pub auto_resume_interrupted: bool,
+    /// Phase 37 follow-up #2 — has the user dismissed the
+    /// first-launch mobile-onboarding modal?
+    #[serde(default)]
+    pub mobile_onboarding_dismissed: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1575,6 +1579,7 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 paste_shortcut: s.general.paste_shortcut.clone(),
                 clipboard_watcher_enabled: s.general.clipboard_watcher_enabled,
                 auto_resume_interrupted: s.general.auto_resume_interrupted,
+                mobile_onboarding_dismissed: s.general.mobile_onboarding_dismissed,
             },
             transfer: TransferDto {
                 buffer_size_bytes: s.transfer.buffer_size_bytes as u64,
@@ -1765,6 +1770,7 @@ impl SettingsDto {
         };
         s.general.clipboard_watcher_enabled = self.general.clipboard_watcher_enabled;
         s.general.auto_resume_interrupted = self.general.auto_resume_interrupted;
+        s.general.mobile_onboarding_dismissed = self.general.mobile_onboarding_dismissed;
 
         s.transfer.buffer_size_bytes = self.transfer.buffer_size_bytes as usize;
         s.transfer.verify = parse_verify(&self.transfer.verify);

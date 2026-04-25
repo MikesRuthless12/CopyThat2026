@@ -53,6 +53,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
             paste_shortcut: "Alt+Shift+V".into(),
             clipboard_watcher_enabled: true,
             auto_resume_interrupted: true,
+            mobile_onboarding_dismissed: true,
         },
         transfer: copythat_settings::TransferSettings {
             buffer_size_bytes: 4 * 1024 * 1024,
@@ -107,6 +108,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
         mount: copythat_settings::MountSettings::default(),
         audit: copythat_settings::AuditSettings::default(),
         crypt: copythat_settings::CryptSettings::default(),
+        mobile: copythat_settings::MobileSettings::default(),
     };
 
     before.save_to(&path).expect("save_to");
@@ -127,6 +129,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
             paste_shortcut: "Alt+Shift+V".into(),
             clipboard_watcher_enabled: true,
             auto_resume_interrupted: true,
+            mobile_onboarding_dismissed: true,
         },
         transfer: copythat_settings::TransferSettings {
             buffer_size_bytes: 4 * 1024 * 1024,
@@ -181,6 +184,7 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
         mount: copythat_settings::MountSettings::default(),
         audit: copythat_settings::AuditSettings::default(),
         crypt: copythat_settings::CryptSettings::default(),
+        mobile: copythat_settings::MobileSettings::default(),
     };
     assert_eq!(after, expected);
 }
