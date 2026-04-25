@@ -24,6 +24,7 @@
   import ErrorLogDrawer from "./lib/components/ErrorLogDrawer.svelte";
   import HistoryDrawer from "./lib/components/HistoryDrawer.svelte";
   import TotalsDrawer from "./lib/components/TotalsDrawer.svelte";
+  import MobileOnboardingModal from "./lib/components/MobileOnboardingModal.svelte";
   import SettingsModal from "./lib/components/SettingsModal.svelte";
   import ResumePromptModal from "./lib/components/ResumePromptModal.svelte";
   import SyncDrawer from "./lib/components/SyncDrawer.svelte";
@@ -39,6 +40,7 @@
     errorDisplayMode,
     initStores,
     jobs,
+    openSettings,
     syncDrawerOpen,
   } from "./lib/stores";
   import {
@@ -62,6 +64,11 @@
   let pendingResumes: PendingResumeDto[] = $state([]);
   let autoResume: boolean = $state(false);
 
+  // Phase 37 follow-up #2 — first-launch mobile-companion
+  // onboarding modal. Decided once at mount; subsequent toggles are
+  // driven by the modal's own dismiss / pair-now actions.
+  let mobileOnboardingOpen = $state(false);
+
   let storesCleanup: (() => void) | null = null;
   let themeCleanup: (() => void) | null = null;
 
@@ -77,6 +84,16 @@
       pendingResumes = await invoke<PendingResumeDto[]>("pending_resumes");
       const settings = await invoke<SettingsDto>("get_settings");
       autoResume = settings.general.autoResumeInterrupted;
+      // Phase 37 follow-up #2 — show the mobile-companion
+      // onboarding modal once. Skip if the user already paired a
+      // phone or has explicitly dismissed.
+      const dismissed = settings.general.mobileOnboardingDismissed === true;
+      const hasPairings =
+        Array.isArray(settings.mobile?.pairings) &&
+        settings.mobile.pairings.length > 0;
+      if (!dismissed && !hasPairings) {
+        mobileOnboardingOpen = true;
+      }
     } catch (err) {
       console.error("[pending_resumes]", err);
     }
@@ -221,6 +238,13 @@
 
   <!-- Phase 11b: Settings modal (Phase 12 extends with more tabs) -->
   <SettingsModal />
+
+  <!-- Phase 37 follow-up #2: first-launch mobile companion onboarding. -->
+  <MobileOnboardingModal
+    open={mobileOnboardingOpen}
+    onClose={() => (mobileOnboardingOpen = false)}
+    onOpenSettings={openSettings}
+  />
 
   <!-- Phase 20: resume prompt for unfinished jobs from a prior crash -->
   <ResumePromptModal

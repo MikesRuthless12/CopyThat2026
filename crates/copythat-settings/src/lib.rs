@@ -253,6 +253,13 @@ pub struct GeneralSettings {
     /// the prompt; the user's choice on the prompt can flip this on
     /// per-volume in a follow-up phase. For now it's a global flag.
     pub auto_resume_interrupted: bool,
+    /// Phase 37 follow-up #2 — has the user dismissed the
+    /// first-launch "install the Copy That mobile companion PWA"
+    /// modal? Default `false` — fresh installs see the modal once
+    /// and either pair a phone or click "Maybe later" (which flips
+    /// this to `true` so the modal doesn't reappear). Re-pairing
+    /// from Settings → Mobile is always available regardless.
+    pub mobile_onboarding_dismissed: bool,
 }
 
 impl Default for GeneralSettings {
@@ -268,6 +275,7 @@ impl Default for GeneralSettings {
             paste_shortcut: defaults::DEFAULT_PASTE_SHORTCUT.to_string(),
             clipboard_watcher_enabled: false,
             auto_resume_interrupted: false,
+            mobile_onboarding_dismissed: false,
         }
     }
 }

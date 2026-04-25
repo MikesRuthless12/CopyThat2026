@@ -129,6 +129,11 @@ pub struct AppState {
     /// via `mobile_pair_stop` (or when a successful pairing
     /// commits).
     pub mobile: crate::mobile_commands::MobileRegistry,
+    /// Phase 37 follow-up #2 — OS wake-lock guard. `Some` while
+    /// the PWA's "Keep desktop awake" toggle is on; release on
+    /// drop / Goodbye / Exit so the screensaver isn't permanently
+    /// suppressed.
+    pub wake_lock: std::sync::Arc<Mutex<Option<copythat_platform::WakeLock>>>,
 }
 
 impl AppState {
@@ -199,6 +204,10 @@ impl AppState {
             // Phase 37 — idle mobile registry; the user spins the
             // pair-server up on demand from Settings → Mobile.
             mobile: crate::mobile_commands::MobileRegistry::new(),
+            // Phase 37 follow-up #2 — wake-lock idle by default.
+            // The PWA's "Keep desktop awake" toggle acquires it on
+            // demand.
+            wake_lock: Arc::new(Mutex::new(None)),
         }
     }
 

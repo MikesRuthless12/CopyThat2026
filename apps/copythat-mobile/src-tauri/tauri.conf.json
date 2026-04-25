@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0",
+  "productName": "Copy That Mobile",
+  "version": "1.25.0",
+  "identifier": "dev.copythat.mobile",
+  "build": {
+    "beforeBuildCommand": "pnpm --filter copythat-mobile build",
+    "beforeDevCommand": "pnpm --filter copythat-mobile dev",
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Copy That",
+        "width": 414,
+        "height": 896,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' wss://*.peerjs.com https://*.peerjs.com; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "apk", "ipa"],
+    "icon": ["icons/icon.png"],
+    "iOS": {
+      "developmentTeam": null,
+      "minimumSystemVersion": "14.0"
+    },
+    "android": {
+      "minSdkVersion": 24
+    }
+  }
+}
