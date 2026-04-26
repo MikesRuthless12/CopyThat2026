@@ -188,13 +188,13 @@ deferred true-end-to-end tauri-driver path.
 ### 4.2 Move
 
 - [x] Same-volume move → atomic rename. Source disappears.
-      *(harness stub at `e2e/qa-section-4-2-move.spec.ts`)*
+      *(harness implemented at `e2e/qa-section-4-2-move.spec.ts`)*
 - [x] Cross-volume move → engine falls back to copy + delete
       (EXDEV path). Source disappears only after copy succeeds.
-      *(harness stub at `e2e/qa-section-4-2-move.spec.ts`)*
+      *(harness implemented at `e2e/qa-section-4-2-move.spec.ts`)*
 - [x] Cancel a long-running move → source still present, partial
       destination cleaned up unless `keep_partial` is on.
-      *(harness stub at `e2e/qa-section-4-2-move.spec.ts`)*
+      *(harness implemented at `e2e/qa-section-4-2-move.spec.ts`)*
 
 ### 4.3 Verify
 
