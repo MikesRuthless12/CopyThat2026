@@ -131,7 +131,7 @@ mod backend_macos {
     const K_IO_RETURN_SUCCESS: c_int = 0;
 
     #[link(name = "IOKit", kind = "framework")]
-    extern "C" {
+    unsafe extern "C" {
         fn IOPMAssertionCreateWithName(
             assertion_type: CFStringRef,
             assertion_level: IOPMAssertionLevel,

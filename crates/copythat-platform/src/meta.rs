@@ -30,7 +30,9 @@
 //! when the file lands back on a Mac.
 
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use std::path::PathBuf;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use copythat_core::meta::XattrEntry;
@@ -38,7 +40,9 @@ use copythat_core::meta::XattrEntry;
 use copythat_core::meta::{FileCaps, PosixAclBlob, SeLinuxContext};
 #[cfg(target_os = "macos")]
 use copythat_core::meta::{FinderInfoBlob, ResourceForkBlob};
-use copythat_core::meta::{MetaApplyOutcome, MetaOps, MetaPolicy, MetaSnapshot, NtfsStream};
+use copythat_core::meta::{MetaApplyOutcome, MetaOps, MetaPolicy, MetaSnapshot};
+#[cfg(target_os = "windows")]
+use copythat_core::meta::NtfsStream;
 
 /// Platform-backed security-metadata capture/apply hook.
 ///

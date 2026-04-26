@@ -49,9 +49,10 @@ copythat-platform = { path = "../copythat-platform", version = "1" }
 # Phase 31b — Linux DBus ScreenSaver Inhibit probe via zbus 5.
 # zbus is already a workspace dep through copythat-platform's
 # wake_lock module; reuse keeps the dep graph + license review
-# unchanged.
+# unchanged. `blocking-api` is gated as a separate feature in
+# zbus 5.x; `source.rs` uses `zbus::blocking::{Connection, Proxy}`.
 [target.'cfg(target_os = "linux")'.dependencies]
-zbus = { version = "5", default-features = false, features = ["tokio"] }
+zbus = { version = "5", default-features = false, features = ["tokio", "blocking-api"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = [

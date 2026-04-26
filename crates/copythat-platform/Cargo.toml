@@ -71,8 +71,9 @@ core-foundation-sys = "0.8"
 [target.'cfg(target_os = "linux")'.dependencies]
 # Phase 37 follow-up #2 — `org.freedesktop.ScreenSaver.Inhibit` for
 # the mobile companion's "Keep desktop awake" toggle. Pure-Rust
-# dbus client. MIT.
-zbus = { version = "5", default-features = false, features = ["tokio"] }
+# dbus client. MIT. `blocking-api` is gated as a separate feature
+# in zbus 5.x; the wake-lock backend uses `zbus::blocking::*`.
+zbus = { version = "5", default-features = false, features = ["tokio", "blocking-api"] }
 
 [dev-dependencies]
 blake3 = "1"
