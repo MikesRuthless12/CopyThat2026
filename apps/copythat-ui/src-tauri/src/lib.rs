@@ -44,6 +44,8 @@ pub mod errors;
 pub mod global_paste;
 pub mod i18n;
 pub mod icon;
+#[cfg(windows)]
+pub mod instance_broker;
 pub mod ipc;
 pub mod ipc_safety;
 pub mod live_mirror;
@@ -91,6 +93,29 @@ pub fn run() {
             return;
         }
         _ => {}
+    }
+
+    // Phase 40 — second-instance fast bail. If our process-wide
+    // mutex is already owned, a sibling `copythat-ui` is already
+    // running; forward our argv through the named-pipe broker
+    // instead of doing the full Tauri boot. Saves ~5-7 seconds
+    // per `--enqueue` invocation on Windows. On any failure
+    // (no server, pipe busy, write error) we fall through to the
+    // normal first-instance boot — the existing
+    // tauri-plugin-single-instance still kicks in inside
+    // builder.run() as a safety net.
+    #[cfg(windows)]
+    if matches!(&action, CliAction::Enqueue(_)) && instance_broker::is_second_instance() {
+        let argv: Vec<String> = std::env::args().collect();
+        match instance_broker::try_forward_argv(&argv) {
+            Ok(()) => return,
+            Err(e) => {
+                eprintln!("[broker] forward failed, falling through to full boot: {e}");
+                // fall through; normal boot path will set up the
+                // single-instance plugin + builder.run() will
+                // detect + forward via the older mechanism.
+            }
+        }
     }
 
     // The setup hook consumes this once; the Mutex<Option<_>> lets
@@ -384,6 +409,14 @@ pub fn run() {
             mobile_commands::mobile_onboarding_dismiss,
         ])
         .setup(move |app| {
+            // Phase 40 — start the named-pipe broker that future
+            // `--enqueue` invocations talk to instead of booting a
+            // second Tauri instance. See `instance_broker.rs`.
+            // Windows-only — macOS/Linux still rely on
+            // tauri-plugin-single-instance's argv-forwarding path.
+            #[cfg(windows)]
+            instance_broker::start_pipe_server(app.handle().clone());
+
             // Phase 16 / 28 — tray icon + menu. Visible regardless
             // of the "minimize to tray" setting; the setting only
             // changes what the window's close button does. Phase 28

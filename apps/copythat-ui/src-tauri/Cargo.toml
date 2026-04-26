@@ -177,6 +177,15 @@ windows = { version = "0.61", features = [
     "Win32_System_Ole",
     "Win32_UI_Shell",
 ] }
+# Phase 40 — `instance_broker.rs` second-instance fast-bail
+# infrastructure. Named-pipe IPC + named mutex via the
+# already-in-workspace windows-sys 0.59 binding.
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }
 
 # macOS-only clipboard reader: NSPasteboard via the modern `objc2`
 # bindings. `objc2-foundation` covers NSArray / NSString / NSURL and
