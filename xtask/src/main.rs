@@ -19,6 +19,11 @@
 //!   Shells out to `pnpm tauri build --bundles …` with
 //!   `APPLE_SIGNING_IDENTITY=-` set so macOS picks up ad-hoc codesign.
 //!   Mirrors `.github/workflows/release.yml`.
+//! - `qa-automate`: drive every automatable checkbox in
+//!   `QualityAssuranceChecklist.md` (§0 pre-flight, §1 static +
+//!   frontend, §2 per-crate tests, §3 security, §5 bench-ci) and
+//!   emit a single pass/fail report. The single-call gate the
+//!   checklist's appendix recommends running before `release.yml`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -26,6 +31,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 mod bench;
+mod qa;
 mod release;
 
 const LOCALES: &[&str] = &[
@@ -102,6 +108,16 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("qa-automate") => {
+            let rest: Vec<String> = args.collect();
+            match qa::run(rest) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("xtask qa-automate: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("--help" | "-h") | None => {
             print_help();
             ExitCode::SUCCESS
@@ -116,7 +132,7 @@ fn main() -> ExitCode {
 
 fn print_help() {
     println!(
-        "Usage: xtask <command>\n\nCommands:\n  i18n-lint   Verify key parity, literal-key coverage, and Fluent syntax\n              across locales/<code>/copythat.ftl\n  bench       Run the Criterion bench suite at full size\n  bench-ci    Run the Criterion bench suite at CI-scaled sizes\n  bench-vs    Time our engine against OS copy tools on PATH\n  release     Drive the Phase 16 free-first packaging path (pnpm tauri build)\n"
+        "Usage: xtask <command>\n\nCommands:\n  i18n-lint    Verify key parity, literal-key coverage, and Fluent syntax\n               across locales/<code>/copythat.ftl\n  bench        Run the Criterion bench suite at full size\n  bench-ci     Run the Criterion bench suite at CI-scaled sizes\n  bench-vs     Time our engine against OS copy tools on PATH\n  release      Drive the Phase 16 free-first packaging path (pnpm tauri build)\n  qa-automate  Run every automatable QualityAssuranceChecklist item\n               (§0 pre-flight + §1 static + §2 tests + §3 security + §5 perf)\n               and emit a pass/fail report. Use `qa-automate --help` for flags.\n"
     );
 }
 
