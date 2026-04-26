@@ -49,7 +49,24 @@ use crate::outcome::ChosenStrategy;
 /// We put it back to 256 MiB (Windows Explorer's default); the
 /// 10 GiB C→C workload still picks up the NO_BUFFERING path
 /// since it sits well above the threshold.
-const NO_BUFFERING_THRESHOLD: u64 = 256 * 1024 * 1024;
+///
+/// Phase 38 follow-up: the threshold can be overridden at runtime
+/// via `COPYTHAT_NO_BUFFERING_THRESHOLD_MB=<N>` (set to a very
+/// large number to effectively disable). Used by `xtask bench-vs`
+/// to A/B test on Dev Drive / NVMe-equipped machines where the
+/// page-cache regression argument may not apply.
+const NO_BUFFERING_THRESHOLD_DEFAULT: u64 = 256 * 1024 * 1024;
+
+fn no_buffering_threshold() -> u64 {
+    static CACHED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *CACHED.get_or_init(|| {
+        std::env::var("COPYTHAT_NO_BUFFERING_THRESHOLD_MB")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(|mb| mb.saturating_mul(1024 * 1024))
+            .unwrap_or(NO_BUFFERING_THRESHOLD_DEFAULT)
+    })
+}
 const PROGRESS_MIN_BYTES: u64 = 16 * 1024;
 const PROGRESS_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
 const ERROR_REQUEST_ABORTED: u32 = 1235;
@@ -213,7 +230,7 @@ pub(crate) async fn try_native_copy(
     let src_w = wide(&src);
     let dst_w = wide(&dst);
 
-    let flags: u32 = if total >= NO_BUFFERING_THRESHOLD {
+    let flags: u32 = if total >= no_buffering_threshold() {
         COPY_FILE_NO_BUFFERING
     } else {
         0
