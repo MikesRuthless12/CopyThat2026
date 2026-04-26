@@ -128,6 +128,18 @@ pub(crate) fn release_blocking(c: Cleanup) -> Result<(), SnapshotError> {
 // --- In-process PowerShell path ------------------------------------
 
 async fn create_in_process(volume: &str) -> Result<(String, String), SnapshotError> {
+    // Defence-in-depth — `volume_letter_for` already restricts to
+    // the `[A-Za-z]:\` shape upstream, but if a future caller
+    // bypasses that helper, the same shape check fires here too.
+    // Mirrors the validation in `helper_vss::create_shadow`.
+    if !is_valid_drive_root(volume) {
+        return Err(SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: format!(
+                "refusing to shadow non-drive-root volume {volume:?}; expected `X:\\\\`"
+            ),
+        });
+    }
     let script = format!(
         concat!(
             "$ErrorActionPreference='Stop';",
@@ -162,6 +174,17 @@ async fn create_in_process(volume: &str) -> Result<(String, String), SnapshotErr
 }
 
 async fn release_in_process(shadow_id: &str) -> Result<(), SnapshotError> {
+    // Mirror the helper-side validation: shadow_id must be the
+    // braced-GUID shape WMI hands back from
+    // `Win32_ShadowCopy.ID`. Refuses anything else so a bug in a
+    // future caller can't smuggle a script-fragment-bearing
+    // string past `powershell_escape` (which only handles `'`).
+    if !is_valid_guid_brace(shadow_id) {
+        return Err(SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: format!("refusing to release non-GUID shadow_id {shadow_id:?}"),
+        });
+    }
     let script = format!(
         concat!(
             "$ErrorActionPreference='Stop';",
@@ -194,6 +217,13 @@ async fn release_in_process(shadow_id: &str) -> Result<(), SnapshotError> {
 }
 
 fn release_in_process_blocking(shadow_id: &str) -> Result<(), SnapshotError> {
+    // Same GUID-shape gate as the async `release_in_process`.
+    if !is_valid_guid_brace(shadow_id) {
+        return Err(SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: format!("refusing to release non-GUID shadow_id {shadow_id:?}"),
+        });
+    }
     let script = format!(
         concat!(
             "$ErrorActionPreference='Stop';",
@@ -496,6 +526,44 @@ fn parse_id_device(stdout: &str) -> Result<(String, String), SnapshotError> {
 
 fn powershell_escape(s: &str) -> String {
     s.replace('\'', "''")
+}
+
+/// Reject anything not matching `[A-Za-z]:\` exactly. Matches
+/// `helper_vss::is_valid_drive_root`; duplicated rather than
+/// shared because the helper binary is intentionally
+/// `unsafe_code = forbid` and copying the four-line check is
+/// cheaper than threading a pub(crate) helper across the crate
+/// boundary for the helper bin.
+fn is_valid_drive_root(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    bytes.len() == 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && bytes[2] == b'\\'
+}
+
+/// Accept `{` + 32 hex digits with 4 hyphens + `}` (Win32
+/// `Win32_ShadowCopy.ID` shape). Hyphen positions are 8/4/4/4/12.
+/// Mirrors `helper_vss::is_valid_guid_brace`.
+fn is_valid_guid_brace(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    if bytes.len() != 38 {
+        return false;
+    }
+    if bytes[0] != b'{' || bytes[37] != b'}' {
+        return false;
+    }
+    for (i, &b) in bytes[1..37].iter().enumerate() {
+        let want_hyphen = matches!(i, 8 | 13 | 18 | 23);
+        if want_hyphen {
+            if b != b'-' {
+                return false;
+            }
+        } else if !b.is_ascii_hexdigit() {
+            return false;
+        }
+    }
+    true
 }
 
 /// Resolve the absolute path to PowerShell. Falls back to

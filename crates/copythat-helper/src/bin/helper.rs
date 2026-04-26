@@ -23,7 +23,7 @@ use copythat_helper::transport::{TransportError, buf_reader, read_line, write_li
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let granted = match resolve_capabilities(&args) {
+    let argv_requested = match resolve_capabilities(&args) {
         Ok(caps) => caps,
         Err(e) => {
             eprintln!("copythat-helper: {e}");
@@ -34,7 +34,7 @@ fn main() {
     let mut reader = buf_reader(stdin().lock());
     let mut writer = BufWriter::new(stdout().lock());
 
-    let exit_code = match run_loop(&mut reader, &mut writer, &granted) {
+    let exit_code = match run_loop(&mut reader, &mut writer, &argv_requested) {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("copythat-helper: transport error: {e}");
@@ -56,11 +56,33 @@ fn resolve_capabilities(args: &[String]) -> Result<Vec<Capability>, String> {
     }
 }
 
+/// Intersect `argv_requested` (the upper bound) with
+/// `pipe_granted` (the lower bound) so a `GrantCapabilities`
+/// request can never widen beyond what the spawn argv asked for.
+fn effective_capabilities(
+    argv_requested: &[Capability],
+    pipe_granted: &[Capability],
+) -> Vec<Capability> {
+    let mut out: Vec<Capability> = Vec::with_capacity(pipe_granted.len());
+    for cap in pipe_granted {
+        if argv_requested.contains(cap) {
+            out.push(*cap);
+        }
+    }
+    out
+}
+
 fn run_loop<R: std::io::BufRead, W: std::io::Write>(
     reader: &mut R,
     writer: &mut W,
-    granted: &[Capability],
+    argv_requested: &[Capability],
 ) -> Result<(), TransportError> {
+    // Phase 17j — runtime-granted starts empty. The caller must
+    // send `Request::GrantCapabilities` over the (DACL-restricted)
+    // pipe before any capability-bearing request is accepted.
+    // argv `--capabilities=` is the upper bound; this is the
+    // lower bound. Effective = argv ∩ pipe.
+    let mut pipe_granted: Vec<Capability> = Vec::new();
     loop {
         let request: Request = match read_line(reader) {
             Ok(r) => r,
@@ -84,7 +106,21 @@ fn run_loop<R: std::io::BufRead, W: std::io::Write>(
         };
 
         let is_shutdown = matches!(request, Request::Shutdown);
-        let response = handle_request(&request, granted);
+        // GrantCapabilities is special-cased here in the binary
+        // because it mutates the per-session granted state; every
+        // other request gates through the stateless
+        // `handle_request`.
+        let response = match &request {
+            Request::GrantCapabilities { capabilities } => {
+                pipe_granted = capabilities.clone();
+                let granted = effective_capabilities(argv_requested, &pipe_granted);
+                Response::CapabilitiesGranted { granted }
+            }
+            _ => {
+                let effective = effective_capabilities(argv_requested, &pipe_granted);
+                handle_request(&request, &effective)
+            }
+        };
         write_line(writer, &response)?;
         if is_shutdown {
             return Ok(());
@@ -115,5 +151,121 @@ mod tests {
         let r2: Response = serde_json::from_str(lines.next().unwrap()).unwrap();
         assert!(matches!(r1, Response::Failed { .. }));
         assert!(matches!(r2, Response::ShuttingDown));
+    }
+
+    /// Phase 17j — capability-bearing requests sent before
+    /// `GrantCapabilities` must surface as `CapabilityDenied`,
+    /// regardless of what `--capabilities=` argv said. The argv
+    /// is the upper bound; the lower bound starts at zero.
+    #[test]
+    fn run_loop_denies_capability_request_before_grant() {
+        let req = Request::ElevatedRetry {
+            src: std::path::PathBuf::from("/tmp/src"),
+            dst: std::path::PathBuf::from("/tmp/dst"),
+        };
+        let req_line = serde_json::to_string(&req).unwrap();
+        let shut_line = serde_json::to_string(&Request::Shutdown).unwrap();
+        let stream = format!("{req_line}\n{shut_line}\n");
+        let mut reader = BufReader::new(Cursor::new(stream.into_bytes()));
+        let mut wire: Vec<u8> = Vec::new();
+        // argv-requested = ElevatedRetry, but no GrantCapabilities
+        // landed yet, so effective = ∅.
+        run_loop(&mut reader, &mut wire, &[Capability::ElevatedRetry]).unwrap();
+        let body = String::from_utf8(wire).unwrap();
+        let mut lines = body.lines();
+        let r1: Response = serde_json::from_str(lines.next().unwrap()).unwrap();
+        let r2: Response = serde_json::from_str(lines.next().unwrap()).unwrap();
+        assert!(
+            matches!(r1, Response::CapabilityDenied { .. }),
+            "expected CapabilityDenied before GrantCapabilities, got {r1:?}"
+        );
+        assert!(matches!(r2, Response::ShuttingDown));
+    }
+
+    /// Phase 17j — `GrantCapabilities` populates the per-session
+    /// state; subsequent requests use the intersection of argv-
+    /// requested and pipe-granted.
+    #[test]
+    fn run_loop_grants_then_serves_capability() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src.bin");
+        let dst = dir.path().join("dst.bin");
+        std::fs::write(&src, b"payload").unwrap();
+        let grant = Request::GrantCapabilities {
+            capabilities: vec![Capability::ElevatedRetry],
+        };
+        let retry = Request::ElevatedRetry {
+            src: src.clone(),
+            dst: dst.clone(),
+        };
+        let stream = format!(
+            "{}\n{}\n{}\n",
+            serde_json::to_string(&grant).unwrap(),
+            serde_json::to_string(&retry).unwrap(),
+            serde_json::to_string(&Request::Shutdown).unwrap(),
+        );
+        let mut reader = BufReader::new(Cursor::new(stream.into_bytes()));
+        let mut wire: Vec<u8> = Vec::new();
+        run_loop(&mut reader, &mut wire, &[Capability::ElevatedRetry]).unwrap();
+        let body = String::from_utf8(wire).unwrap();
+        let mut lines = body.lines();
+        let r1: Response = serde_json::from_str(lines.next().unwrap()).unwrap();
+        let r2: Response = serde_json::from_str(lines.next().unwrap()).unwrap();
+        let r3: Response = serde_json::from_str(lines.next().unwrap()).unwrap();
+        assert!(matches!(r1, Response::CapabilitiesGranted { .. }));
+        assert!(
+            matches!(r2, Response::ElevatedRetryOk { bytes: 7 }),
+            "expected ElevatedRetryOk after grant, got {r2:?}"
+        );
+        assert!(matches!(r3, Response::ShuttingDown));
+    }
+
+    /// Phase 17j — pipe-granted set wider than argv-requested is
+    /// silently clamped to argv (you can't widen the grant beyond
+    /// what the spawn argv asked for). A request for the
+    /// non-argv-requested capability after such a clamp is denied.
+    #[test]
+    fn run_loop_clamps_grant_to_argv_upper_bound() {
+        let grant = Request::GrantCapabilities {
+            capabilities: vec![Capability::ElevatedRetry, Capability::HardwareErase],
+        };
+        let erase = Request::HardwareErase {
+            device: std::path::PathBuf::from("/dev/nvme0n1"),
+        };
+        let stream = format!(
+            "{}\n{}\n{}\n",
+            serde_json::to_string(&grant).unwrap(),
+            serde_json::to_string(&erase).unwrap(),
+            serde_json::to_string(&Request::Shutdown).unwrap(),
+        );
+        let mut reader = BufReader::new(Cursor::new(stream.into_bytes()));
+        let mut wire: Vec<u8> = Vec::new();
+        // argv-requested = ElevatedRetry only. The grant asked for
+        // HardwareErase too but the intersection drops it.
+        run_loop(&mut reader, &mut wire, &[Capability::ElevatedRetry]).unwrap();
+        let body = String::from_utf8(wire).unwrap();
+        let mut lines = body.lines();
+        let r1: Response = serde_json::from_str(lines.next().unwrap()).unwrap();
+        let r2: Response = serde_json::from_str(lines.next().unwrap()).unwrap();
+        let _r3: Response = serde_json::from_str(lines.next().unwrap()).unwrap();
+        match r1 {
+            Response::CapabilitiesGranted { granted } => {
+                assert_eq!(granted, vec![Capability::ElevatedRetry]);
+            }
+            other => panic!("expected CapabilitiesGranted, got {other:?}"),
+        }
+        assert!(
+            matches!(r2, Response::CapabilityDenied { .. }),
+            "HardwareErase must be denied even after over-broad grant: {r2:?}"
+        );
+    }
+
+    /// Helper unit-test: `effective_capabilities` is intersection.
+    #[test]
+    fn effective_capabilities_is_intersection() {
+        let argv = [Capability::ElevatedRetry, Capability::ShellExtension];
+        let pipe = vec![Capability::ElevatedRetry, Capability::HardwareErase];
+        let eff = effective_capabilities(&argv, &pipe);
+        assert_eq!(eff, vec![Capability::ElevatedRetry]);
     }
 }

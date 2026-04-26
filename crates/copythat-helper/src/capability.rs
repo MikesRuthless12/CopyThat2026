@@ -66,7 +66,17 @@ impl Capability {
     /// management — gating them would deadlock the protocol.
     pub fn required_for(req: &Request) -> Option<Self> {
         match req {
-            Request::Hello { .. } | Request::Shutdown => None,
+            // Hello / Shutdown / GrantCapabilities are lifecycle —
+            // gating them would deadlock the protocol (the grant
+            // itself can't require a capability it's about to
+            // grant). The binary's run-loop handles
+            // GrantCapabilities specially anyway, so this branch
+            // is defence-in-depth: even if a future caller routes
+            // GrantCapabilities through `handle_request`, the
+            // capability gate doesn't refuse it.
+            Request::Hello { .. }
+            | Request::Shutdown
+            | Request::GrantCapabilities { .. } => None,
             Request::ElevatedRetry { .. } => Some(Self::ElevatedRetry),
             Request::InstallShellExtension { .. } | Request::UninstallShellExtension { .. } => {
                 Some(Self::ShellExtension)

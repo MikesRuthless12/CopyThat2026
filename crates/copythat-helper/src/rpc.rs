@@ -57,6 +57,25 @@ pub enum Request {
     /// Drop the connection cleanly. Optional — EOF on the pipe is
     /// the same shape, just less polite.
     Shutdown,
+    /// Phase 17j — post-handshake capability grant. The helper
+    /// starts with **zero** runtime-granted capabilities regardless
+    /// of what `--capabilities=` argv said; the caller must send
+    /// this request over the pipe before any capability-bearing
+    /// request will be accepted. The argv flag bounds the *upper*
+    /// limit of what can be granted (so a future contributor can't
+    /// silently widen the surface from the binary side); this
+    /// request bounds the *lower* limit (so an argv-injection
+    /// attack between Start-Process and helper-startup can't
+    /// declare capabilities the unprivileged caller never asked
+    /// for).
+    ///
+    /// The helper replies with [`Response::CapabilitiesGranted`]
+    /// carrying the actually-honored set (argv-requested ∩
+    /// pipe-granted). Subsequent capability checks gate against
+    /// this set.
+    GrantCapabilities {
+        capabilities: Vec<crate::capability::Capability>,
+    },
 }
 
 /// What the helper sends back. One per request. The wire shape
@@ -132,6 +151,14 @@ pub enum Response {
     /// Match for `Request::Shutdown`. Helper exits cleanly after
     /// flushing the response.
     ShuttingDown,
+    /// Phase 17j — reply to `Request::GrantCapabilities`. Carries
+    /// the actually-honored set (argv-requested ∩ pipe-granted).
+    /// May be empty when the caller asked for capabilities the
+    /// helper wasn't configured to grant; that's not an error,
+    /// the caller can re-Hello and try a different mix.
+    CapabilitiesGranted {
+        granted: Vec<crate::capability::Capability>,
+    },
 }
 
 /// Which shell extension flavour the caller wants installed /
