@@ -135,7 +135,17 @@ pub(crate) async fn parallel_chunk_copy(
     super::emit_started(&src, &dst, total, &events).await;
 
     // Pre-allocate so every worker writes into its own range
-    // without contending on file-extend.
+    // without contending on file-extend. Phase 39 follow-up: when
+    // `COPYTHAT_SKIP_ZERO_FILL=1` and the calling process holds
+    // `SE_MANAGE_VOLUME_NAME` (admin), we also call
+    // `SetFileValidData` after `set_len` so NTFS skips its
+    // lazy-zero pass over the pre-allocated extent. The caller
+    // guarantees every byte is overwritten by the chunk workers,
+    // so the security implication of "uninitialised disk blocks
+    // briefly readable" is bounded by us, not exposed to other
+    // processes. Best-effort: if the privilege isn't held the
+    // call returns ERROR_PRIVILEGE_NOT_HELD and we silently fall
+    // through to the (slightly slower) lazy-zero path.
     {
         let prep = {
             let dst = dst.clone();
@@ -146,6 +156,10 @@ pub(crate) async fn parallel_chunk_copy(
                     .write(true)
                     .open(&dst)?;
                 f.set_len(total)?;
+                #[cfg(windows)]
+                {
+                    let _ = try_skip_zero_fill(&f, total);
+                }
                 Ok(())
             })
             .await
@@ -307,4 +321,36 @@ pub(crate) async fn parallel_chunk_copy(
         strategy: ChosenStrategy::CopyFileExW, // Same native strategy class; the dispatcher records "fast" regardless of chunked vs single-stream.
         bytes: total,
     }
+}
+
+/// Attempt the NTFS lazy-zero skip via `SetFileValidData`. Returns
+/// `true` iff the system call succeeded — which requires the caller
+/// to hold `SE_MANAGE_VOLUME_NAME` (admin). On failure the call is
+/// silently a no-op; NTFS still zero-fills the extent during writes,
+/// just slower. Gated behind `COPYTHAT_SKIP_ZERO_FILL=1` so the
+/// admin / opt-in nature is explicit.
+///
+/// Security note: an admin user opting into this acknowledges that
+/// the pre-allocated extent contains whatever bytes were on those
+/// clusters before. Copy That guarantees the workers write valid
+/// data over every byte, so the risk is bounded to the Copy That
+/// process — there's no cross-process data exposure.
+#[cfg(windows)]
+fn try_skip_zero_fill(file: &File, size: u64) -> bool {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::SetFileValidData;
+
+    if std::env::var("COPYTHAT_SKIP_ZERO_FILL")
+        .ok()
+        .as_deref()
+        .is_none_or(|v| !matches!(v, "1" | "true" | "on"))
+    {
+        return false;
+    }
+    let handle = file.as_raw_handle().cast::<core::ffi::c_void>();
+    // SAFETY: `file` is a valid open file handle held by the caller
+    // for the duration of this call. SetFileValidData has no aliasing
+    // requirements and writes only the file's metadata.
+    let ok = unsafe { SetFileValidData(handle, size as i64) };
+    ok != 0
 }

@@ -52,7 +52,8 @@ use windows_sys::Win32::Foundation::{
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CREATE_ALWAYS, CreateFileW, FILE_BEGIN, FILE_FLAG_NO_BUFFERING, FILE_FLAG_OVERLAPPED,
-    FILE_SHARE_READ, OPEN_EXISTING, ReadFile, SetEndOfFile, SetFilePointerEx, WriteFile,
+    FILE_SHARE_READ, OPEN_EXISTING, ReadFile, SetEndOfFile, SetFilePointerEx, SetFileValidData,
+    WriteFile,
 };
 
 // Generic access rights (kept inline to avoid pulling in another
@@ -313,6 +314,22 @@ unsafe fn do_overlapped_copy(
     let alloc_size = (total + sector_bytes as u64 - 1) & !(sector_bytes as u64 - 1);
     seek_and_set_eof(dst_handle.0, alloc_size as i64)
         .map_err(|e| io::Error::other(format!("set_eof alloc: {e}")))?;
+    // Phase 39 follow-up — opt-in lazy-zero skip via
+    // `SetFileValidData`. Only fires when the user has set
+    // `COPYTHAT_SKIP_ZERO_FILL=1` AND the process holds
+    // `SE_MANAGE_VOLUME_NAME` (admin). On failure the call is a
+    // best-effort no-op; NTFS will still lazy-zero on writes,
+    // just slower. See parallel.rs::try_skip_zero_fill for the
+    // matching path on the parallel-chunk branch.
+    if std::env::var("COPYTHAT_SKIP_ZERO_FILL")
+        .ok()
+        .as_deref()
+        .is_some_and(|v| matches!(v, "1" | "true" | "on"))
+    {
+        // SAFETY: dst_handle is a valid open file handle held by
+        // this scope; SetFileValidData has no aliasing constraints.
+        let _ = SetFileValidData(dst_handle.0, alloc_size as i64);
+    }
 
     // --- IOCP --------------------------------------------------------
     let iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, ptr::null_mut(), 0, 0);
