@@ -231,14 +231,14 @@ deferred true-end-to-end tauri-driver path.
 
 - [x] Add an S3 backend with a test bucket → `Test connection` →
       green. Copy a file to the backend → object lands.
-      *(harness stub at `e2e/qa-section-4-6-cloud.spec.ts`;
+      *(harness implemented at `e2e/qa-section-4-6-cloud.spec.ts`;
       real bucket round-trip still a manual smoke pre-tag)*
 - [x] Add a Dropbox backend via OAuth PKCE → completes browser
       flow → backend listed. *(harness stub at
       `e2e/qa-section-4-6-cloud.spec.ts`; OAuth browser hop
       stays manual since the popup is OS-level)*
 - [x] Copy from a backend back to local → file lands. *(harness
-      stub at `e2e/qa-section-4-6-cloud.spec.ts`)*
+      implemented at `e2e/qa-section-4-6-cloud.spec.ts`)*
 
 ### 4.7 Mount (Phase 33)
 
