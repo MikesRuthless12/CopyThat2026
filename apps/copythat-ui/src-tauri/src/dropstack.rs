@@ -462,7 +462,7 @@ pub async fn dropstack_toggle_window(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let url = WebviewUrl::App("dropstack.html".into());
-    WebviewWindowBuilder::new(&app, DROPSTACK_WINDOW_LABEL, url)
+    let builder = WebviewWindowBuilder::new(&app, DROPSTACK_WINDOW_LABEL, url)
         .title("Drop Stack — Copy That")
         .inner_size(380.0, 520.0)
         .min_inner_size(320.0, 240.0)
@@ -472,13 +472,15 @@ pub async fn dropstack_toggle_window(app: AppHandle) -> Result<(), String> {
                 .map(|s| s.settings_snapshot().drop_stack.always_on_top)
                 .unwrap_or(false),
         )
-        .skip_taskbar(false)
-        // Explorer drag onto this window delivers paths via the
-        // Tauri window-level `drag-drop` event; the Svelte layer
-        // feeds them into `dropstack_add`.
-        .drag_and_drop(true)
-        .build()
-        .map_err(|e| e.to_string())?;
+        .skip_taskbar(false);
+    // Explorer drag onto this window delivers paths via the
+    // Tauri window-level `drag-drop` event; the Svelte layer
+    // feeds them into `dropstack_add`. `drag_and_drop` is
+    // `#[cfg(windows)]`-gated in tauri 2.x — Linux/macOS get the
+    // drag-drop wiring through `tauri.conf.json` instead.
+    #[cfg(windows)]
+    let builder = builder.drag_and_drop(true);
+    builder.build().map_err(|e| e.to_string())?;
     Ok(())
 }
 
