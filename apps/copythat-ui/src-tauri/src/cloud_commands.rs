@@ -12,7 +12,6 @@
 //! name + kind + config only and prompts for the secret on re-edit
 //! if the user needs to rotate it.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use copythat_cloud::{
@@ -27,6 +26,7 @@ use copythat_settings::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::ipc_safety::{err_string, validate_ipc_path};
 use crate::state::AppState;
 
 /// Wire-form for a single backend. Round-trips directly from the
@@ -256,13 +256,18 @@ pub async fn test_backend_connection(
         }
     };
 
-    match operator.stat("/").await {
-        Ok(_) => Ok(TestConnectionResult {
+    // Bound the network probe at 15 s. A misconfigured / hostile
+    // SFTP/FTP/WebDAV endpoint can hold the future open indefinitely;
+    // without this timeout the Tauri command pins a runtime worker
+    // and any concurrent settings IPC blocks behind the read lock the
+    // wizard re-takes on every keystroke.
+    match tokio::time::timeout(std::time::Duration::from_secs(15), operator.stat("/")).await {
+        Ok(Ok(_)) => Ok(TestConnectionResult {
             ok: true,
             reason: None,
             detail: None,
         }),
-        Err(e) if e.kind() == opendal::ErrorKind::NotFound => Ok(TestConnectionResult {
+        Ok(Err(e)) if e.kind() == opendal::ErrorKind::NotFound => Ok(TestConnectionResult {
             // stat("/") on some backends (flat S3 buckets) legitimately
             // reports NotFound for the root prefix even when the bucket
             // exists. Treat as success — a bucket-scoped `list("/")`
@@ -271,10 +276,15 @@ pub async fn test_backend_connection(
             reason: None,
             detail: None,
         }),
-        Err(e) => Ok(TestConnectionResult {
+        Ok(Err(e)) => Ok(TestConnectionResult {
             ok: false,
             reason: Some(map_opendal_kind(e.kind())),
             detail: Some(e.to_string()),
+        }),
+        Err(_elapsed) => Ok(TestConnectionResult {
+            ok: false,
+            reason: Some("network"),
+            detail: Some("test connection timed out after 15s".to_string()),
         }),
     }
 }
@@ -290,6 +300,11 @@ pub async fn copy_local_to_backend(
     dst_key: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<u64, String> {
+    // Phase 17e — gate src_path through the same lexical + encoding
+    // bar every other path-typed Tauri command uses. Without this an
+    // attacker-controlled IPC payload could exfiltrate files via
+    // `..` traversal (the LocalFs path the engine ultimately opens).
+    let src = validate_ipc_path(&src_path).map_err(err_string)?;
     let backend = state
         .cloud_backends
         .get(&backend_name)
@@ -297,7 +312,7 @@ pub async fn copy_local_to_backend(
     let secret = Credentials.load(&backend.name).map_err(|e| e.to_string())?;
     let operator = make_operator(&backend, secret.as_deref()).map_err(|e| e.to_string())?;
     let target: Arc<dyn CopyTarget> = Arc::new(OperatorTarget::new(backend.name.clone(), operator));
-    copy_to_target(&PathBuf::from(&src_path), &target, &dst_key)
+    copy_to_target(&src, &target, &dst_key)
         .await
         .map_err(|e| e.to_string())
 }
@@ -311,6 +326,10 @@ pub async fn copy_backend_to_local(
     dst_path: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<u64, String> {
+    // Phase 17e — same gate the local→cloud direction uses: a forged
+    // IPC payload with `..` segments would otherwise let the download
+    // land outside the user's chosen destination.
+    let dst = validate_ipc_path(&dst_path).map_err(err_string)?;
     let backend = state
         .cloud_backends
         .get(&backend_name)
@@ -318,7 +337,7 @@ pub async fn copy_backend_to_local(
     let secret = Credentials.load(&backend.name).map_err(|e| e.to_string())?;
     let operator = make_operator(&backend, secret.as_deref()).map_err(|e| e.to_string())?;
     let target: Arc<dyn CopyTarget> = Arc::new(OperatorTarget::new(backend.name.clone(), operator));
-    copy_from_target(&target, &src_key, &PathBuf::from(&dst_path))
+    copy_from_target(&target, &src_key, &dst)
         .await
         .map_err(|e| e.to_string())
 }
@@ -492,6 +511,10 @@ fn dto_to_entry(dto: &BackendDto) -> Option<BackendConfigEntry> {
                 port: if c.port == 0 { 22 } else { c.port },
                 username: c.username.clone(),
                 root: c.root.clone(),
+                // Empty here defers to `default_known_hosts_path`
+                // at engine-bind time. A future Settings panel can
+                // surface this directly via the DTO.
+                known_hosts_path: String::new(),
             });
         }
         BackendKindChoice::Ftp => {
@@ -550,6 +573,24 @@ fn wire_to_kind_choice(wire: &str) -> Option<BackendKindChoice> {
     })
 }
 
+/// Resolve the user's default OpenSSH-format `known_hosts` path
+/// (`~/.ssh/known_hosts`). Used as the SFTP fallback when the user
+/// hasn't explicitly configured one — eliminates the silent TOFU
+/// that the previous shape exhibited (empty string → verifier
+/// returns `Ok(true)` for any presented host key).
+fn default_known_hosts_path() -> String {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
+    if home.is_empty() {
+        return String::new();
+    }
+    let mut p = std::path::PathBuf::from(home);
+    p.push(".ssh");
+    p.push("known_hosts");
+    p.to_string_lossy().into_owned()
+}
+
 fn entry_to_cloud_backend(
     entry: &BackendConfigEntry,
 ) -> Result<Backend, copythat_cloud::BackendError> {
@@ -601,16 +642,23 @@ fn entry_to_cloud_backend(
         }
         BackendKindChoice::Sftp => {
             let c = entry.sftp.clone().unwrap_or_default();
+            // Default to the user's `~/.ssh/known_hosts` when the
+            // settings entry doesn't supply one. Without a
+            // populated `known_hosts_path` the SFTP target's host-
+            // key verifier returns `Ok(true)` for any presented
+            // key (silent TOFU), which under an active MITM hands
+            // the user's password to the attacker.
+            let known_hosts_path = if c.known_hosts_path.is_empty() {
+                default_known_hosts_path()
+            } else {
+                c.known_hosts_path.clone()
+            };
             BackendConfig::Sftp(SftpConfig {
                 host: c.host,
                 port: c.port,
                 username: c.username,
                 root: c.root,
-                // Phase 32h — known_hosts path isn't surfaced
-                // through the IPC DTO yet; Phase 32i adds the
-                // Settings UI for it. Defaults to trust-on-first-
-                // use for now.
-                known_hosts_path: String::new(),
+                known_hosts_path,
             })
         }
         BackendKindChoice::Ftp => {

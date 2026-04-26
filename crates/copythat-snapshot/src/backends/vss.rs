@@ -3,8 +3,11 @@
 //! Two paths, picked at runtime:
 //!
 //! - **In-process.** When the parent is already elevated (Administrator
-//!   token), we shell to PowerShell's `Win32_ShadowCopy::Create` to
-//!   mint the shadow. No child binary needed.
+//!   token), we mint the shadow with the `IVssBackupComponents` COM
+//!   port in [`super::vss_com`]. No child binary, no PowerShell
+//!   shellout. With `--no-default-features` (i.e. the `vss-com`
+//!   feature off) the in-process path falls back to PowerShell's
+//!   `Win32_ShadowCopy::Create`.
 //! - **Helper binary + UAC.** Otherwise we start the sibling
 //!   `copythat-helper-vss.exe` via `Start-Process -Verb RunAs`, which
 //!   triggers the UAC prompt. The helper connects to two named pipes
@@ -21,7 +24,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
+use tokio::net::windows::named_pipe::NamedPipeServer;
 use tokio::process::Command;
 
 use crate::SnapshotHandle;
@@ -125,9 +128,53 @@ pub(crate) fn release_blocking(c: Cleanup) -> Result<(), SnapshotError> {
     }
 }
 
-// --- In-process PowerShell path ------------------------------------
+// --- In-process path ----------------------------------------------
+//
+// Two implementations, feature-gated on `vss-com`:
+//
+// * Default (`vss-com` on): direct `IVssBackupComponents` COM via
+//   `super::vss_com`. No PowerShell, no WMI, no string interpolation.
+// * Fallback (`--no-default-features`): the original PowerShell +
+//   `Get-WmiObject Win32_ShadowCopy` shellout, kept for users who
+//   need to drop the COM dep (e.g. ultra-minimal Windows builds).
 
+#[cfg(feature = "vss-com")]
 async fn create_in_process(volume: &str) -> Result<(String, String), SnapshotError> {
+    // Defence-in-depth — `volume_letter_for` already restricts to the
+    // `[A-Za-z]:\` shape upstream. `vss_com::create_shadow_via_com`
+    // documents that it trusts the input, so we keep the same gate
+    // active even on the COM path.
+    if !is_valid_drive_root(volume) {
+        return Err(SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: format!(
+                "refusing to shadow non-drive-root volume {volume:?}; expected `X:\\\\`"
+            ),
+        });
+    }
+    let volume = volume.to_string();
+    tokio::task::spawn_blocking(move || {
+        super::vss_com::create_shadow_via_com(&volume).map_err(|msg| {
+            SnapshotError::BackendFailure {
+                kind: SnapshotKind::Vss,
+                message: msg,
+            }
+        })
+    })
+    .await
+    .map_err(|e| SnapshotError::Protocol(format!("vss_com create spawn_blocking: {e}")))?
+}
+
+#[cfg(not(feature = "vss-com"))]
+async fn create_in_process(volume: &str) -> Result<(String, String), SnapshotError> {
+    if !is_valid_drive_root(volume) {
+        return Err(SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: format!(
+                "refusing to shadow non-drive-root volume {volume:?}; expected `X:\\\\`"
+            ),
+        });
+    }
     let script = format!(
         concat!(
             "$ErrorActionPreference='Stop';",
@@ -140,7 +187,7 @@ async fn create_in_process(volume: &str) -> Result<(String, String), SnapshotErr
         ),
         vol = powershell_escape(volume),
     );
-    let out = Command::new("powershell")
+    let out = Command::new(powershell_exe_path())
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -161,7 +208,40 @@ async fn create_in_process(volume: &str) -> Result<(String, String), SnapshotErr
     parse_id_device(&String::from_utf8_lossy(&out.stdout))
 }
 
+#[cfg(feature = "vss-com")]
 async fn release_in_process(shadow_id: &str) -> Result<(), SnapshotError> {
+    if !is_valid_guid_brace(shadow_id) {
+        return Err(SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: format!("refusing to release non-GUID shadow_id {shadow_id:?}"),
+        });
+    }
+    let shadow_id = shadow_id.to_string();
+    tokio::task::spawn_blocking(move || {
+        super::vss_com::release_shadow_via_com(&shadow_id).map_err(|msg| {
+            SnapshotError::BackendFailure {
+                kind: SnapshotKind::Vss,
+                message: msg,
+            }
+        })
+    })
+    .await
+    .map_err(|e| SnapshotError::Protocol(format!("vss_com release spawn_blocking: {e}")))?
+}
+
+#[cfg(not(feature = "vss-com"))]
+async fn release_in_process(shadow_id: &str) -> Result<(), SnapshotError> {
+    // Mirror the helper-side validation: shadow_id must be the
+    // braced-GUID shape WMI hands back from `Win32_ShadowCopy.ID`.
+    // Refuses anything else so a bug in a future caller can't smuggle
+    // a script-fragment-bearing string past `powershell_escape`
+    // (which only handles `'`).
+    if !is_valid_guid_brace(shadow_id) {
+        return Err(SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: format!("refusing to release non-GUID shadow_id {shadow_id:?}"),
+        });
+    }
     let script = format!(
         concat!(
             "$ErrorActionPreference='Stop';",
@@ -171,7 +251,7 @@ async fn release_in_process(shadow_id: &str) -> Result<(), SnapshotError> {
         ),
         id = powershell_escape(shadow_id),
     );
-    let out = Command::new("powershell")
+    let out = Command::new(powershell_exe_path())
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -193,7 +273,29 @@ async fn release_in_process(shadow_id: &str) -> Result<(), SnapshotError> {
     }
 }
 
+#[cfg(feature = "vss-com")]
 fn release_in_process_blocking(shadow_id: &str) -> Result<(), SnapshotError> {
+    if !is_valid_guid_brace(shadow_id) {
+        return Err(SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: format!("refusing to release non-GUID shadow_id {shadow_id:?}"),
+        });
+    }
+    super::vss_com::release_shadow_via_com(shadow_id).map_err(|msg| SnapshotError::BackendFailure {
+        kind: SnapshotKind::Vss,
+        message: msg,
+    })
+}
+
+#[cfg(not(feature = "vss-com"))]
+fn release_in_process_blocking(shadow_id: &str) -> Result<(), SnapshotError> {
+    // Same GUID-shape gate as the async `release_in_process`.
+    if !is_valid_guid_brace(shadow_id) {
+        return Err(SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: format!("refusing to release non-GUID shadow_id {shadow_id:?}"),
+        });
+    }
     let script = format!(
         concat!(
             "$ErrorActionPreference='Stop';",
@@ -203,7 +305,7 @@ fn release_in_process_blocking(shadow_id: &str) -> Result<(), SnapshotError> {
         ),
         id = powershell_escape(shadow_id),
     );
-    let out = std::process::Command::new("powershell")
+    let out = std::process::Command::new(powershell_exe_path())
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -231,15 +333,18 @@ async fn spawn_helper() -> Result<HelperConn, SnapshotError> {
 
     // Create both pipe server ends BEFORE launching the helper, so
     // its connect attempts never race ahead of us.
-    let reader_pipe = ServerOptions::new()
-        .first_pipe_instance(true)
-        .max_instances(1)
-        .create(&out_pipe_name)
+    //
+    // Phase 17 follow-up — pipes use a custom DACL granting
+    // pipe access only to the current user SID and
+    // BUILTIN\Administrators (see `win_pipe_security`). The
+    // default Win32 pipe DACL would otherwise grant
+    // GENERIC_READ|GENERIC_WRITE to every process in the same
+    // desktop session, letting a local non-admin attacker
+    // enumerate `\\.\pipe\copythat-vss-*` and race the legitimate
+    // helper to the connect.
+    let reader_pipe = super::win_pipe_security::create_secure_named_pipe_server(&out_pipe_name)
         .map_err(|e| SnapshotError::Protocol(format!("create out-pipe: {e}")))?;
-    let writer_pipe = ServerOptions::new()
-        .first_pipe_instance(true)
-        .max_instances(1)
-        .create(&in_pipe_name)
+    let writer_pipe = super::win_pipe_security::create_secure_named_pipe_server(&in_pipe_name)
         .map_err(|e| SnapshotError::Protocol(format!("create in-pipe: {e}")))?;
 
     let helper_str = helper_path.to_string_lossy().to_string();
@@ -256,7 +361,7 @@ async fn spawn_helper() -> Result<HelperConn, SnapshotError> {
         outp = powershell_escape(&out_pipe_name),
     );
 
-    let launch = Command::new("powershell")
+    let launch = Command::new(powershell_exe_path())
         .args(["-NoProfile", "-NonInteractive", "-Command", &ps_cmd])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -462,13 +567,23 @@ fn locate_helper_binary() -> Result<PathBuf, SnapshotError> {
 }
 
 fn make_pipe_names() -> (String, String) {
-    let id = uuid::Uuid::new_v4();
+    // Use 256 bits of CSPRNG entropy (Uuid v4 carries ~122 bits of
+    // randomness) so an attacker enumerating `\\.\pipe\copythat-vss-*`
+    // can't predict the suffix. Falls back to a Uuid v4 if
+    // getrandom fails; the helper's argv-time validation catches
+    // shape drift either way.
+    let mut bytes = [0u8; 32];
+    let id = match getrandom::fill(&mut bytes) {
+        Ok(()) => hex::encode(bytes),
+        Err(_) => uuid::Uuid::new_v4().to_string().replace('-', ""),
+    };
     (
         format!(r"\\.\pipe\copythat-vss-{id}-in"),
         format!(r"\\.\pipe\copythat-vss-{id}-out"),
     )
 }
 
+#[cfg(not(feature = "vss-com"))]
 fn parse_id_device(stdout: &str) -> Result<(String, String), SnapshotError> {
     for line in stdout.lines() {
         let line = line.trim();
@@ -484,6 +599,58 @@ fn parse_id_device(stdout: &str) -> Result<(String, String), SnapshotError> {
 
 fn powershell_escape(s: &str) -> String {
     s.replace('\'', "''")
+}
+
+/// Reject anything not matching `[A-Za-z]:\` exactly. Matches
+/// `helper_vss::is_valid_drive_root`; duplicated rather than
+/// shared because the helper binary is intentionally
+/// `unsafe_code = forbid` and copying the four-line check is
+/// cheaper than threading a pub(crate) helper across the crate
+/// boundary for the helper bin.
+fn is_valid_drive_root(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    bytes.len() == 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'\\'
+}
+
+/// Accept `{` + 32 hex digits with 4 hyphens + `}` (Win32
+/// `Win32_ShadowCopy.ID` shape). Hyphen positions are 8/4/4/4/12.
+/// Mirrors `helper_vss::is_valid_guid_brace`.
+fn is_valid_guid_brace(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    if bytes.len() != 38 {
+        return false;
+    }
+    if bytes[0] != b'{' || bytes[37] != b'}' {
+        return false;
+    }
+    for (i, &b) in bytes[1..37].iter().enumerate() {
+        let want_hyphen = matches!(i, 8 | 13 | 18 | 23);
+        if want_hyphen {
+            if b != b'-' {
+                return false;
+            }
+        } else if !b.is_ascii_hexdigit() {
+            return false;
+        }
+    }
+    true
+}
+
+/// Resolve the absolute path to PowerShell. Falls back to
+/// `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`
+/// when the env var is missing. Using the absolute path defends
+/// against PATH-hijack: the snapshot calls run on the user's main
+/// process before elevation, but the elevated `Start-Process -Verb
+/// RunAs` ceremony inherits the unprivileged side's CWD, which on
+/// the typical first-launch of a Tauri app is the user's Downloads
+/// folder. Without an absolute path a `powershell.exe` planted in
+/// CWD would be picked up first by the default lookup order.
+fn powershell_exe_path() -> String {
+    let sysroot = std::env::var("SystemRoot")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| r"C:\Windows".to_string());
+    format!(r"{sysroot}\System32\WindowsPowerShell\v1.0\powershell.exe")
 }
 
 fn map_spawn_err(e: std::io::Error) -> SnapshotError {
@@ -512,6 +679,7 @@ mod tests {
         assert_eq!(volume_letter_for(Path::new(r".\rel")), None);
     }
 
+    #[cfg(not(feature = "vss-com"))]
     #[test]
     fn parse_id_device_splits_on_tab() {
         let (id, dev) =
@@ -521,6 +689,7 @@ mod tests {
         assert_eq!(dev, r"\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy5");
     }
 
+    #[cfg(not(feature = "vss-com"))]
     #[test]
     fn parse_id_device_surfaces_empty_input_as_error() {
         assert!(parse_id_device("").is_err());

@@ -114,17 +114,33 @@ fn case2_reserved_name_gets_underscore_suffix() {
         "expected ReservedName error, got {err:?}"
     );
 
-    // Linux target: CON.txt is just a filename; no rewrite, no error.
-    let linux_policy = PathPolicy {
+    // Phase 17 follow-up — reserved-name handling now applies
+    // unconditionally so a Linux-side dst that gets later mounted
+    // on Windows (zip / removable / network share) doesn't leave
+    // CON.txt resolvable to the console device. Reject + Suffix
+    // both fire on Linux too.
+    let linux_reject_policy = PathPolicy {
         target_os: TargetOs::Linux,
         reserved_name_strategy: ReservedNameStrategy::Reject,
         ..PathPolicy::default()
     };
-    let out = translate_path(&src, &PathBuf::from("/out"), &linux_policy).expect("translate");
+    let err = translate_path(&src, &PathBuf::from("/out"), &linux_reject_policy).unwrap_err();
+    assert!(
+        matches!(err, TranslateError::ReservedName { .. }),
+        "expected ReservedName error on Linux target too, got {err:?}"
+    );
+
+    let linux_suffix_policy = PathPolicy {
+        target_os: TargetOs::Linux,
+        reserved_name_strategy: ReservedNameStrategy::Suffix,
+        ..PathPolicy::default()
+    };
+    let out =
+        translate_path(&src, &PathBuf::from("/out"), &linux_suffix_policy).expect("translate");
     assert_eq!(
         out.file_name().unwrap().to_string_lossy(),
-        "CON.txt",
-        "Linux target must not rewrite the reserved Windows name"
+        "CON_.txt",
+        "Linux target must also rewrite CON.txt under Suffix strategy"
     );
 }
 

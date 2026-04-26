@@ -15,7 +15,9 @@ use directories::ProjectDirs;
 use redb::{Database, ReadableTable};
 
 use crate::error::{JournalError, Result};
-use crate::schema::{FILES, JOBS, SEQ, SEQ_KEY_NEXT_ROW_ID};
+use crate::schema::{
+    FILES, JOBS, JOURNAL_SCHEMA_VERSION, SEQ, SEQ_KEY_NEXT_ROW_ID, SEQ_KEY_SCHEMA_VERSION,
+};
 use crate::types::{
     CheckpointId, FileCheckpoint, FileStatus, JobRecord, JobRowId, JobStatus, ResumePlan,
     UnfinishedJob, now_ms,
@@ -58,11 +60,28 @@ impl Journal {
         let db = Database::create(path)?;
         // Eagerly create the three tables so a fresh journal isn't
         // missing them on first read. `create_table` inside a write
-        // txn is a no-op on existing tables.
+        // txn is a no-op on existing tables. Then read/initialise
+        // the schema-version row so a future-version file is
+        // refused before the runner reads any payload.
         let txn = db.begin_write()?;
         let _ = txn.open_table(JOBS)?;
         let _ = txn.open_table(FILES)?;
-        let _ = txn.open_table(SEQ)?;
+        {
+            let mut t = txn.open_table(SEQ)?;
+            let existing = t.get(SEQ_KEY_SCHEMA_VERSION)?.map(|v| v.value());
+            match existing {
+                None => {
+                    t.insert(SEQ_KEY_SCHEMA_VERSION, JOURNAL_SCHEMA_VERSION)?;
+                }
+                Some(v) if v > JOURNAL_SCHEMA_VERSION => {
+                    return Err(JournalError::Schema(format!(
+                        "journal at {} was written by a newer build (schema v{v}); refusing to load — upgrade the app",
+                        path.display()
+                    )));
+                }
+                Some(_) => {}
+            }
+        }
         txn.commit()?;
         Ok(Self {
             inner: Arc::new(db),

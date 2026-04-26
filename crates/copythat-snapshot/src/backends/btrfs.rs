@@ -55,7 +55,7 @@ pub(crate) async fn create(src_path: &Path) -> Result<SnapshotHandle, SnapshotEr
     let name = format!("copythat-{}", uuid::Uuid::new_v4());
     let snap_path = snap_dir.join(&name);
 
-    let out = Command::new("btrfs")
+    let out = Command::new("/sbin/btrfs")
         .arg("subvolume")
         .arg("snapshot")
         .arg("-r")
@@ -88,7 +88,7 @@ pub(crate) async fn create(src_path: &Path) -> Result<SnapshotHandle, SnapshotEr
 }
 
 pub(crate) async fn release(c: Cleanup) -> Result<(), SnapshotError> {
-    let out = Command::new("btrfs")
+    let out = Command::new("/sbin/btrfs")
         .arg("subvolume")
         .arg("delete")
         .arg(&c.snap_path)
@@ -113,7 +113,7 @@ pub(crate) async fn release(c: Cleanup) -> Result<(), SnapshotError> {
 }
 
 pub(crate) fn release_blocking(c: Cleanup) -> Result<(), SnapshotError> {
-    let out = std::process::Command::new("btrfs")
+    let out = std::process::Command::new("/sbin/btrfs")
         .arg("subvolume")
         .arg("delete")
         .arg(&c.snap_path)

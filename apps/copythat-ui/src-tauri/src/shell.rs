@@ -206,13 +206,22 @@ fn dispatch_enqueue(app: &AppHandle, args: EnqueueArgs) {
         // Non-interactive: skip the staging dialog and drop straight
         // into the queue. Used by scripted pipelines and tests.
         let state = app.state::<AppState>().inner().clone();
+        // Phase 39 — attach the platform fast-copy hook so the
+        // CLI-enqueue path uses `CopyFileExW` + reflink instead of
+        // the async-fallback Rust loop. On Windows 11 NVMe the
+        // unhooked path runs at ~600 MiB/s; the hook unlocks the
+        // 2400+ MiB/s `CopyFileExW` ceiling we measured headlessly.
+        let mut copy_opts = CopyOptions::default();
+        copy_opts.fast_copy_hook = Some(std::sync::Arc::new(
+            copythat_platform::PlatformFastCopyHook,
+        ));
         let _ = enqueue_jobs(
             app,
             &state,
             kind,
             args.paths,
             &dst_root,
-            CopyOptions::default(),
+            copy_opts,
             None,
             // Scripted enqueue inherits the engine default (Skip on
             // collision, Abort on error) to stay deterministic; an

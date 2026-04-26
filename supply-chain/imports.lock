@@ -1,0 +1,9 @@
+
+# `cargo vet`-managed cache of the third-party audit feeds declared
+# in `config.toml`. cargo-vet writes this file on the first run; do
+# not edit by hand.
+#
+# Tracked in git so CI runs deterministically without having to
+# re-fetch upstream feeds on every push. `cargo vet` regenerates
+# this file as feeds update; review the diff like any other
+# dependency change.

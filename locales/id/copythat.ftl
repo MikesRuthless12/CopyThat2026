@@ -169,6 +169,12 @@ err-verify-failed = Verifikasi pasca-salin gagal
 # MT
 err-path-escape = Jalur ditolak — berisi segmen direktori induk (..) atau byte ilegal
 # MT
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+# MT
+err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+err-helper-grant-out-of-band = GrantCapabilities must be handled by the helper run-loop, not the stateless handler
+err-randomness-unavailable = OS random-number generator failed; cannot mint a session id
+# MT
 err-io-other = Kesalahan I/O tidak dikenal
 err-sparseness-mismatch = Tata letak sparse tidak dapat dipertahankan di tujuan  # MT
 
@@ -1150,3 +1156,19 @@ pair-toast-success = Paired with { $device }  # MT
 pair-toast-failed = Pairing failed: { $reason }  # MT
 push-toast-sent = Push sent to { $device }  # MT
 push-toast-failed = Push to { $device } failed: { $reason }  # MT
+
+# Phase 38 — destination dedup + reflink ladder. MT-flagged
+# English strings pending human translation; tracked in
+# docs/I18N_TODO.md.
+settings-dedup-heading = Destination dedup  # MT
+settings-dedup-hint = When the source and destination share a volume, Copy That can clone files at the filesystem level instead of copying bytes. Reflink is instant + safe; hardlink is faster but both names share state.  # MT
+settings-dedup-mode-auto = Auto ladder (reflink → hardlink → chunk → copy)  # MT
+settings-dedup-mode-reflink-only = Reflink only  # MT
+settings-dedup-mode-hardlink-aggressive = Aggressive (reflink + hardlink even on writable files)  # MT
+settings-dedup-mode-off = Disabled (always byte-copy)  # MT
+settings-dedup-hardlink-policy = Hardlink policy  # MT
+settings-dedup-prescan = Pre-scan destination tree for duplicate content  # MT
+dedup-badge-reflinked = ⚡ Reflinked  # MT
+dedup-badge-hardlinked = 🔗 Hardlinked  # MT
+dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
+dedup-badge-copied = 📋 Copied  # MT

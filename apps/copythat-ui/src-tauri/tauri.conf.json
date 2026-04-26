@@ -66,12 +66,5 @@
       }
     }
   },
-  "plugins": {
-    "updater": {
-      "pubkey": "UNTRUSTED_COMMENT_REPLACE_ME_WITH_RELEASE_PUBKEY",
-      "endpoints": [
-        "https://releases.copythat.app/{{channel}}/{{target}}-{{arch}}.json"
-      ]
-    }
-  }
+  "plugins": {}
 }

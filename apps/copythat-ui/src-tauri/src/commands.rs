@@ -11,10 +11,11 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use copythat_core::{CopyOptions, JobKind, validate_path_no_traversal};
+use copythat_core::{CopyOptions, JobKind};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::ipc::{CopyOptionsDto, FileIconDto, JobDto};
+use crate::ipc_safety::{err_string, validate_ipc_path, validate_ipc_paths};
 use crate::shell::enqueue_jobs;
 use crate::state::AppState;
 
@@ -33,10 +34,12 @@ pub async fn start_copy(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<u64>, String> {
-    eprintln!(
-        "[start_copy] begin sources={} dst={}",
-        sources.join(" | "),
-        destination
+    // Phase 17f — moved off `eprintln!` so production builds don't
+    // surface user paths on stderr; opt in via `RUST_LOG=copythat=debug`.
+    tracing::debug!(
+        target: "copythat::ipc",
+        source_count = sources.len(),
+        "start_copy begin",
     );
     enqueue(
         JobKind::Copy,
@@ -80,19 +83,27 @@ async fn enqueue(
     if sources.is_empty() {
         return Err("err-source-required".to_string());
     }
-    let dst_root = PathBuf::from(destination.trim());
-    if dst_root.as_os_str().is_empty() {
-        return Err("err-destination-empty".to_string());
-    }
-    // Phase 17a — reject traversal (`..`) + NUL-byte paths at the
-    // IPC boundary, before a job is even allocated. The engine runs
-    // the same lexical check as a depth-2 guard; this one lets the
-    // UI surface a human-readable error without creating a history
-    // row for the rejected attempt.
-    if let Err(e) = validate_path_no_traversal(&dst_root) {
-        eprintln!("[start_{kind:?}] rejected destination: {e}");
-        return Err(e.localized_key().to_string());
-    }
+    // Phase 17e — route the destination through the IPC gate so
+    // U+FFFD-laden strings (lossy WTF-16 → UTF-8 coercion at the
+    // Tauri serde boundary) are rejected before any history row.
+    // The earlier shape did `PathBuf::from(destination.trim())` then
+    // `validate_path_no_traversal`, which catches `..` + NUL but
+    // skips the encoding check; an attacker who could land a
+    // U+FFFD payload would slip past `start_copy` even though
+    // `destination_free_bytes` (and every other path-typed command)
+    // rejects it.
+    let dst_root = match crate::ipc_safety::validate_ipc_path(&destination) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::debug!(
+                target: "copythat::ipc",
+                kind = ?kind,
+                err_key = e.localized_key(),
+                "destination rejected at IPC gate",
+            );
+            return Err(e.localized_key().to_string());
+        }
+    };
 
     // Phase 12: per-enqueue `CopyOptionsDto` overrides come from the
     // frontend's drop-dialog and still win (highest precedence);
@@ -115,24 +126,32 @@ async fn enqueue(
         None
     };
 
-    let srcs: Vec<PathBuf> = sources
-        .into_iter()
-        .map(|raw| PathBuf::from(raw.trim()))
-        .filter(|p| !p.as_os_str().is_empty())
+    // Phase 17e — same gate the destination went through. Filter
+    // out fully-empty entries (a stray empty drag-drop payload
+    // shouldn't take down the whole batch), then validate the
+    // remainder through the IPC gate which adds the U+FFFD encoding
+    // check on top of `..`/NUL. If every entry filtered out, surface
+    // `err-source-empty`.
+    let raw_srcs: Vec<&str> = sources
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
         .collect();
-    if srcs.is_empty() {
+    if raw_srcs.is_empty() {
         return Err("err-source-empty".to_string());
     }
-    // Phase 17a — same guard as the destination: any source path
-    // carrying `..` or NUL bytes is a crafted IPC payload, not a
-    // legitimate drag-drop. Reject the whole batch so the UI
-    // doesn't get half-queued, half-rejected state.
-    for s in &srcs {
-        if let Err(e) = validate_path_no_traversal(s) {
-            eprintln!("[start_{kind:?}] rejected source `{}`: {e}", s.display());
+    let srcs: Vec<PathBuf> = match crate::ipc_safety::validate_ipc_paths(&raw_srcs) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!(
+                target: "copythat::ipc",
+                kind = ?kind,
+                err_key = e.localized_key(),
+                "source rejected at IPC gate",
+            );
             return Err(e.localized_key().to_string());
         }
-    }
+    };
     Ok(enqueue_jobs(
         &app,
         state.inner(),
@@ -297,6 +316,14 @@ fn apply_options(
         ..Default::default()
     };
 
+    // Phase 39 — attach the platform fast-copy hook unconditionally.
+    // Without this, the engine's reflink + `CopyFileExW` paths are
+    // dark and every UI copy falls through to the pure-Rust async
+    // loop. Phase 39 bench on Win 11 NVMe: with hook = 2429 MiB/s,
+    // without = ~600 MiB/s on a 10 GiB same-volume copy. Stateless
+    // unit struct; Arc is effectively free.
+    opts.fast_copy_hook = Some(std::sync::Arc::new(copythat_platform::PlatformFastCopyHook));
+
     // Phase 23 — attach the platform extent-introspection hook whenever
     // sparseness preservation is enabled. The hook is stateless (a
     // unit struct) so the Arc is effectively free; the engine skips
@@ -441,16 +468,35 @@ pub fn globals(state: State<'_, AppState>) -> crate::ipc::GlobalsDto {
 /// Classify a path for the frontend to pick a Lucide icon. Ships
 /// without a native file-icon bridge — Phase 7 extends this with
 /// SHGetFileInfo / NSWorkspace / GIO lookups.
+///
+/// Phase 17e — `path` is gated through [`validate_ipc_path`] before
+/// classification. A traversal-laden or empty input renders as the
+/// generic icon rather than touching disk; the gate keeps the
+/// classifier from leaking enum variants based on a forged input.
 #[tauri::command]
 pub fn file_icon(path: String) -> FileIconDto {
-    crate::icon::classify(Path::new(&path))
+    match validate_ipc_path(&path) {
+        Ok(p) => crate::icon::classify(&p),
+        // Stub icon for rejected input so the renderer doesn't crash
+        // on a Result; the input path is bad enough that no
+        // classification is meaningful.
+        Err(_) => FileIconDto {
+            kind: "unknown",
+            extension: None,
+        },
+    }
 }
 
 /// Reveal a path in the platform's file manager. No-op + Err if
 /// the path does not exist.
+///
+/// Phase 17e — gates `path` through [`validate_ipc_path`] before
+/// the platform-specific reveal handler, so a `..`-laden input
+/// can't escape the user's intended folder.
 #[tauri::command]
 pub fn reveal_in_folder(path: String) -> Result<(), String> {
-    crate::reveal::reveal(Path::new(&path))
+    let p = validate_ipc_path(&path).map_err(err_string)?;
+    crate::reveal::reveal(&p)
 }
 
 /// Return all translations for one locale. Falls back to `en` if
@@ -587,6 +633,8 @@ pub fn error_log_export(
     path: String,
     state: State<'_, AppState>,
 ) -> Result<u64, String> {
+    // Phase 17e — gate the destination path before opening it.
+    let dst = validate_ipc_path(&path).map_err(err_string)?;
     let entries = state.errors.log();
     let body = match format.as_str() {
         "csv" => crate::errors::export_csv(&entries),
@@ -594,18 +642,95 @@ pub fn error_log_export(
         other => return Err(format!("unknown export format: {other}")),
     };
     let bytes = body.len() as u64;
-    std::fs::write(&path, body).map_err(|e| format!("export write failed: {e}"))?;
+    std::fs::write(&dst, body).map_err(|e| format!("export write failed: {e}"))?;
     Ok(bytes)
 }
 
-/// Stub for the Phase 8 "Retry with elevated permissions" button.
-/// Full UAC / `AuthorizationServices` / polkit wiring lands with
-/// Phase 17 privilege separation. Until then this surfaces a
-/// localised "not available yet" message — lets the UI carry the
-/// button without us needing to hide it conditionally.
+/// Phase 8 follow-up + Phase 17d wiring — "Retry with elevated
+/// permissions" button.
+///
+/// The error registry holds a pending prompt at `id`; we look up
+/// its `(src, dst)` and route the request through the
+/// `copythat-helper` request handler. Today the helper runs in-
+/// process (the unprivileged main app dispatches `handle_request`
+/// directly); the actual UAC / sudo / polkit spawn ceremony
+/// reuses Phase 19b's `Start-Process -Verb RunAs` pattern and
+/// lands when the per-OS spawn helpers are wired in
+/// `crates/copythat-helper/src/spawn.rs`.
+///
+/// This wiring is a meaningful step forward from the prior stub:
+/// the helper's path-safety bar, capability gate, and error-key
+/// mapping all run; a click that previously surfaced
+/// `retry-elevated-unavailable` now surfaces the actual class of
+/// failure (`err-permission-denied` if the OS still refuses,
+/// `err-path-escape` if the registry held a tainted path, etc.).
 #[tauri::command]
-pub fn retry_elevated(_id: u64) -> Result<(), String> {
-    Err("retry-elevated-unavailable".to_string())
+pub async fn retry_elevated(id: u64, state: State<'_, AppState>) -> Result<u64, String> {
+    use copythat_helper::capability::Capability;
+    use copythat_helper::handle_request;
+    use copythat_helper::rpc::{Request, Response};
+
+    let (src, dst) = state
+        .errors
+        .pending_paths(id)
+        .ok_or_else(|| "err-helper-unknown-prompt".to_string())?;
+
+    // Run the helper dispatch on the blocking pool. `handle_request`
+    // performs `std::fs::open` + a synchronous byte loop in
+    // `copy_no_follow`; in a future phase it will block on a UAC /
+    // sudo / polkit consent prompt for seconds at a time. Doing
+    // that on the Tauri runtime thread would freeze every other
+    // IPC command pinned to the same worker.
+    let resp = tokio::task::spawn_blocking(move || {
+        let granted = vec![Capability::ElevatedRetry];
+        handle_request(&Request::ElevatedRetry { src, dst }, &granted)
+    })
+    .await
+    .map_err(|e| format!("err-helper-join:{e}"))?;
+    match resp {
+        Response::ElevatedRetryOk { bytes } => Ok(bytes),
+        Response::ElevatedRetryFailed { localized_key, .. } => Err(localized_key),
+        Response::PathRejected { localized_key, .. } => Err(localized_key),
+        Response::CapabilityDenied { .. } => Err("retry-elevated-unavailable".to_string()),
+        other => Err(format!("err-helper-unexpected:{other:?}")),
+    }
+}
+
+/// Phase 8 follow-up — "Quick hash (SHA-256)" button on the
+/// collision modal. Hashes the named path and returns the lowercase
+/// hex digest. The Svelte modal calls this on demand for each side
+/// of the collision and shows the two digests next to each other so
+/// the user can decide overwrite-vs-skip with content evidence
+/// rather than just metadata.
+///
+/// SHA-256 (not BLAKE3) for two reasons: (1) the existing
+/// `collision-modal-hash-check` Fluent key promises SHA-256 in
+/// every locale; (2) SHA-256 sidecars are the dominant on-disk
+/// format users encounter, so showing the same digest the
+/// `*.sha256` sidecar carries is what the user expects to compare
+/// against.
+#[tauri::command]
+pub async fn quick_hash_for_collision(path: String) -> Result<String, String> {
+    let p = validate_ipc_path(&path).map_err(err_string)?;
+    let (events_tx, mut events_rx) = tokio::sync::mpsc::channel(8);
+    // Drain the progress channel concurrently — if we kept the rx
+    // alive without reading it, the bounded sender would block
+    // indefinitely once the 9th progress event tried to enqueue,
+    // and `hash_file_async` would never return on files large
+    // enough to emit > 8 events.
+    let drain = tokio::spawn(async move { while events_rx.recv().await.is_some() {} });
+    let report = copythat_hash::hash_file_async(
+        &p,
+        copythat_hash::HashAlgorithm::Sha256,
+        copythat_core::CopyControl::new(),
+        events_tx,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    // Sender drops when `hash_file_async` returns, ending the
+    // drain task; await it so we don't leak the join handle.
+    let _ = drain.await;
+    Ok(report.hex())
 }
 
 fn parse_error_action(action: &str) -> Result<copythat_core::ErrorAction, String> {
@@ -705,6 +830,8 @@ pub async fn history_export_csv(
     filter: Option<crate::ipc::HistoryFilterDto>,
     state: tauri::State<'_, AppState>,
 ) -> Result<u64, String> {
+    // Phase 17e — gate the destination path before opening it.
+    let dst = validate_ipc_path(&path).map_err(err_string)?;
     let history = require_history(&state)?;
     let filter = filter.unwrap_or_default();
     let f = copythat_history::HistoryFilter {
@@ -718,7 +845,7 @@ pub async fn history_export_csv(
     let rows = history.search(f).await.map_err(|e| e.to_string())?;
     let body = copythat_history::export_csv(&rows);
     let bytes = body.len() as u64;
-    std::fs::write(&path, body).map_err(|e| format!("history export write failed: {e}"))?;
+    std::fs::write(&dst, body).map_err(|e| format!("history export write failed: {e}"))?;
     Ok(bytes)
 }
 
@@ -769,13 +896,20 @@ pub async fn history_rerun(
     } else {
         None
     };
+    // Phase 39 — rerun must attach the platform fast-copy hook too,
+    // otherwise the engine falls through to the async-fallback Rust
+    // loop and runs at ~600 MiB/s instead of CopyFileExW's 2400+.
+    let mut copy_opts = CopyOptions::default();
+    copy_opts.fast_copy_hook = Some(std::sync::Arc::new(
+        copythat_platform::PlatformFastCopyHook,
+    ));
     Ok(crate::shell::enqueue_jobs(
         &app,
         state.inner(),
         kind,
         sources,
         &dst_root,
-        CopyOptions::default(),
+        copy_opts,
         None,
         copythat_core::CollisionPolicy::default(),
         copythat_core::ErrorPolicy::Ask,
@@ -1264,7 +1398,8 @@ const DEFAULT_UPDATER_ENDPOINT_TEMPLATE: &str =
 /// offline) so the UI falls through to "unknown — proceed".
 #[tauri::command]
 pub async fn destination_free_bytes(path: String) -> Result<u64, String> {
-    let p = std::path::PathBuf::from(path);
+    // Phase 17e — gate the IPC arg before any FS probe.
+    let p = validate_ipc_path(&path).map_err(err_string)?;
     let moved = p.clone();
     tokio::task::spawn_blocking(move || copythat_platform::free_space_bytes(&moved).unwrap_or(0))
         .await
@@ -1280,6 +1415,9 @@ pub async fn destination_free_bytes(path: String) -> Result<u64, String> {
 /// safety net.
 #[tauri::command]
 pub async fn path_total_bytes(paths: Vec<String>) -> Result<u64, String> {
+    // Phase 17e — gate every IPC arg before the walk. Empty list →
+    // typed `EmptyList` Fluent key.
+    let validated = validate_ipc_paths(&paths).map_err(err_string)?;
     // Whole-drive walks were spending 30+ seconds in here before
     // the preflight dialog ever appeared, which left the Start
     // button looking frozen. Cap at a small entry count + a hard
@@ -1292,11 +1430,10 @@ pub async fn path_total_bytes(paths: Vec<String>) -> Result<u64, String> {
         let started = std::time::Instant::now();
         let mut total: u64 = 0;
         let mut entries: u64 = 0;
-        for p in paths {
+        for root in validated {
             if started.elapsed().as_millis() >= HARD_LIMIT_MS {
                 return Err("too-large".to_string());
             }
-            let root = std::path::PathBuf::from(p);
             total = total.saturating_add(walk_size(&root, &mut entries, HARD_LIMIT_ENTRIES)?);
         }
         Ok(total)
@@ -1348,7 +1485,15 @@ pub async fn enumerate_tree_files(
     paths: Vec<String>,
     app: AppHandle,
 ) -> Result<TreeEnumerationDto, String> {
-    eprintln!("[enumerate_tree_files] start paths={}", paths.join(" | "));
+    // Phase 17f — moved off `eprintln!`. Path bodies stay out of
+    // stderr; the count is enough for the diagnostic.
+    tracing::debug!(
+        target: "copythat::ipc",
+        path_count = paths.len(),
+        "enumerate_tree_files start",
+    );
+    // Phase 17e — gate every IPC arg before any traversal.
+    let validated = validate_ipc_paths(&paths).map_err(err_string)?;
     // Matches the frontend ACTIVITY_LIMIT. Past this the `overflow`
     // flag tells the UI to skip pre-seed; the engine's own walker
     // keeps copying every file regardless of this cap.
@@ -1369,17 +1514,11 @@ pub async fn enumerate_tree_files(
             last_emitted_count: &mut last_emitted_count,
             emit_every: PROGRESS_EMIT_EVERY,
         };
-        for p in paths {
+        for root in validated {
             if overflow {
                 break;
             }
-            walk_files_streaming(
-                &std::path::PathBuf::from(p),
-                &mut files,
-                HARD_LIMIT,
-                &mut overflow,
-                &mut ctx,
-            );
+            walk_files_streaming(&root, &mut files, HARD_LIMIT, &mut overflow, &mut ctx);
         }
         // Final tick so the UI's counter reflects the complete total
         // even if the last incremental tick got suppressed by the
@@ -1392,10 +1531,12 @@ pub async fn enumerate_tree_files(
                 overflow,
             },
         );
-        eprintln!(
-            "[enumerate_tree_files] done count={} overflow={}",
-            files.len(),
-            overflow
+        // Phase 17f — counts only; user paths stay out of stderr.
+        tracing::debug!(
+            target: "copythat::ipc",
+            count = files.len(),
+            overflow,
+            "enumerate_tree_files done",
         );
         Ok(TreeEnumerationDto { files, overflow })
     })
@@ -1517,7 +1658,14 @@ pub struct PathMetaDto {
 
 #[tauri::command]
 pub async fn path_metadata(paths: Vec<String>) -> Result<Vec<PathMetaDto>, String> {
-    eprintln!("[path_metadata] start paths={}", paths.join(" | "));
+    // Phase 17f — count-only diagnostic; path bodies stay off stderr.
+    tracing::debug!(
+        target: "copythat::ipc",
+        path_count = paths.len(),
+        "path_metadata start",
+    );
+    // Phase 17e — gate the IPC arg list before any FS probe.
+    let validated = validate_ipc_paths(&paths).map_err(err_string)?;
     // The DropStagingDialog fires this command as part of the
     // file-order UI, so it has to return within ~2 s even when a
     // user dropped `D:\` with millions of files. A small entry cap
@@ -1527,9 +1675,8 @@ pub async fn path_metadata(paths: Vec<String>) -> Result<Vec<PathMetaDto>, Strin
     const HARD_LIMIT_ENTRIES: u64 = 20_000;
     const HARD_LIMIT_MS: u128 = 2_000;
     tokio::task::spawn_blocking(move || {
-        let mut out = Vec::with_capacity(paths.len());
-        for p in paths {
-            let root = std::path::PathBuf::from(&p);
+        let mut out = Vec::with_capacity(validated.len());
+        for root in validated {
             let md = std::fs::symlink_metadata(&root).ok();
             let is_dir = md.as_ref().is_some_and(|m| m.is_dir());
             let size = if let Some(m) = md.as_ref() {
@@ -1557,7 +1704,7 @@ pub async fn path_metadata(paths: Vec<String>) -> Result<Vec<PathMetaDto>, Strin
             };
             out.push(PathMetaDto { is_dir, size });
         }
-        eprintln!("[path_metadata] done");
+        tracing::debug!(target: "copythat::ipc", "path_metadata done");
         Ok(out)
     })
     .await
@@ -1614,11 +1761,12 @@ fn walk_size_timed(
 /// "too large to count" for that row.
 #[tauri::command]
 pub async fn path_sizes_individual(paths: Vec<String>) -> Result<Vec<u64>, String> {
+    // Phase 17e — gate every IPC arg before walking.
+    let validated = validate_ipc_paths(&paths).map_err(err_string)?;
     const HARD_LIMIT_ENTRIES: u64 = 200_000;
     tokio::task::spawn_blocking(move || {
-        let mut out = Vec::with_capacity(paths.len());
-        for p in paths {
-            let root = std::path::PathBuf::from(p);
+        let mut out = Vec::with_capacity(validated.len());
+        for root in validated {
             let mut entries: u64 = 0;
             let sz = match walk_size(&root, &mut entries, HARD_LIMIT_ENTRIES) {
                 Ok(n) => n,
@@ -1716,9 +1864,11 @@ pub fn export_profile(
     dest: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    // Phase 17e — gate the destination path before opening it.
+    let dst = validate_ipc_path(&dest).map_err(err_string)?;
     state
         .profiles
-        .export(&name, std::path::Path::new(&dest))
+        .export(&name, &dst)
         .map_err(|e| e.to_string())
 }
 
@@ -1728,9 +1878,11 @@ pub fn import_profile(
     src: String,
     state: State<'_, AppState>,
 ) -> Result<crate::ipc::ProfileInfoDto, String> {
+    // Phase 17e — gate the source path before reading it.
+    let src_path = validate_ipc_path(&src).map_err(err_string)?;
     let info = state
         .profiles
-        .import(&name, std::path::Path::new(&src))
+        .import(&name, &src_path)
         .map_err(|e| e.to_string())?;
     Ok((&info).into())
 }
@@ -1948,7 +2100,8 @@ pub async fn thumbnail_for(
     path: String,
     max_dim: Option<u32>,
 ) -> Result<crate::ipc::ThumbnailDto, String> {
-    let p = PathBuf::from(path);
+    // Phase 17e — gate the IPC arg before reading the file.
+    let p = validate_ipc_path(&path).map_err(err_string)?;
     let dim = max_dim.unwrap_or(crate::thumbnail::DEFAULT_MAX_DIM);
     tokio::task::spawn_blocking(move || crate::thumbnail::thumbnail_for(&p, dim))
         .await
@@ -2135,10 +2288,11 @@ pub struct DirChildDto {
 
 #[tauri::command]
 pub async fn list_directory(path: String) -> Result<Vec<DirChildDto>, String> {
+    // Phase 17e — gate the IPC arg before traversing the dir.
+    let root = validate_ipc_path(&path).map_err(err_string)?;
     tokio::task::spawn_blocking(move || {
-        let root = std::path::PathBuf::from(&path);
         if !root.is_dir() {
-            return Err(format!("not a directory: {path}"));
+            return Err(format!("not a directory: {}", root.display()));
         }
         let mut out: Vec<DirChildDto> = Vec::new();
         let rd = std::fs::read_dir(&root).map_err(|e| e.to_string())?;
@@ -2165,7 +2319,7 @@ pub async fn list_directory(path: String) -> Result<Vec<DirChildDto>, String> {
                 writable,
             });
         }
-        out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        out.sort_by_key(|e| e.name.to_lowercase());
         Ok(out)
     })
     .await
@@ -2236,10 +2390,16 @@ pub struct DragOutStagedDto {
 
 #[tauri::command]
 pub async fn drag_out_stage(paths: Vec<String>) -> Result<DragOutStagedDto, String> {
-    // Validate that each path still exists; drop missing entries.
-    let kept: Vec<String> = paths
+    // Phase 17e — every drag-out path runs through the lexical
+    // gate. A traversal-laden member rejects the whole batch
+    // (consistent with `start_copy`'s "fail the whole list on the
+    // first bad path" policy).
+    let validated = validate_ipc_paths(&paths).map_err(err_string)?;
+    // Then drop entries that no longer exist on disk.
+    let kept: Vec<String> = validated
         .into_iter()
-        .filter(|p| std::path::Path::new(p).exists())
+        .filter(|p| p.exists())
+        .map(|p| p.to_string_lossy().into_owned())
         .collect();
     Ok(DragOutStagedDto {
         count: kept.len(),

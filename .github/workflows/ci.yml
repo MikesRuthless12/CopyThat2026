@@ -52,6 +52,76 @@ jobs:
           command: check
           arguments: --all-features
 
+  # Phase 17b — RustSec advisories + yank surveillance, layered on top
+  # of cargo-deny. cargo-deny already screens advisories via its
+  # `[advisories]` section, but cargo-audit's database refresh is more
+  # frequent and surfaces yanks the deny job classifies as warnings
+  # rather than failures. Treat cargo-audit's output as a richer second
+  # pass — fail on Critical/High, warn on Medium/Low.
+  cargo-audit:
+    name: cargo-audit (RustSec advisories)
+    runs-on: ubuntu-latest
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit
+      - name: Run cargo audit
+        # The `--ignore` flags mirror the `[advisories] ignore` block
+        # in deny.toml so the two surfaces stay in lockstep. Update
+        # both atomically when adding/removing an exception. The
+        # Phase 17b smoke test (`tests/smoke/phase_17b_supply_chain.rs`)
+        # walks deny.toml and asserts every entry appears here too —
+        # silent drift breaks the build before merge.
+        run: |
+          cargo audit \
+            --ignore RUSTSEC-2023-0071 \
+            --ignore RUSTSEC-2021-0119 \
+            --ignore RUSTSEC-2025-0026 \
+            --ignore RUSTSEC-2021-0154 \
+            --ignore RUSTSEC-2020-0168 \
+            --ignore RUSTSEC-2025-0052 \
+            --ignore RUSTSEC-2024-0411 \
+            --ignore RUSTSEC-2024-0412 \
+            --ignore RUSTSEC-2024-0413 \
+            --ignore RUSTSEC-2024-0414 \
+            --ignore RUSTSEC-2024-0415 \
+            --ignore RUSTSEC-2024-0416 \
+            --ignore RUSTSEC-2024-0417 \
+            --ignore RUSTSEC-2024-0418 \
+            --ignore RUSTSEC-2024-0419 \
+            --ignore RUSTSEC-2024-0420 \
+            --ignore RUSTSEC-2024-0370 \
+            --ignore RUSTSEC-2025-0057 \
+            --ignore RUSTSEC-2025-0075 \
+            --ignore RUSTSEC-2025-0080 \
+            --ignore RUSTSEC-2025-0081 \
+            --ignore RUSTSEC-2025-0098 \
+            --ignore RUSTSEC-2025-0100
+
+  # Phase 17b — supply-chain trust audits via cargo-vet. Tagged
+  # releases require a vet-clean tree; on every push we run the
+  # check non-blocking to surface drift early. The vet config and
+  # imports live in `supply-chain/` (Mozilla / Google / Embark trust
+  # imports + per-crate audit decisions).
+  cargo-vet:
+    name: cargo-vet (supply-chain audit)
+    runs-on: ubuntu-latest
+    # Vet exceptions accumulate as new transitive deps land; we don't
+    # want a single un-vetted dep to red-X every PR while the audit
+    # backlog catches up. Enforced on tagged releases via release.yml.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-vet
+        run: cargo install --locked cargo-vet
+      - name: Run cargo vet
+        run: cargo vet --locked
+
   clippy-test:
     name: clippy + test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

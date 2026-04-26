@@ -114,12 +114,38 @@ pub(crate) fn normalize_relpath(p: &Path) -> String {
 
 /// Reconstruct an absolute path from a pair root + normalized
 /// relpath. Handles Windows + Unix separators uniformly.
-pub(crate) fn join_relpath(root: &Path, relpath: &str) -> PathBuf {
+///
+/// Returns `None` when the relpath contains a `..` segment, an
+/// embedded NUL/control char, or a Windows drive prefix — any of
+/// which would let an attacker who can write the sync `.copythat-sync.db`
+/// (which lives inside the synced tree by default) plant a baseline
+/// row whose key escapes the pair root. Callers must treat `None`
+/// as a fatal-for-this-relpath outcome and skip the operation.
+pub(crate) fn join_relpath(root: &Path, relpath: &str) -> Option<PathBuf> {
+    if relpath.contains("..") || relpath.contains('\0') {
+        return None;
+    }
+    if relpath.chars().any(|c| c.is_control() && c != '\t') {
+        return None;
+    }
+    // A Windows drive prefix or absolute root inside the relpath
+    // would also escape; reject anything containing `:` (Windows
+    // drive separator) or beginning with a separator.
+    if relpath.starts_with('/') || relpath.starts_with('\\') || relpath.contains(':') {
+        return None;
+    }
     let mut p = root.to_path_buf();
     for segment in relpath.split('/').filter(|s| !s.is_empty()) {
+        // Defence-in-depth: a segment containing `..` already fails
+        // the top-level guard, but reject Windows-separator-bearing
+        // segments here too — `foo\..\bar` is a single POSIX
+        // component but parses with separators on Windows.
+        if segment == ".." || segment.contains('\\') {
+            return None;
+        }
         p.push(segment);
     }
-    p
+    Some(p)
 }
 
 /// Capture one file's mtime + size + BLAKE3 digest.
@@ -229,7 +255,19 @@ mod tests {
     #[test]
     fn join_relpath_round_trips() {
         let root = Path::new("/tmp/sync");
-        let joined = join_relpath(root, "foo/bar/baz.txt");
+        let joined = join_relpath(root, "foo/bar/baz.txt").expect("safe relpath joins to Some(_)");
         assert!(joined.ends_with("foo/bar/baz.txt") || joined.ends_with("foo\\bar\\baz.txt"));
+    }
+
+    #[test]
+    fn join_relpath_rejects_traversal_and_separators() {
+        let root = Path::new("/tmp/sync");
+        assert!(join_relpath(root, "../etc/passwd").is_none());
+        assert!(join_relpath(root, "foo/../bar").is_none());
+        assert!(join_relpath(root, "/etc/passwd").is_none());
+        assert!(join_relpath(root, "C:\\Windows").is_none());
+        assert!(join_relpath(root, "foo\\..\\bar").is_none());
+        assert!(join_relpath(root, "foo\nbar").is_none());
+        assert!(join_relpath(root, "foo\0bar").is_none());
     }
 }

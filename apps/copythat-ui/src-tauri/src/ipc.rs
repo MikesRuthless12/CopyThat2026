@@ -188,8 +188,17 @@ impl JobDto {
             files_total: job.files_total,
             rate_bps: 0,
             eta_seconds: None,
-            started_at_ms: job.started_at.map(|_| now_ms()),
-            finished_at_ms: job.finished_at.map(|_| now_ms()),
+            // Convert the `Instant` to a wall-clock unix-ms by
+            // subtracting `elapsed()` from `now_ms()`. The previous
+            // shape returned `now_ms()` unconditionally, so the UI
+            // always rendered "started 1s ago" no matter how long
+            // ago the job actually started.
+            started_at_ms: job
+                .started_at
+                .map(|i| now_ms().saturating_sub(i.elapsed().as_millis() as u64)),
+            finished_at_ms: job
+                .finished_at
+                .map(|i| now_ms().saturating_sub(i.elapsed().as_millis() as u64)),
             last_error: job.last_error.as_ref().map(|e| e.message.clone()),
         }
     }
@@ -1130,6 +1139,27 @@ pub struct TransferDto {
     /// when the destination FS can't accept the foreign metadata.
     #[serde(default = "default_true")]
     pub appledouble_fallback: bool,
+    /// Phase 38 — destination dedup ladder mode. Mirrors
+    /// `copythat_platform::DedupMode` wire string (`"auto-ladder"
+    /// | "reflink-only" | "hardlink-aggressive" | "off"`).
+    #[serde(default = "default_dedup_mode")]
+    pub dedup_mode: String,
+    /// Phase 38 — hardlink leg gate. Mirrors
+    /// `copythat_platform::HardlinkPolicy` wire string (`"never"
+    /// | "read-only-only" | "always"`).
+    #[serde(default = "default_dedup_hardlink_policy")]
+    pub dedup_hardlink_policy: String,
+    /// Phase 38 — pre-pass dedup scan opt-in.
+    #[serde(default)]
+    pub dedup_prescan: bool,
+}
+
+fn default_dedup_mode() -> String {
+    "off".into()
+}
+
+fn default_dedup_hardlink_policy() -> String {
+    "read-only-only".into()
 }
 
 fn default_true() -> bool {
@@ -1598,6 +1628,9 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 preserve_selinux_contexts: s.transfer.preserve_selinux_contexts,
                 preserve_resource_forks: s.transfer.preserve_resource_forks,
                 appledouble_fallback: s.transfer.appledouble_fallback,
+                dedup_mode: s.transfer.dedup_mode.clone(),
+                dedup_hardlink_policy: s.transfer.dedup_hardlink_policy.clone(),
+                dedup_prescan: s.transfer.dedup_prescan,
             },
             shell: ShellDto {
                 context_menu_enabled: s.shell.context_menu_enabled,
@@ -1772,7 +1805,17 @@ impl SettingsDto {
         s.general.auto_resume_interrupted = self.general.auto_resume_interrupted;
         s.general.mobile_onboarding_dismissed = self.general.mobile_onboarding_dismissed;
 
-        s.transfer.buffer_size_bytes = self.transfer.buffer_size_bytes as usize;
+        // Clamp at the IPC boundary so a hand-edited DTO (or a
+        // future panel that forgets to clamp on the UI side) can't
+        // persist a buffer size below the engine's 64 KiB floor or
+        // above the 16 MiB ceiling. The engine's `effective_buffer_size`
+        // would otherwise be the only line of defence and the
+        // raw value would round-trip back into TOML at whatever
+        // garbage the caller supplied.
+        const MIN_BUF: u64 = 64 * 1024;
+        const MAX_BUF: u64 = 16 * 1024 * 1024;
+        let clamped_buf = self.transfer.buffer_size_bytes.clamp(MIN_BUF, MAX_BUF);
+        s.transfer.buffer_size_bytes = clamped_buf as usize;
         s.transfer.verify = parse_verify(&self.transfer.verify);
         s.transfer.concurrency = parse_concurrency(&self.transfer.concurrency);
         s.transfer.reflink = parse_reflink(&self.transfer.reflink);
@@ -1788,6 +1831,9 @@ impl SettingsDto {
         s.transfer.preserve_selinux_contexts = self.transfer.preserve_selinux_contexts;
         s.transfer.preserve_resource_forks = self.transfer.preserve_resource_forks;
         s.transfer.appledouble_fallback = self.transfer.appledouble_fallback;
+        s.transfer.dedup_mode = self.transfer.dedup_mode;
+        s.transfer.dedup_hardlink_policy = self.transfer.dedup_hardlink_policy;
+        s.transfer.dedup_prescan = self.transfer.dedup_prescan;
 
         s.shell.context_menu_enabled = self.shell.context_menu_enabled;
         s.shell.intercept_default_copy = self.shell.intercept_default_copy;

@@ -44,7 +44,10 @@ pub mod errors;
 pub mod global_paste;
 pub mod i18n;
 pub mod icon;
+#[cfg(windows)]
+pub mod instance_broker;
 pub mod ipc;
+pub mod ipc_safety;
 pub mod live_mirror;
 pub mod mobile_commands;
 pub mod mount_commands;
@@ -90,6 +93,29 @@ pub fn run() {
             return;
         }
         _ => {}
+    }
+
+    // Phase 40 — second-instance fast bail. If our process-wide
+    // mutex is already owned, a sibling `copythat-ui` is already
+    // running; forward our argv through the named-pipe broker
+    // instead of doing the full Tauri boot. Saves ~5-7 seconds
+    // per `--enqueue` invocation on Windows. On any failure
+    // (no server, pipe busy, write error) we fall through to the
+    // normal first-instance boot — the existing
+    // tauri-plugin-single-instance still kicks in inside
+    // builder.run() as a safety net.
+    #[cfg(windows)]
+    if matches!(&action, CliAction::Enqueue(_)) && instance_broker::is_second_instance() {
+        let argv: Vec<String> = std::env::args().collect();
+        match instance_broker::try_forward_argv(&argv) {
+            Ok(()) => return,
+            Err(e) => {
+                eprintln!("[broker] forward failed, falling through to full boot: {e}");
+                // fall through; normal boot path will set up the
+                // single-instance plugin + builder.run() will
+                // detect + forward via the older mechanism.
+            }
+        }
     }
 
     // The setup hook consumes this once; the Mutex<Option<_>> lets
@@ -193,7 +219,20 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        // Phase 17 follow-up — the Tauri updater plugin is
+        // disabled until release infra ships. Previously the
+        // `[plugins.updater]` block in `tauri.conf.json` carried a
+        // placeholder ed25519 pubkey + an endpoint pointed at an
+        // unowned domain, while `bundle.createUpdaterArtifacts` was
+        // already false. Loading the plugin in that state was a
+        // foot-gun: the moment a future contributor flipped
+        // `createUpdaterArtifacts: true` without replacing the
+        // pubkey, the unsigned-update window would open. Re-enable
+        // when the keypair lands and the manifest endpoint is
+        // owned. (`crates/copythat-ui/src/updater.rs` still
+        // contains the manifest-prefetch + 24h-throttle helper for
+        // when the plugin returns.)
+        // .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(app_state)
         .on_window_event(|window, event| {
             match event {
@@ -257,6 +296,7 @@ pub fn run() {
             commands::clear_error_log,
             commands::error_log_export,
             commands::retry_elevated,
+            commands::quick_hash_for_collision,
             // Phase 9 — SQLite history surface.
             commands::history_search,
             commands::history_items,
@@ -369,6 +409,14 @@ pub fn run() {
             mobile_commands::mobile_onboarding_dismiss,
         ])
         .setup(move |app| {
+            // Phase 40 — start the named-pipe broker that future
+            // `--enqueue` invocations talk to instead of booting a
+            // second Tauri instance. See `instance_broker.rs`.
+            // Windows-only — macOS/Linux still rely on
+            // tauri-plugin-single-instance's argv-forwarding path.
+            #[cfg(windows)]
+            instance_broker::start_pipe_server(app.handle().clone());
+
             // Phase 16 / 28 — tray icon + menu. Visible regardless
             // of the "minimize to tray" setting; the setting only
             // changes what the window's close button does. Phase 28
@@ -445,7 +493,7 @@ pub fn run() {
                 // without a UI poll.
                 state::apply_network_settings_to_shape(&state.shape, &snap.network);
                 let poll_handle = handle.clone();
-                tokio::spawn(async move {
+                tauri::async_runtime::spawn(async move {
                     let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
                     // Skip the immediate first tick — startup already
                     // applied the rate above.
@@ -498,9 +546,14 @@ pub fn run() {
             if let Some(state) = app.handle().try_state::<AppState>() {
                 let app_state: AppState = state.inner().clone();
                 let probes = copythat_power::ProbeSet::production();
-                let _poller = app_state
-                    .power_bus
-                    .spawn_poller(probes, copythat_power::bus::DEFAULT_POLL_PERIOD);
+                // `spawn_poller` calls bare `tokio::spawn` inside; we
+                // need to enter Tauri's tokio context first. See the
+                // shell.rs:89 comment about the setup-hook path.
+                let _poller = tauri::async_runtime::block_on(async {
+                    app_state
+                        .power_bus
+                        .spawn_poller(probes, copythat_power::bus::DEFAULT_POLL_PERIOD)
+                });
                 let _subscriber = power::spawn_power_subscriber(app_state, app.handle().clone());
             }
 

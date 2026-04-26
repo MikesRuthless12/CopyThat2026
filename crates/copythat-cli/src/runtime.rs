@@ -11,10 +11,11 @@ use crate::cli::{Cli, Cmd};
 use crate::commands;
 use crate::output::{OutputMode, OutputWriter};
 
-/// Build a single-threaded tokio runtime with the engine's default
-/// IO + time features enabled. Single-threaded keeps the CLI's
-/// scheduler footprint small; the engine's per-file copy still runs
-/// in `spawn_blocking` for CPU-bound work like verify.
+/// Build a small multi-threaded tokio runtime (2 workers) with the
+/// engine's default IO + time features enabled. Two workers keeps
+/// the CLI's scheduler footprint small while still letting the
+/// engine's per-file copy run async tasks alongside any
+/// `spawn_blocking` work like verify hashing.
 fn build_runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -43,6 +44,7 @@ pub(crate) fn dispatch(cli: Cli) -> ExitCode {
             Cmd::Audit(args) => commands::audit::run(&cli.global, args, writer.clone()).await,
             Cmd::Plan(args) => commands::plan::run(&cli.global, args, writer.clone(), false).await,
             Cmd::Apply(args) => commands::plan::run(&cli.global, args, writer.clone(), true).await,
+            Cmd::Schedule(args) => commands::schedule::run(&cli.global, args, writer.clone()).await,
             Cmd::Version(_) => commands::version::run(&cli.global, writer.clone()).await,
             Cmd::Config(args) => commands::config::run(&cli.global, args, writer.clone()).await,
             Cmd::Completions(args) => commands::completions::run(args).await,

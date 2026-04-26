@@ -51,6 +51,29 @@ pub async fn copy_file(
     if let Err(e) = validate_path_no_traversal(&dst_path) {
         return Err(CopyError::path_escape(&src_path, &dst_path, e));
     }
+    // Phase 17 follow-up — when the caller configured a
+    // destination jail, refuse any dst that escapes it. The lexical
+    // guard above catches `..`/control/NUL but not absolute paths
+    // outside the jail (e.g. `/etc/passwd`); the jail check is the
+    // closing brace.
+    if let Some(jail) = opts.dest_jail_root.as_deref() {
+        // The dst may not exist yet (we're about to create it), so
+        // canonicalise its parent and append the leaf manually.
+        let parent = dst_path.parent().unwrap_or(std::path::Path::new(""));
+        let canon_parent = parent
+            .canonicalize()
+            .unwrap_or_else(|_| parent.to_path_buf());
+        let canon_jail = jail.canonicalize().unwrap_or_else(|_| jail.to_path_buf());
+        if !canon_parent.starts_with(&canon_jail) {
+            return Err(CopyError::path_escape(
+                &src_path,
+                &dst_path,
+                crate::safety::PathSafetyError::ParentTraversal {
+                    offending: dst_path.clone(),
+                },
+            ));
+        }
+    }
 
     let metadata_result = if opts.follow_symlinks {
         tokio::fs::metadata(&src_path).await
@@ -272,13 +295,47 @@ pub async fn copy_file(
         // Resume — dst must already exist.
         open.create(false);
     }
+    // Phase 17c — refuse to follow a symlink at `dst`. Without this,
+    // an attacker who can place a symlink at the destination path
+    // before the engine opens it (planted by an earlier-arriving
+    // process with write access to dst's parent) redirects the
+    // engine's `truncate(true).create(true)` write to whatever the
+    // link targets — `/etc/shadow`, `C:\Windows\System32\drivers\etc\hosts`
+    // — clobbering files the engine had no business writing. The
+    // src-side flag is set inside `open_src_with_retry`; this is
+    // the dst-side parity. The flag is omitted entirely on resume
+    // because a legitimate resume opens an existing regular file
+    // the engine itself created on the prior run.
+    if matches!(resume_decision, ResumeDecision::FreshStart) {
+        let no_follow = crate::safety::no_follow_open_flags();
+        if no_follow != 0 {
+            // tokio::fs::OpenOptions exposes `custom_flags` as an
+            // inherent method on Unix (i32) and Windows (u32); no
+            // OpenOptionsExt import needed.
+            #[cfg(unix)]
+            open.custom_flags(no_follow as i32);
+            #[cfg(windows)]
+            open.custom_flags(no_follow);
+        }
+    }
     let mut dst_file = open
         .open(&dst_path)
         .await
         .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
 
-    // Seek both ends past the resumed prefix.
+    // Seek both ends past the resumed prefix. Truncate dst to
+    // exactly `resume_offset` first: if the prior run left bytes
+    // past `offset` durable on disk (the journal checkpoint fired
+    // before the next sync), the BufWriter would otherwise pass
+    // those stale bytes through unchanged and produce a corrupt
+    // dst that the verify pass would only catch after the full
+    // copy. Truncate-then-seek ensures the resumed write starts
+    // from a known-clean tail.
     if resume_offset > 0 {
+        dst_file
+            .set_len(resume_offset)
+            .await
+            .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
         src_file
             .seek(std::io::SeekFrom::Start(resume_offset))
             .await
@@ -836,7 +893,19 @@ async fn copy_file_sparse_aware(
     } else {
         open.create(true);
     }
-    let dst_file = open
+    // Phase 17c — same dst-side no-follow defence as the dense
+    // path (see `copy_file`). Sparse never resumes, so the flag is
+    // unconditional here.
+    {
+        let no_follow = crate::safety::no_follow_open_flags();
+        if no_follow != 0 {
+            #[cfg(unix)]
+            open.custom_flags(no_follow as i32);
+            #[cfg(windows)]
+            open.custom_flags(no_follow);
+        }
+    }
+    let mut dst_file = open
         .open(&dst_path)
         .await
         .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
@@ -854,30 +923,19 @@ async fn copy_file_sparse_aware(
 
     // Pre-size the destination so writes at offsets > current EOF
     // don't fault the OS into allocating the intervening bytes.
-    {
-        let dst_clone = dst_path.clone();
-        let set_len_result = tokio::task::spawn_blocking(move || {
-            let std_file = std::fs::OpenOptions::new().write(true).open(&dst_clone)?;
-            std_file.set_len(total)?;
-            Ok::<(), std::io::Error>(())
-        })
+    // Reuse the existing tokio handle (`dst_file` was opened above
+    // with the no-follow flag); the previous shape opened a second
+    // `std::fs::OpenOptions` write handle via `spawn_blocking`,
+    // which on Windows can ERROR_SHARING_VIOLATION on certain
+    // filesystems and racks up two extra syscalls per file.
+    dst_file
+        .set_len(total)
         .await
-        .map_err(|e| {
-            CopyError::from_io(
-                &src_path,
-                &dst_path,
-                std::io::Error::other(format!("set_len join: {e}")),
-            )
-        })?;
-        if let Err(e) = set_len_result {
-            return Err(CopyError::from_io(&src_path, &dst_path, e));
-        }
-    }
+        .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
 
     // Source open with the same snapshot fallback the dense path uses.
     let (mut src_file, _snapshot_lease) =
         open_src_with_snapshot_fallback(&src_path, &dst_path, &opts, &events).await?;
-    let mut dst_file = dst_file;
 
     let _ = events
         .send(CopyEvent::Started {
@@ -1599,7 +1657,7 @@ async fn open_src_with_snapshot_fallback(
     opts: &CopyOptions,
     events: &mpsc::Sender<CopyEvent>,
 ) -> Result<(File, Option<SnapshotLease>), CopyError> {
-    match open_src_with_retry(src).await {
+    match open_src_with_retry(src, opts.follow_symlinks).await {
         Ok(f) => Ok((f, None)),
         Err(e) if is_sharing_violation(&e) => {
             match opts.on_locked {
@@ -1616,7 +1674,7 @@ async fn open_src_with_snapshot_fallback(
                         })
                         .await;
                     let translated = lease.translated.clone();
-                    match open_src_with_retry(&translated).await {
+                    match open_src_with_retry(&translated, opts.follow_symlinks).await {
                         Ok(f) => Ok((f, Some(lease))),
                         Err(open_err) => Err(CopyError::from_io(src, dst, open_err)),
                     }
@@ -1668,7 +1726,17 @@ fn libc_ebusy() -> i32 {
 /// — log files being written, loaded DLLs, Office documents with an
 /// exclusive lock). Unix kernels don't block reads on open files,
 /// so this compiles down to a plain `File::open` there.
-async fn open_src_with_retry(src: &Path) -> std::io::Result<File> {
+///
+/// Phase 17c — when `follow_symlinks=false` the open call adds
+/// `O_NOFOLLOW` (Unix) / `FILE_FLAG_OPEN_REPARSE_POINT` (Windows) via
+/// [`crate::safety::no_follow_open_flags`] so a symlink-swap race
+/// between the engine's metadata pre-flight and this open can't
+/// silently redirect the read to a victim file. When the caller
+/// explicitly opted into following symlinks the flag is omitted —
+/// otherwise an absolute symlink at `src` (the common case for
+/// `follow_symlinks=true`) would fail with `ELOOP`/`ERROR_*` and
+/// break the default copy path.
+async fn open_src_with_retry(src: &Path, follow_symlinks: bool) -> std::io::Result<File> {
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
@@ -1677,10 +1745,24 @@ async fn open_src_with_retry(src: &Path) -> std::io::Result<File> {
         // while we read — matches what `robocopy /B` would use in
         // backup semantics mode.
         const SHARE_ALL: u32 = 0x1 | 0x2 | 0x4;
+        // Phase 17c — only refuse to follow when the caller did not
+        // opt into symlink-following. With the default
+        // `follow_symlinks=true`, Windows opens the link target the
+        // user explicitly asked for; with `follow_symlinks=false`,
+        // the symlink-copy path takes the call before reaching this
+        // helper, so any reparse point we see here is unexpected
+        // and the no-follow flag turns it into a typed error.
+        let no_follow = if follow_symlinks {
+            0
+        } else {
+            crate::safety::no_follow_open_flags()
+        };
         let mut last_err: Option<std::io::Error> = None;
         for attempt in 0..3u32 {
             let mut opts = std::fs::OpenOptions::new();
-            opts.read(true).share_mode(SHARE_ALL);
+            opts.read(true)
+                .share_mode(SHARE_ALL)
+                .custom_flags(no_follow);
             let res = {
                 let path = src.to_path_buf();
                 tokio::task::spawn_blocking(move || opts.open(&path)).await
@@ -1709,7 +1791,30 @@ async fn open_src_with_retry(src: &Path) -> std::io::Result<File> {
             )
         }))
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // Phase 17c — only set O_NOFOLLOW when the caller did NOT
+        // opt into symlink-following. With `follow_symlinks=true` an
+        // absolute symlink at `src` is a normal target; with
+        // `follow_symlinks=false` the symlink-copy path takes the
+        // call before reaching this helper, so a symlink here means
+        // a TOCTOU swap and the kernel returns ELOOP via
+        // `is_no_follow_rejection`.
+        let no_follow = if follow_symlinks {
+            0
+        } else {
+            crate::safety::no_follow_open_flags() as i32
+        };
+        let mut opts = std::fs::OpenOptions::new();
+        opts.read(true).custom_flags(no_follow);
+        let path = src.to_path_buf();
+        let std_file = tokio::task::spawn_blocking(move || opts.open(&path))
+            .await
+            .map_err(|e| std::io::Error::other(format!("join: {e}")))??;
+        Ok(File::from_std(std_file))
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         File::open(src).await
     }

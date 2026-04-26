@@ -144,13 +144,33 @@ struct DeviceCodeResponse {
 /// Shape returned by the provider's token-endpoint success. Google
 /// uses `refresh_token`; MS uses `refresh_token` too; both use
 /// `access_token` and `expires_in`.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+///
+/// `Debug` is hand-implemented to redact `access_token` and
+/// `refresh_token`. The previous derived-`Debug` impl would dump
+/// both secrets if any future contributor added a
+/// `tracing::debug!("got tokens: {tokens:?}")` line — and the
+/// audit-layer field-name scrubber only fires when the secrets
+/// appear as JSON object keys, not when they're inlined into a
+/// debug-string. Same risk for `Serialize`: keep it (the keychain
+/// blob path needs it) but rely on the JSON consumer to redact.
+#[derive(Clone, Deserialize, Serialize)]
 pub struct OAuthTokenResponse {
     pub access_token: String,
     #[serde(default)]
     pub refresh_token: String,
     pub token_type: String,
     pub expires_in: u64,
+}
+
+impl std::fmt::Debug for OAuthTokenResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OAuthTokenResponse")
+            .field("access_token", &"<redacted>")
+            .field("refresh_token", &"<redacted>")
+            .field("token_type", &self.token_type)
+            .field("expires_in", &self.expires_in)
+            .finish()
+    }
 }
 
 impl OAuthTokenResponse {
@@ -245,8 +265,12 @@ pub async fn poll_device_code_flow(
         .map_err(|e| OAuthError::Parse(format!("token body: {e}")))?;
 
     if status.is_success() {
+        // Suppress serde_json's input-bearing Display message — on
+        // a malformed-but-200 response it can include excerpts of
+        // the surrounding bytes (and thus token characters) in the
+        // error string that propagates up to the renderer log.
         let tokens: OAuthTokenResponse = serde_json::from_value(body)
-            .map_err(|e| OAuthError::Parse(format!("token decode: {e}")))?;
+            .map_err(|_| OAuthError::Parse("token-response decode failed".into()))?;
         return Ok(TokenPollOutcome::Granted(tokens));
     }
 
@@ -299,21 +323,38 @@ pub async fn refresh_oauth_token(
         .send()
         .await?;
     if !resp.status().is_success() {
+        // Sanitised: suppress serde_json's input-bearing error
+        // messages and provider-side body content (which on
+        // misconfigured endpoints can echo the access_token).
+        let status_code = resp.status().as_u16();
         let body: serde_json::Value = resp
             .json()
             .await
-            .map_err(|e| OAuthError::Parse(format!("refresh body: {e}")))?;
+            .map_err(|_| OAuthError::Parse("refresh-response body decode failed".into()))?;
         let err = body
             .get("error")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown")
             .to_owned();
-        return Err(OAuthError::Provider(err));
+        // Allow only RFC 6749 short error codes through; anything
+        // else collapses to a generic label.
+        let safe_err = match err.as_str() {
+            "invalid_grant"
+            | "invalid_client"
+            | "invalid_request"
+            | "invalid_scope"
+            | "unauthorized_client"
+            | "unsupported_grant_type"
+            | "access_denied" => err,
+            _ => format!("token endpoint returned status {status_code}"),
+        };
+        return Err(OAuthError::Provider(safe_err));
     }
+    // Sanitised — same reason as the failure-path decode above.
     let mut tokens: OAuthTokenResponse = resp
         .json()
         .await
-        .map_err(|e| OAuthError::Parse(format!("refresh decode: {e}")))?;
+        .map_err(|_| OAuthError::Parse("refresh-response decode failed".into()))?;
     // Some providers (Microsoft Graph) omit the refresh_token
     // in the refresh-response — in that case the existing
     // refresh_token stays valid. Preserve it so callers can keep
@@ -337,9 +378,18 @@ pub async fn run_device_code_flow(
     let flow = begin_device_code_flow(provider, client_id, scope_override).await?;
 
     // Open the verification URI in the user's default browser —
-    // best-effort, most users expect this. Failure is non-fatal;
-    // the user can still paste the URL themselves.
-    let _ = webbrowser::open(&flow.verification_uri);
+    // best-effort, most users expect this. Reject anything other
+    // than `https://` before handing to `webbrowser::open`: an
+    // attacker who MITMs the device-code POST (CA misissuance,
+    // forced corporate root) can return `verification_uri =
+    // "ms-cxh-full://...arg"` or `"javascript:..."` which on
+    // Windows surface as a `ShellExecuteW` against the registered
+    // protocol handler — RCE on the unprivileged user.
+    if let Ok(parsed) = url::Url::parse(&flow.verification_uri) {
+        if parsed.scheme() == "https" {
+            let _ = webbrowser::open(&flow.verification_uri);
+        }
+    }
 
     let mut interval = flow.interval.max(1);
     let deadline = std::time::Instant::now() + Duration::from_secs(flow.expires_in.max(60));

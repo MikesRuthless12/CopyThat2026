@@ -57,11 +57,83 @@ fn display_forward(p: &Path) -> String {
     }
 }
 
+/// Phase 17f — refuse to write sidecar entries whose path component
+/// is absolute or contains a parent-dir (`..`) segment. The
+/// TeraCopy / coreutils sidecar convention is **job-root-relative**:
+/// an entry with an absolute path silently leaks the user's
+/// directory layout (`/home/alice/private/.git/...`) into a file
+/// the `sha256sum -c` consumer expects to be portable. Reject at
+/// write time so the on-disk format stays consistent.
+///
+/// Returns `Ok(())` for an acceptable relative path and an
+/// `Err(io::Error)` with `ErrorKind::InvalidInput` on rejection.
+pub fn validate_sidecar_relpath(p: &Path) -> std::io::Result<()> {
+    use std::path::Component;
+    if p.is_absolute() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "sidecar entry must use a job-root-relative path, got absolute: {}",
+                p.display()
+            ),
+        ));
+    }
+    for c in p.components() {
+        if matches!(
+            c,
+            Component::ParentDir | Component::Prefix(_) | Component::RootDir
+        ) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "sidecar entry contains forbidden path segment ({c:?}): {}",
+                    p.display()
+                ),
+            ));
+        }
+    }
+    // The on-disk sidecar format is `<hex>  <path>\n`. A path
+    // containing a literal newline / carriage-return lets an attacker
+    // smuggle a forged second entry past `sha256sum -c`; a NUL would
+    // truncate the path mid-entry and confuse downstream parsers.
+    // Reject both up front.
+    let s = p.to_string_lossy();
+    if s.bytes().any(|b| matches!(b, b'\n' | b'\r' | 0)) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "sidecar entry contains a newline, carriage-return, or NUL byte",
+        ));
+    }
+    // POSIX does not parse `\` as a path separator, so a Unix-side
+    // sidecar can carry a Windows-traversal payload like
+    // `..\..\..\Windows\System32\drivers\etc\hosts` as a single
+    // literal filename. When the sidecar travels to a Windows host
+    // and `sha256sum -c` (or a TeraCopy-style verifier) reads it,
+    // `\` becomes a separator and the verifier escapes the job
+    // root. On Windows, [`display_forward`] already converts `\` →
+    // `/` before writing; on non-Windows hosts the conversion is a
+    // no-op, so reject embedded backslashes here to keep the
+    // on-disk format portable.
+    #[cfg(not(windows))]
+    if s.contains('\\') {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "sidecar entry contains a backslash; sidecar paths must use forward slashes",
+        ));
+    }
+    Ok(())
+}
+
 /// Write a single-file sidecar alongside `dst`: `<dst>.<ext>`.
 ///
 /// Returns the path of the sidecar that was created. `hex` must be the
 /// lowercase hex representation of the digest. Fails if the algorithm
 /// is not one that has a sidecar extension (CRC32 / xxHash3 variants).
+///
+/// Phase 17f — the entry written into the sidecar is `dst.file_name()`
+/// only. If the destination has no file_name (degenerate input — a
+/// path ending in `..`, a Windows drive root, etc.) we now fail with
+/// `InvalidInput` rather than silently writing the absolute path.
 pub async fn write_single_file_sidecar(
     dst: &Path,
     algorithm: HashAlgorithm,
@@ -73,10 +145,19 @@ pub async fn write_single_file_sidecar(
             format!("algorithm {algorithm} has no sidecar format"),
         )
     })?;
-    let relative = dst
-        .file_name()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| dst.to_path_buf());
+    let relative = dst.file_name().map(PathBuf::from).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "sidecar relpath cannot be derived from {} (no file_name component)",
+                dst.display()
+            ),
+        )
+    })?;
+    // Defence-in-depth: even file_name() should be a single component.
+    // If a malicious dst ever produces something multi-component, the
+    // validator surfaces it before we open the sidecar.
+    validate_sidecar_relpath(&relative)?;
     let sidecar_path = append_extension(dst, ext);
     let line = SidecarEntry::new(hex.to_string(), relative).to_string();
     let mut file = tokio::fs::File::create(&sidecar_path).await?;
@@ -90,10 +171,19 @@ pub async fn write_single_file_sidecar(
 /// `entries`. Caller supplies the entries — this module doesn't walk a
 /// tree itself so the higher-level verify pipeline stays in charge of
 /// path layout.
+///
+/// Phase 17f — every entry's `relative_path` is validated through
+/// [`validate_sidecar_relpath`] before any byte is written. The
+/// first absolute or `..`-laden entry fails the whole write, so
+/// callers can't accidentally publish a sidecar mixing relative
+/// and absolute paths.
 pub async fn write_tree_sidecar(
     sidecar_path: &Path,
     entries: &[SidecarEntry],
 ) -> std::io::Result<()> {
+    for entry in entries {
+        validate_sidecar_relpath(&entry.relative_path)?;
+    }
     let mut file = tokio::fs::File::create(sidecar_path).await?;
     for entry in entries {
         let line = entry.to_string();

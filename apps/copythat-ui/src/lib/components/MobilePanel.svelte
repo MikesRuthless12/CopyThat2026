@@ -71,17 +71,11 @@
     if (busy) return;
     busy = true;
     try {
-      // The desktop's PeerJS peer is already registered by the
-      // Tauri webview's `lib/peer.ts` boot routine; we only need a
-      // fresh SAS seed + QR so the phone can connect to it. The
-      // hex pubkey we hand here is the desktop's long-term X25519
-      // pubkey derived in lib/peer.ts; for the wire-up demo we
-      // pass an all-zero placeholder — the matching follow-up that
-      // ships the keypair generation lands alongside the PWA.
-      const desktopPubkeyHex = "00".repeat(32);
-      status = (await invoke("mobile_pair_start", {
-        desktopPubkeyHex,
-      })) as MobilePairStatus;
+      // The desktop now mints its own X25519 keypair server-side
+      // inside `mobile_pair_start` (Phase 38 follow-up). The IPC
+      // takes no arguments; the public key is included in the
+      // pairing-token URL the phone scans.
+      status = (await invoke("mobile_pair_start")) as MobilePairStatus;
       ensurePolling();
     } catch (e) {
       pushToast("error", `${e}`);

@@ -553,8 +553,10 @@ async fn apply_copy(
         Direction::LeftToRight => (&pair.left, &pair.right),
         Direction::RightToLeft => (&pair.right, &pair.left),
     };
-    let src = join_relpath(src_root, relpath);
-    let dst = join_relpath(dst_root, relpath);
+    let src = join_relpath(src_root, relpath)
+        .ok_or_else(|| SyncError::UnsafeRelpath(relpath.to_string()))?;
+    let dst = join_relpath(dst_root, relpath)
+        .ok_or_else(|| SyncError::UnsafeRelpath(relpath.to_string()))?;
 
     if let Some(parent) = dst.parent() {
         std::fs::create_dir_all(parent).map_err(|e| SyncError::Io {
@@ -571,7 +573,8 @@ async fn apply_delete(pair: &SyncPair, relpath: &str, direction: Direction) -> R
         Direction::LeftToRight => &pair.right,
         Direction::RightToLeft => &pair.left,
     };
-    let dst = join_relpath(dst_root, relpath);
+    let dst = join_relpath(dst_root, relpath)
+        .ok_or_else(|| SyncError::UnsafeRelpath(relpath.to_string()))?;
     if dst.exists() {
         std::fs::remove_file(&dst).map_err(|e| SyncError::Io {
             path: dst.clone(),
@@ -601,8 +604,10 @@ async fn apply_conflict(
         Direction::LeftToRight => &pair.left,
         Direction::RightToLeft => &pair.right,
     };
-    let loser_path = join_relpath(loser_root, relpath);
-    let winner_path = join_relpath(winner_root, relpath);
+    let loser_path = join_relpath(loser_root, relpath)
+        .ok_or_else(|| SyncError::UnsafeRelpath(relpath.to_string()))?;
+    let winner_path = join_relpath(winner_root, relpath)
+        .ok_or_else(|| SyncError::UnsafeRelpath(relpath.to_string()))?;
 
     let preservation_name = conflict_preservation_name(relpath, host_label);
     let preservation_path = loser_path

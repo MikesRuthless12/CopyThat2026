@@ -99,25 +99,31 @@ fn chunk_buf_size(total_file_bytes: u64, num_chunks: usize) -> usize {
 }
 
 /// Returns the chunk count for the parallel path, or `None` if the
-/// file is below [`MIN_FILE_FOR_PARALLEL`]. Default is
-/// [`DEFAULT_NUM_CHUNKS`] — the Phase 13c matched-memory A/B on
-/// C → D showed parallel-at-budget (4 × 256 KiB = 1 MiB total)
-/// beats single-stream CopyFileExW by ~9 % on 10 GiB files, so the
-/// parallel path is now the default for large files. The
-/// `COPYTHAT_PARALLEL_CHUNKS` env override still lets users disable
-/// (set to `1` or `0`) or tune the chunk count (2..=16).
+/// file is below [`MIN_FILE_FOR_PARALLEL`] OR the env var isn't set.
+///
+/// Phase 13c had this default-on for files ≥1 GiB based on a
+/// matched-memory A/B on C → D that showed +9 % vs single-stream
+/// CopyFileExW. **Phase 39 re-bench on Windows 11 NVMe** showed
+/// the opposite: parallel-chunks-4 hits 1128 MiB/s while raw
+/// CopyFileExW hits **2429 MiB/s** on a 10 GiB same-volume copy.
+/// Modern NVMe + Windows 11's CopyFileExW already saturates the
+/// per-device queue with one stream; splitting into 4 streams
+/// adds per-chunk seek + handle-open overhead and contends for
+/// the same hardware queue.
+///
+/// Default is now **off**. Users with hardware that benefits
+/// (RAID arrays, NVMe-over-fabric, distributed FS) can opt in
+/// via `COPYTHAT_PARALLEL_CHUNKS=<N>` (clamped 2..=16).
 pub(crate) fn requested_chunks(total: u64) -> Option<usize> {
     if total < MIN_FILE_FOR_PARALLEL {
         return None;
     }
-    if let Ok(raw) = std::env::var("COPYTHAT_PARALLEL_CHUNKS") {
-        let n: usize = raw.parse().ok()?;
-        if n < 2 {
-            return None;
-        }
-        return Some(n.clamp(2, 16));
+    let raw = std::env::var("COPYTHAT_PARALLEL_CHUNKS").ok()?;
+    let n: usize = raw.parse().ok()?;
+    if n < 2 {
+        return None;
     }
-    Some(DEFAULT_NUM_CHUNKS)
+    Some(n.clamp(2, 16))
 }
 
 /// Run the parallel multi-chunk copy. Caller guarantees:
@@ -135,7 +141,17 @@ pub(crate) async fn parallel_chunk_copy(
     super::emit_started(&src, &dst, total, &events).await;
 
     // Pre-allocate so every worker writes into its own range
-    // without contending on file-extend.
+    // without contending on file-extend. Phase 39 follow-up: when
+    // `COPYTHAT_SKIP_ZERO_FILL=1` and the calling process holds
+    // `SE_MANAGE_VOLUME_NAME` (admin), we also call
+    // `SetFileValidData` after `set_len` so NTFS skips its
+    // lazy-zero pass over the pre-allocated extent. The caller
+    // guarantees every byte is overwritten by the chunk workers,
+    // so the security implication of "uninitialised disk blocks
+    // briefly readable" is bounded by us, not exposed to other
+    // processes. Best-effort: if the privilege isn't held the
+    // call returns ERROR_PRIVILEGE_NOT_HELD and we silently fall
+    // through to the (slightly slower) lazy-zero path.
     {
         let prep = {
             let dst = dst.clone();
@@ -146,6 +162,10 @@ pub(crate) async fn parallel_chunk_copy(
                     .write(true)
                     .open(&dst)?;
                 f.set_len(total)?;
+                #[cfg(windows)]
+                {
+                    let _ = try_skip_zero_fill(&f, total);
+                }
                 Ok(())
             })
             .await
@@ -173,6 +193,7 @@ pub(crate) async fn parallel_chunk_copy(
     let events_for_progress = events.clone();
     let progress_task = {
         let cancelled = cancelled.clone();
+        let ctrl_for_progress = ctrl.clone();
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(super::PROGRESS_MIN_INTERVAL);
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -180,6 +201,17 @@ pub(crate) async fn parallel_chunk_copy(
             let mut last_emit_bytes: u64 = 0;
             loop {
                 ticker.tick().await;
+                // While paused, every worker is busy-sleeping at 20 ms;
+                // the bytes counter is frozen and there's nothing
+                // useful to emit. Skip until pause clears or cancel
+                // fires — keeps the emitter from burning a wakeup
+                // every 50 ms forever on an indefinitely-paused job.
+                if ctrl_for_progress.is_paused() {
+                    if cancelled.load(Ordering::Relaxed) || ctrl_for_progress.is_cancelled() {
+                        break;
+                    }
+                    continue;
+                }
                 let bytes = bytes_for_progress.load(Ordering::Relaxed);
                 if bytes.saturating_sub(last_emit_bytes) >= super::PROGRESS_MIN_BYTES {
                     let elapsed = started.elapsed();
@@ -295,4 +327,36 @@ pub(crate) async fn parallel_chunk_copy(
         strategy: ChosenStrategy::CopyFileExW, // Same native strategy class; the dispatcher records "fast" regardless of chunked vs single-stream.
         bytes: total,
     }
+}
+
+/// Attempt the NTFS lazy-zero skip via `SetFileValidData`. Returns
+/// `true` iff the system call succeeded — which requires the caller
+/// to hold `SE_MANAGE_VOLUME_NAME` (admin). On failure the call is
+/// silently a no-op; NTFS still zero-fills the extent during writes,
+/// just slower. Gated behind `COPYTHAT_SKIP_ZERO_FILL=1` so the
+/// admin / opt-in nature is explicit.
+///
+/// Security note: an admin user opting into this acknowledges that
+/// the pre-allocated extent contains whatever bytes were on those
+/// clusters before. Copy That guarantees the workers write valid
+/// data over every byte, so the risk is bounded to the Copy That
+/// process — there's no cross-process data exposure.
+#[cfg(windows)]
+fn try_skip_zero_fill(file: &File, size: u64) -> bool {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::SetFileValidData;
+
+    if std::env::var("COPYTHAT_SKIP_ZERO_FILL")
+        .ok()
+        .as_deref()
+        .is_none_or(|v| !matches!(v, "1" | "true" | "on"))
+    {
+        return false;
+    }
+    let handle = file.as_raw_handle().cast::<core::ffi::c_void>();
+    // SAFETY: `file` is a valid open file handle held by the caller
+    // for the duration of this call. SetFileValidData has no aliasing
+    // requirements and writes only the file's metadata.
+    let ok = unsafe { SetFileValidData(handle, size as i64) };
+    ok != 0
 }

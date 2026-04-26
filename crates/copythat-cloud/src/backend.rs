@@ -411,6 +411,22 @@ pub fn make_operator(
                     "ftp backend requires a host".into(),
                 ));
             }
+            // Reject hosts that contain URL-structural characters
+            // (`/`, `@`, `:`, `?`, `#`, `\` plus whitespace and
+            // anything URL-encoded would smuggle through). A host
+            // like `evil.com:443/p?@victim.com` would otherwise
+            // produce an endpoint URL whose authority component
+            // points somewhere different than the wizard displayed.
+            if cfg
+                .host
+                .chars()
+                .any(|c| matches!(c, '/' | '@' | ':' | '?' | '#' | '\\') || c.is_whitespace())
+            {
+                return Err(BackendError::InvalidConfig(
+                    "ftp host must be a bare hostname or IP literal — drop any `/`, `@`, `:`, `?`, `#`, or whitespace"
+                        .into(),
+                ));
+            }
             let port = if cfg.port == 0 { 21 } else { cfg.port };
             let endpoint = format!("ftps://{}:{port}", cfg.host);
             let mut builder = opendal::services::Ftp::default().endpoint(&endpoint);

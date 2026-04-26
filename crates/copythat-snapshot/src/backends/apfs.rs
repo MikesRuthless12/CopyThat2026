@@ -45,7 +45,7 @@ pub(crate) fn applies_to(_path: &Path) -> bool {
 pub(crate) async fn create(src_path: &Path) -> Result<SnapshotHandle, SnapshotError> {
     // Step 1: ask tmutil to take a fresh local snapshot. The system
     // snapshots the current root volume (typically `/System/Volumes/Data`).
-    let out = Command::new("tmutil")
+    let out = Command::new("/usr/bin/tmutil")
         .arg("localsnapshot")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -84,7 +84,7 @@ pub(crate) async fn create(src_path: &Path) -> Result<SnapshotHandle, SnapshotEr
             message: format!("create mountpoint {}: {e}", mount_point.display()),
         })?;
 
-    let mount_out = Command::new("mount_apfs")
+    let mount_out = Command::new("/sbin/mount_apfs")
         .arg("-o")
         .arg("nobrowse,ro")
         .arg("-s")
@@ -99,7 +99,7 @@ pub(crate) async fn create(src_path: &Path) -> Result<SnapshotHandle, SnapshotEr
         .map_err(map_spawn_err_mount)?;
     if !mount_out.status.success() {
         // Best-effort roll-back of tmutil snapshot we just created.
-        let _ = Command::new("tmutil")
+        let _ = Command::new("/usr/bin/tmutil")
             .args(["deletelocalsnapshots", &stamp])
             .output()
             .await;
@@ -127,13 +127,13 @@ pub(crate) async fn create(src_path: &Path) -> Result<SnapshotHandle, SnapshotEr
 }
 
 pub(crate) async fn release(c: Cleanup) -> Result<(), SnapshotError> {
-    let _ = Command::new("umount")
+    let _ = Command::new("/sbin/umount")
         .arg(&c.mount_point)
         .output()
         .await
         .map_err(map_spawn_err_mount)?;
     let _ = tokio::fs::remove_dir(&c.mount_point).await;
-    let out = Command::new("tmutil")
+    let out = Command::new("/usr/bin/tmutil")
         .arg("deletelocalsnapshots")
         .arg(&c.snapshot_timestamp)
         .output()
@@ -154,12 +154,12 @@ pub(crate) async fn release(c: Cleanup) -> Result<(), SnapshotError> {
 }
 
 pub(crate) fn release_blocking(c: Cleanup) -> Result<(), SnapshotError> {
-    let _ = std::process::Command::new("umount")
+    let _ = std::process::Command::new("/sbin/umount")
         .arg(&c.mount_point)
         .output()
         .map_err(map_spawn_err_mount)?;
     let _ = std::fs::remove_dir(&c.mount_point);
-    let out = std::process::Command::new("tmutil")
+    let out = std::process::Command::new("/usr/bin/tmutil")
         .arg("deletelocalsnapshots")
         .arg(&c.snapshot_timestamp)
         .output()
@@ -211,7 +211,7 @@ fn extract_timestamp(stdout: &str) -> Option<String> {
 }
 
 fn detect_device_for(path: &Path) -> Option<String> {
-    let out = std::process::Command::new("df")
+    let out = std::process::Command::new("/bin/df")
         .arg("-P")
         .arg(path)
         .output()

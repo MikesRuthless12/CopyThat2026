@@ -247,6 +247,17 @@ fn handle_raw_event(
     opts: &WatcherOptions,
     root: &Path,
 ) {
+    // Containment guard: a backend that surfaces an out-of-root
+    // path (Windows ReadDirectoryChangesW with a crossed-junction,
+    // an inotify watch handed a directory-symlink target) can let
+    // a downstream sync consumer treat that path as in-tree, which
+    // is a stored exfiltration vector. Drop any event whose first
+    // path doesn't lie under `root`.
+    if let Some(first) = evt.paths.first() {
+        if !path_inside_root(first, root) {
+            return;
+        }
+    }
     // notify's Event can carry 1 or 2 paths (Renamed is the 2-path
     // case). Anything else is mostly ignorable, but we still honour
     // the path count per kind.
@@ -424,6 +435,13 @@ fn enumerate_dir_into(dir: &Path, queue: &mut DebounceQueue, now: Instant) {
         if default_filter(&path).is_dropped(false) {
             continue;
         }
+        // Skip symlinks: a directory symlink whose target is
+        // outside the watch root would otherwise produce
+        // `Modified(<path-inside-watched>/...)` events that point
+        // at files outside the user's intended watch scope.
+        if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
+            continue;
+        }
         queue.push(FsEvent::Modified(path), now);
     }
 }
@@ -433,6 +451,7 @@ fn enumerate_dir_into(dir: &Path, queue: &mut DebounceQueue, now: Instant) {
 /// `EventKind::Any`/`Other` events with no specific path.
 fn rescan_into(root: &Path, queue: &mut DebounceQueue, now: Instant) {
     let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
+    let canon_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     while let Some(dir) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
@@ -442,12 +461,43 @@ fn rescan_into(root: &Path, queue: &mut DebounceQueue, now: Instant) {
             if default_filter(&path).is_dropped(false) {
                 continue;
             }
-            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            let ftype = match entry.file_type() {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+            // Skip symlinks unconditionally: a directory symlink
+            // would let the walk follow into territory outside the
+            // pair root, and a file symlink that points outside
+            // the root would surface as an in-root event.
+            if ftype.is_symlink() {
+                continue;
+            }
+            // Defence-in-depth: even without a symlink, confirm the
+            // entry's canonical path is still under the watch root.
+            if let Ok(canon) = path.canonicalize() {
+                if !canon.starts_with(&canon_root) {
+                    continue;
+                }
+            }
+            if ftype.is_dir() {
                 stack.push(path);
             } else {
                 queue.push(FsEvent::Modified(path), now);
             }
         }
+    }
+}
+
+/// Lexical containment check used by `handle_raw_event`. Falls back
+/// to `starts_with` on the original paths when canonicalisation
+/// fails (e.g. transient `NotFound` between event delivery and
+/// inspection — the path has already been deleted).
+fn path_inside_root(p: &Path, root: &Path) -> bool {
+    let canon_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    if let Ok(canon_p) = p.canonicalize() {
+        canon_p.starts_with(&canon_root)
+    } else {
+        p.starts_with(&canon_root) || p.starts_with(root)
     }
 }
 

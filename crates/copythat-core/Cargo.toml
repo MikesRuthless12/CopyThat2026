@@ -104,6 +104,22 @@ path = "../../tests/smoke/phase_14a_filters.rs"
 name = "phase_17_security"
 path = "../../tests/smoke/phase_17_security.rs"
 
+# Phase 17b — supply-chain audit gate tripwire. Filesystem-only —
+# asserts that the cargo-audit + cargo-vet CI jobs are still wired
+# in `.github/workflows/ci.yml` and that the supply-chain/ directory
+# carries the trust imports + audit feed config.
+[[test]]
+name = "phase_17b_supply_chain"
+path = "../../tests/smoke/phase_17b_supply_chain.rs"
+
+# Phase 17c — symlink-race / TOCTOU hardening. Asserts O_NOFOLLOW
+# (Unix) / FILE_FLAG_OPEN_REPARSE_POINT (Windows) flag values, the
+# `is_no_follow_rejection` classifier, the `is_within_root` jail
+# helper, and (Unix only) the engine-level race regression.
+[[test]]
+name = "phase_17c_symlink_race"
+path = "../../tests/smoke/phase_17c_symlink_race.rs"
+
 # Phase 19a — disk-backed file enumeration (TeraCopy-style scan DB):
 # streaming inserts, pause+resume round-trip, cursor-driven copy.
 [[test]]

@@ -55,6 +55,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
+use crate::ipc_safety::{err_string, validate_ipc_path, validate_ipc_paths};
 use crate::state::AppState;
 
 /// Event name emitted on every registry mutation. Payload is the
@@ -169,6 +170,23 @@ impl DropStackRegistry {
             path: (*self.path).clone(),
             message: e.to_string(),
         })?;
+        // Refuse to load future-version files: deserialising under
+        // the v1 shape when the on-disk shape is v2 could silently
+        // discard fields and lose data on the next save. The
+        // `version` field on `OnDisk` was previously declared but
+        // never inspected — surfacing the mismatch now means a
+        // newer build that wrote a v2 file is safely refused by an
+        // older build instead of being silently re-encoded as v1.
+        const SUPPORTED_VERSION: u32 = 1;
+        if parsed.version > SUPPORTED_VERSION {
+            return Err(DropStackError::Parse {
+                path: (*self.path).clone(),
+                message: format!(
+                    "dropstack.json on-disk version {} is newer than this build (supports {SUPPORTED_VERSION}); upgrade the app",
+                    parsed.version,
+                ),
+            });
+        }
 
         let mut missing: Vec<PathBuf> = Vec::new();
         let mut kept: Vec<DropStackEntry> = Vec::with_capacity(parsed.entries.len());
@@ -383,7 +401,12 @@ pub async fn dropstack_add(
     paths: Vec<String>,
 ) -> Result<usize, String> {
     let registry = state.dropstack.clone();
-    let path_bufs: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+    // Phase 17e — gate every path through the IPC validator before
+    // it reaches the persistent JSON store. Anything tainted (`..`,
+    // NUL, U+FFFD lossy WTF-16) would otherwise live in
+    // `dropstack.json` indefinitely and inherit any future
+    // pre-dispatch reader that forgets to re-validate.
+    let path_bufs: Vec<PathBuf> = validate_ipc_paths(&paths).map_err(err_string)?;
     let added = registry.add(path_bufs).map_err(|e| e.to_string())?;
     if added > 0 {
         emit_changed(&app, &registry);
@@ -439,7 +462,7 @@ pub async fn dropstack_toggle_window(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let url = WebviewUrl::App("dropstack.html".into());
-    WebviewWindowBuilder::new(&app, DROPSTACK_WINDOW_LABEL, url)
+    let builder = WebviewWindowBuilder::new(&app, DROPSTACK_WINDOW_LABEL, url)
         .title("Drop Stack — Copy That")
         .inner_size(380.0, 520.0)
         .min_inner_size(320.0, 240.0)
@@ -449,13 +472,15 @@ pub async fn dropstack_toggle_window(app: AppHandle) -> Result<(), String> {
                 .map(|s| s.settings_snapshot().drop_stack.always_on_top)
                 .unwrap_or(false),
         )
-        .skip_taskbar(false)
-        // Explorer drag onto this window delivers paths via the
-        // Tauri window-level `drag-drop` event; the Svelte layer
-        // feeds them into `dropstack_add`.
-        .drag_and_drop(true)
-        .build()
-        .map_err(|e| e.to_string())?;
+        .skip_taskbar(false);
+    // Explorer drag onto this window delivers paths via the
+    // Tauri window-level `drag-drop` event; the Svelte layer
+    // feeds them into `dropstack_add`. `drag_and_drop` is
+    // `#[cfg(windows)]`-gated in tauri 2.x — Linux/macOS get the
+    // drag-drop wiring through `tauri.conf.json` instead.
+    #[cfg(windows)]
+    let builder = builder.drag_and_drop(true);
+    builder.build().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -497,13 +522,9 @@ async fn dispatch_all(
     if paths.is_empty() {
         return Ok(paths);
     }
-    let dst_root = PathBuf::from(destination.trim());
-    if dst_root.as_os_str().is_empty() {
-        return Err("err-destination-empty".to_string());
-    }
-    if let Err(e) = copythat_core::validate_path_no_traversal(&dst_root) {
-        return Err(e.localized_key().to_string());
-    }
+    // Phase 17e — same IPC gate `enqueue` uses; closes the U+FFFD
+    // bypass that bare `validate_path_no_traversal` misses.
+    let dst_root = validate_ipc_path(&destination).map_err(err_string)?;
 
     // Defaults inherited from live Settings so behaviour matches
     // a drag-drop from the main window. No per-enqueue overrides

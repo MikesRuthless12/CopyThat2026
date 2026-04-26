@@ -182,6 +182,10 @@ err-disk-full = Destination disk is full
 err-interrupted = Operation interrupted
 err-verify-failed = Post-copy verification failed
 err-path-escape = Path rejected — contains parent-directory (..) segments or illegal bytes
+err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
+err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+err-helper-grant-out-of-band = GrantCapabilities must be handled by the helper run-loop, not the stateless handler
+err-randomness-unavailable = OS random-number generator failed; cannot mint a session id
 err-sparseness-mismatch = Sparse layout could not be preserved on destination
 err-io-other = Unknown I/O error
 
@@ -890,3 +894,20 @@ pair-toast-success = Paired with { $device }
 pair-toast-failed = Pairing failed: { $reason }
 push-toast-sent = Push sent to { $device }
 push-toast-failed = Push to { $device } failed: { $reason }
+
+# Phase 38 — aggregate destination dedup + reflink fallback ladder.
+# Settings → Transfer → Dedup panel + per-job-row badges (⚡
+# Reflinked / 🔗 Hardlinked / 🧩 Chunk-shared / 📋 Copied) +
+# pre-pass dedup-scan modal.
+settings-dedup-heading = Destination dedup
+settings-dedup-hint = When the source and destination share a volume, Copy That can clone files at the filesystem level instead of copying bytes. Reflink is instant + safe; hardlink is faster but both names share state.
+settings-dedup-mode-auto = Auto ladder (reflink → hardlink → chunk → copy)
+settings-dedup-mode-reflink-only = Reflink only
+settings-dedup-mode-hardlink-aggressive = Aggressive (reflink + hardlink even on writable files)
+settings-dedup-mode-off = Disabled (always byte-copy)
+settings-dedup-hardlink-policy = Hardlink policy
+settings-dedup-prescan = Pre-scan destination tree for duplicate content
+dedup-badge-reflinked = ⚡ Reflinked
+dedup-badge-hardlinked = 🔗 Hardlinked
+dedup-badge-chunk-shared = 🧩 Chunk-shared
+dedup-badge-copied = 📋 Copied

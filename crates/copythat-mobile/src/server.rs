@@ -81,6 +81,11 @@ pub enum RemoteCommand {
     /// glue lives in `copythat-platform` (Phase 37 follow-up); the
     /// IPC + setting land here.
     SetKeepAwake { enabled: bool },
+    /// PWA queries the desktop for its current BCP-47 locale tag
+    /// (`"en"`, `"fr"`, `"pt-BR"`, …). The PWA loads the matching
+    /// translation bundle so the phone UI stays in sync with the
+    /// desktop's selected language. Reply: `RemoteResponse::Locale`.
+    GetLocale,
 }
 
 /// Collision-resolution action the phone replies with. Mirrors the
@@ -198,6 +203,9 @@ pub enum RemoteResponse {
     /// explicit "Desktop exited — reconnect when Copy That is
     /// running" screen instead of a generic disconnect.
     ServerShuttingDown { reason: String },
+    /// Reply to `GetLocale`. Empty string = "auto-detect"; the PWA
+    /// falls back to its own browser locale in that case.
+    Locale { bcp47: String },
 }
 
 /// Per-job summary in `RemoteResponse::Jobs`. Mirrors the shape the
@@ -233,11 +241,10 @@ pub struct HistoryRow {
 }
 
 /// Async-trait the Tauri shell implements. Each method runs against
-/// the live `AppState`. Callers that aren't authenticated never
-/// reach this trait — the PeerJS dispatcher in
-/// `apps/copythat-ui/src/lib/peer.ts` checks the `Hello` payload
-/// against `MobileSettings::pairings` before forwarding subsequent
-/// `RemoteCommand`s.
+/// the live `AppState`. The dispatcher requires the caller to
+/// present a paired-phone pubkey via [`RemoteCommand::Hello`] before
+/// non-lifecycle commands are accepted; see [`SessionAuth`] +
+/// [`dispatch_with_auth`] for the per-connection state machine.
 #[async_trait::async_trait]
 pub trait RemoteControl: Send + Sync {
     async fn list_jobs(&self) -> Result<Vec<JobSummary>, String>;
@@ -264,15 +271,101 @@ pub trait RemoteControl: Send + Sync {
     /// platform syscall lives in `copythat-platform`; this trait
     /// method is a thin shim the Tauri shell wires up.
     async fn set_keep_awake(&self, enabled: bool) -> Result<(), String>;
+    /// Phase 38 — return the desktop's current BCP-47 locale tag
+    /// so the PWA can load the matching translation bundle.
+    async fn get_locale(&self) -> Result<String, String>;
+
+    /// Look up whether `phone_pubkey_hex` matches a stored
+    /// `MobileSettings::pairings` entry. Default impl returns
+    /// `false` (refuse all) — implementations that wire pairings
+    /// override this. Implementations MUST do a constant-time
+    /// comparison over the canonicalised hex form to avoid leaking
+    /// match-prefix length via timing.
+    async fn is_paired_phone(&self, _phone_pubkey_hex: &str) -> bool {
+        false
+    }
+}
+
+/// Per-connection auth state. The PeerJS adapter in the Tauri
+/// webview owns one of these per data-channel and threads it into
+/// every [`dispatch_with_auth`] call. The state survives across
+/// commands but resets when the channel closes.
+#[derive(Debug, Default)]
+pub struct SessionAuth {
+    paired_pubkey: Option<String>,
+}
+
+impl SessionAuth {
+    /// Fresh, unauthenticated session.
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// True iff a `Hello` against a known pairing has succeeded
+    /// during this session.
+    pub fn is_authenticated(&self) -> bool {
+        self.paired_pubkey.is_some()
+    }
+    /// Public key (hex) of the authenticated pairing, if any.
+    pub fn paired_pubkey(&self) -> Option<&str> {
+        self.paired_pubkey.as_deref()
+    }
 }
 
 /// Dispatch a single decoded [`RemoteCommand`] through a
 /// [`RemoteControl`] implementation, returning the matching
 /// [`RemoteResponse`]. The PeerJS adapter in the Tauri webview
 /// handles JSON encoding + decoding around this entry point.
+///
+/// **DEPRECATED, will be removed once every caller migrates to
+/// [`dispatch_with_auth`].** This shape always treats the
+/// connection as authenticated, which is unsafe — see Vuln 1 of
+/// the Phase 38 mobile-pairing security review.
 pub async fn dispatch<C: RemoteControl + ?Sized>(cmd: RemoteCommand, ctl: &C) -> RemoteResponse {
+    let mut auth = SessionAuth {
+        paired_pubkey: Some("legacy-trusted".into()),
+    };
+    dispatch_with_auth(cmd, ctl, &mut auth).await
+}
+
+/// Authenticated dispatcher. Callers thread one `SessionAuth` per
+/// data-channel; the dispatcher requires `Hello` to land first and
+/// to carry a `phone_pubkey_hex` matching a stored pairing before
+/// any non-lifecycle command is accepted.
+///
+/// Lifecycle (`Hello`, `Goodbye`) are always allowed; everything
+/// else returns `RemoteResponse::Error { message: "err-mobile-not-authenticated" }`
+/// when the session hasn't yet authenticated.
+pub async fn dispatch_with_auth<C: RemoteControl + ?Sized>(
+    cmd: RemoteCommand,
+    ctl: &C,
+    auth: &mut SessionAuth,
+) -> RemoteResponse {
+    // Hello and Goodbye always pass — Hello to *establish* auth,
+    // Goodbye to tear the channel down even if pairing failed.
+    if let RemoteCommand::Hello {
+        ref phone_pubkey_hex,
+        ..
+    } = cmd
+    {
+        let paired = ctl.is_paired_phone(phone_pubkey_hex).await;
+        if paired {
+            auth.paired_pubkey = Some(phone_pubkey_hex.clone());
+        } else {
+            auth.paired_pubkey = None;
+        }
+        return RemoteResponse::HelloAck { paired };
+    }
+    if matches!(cmd, RemoteCommand::Goodbye) {
+        auth.paired_pubkey = None;
+        return RemoteResponse::Ok;
+    }
+    if !auth.is_authenticated() {
+        return RemoteResponse::Error {
+            message: "err-mobile-not-authenticated".to_string(),
+        };
+    }
     match cmd {
-        RemoteCommand::Hello { .. } => RemoteResponse::HelloAck { paired: true },
+        RemoteCommand::Hello { .. } | RemoteCommand::Goodbye => unreachable!(),
         RemoteCommand::ListJobs => match ctl.list_jobs().await {
             Ok(jobs) => RemoteResponse::Jobs { jobs },
             Err(message) => RemoteResponse::Error { message },
@@ -300,8 +393,11 @@ pub async fn dispatch<C: RemoteControl + ?Sized>(cmd: RemoteCommand, ctl: &C) ->
             destination,
             verify,
         } => map_unit(ctl.start_copy(sources, destination, verify).await),
-        RemoteCommand::Goodbye => RemoteResponse::Ok,
         RemoteCommand::SetKeepAwake { enabled } => map_unit(ctl.set_keep_awake(enabled).await),
+        RemoteCommand::GetLocale => match ctl.get_locale().await {
+            Ok(bcp47) => RemoteResponse::Locale { bcp47 },
+            Err(message) => RemoteResponse::Error { message },
+        },
     }
 }
 

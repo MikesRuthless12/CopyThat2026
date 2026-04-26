@@ -73,6 +73,9 @@ copythat-crypt = { path = "../../../crates/copythat-crypt", version = "1" }
 # pair-server, return the QR PNG bytes, complete the SAS, and
 # dispatch APNs / FCM pushes when a job finishes.
 copythat-mobile = { path = "../../../crates/copythat-mobile", version = "1" }
+# Phase 17d — privilege-separated helper. Used by retry_elevated and
+# (future) shell-extension install/uninstall flows.
+copythat-helper = { path = "../../../crates/copythat-helper", version = "1" }
 # Phase 37 follow-up — `RemoteControl` is async-trait. The impl
 # in `mobile_commands.rs` re-applies the macro on the impl block,
 # so the host crate needs the dep too.
@@ -173,6 +176,15 @@ windows = { version = "0.61", features = [
     "Win32_System_Memory",
     "Win32_System_Ole",
     "Win32_UI_Shell",
+] }
+# Phase 40 — `instance_broker.rs` second-instance fast-bail
+# infrastructure. Named-pipe IPC + named mutex via the
+# already-in-workspace windows-sys 0.59 binding.
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
 ] }
 
 # macOS-only clipboard reader: NSPasteboard via the modern `objc2`
@@ -322,3 +334,12 @@ path = "../../../tests/smoke/phase_28_dropstack.rs"
 [[test]]
 name = "phase_29_dnd"
 path = "../../../tests/smoke/phase_29_dnd.rs"
+
+# Phase 17e — IPC argument audit + canonicalisation. Exercises
+# `ipc_safety::validate_ipc_path*`, asserts every locale carries the
+# new `err-path-invalid-encoding` Fluent key, and walks
+# `commands.rs` to confirm every path-typed `#[tauri::command]`
+# routes through one of the gate helpers (drift tripwire).
+[[test]]
+name = "phase_17e_ipc_audit"
+path = "../../../tests/smoke/phase_17e_ipc_audit.rs"

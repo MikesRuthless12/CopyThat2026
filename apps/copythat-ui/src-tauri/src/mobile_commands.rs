@@ -16,17 +16,19 @@
 //! `mobile_pair_qr`, displays the QR, and writes the resulting
 //! [`MobilePairingEntry`] back through `mobile_pair_commit`.
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use base64::Engine;
-use copythat_mobile::pairing::{PairingToken, generate_qr_png, mint_peer_id};
+use copythat_mobile::pairing::{PairingToken, generate_qr_png, mint_desktop_keypair, mint_peer_id};
 use copythat_mobile::server::{
-    CollisionAction, HistoryRow, JobSummary, RemoteCommand, RemoteResponse, dispatch,
+    CollisionAction, HistoryRow, JobSummary, RemoteCommand, RemoteResponse, SessionAuth,
+    dispatch_with_auth,
 };
 use copythat_mobile::{
     ApnsSigner, FcmSigner, HttpDispatcher, NotifyDispatcher, PushPayload, PushSigner, PushTarget,
     sas_fingerprint, sas_fingerprint_to_emoji,
 };
+use copythat_settings::Settings;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -70,6 +72,13 @@ pub struct MobilePairStatusDto {
     pub desktop_peer_id: String,
     pub qr_url: Option<String>,
     pub qr_png_base64: Option<String>,
+    /// Phase 38 follow-up — desktop's long-term X25519 public key
+    /// (lowercase hex) for the in-flight pairing session. The
+    /// MobilePanel UI uses this together with a phone pubkey
+    /// received over PeerJS to compute and render the SAS the user
+    /// visually compares against the phone's screen. `None` when no
+    /// pairing session is active.
+    pub desktop_pubkey_hex: Option<String>,
 }
 
 /// Mint a stable peer-id if none is persisted yet, then return the
@@ -107,21 +116,30 @@ pub async fn mobile_pair_status(
         .as_ref()
         .and_then(|url| generate_qr_png(url, 6).ok())
         .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes));
+    let desktop_pubkey_hex = inner.pending.as_ref().map(|p| p.desktop_pubkey_hex.clone());
 
     Ok(MobilePairStatusDto {
         server_active: inner.pending.is_some(),
         desktop_peer_id: peer_id,
         qr_url: qr,
         qr_png_base64: qr_b64,
+        desktop_pubkey_hex,
     })
 }
 
 /// Mint a new pairing QR. The PWA scans it, derives the matching
 /// SAS, and replies via `mobile_pair_commit`.
+///
+/// Phase 38 follow-up — the desktop's long-term X25519 keypair is
+/// generated server-side here (not handed in by the WebView). The
+/// previous shape accepted `desktop_pubkey_hex` from the JS caller,
+/// which let a forged WebView script substitute its own keypair on
+/// both sides of the SAS computation, producing a "matching" SAS
+/// that the user would approve while neither side held the
+/// legitimate desktop key.
 #[tauri::command]
 pub async fn mobile_pair_start(
     state: tauri::State<'_, AppState>,
-    desktop_pubkey_hex: String,
 ) -> Result<MobilePairStatusDto, String> {
     let peer_id = {
         let mut settings = state
@@ -135,7 +153,24 @@ pub async fn mobile_pair_start(
         settings.mobile.desktop_peer_id.clone()
     };
 
-    let token = PairingToken::new(peer_id.clone()).map_err(|e| format!("token: {e}"))?;
+    // Generate (or recover) the desktop's long-term keypair. For
+    // this minimal-correctness landing the secret lives in the
+    // `MobileRegistry` for the duration of the pairing session;
+    // the OS-keychain persistence + per-launch reload is a Phase
+    // 38b follow-up. The public bytes flow into the SAS computation
+    // and end up echoed in the QR / status DTO so the user can
+    // visually confirm the value the PWA computed against.
+    let (_secret_bytes, public_bytes) =
+        mint_desktop_keypair().map_err(|e| format!("desktop keypair: {e}"))?;
+    let desktop_pubkey_hex = hex::encode(public_bytes);
+
+    // Carry the real desktop pubkey in the QR so the phone can
+    // compute the SAS from the same inputs the desktop will (the
+    // previous shape encoded only the seed; the phone had no way
+    // to know the desktop's pubkey, so the SAS computation
+    // degenerated into matching against zeros).
+    let token =
+        PairingToken::new(peer_id.clone(), public_bytes).map_err(|e| format!("token: {e}"))?;
     let qr_url = token.to_url();
     let qr_b64 = generate_qr_png(&qr_url, 6)
         .ok()
@@ -145,7 +180,7 @@ pub async fn mobile_pair_start(
     let mut inner = registry.inner.lock().await;
     inner.pending = Some(PendingPair {
         token: token.clone(),
-        desktop_pubkey_hex,
+        desktop_pubkey_hex: desktop_pubkey_hex.clone(),
     });
 
     Ok(MobilePairStatusDto {
@@ -153,18 +188,30 @@ pub async fn mobile_pair_start(
         desktop_peer_id: peer_id,
         qr_url: Some(qr_url),
         qr_png_base64: qr_b64,
+        desktop_pubkey_hex: Some(desktop_pubkey_hex),
     })
 }
 
 /// PWA replies with its long-term X25519 public key + the SAS the
-/// user just confirmed. Desktop verifies the SAS matches the seed
-/// from the in-flight `pending` slot and persists the pairing.
+/// user just confirmed. Desktop computes the expected SAS from the
+/// pairing seed, compares it to the value the user typed/scanned
+/// on the PWA via constant-time equality, and refuses the commit
+/// on any mismatch.
+///
+/// `phone_sas_emoji` is the four-emoji string the PWA rendered.
+/// The desktop UI displays its own computation and the user
+/// confirms by ticking the "match" button — that confirmation
+/// flips a flag on this command (`user_confirmed_match: true`).
+/// Without that flag, the commit refuses regardless of SAS
+/// equality (defence-in-depth: the PWA could lie about a match).
 #[tauri::command]
 pub async fn mobile_pair_commit(
     state: tauri::State<'_, AppState>,
     phone_pubkey_hex: String,
     device_label: String,
     push_target: Option<copythat_settings::MobilePushTarget>,
+    phone_sas_emoji: Option<String>,
+    user_confirmed_match: Option<bool>,
 ) -> Result<MobilePairStatusDto, String> {
     let registry = state.mobile.clone();
     let pending = {
@@ -175,12 +222,43 @@ pub async fn mobile_pair_commit(
     let phone_bytes = decode_pubkey_hex(&phone_pubkey_hex)?;
     let desktop_bytes = decode_pubkey_hex(&pending.desktop_pubkey_hex)?;
     let sas = sas_fingerprint(&pending.token.sas_seed, &desktop_bytes, &phone_bytes);
-    // The PWA already showed the user the same SAS — desktop just
-    // logs it for the toast and persists the pairing. A mismatch
-    // would manifest on the PWA side as a different emoji string,
-    // and the user wouldn't tap "Match"; if they did, the desktop
-    // commits anyway because the user has affirmed the link.
-    let _ = sas_fingerprint_to_emoji(&sas);
+    let desktop_emoji = sas_fingerprint_to_emoji(&sas);
+
+    // Refuse without explicit user confirmation. The earlier shape
+    // committed unconditionally: the PWA's "tap Match" was advisory
+    // — the desktop persisted the pairing regardless of whether
+    // the SAS values agreed. Now the desktop demands a positive
+    // confirmation flag from the desktop UI (which the user clicks
+    // *after* visually comparing the desktop emoji to the phone
+    // emoji), AND a constant-time match between what the PWA sent
+    // back as its computation and what the desktop computed.
+    if user_confirmed_match != Some(true) {
+        return Err("err-mobile-sas-not-confirmed".to_string());
+    }
+    if let Some(phone_emoji) = phone_sas_emoji {
+        // `sas_fingerprint_to_emoji` returns a Vec<&'static str>;
+        // join into a single string for comparison so the wire
+        // shape is one opaque chunk regardless of separator
+        // choice on the PWA side.
+        let desktop_str: String = desktop_emoji.join("");
+        let a = desktop_str.as_bytes();
+        // Strip whitespace before compare so a phone-side
+        // "🍎🍌🍇🍉" matches a desktop-side "🍎 🍌 🍇 🍉".
+        let phone_normalised: String = phone_emoji.chars().filter(|c| !c.is_whitespace()).collect();
+        let b = phone_normalised.as_bytes();
+        if a.len() != b.len() {
+            return Err("err-mobile-sas-mismatch".to_string());
+        }
+        let mut diff: u8 = 0;
+        for (x, y) in a.iter().zip(b.iter()) {
+            diff |= x ^ y;
+        }
+        if diff != 0 {
+            return Err("err-mobile-sas-mismatch".to_string());
+        }
+    } else {
+        return Err("err-mobile-sas-not-confirmed".to_string());
+    }
 
     let now_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -210,6 +288,7 @@ pub async fn mobile_pair_commit(
         desktop_peer_id: snapshot.mobile.desktop_peer_id.clone(),
         qr_url: None,
         qr_png_base64: None,
+        desktop_pubkey_hex: None,
     })
 }
 
@@ -293,10 +372,20 @@ pub fn mobile_revoke(state: tauri::State<'_, AppState>, pubkey_hex: String) -> R
 /// Dispatch a RemoteCommand the in-webview PeerJS adapter just
 /// decoded. Returns the matching RemoteResponse JSON for the data
 /// channel reply.
+///
+/// `auth_pubkey_hex` is the phone's long-term X25519 public key
+/// (hex, lowercase) — required for every non-`Hello`/`Goodbye`
+/// command. The desktop validates it against
+/// `MobileSettings::pairings` on each call (no per-connection
+/// session map exists at the IPC layer; the cost is one
+/// constant-time comparison per command, paid for stronger
+/// guarantees against an unauthenticated peer driving the
+/// `RemoteControl` trait).
 #[tauri::command]
 pub async fn mobile_handle_remote_command(
     state: tauri::State<'_, AppState>,
     command_json: String,
+    auth_pubkey_hex: Option<String>,
 ) -> Result<String, String> {
     let cmd: RemoteCommand =
         serde_json::from_str(&command_json).map_err(|e| format!("decode command: {e}"))?;
@@ -305,9 +394,31 @@ pub async fn mobile_handle_remote_command(
             globals: state.globals.clone(),
             wake_lock: state.wake_lock.clone(),
             queue: state.queue.clone(),
+            settings: state.settings.clone(),
         },
     };
-    let resp = dispatch(cmd, &ctl).await;
+    // Build a per-call SessionAuth: if the caller supplied a
+    // pubkey AND it matches a stored pairing, mark authenticated;
+    // otherwise leave the session unauthenticated. The dispatcher
+    // refuses every non-lifecycle command on an unauthenticated
+    // session.
+    use copythat_mobile::server::RemoteControl;
+    let mut auth = SessionAuth::new();
+    if let Some(hex) = auth_pubkey_hex {
+        if ctl.is_paired_phone(&hex).await {
+            // Re-issue the lifecycle Hello to populate auth state.
+            let _ = dispatch_with_auth(
+                RemoteCommand::Hello {
+                    phone_pubkey_hex: hex,
+                    device_label: String::new(),
+                },
+                &ctl,
+                &mut auth,
+            )
+            .await;
+        }
+    }
+    let resp = dispatch_with_auth(cmd, &ctl, &mut auth).await;
     serde_json::to_string(&resp).map_err(|e| format!("encode response: {e}"))
 }
 
@@ -420,6 +531,10 @@ struct AppStateProxy {
     globals: Arc<std::sync::atomic::AtomicU64>,
     wake_lock: Arc<std::sync::Mutex<Option<copythat_platform::WakeLock>>>,
     queue: copythat_core::Queue,
+    /// Phase 38 — needed for `get_locale` so the PWA can apply the
+    /// desktop's selected BCP-47 tag instead of always falling back
+    /// to `navigator.language`.
+    settings: Arc<RwLock<Settings>>,
 }
 
 struct AppStateRemoteControl {
@@ -518,6 +633,52 @@ impl copythat_mobile::server::RemoteControl for AppStateRemoteControl {
         _verify: Option<String>,
     ) -> Result<(), String> {
         Ok(())
+    }
+
+    async fn is_paired_phone(&self, phone_pubkey_hex: &str) -> bool {
+        // Constant-time comparison over the canonicalised lowercase
+        // hex form, against every entry in MobileSettings::pairings.
+        // The naive `==` compare would leak match-prefix length via
+        // timing — irrelevant for short strings but the discipline
+        // costs nothing.
+        let needle = phone_pubkey_hex.to_ascii_lowercase();
+        let needle_bytes = needle.as_bytes();
+        let Ok(settings) = self.state.settings.read() else {
+            return false;
+        };
+        let mut matched = false;
+        for entry in &settings.mobile.pairings {
+            let stored = entry.phone_public_key_hex.to_ascii_lowercase();
+            let stored_bytes = stored.as_bytes();
+            if stored_bytes.len() != needle_bytes.len() {
+                continue;
+            }
+            // Constant-time XOR-then-OR fold.
+            let mut diff: u8 = 0;
+            for (a, b) in stored_bytes.iter().zip(needle_bytes.iter()) {
+                diff |= a ^ b;
+            }
+            if diff == 0 {
+                matched = true;
+            }
+        }
+        matched
+    }
+
+    async fn get_locale(&self) -> Result<String, String> {
+        // Take a brief read lock, clone the locale string, drop the
+        // lock — never held across an `.await`, so the future stays
+        // `Send`. The PWA's `applyDesktopLocale` accepts an empty
+        // string as "auto-detect"; on lock poisoning we surface
+        // empty so the PWA falls back to `navigator.language`
+        // rather than failing the whole dispatcher.
+        let locale = self
+            .state
+            .settings
+            .read()
+            .map(|s| s.general.language.clone())
+            .unwrap_or_default();
+        Ok(locale)
     }
 
     async fn set_keep_awake(&self, enabled: bool) -> Result<(), String> {

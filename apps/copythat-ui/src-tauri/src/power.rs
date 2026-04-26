@@ -162,50 +162,58 @@ pub fn spawn_power_subscriber(state: AppState, app: AppHandle) -> PowerSubscribe
     let stop = Arc::new(AtomicBool::new(false));
     let stop_for_task = stop.clone();
 
-    let join = tokio::spawn(async move {
-        let power_state = Arc::new(Mutex::new(PowerState::default()));
-        let book = Arc::new(Mutex::new(Bookkeeping::default()));
-        let mut last_action = PowerAction::Continue;
+    // Enter Tauri's tokio runtime context so the bare `tokio::spawn`
+    // below resolves to a `tokio::task::JoinHandle` (matches
+    // `PowerSubscriberHandle.join`'s type) AND has a reactor to
+    // attach to. From the setup-hook path the call site is OUTSIDE
+    // any tokio context, so a bare `tokio::spawn` here would panic
+    // with "no reactor running". See shell.rs:89.
+    let join = tauri::async_runtime::block_on(async {
+        tokio::spawn(async move {
+            let power_state = Arc::new(Mutex::new(PowerState::default()));
+            let book = Arc::new(Mutex::new(Bookkeeping::default()));
+            let mut last_action = PowerAction::Continue;
 
-        loop {
-            if stop_for_task.load(Ordering::SeqCst) {
-                break;
-            }
-            let ev = match rx.recv().await {
-                Ok(ev) => ev,
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                    // Lost some intermediate events. No cheap way to
-                    // reconcile without re-sampling the probes; the
-                    // caller (the poller) re-emits on the next state
-                    // change so we'll catch up within one tick.
+            loop {
+                if stop_for_task.load(Ordering::SeqCst) {
+                    break;
+                }
+                let ev = match rx.recv().await {
+                    Ok(ev) => ev,
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                        // Lost some intermediate events. No cheap way to
+                        // reconcile without re-sampling the probes; the
+                        // caller (the poller) re-emits on the next state
+                        // change so we'll catch up within one tick.
+                        continue;
+                    }
+                };
+
+                // Snapshot settings + advance the observed state.
+                let snap = state.settings_snapshot();
+                if !snap.power.enabled {
+                    // Power policies disabled — release any power-owned
+                    // pause/cap and stop processing.
+                    release_power_owned(&state, &app, &book, &snap, &mut last_action);
                     continue;
                 }
-            };
+                let policies = policies_from_settings(&snap.power);
 
-            // Snapshot settings + advance the observed state.
-            let snap = state.settings_snapshot();
-            if !snap.power.enabled {
-                // Power policies disabled — release any power-owned
-                // pause/cap and stop processing.
-                release_power_owned(&state, &app, &book, &snap, &mut last_action);
-                continue;
-            }
-            let policies = policies_from_settings(&snap.power);
+                {
+                    let mut ps = power_state.lock().expect("power_state lock");
+                    apply_event(&mut ps, &ev);
+                }
+                let current_state = *power_state.lock().expect("power_state lock");
+                let action = compute_action(&current_state, &policies);
 
-            {
-                let mut ps = power_state.lock().expect("power_state lock");
-                apply_event(&mut ps, &ev);
+                if action == last_action {
+                    continue;
+                }
+                apply_action(&state, &app, &book, &snap, &action);
+                last_action = action;
             }
-            let current_state = *power_state.lock().expect("power_state lock");
-            let action = compute_action(&current_state, &policies);
-
-            if action == last_action {
-                continue;
-            }
-            apply_action(&state, &app, &book, &snap, &action);
-            last_action = action;
-        }
+        })
     });
 
     PowerSubscriberHandle { join, stop }

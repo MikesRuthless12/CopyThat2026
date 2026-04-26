@@ -8,6 +8,8 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 publish.workspace = true
+# Phase 17g — Linux RELRO/NOW/noexecstack flags emitted via build.rs.
+build = "build.rs"
 
 [lints]
 workspace = true
@@ -44,7 +46,15 @@ tokio = { version = "1", features = [
 # Phase 36 — wraps the engine for `copythat copy` / `move` / `verify`.
 copythat-core = { path = "../copythat-core", version = "1" }
 copythat-hash = { path = "../copythat-hash", version = "1" }
+# Phase 39 — attach `PlatformFastCopyHook` so the CLI's `copy`
+# subcommand uses the same `CopyFileExW` + parallel-chunk + reflink
+# fast paths as the GUI shell, instead of falling back to the
+# pure-Rust async loop. Same engine, same numbers — bench parity.
+copythat-platform = { path = "../copythat-platform", version = "1" }
 copythat-settings = { path = "../copythat-settings", version = "1" }
+# Phase 38 follow-up — `copythat copy --shape RATE` wires through
+# Shape + CopyThatShapeSink so the CLI honours bandwidth caps.
+copythat-shape = { path = "../copythat-shape", version = "1" }
 # Phase 36 — `copythat history` reads the same SQLite table as the GUI.
 copythat-history = { path = "../copythat-history", version = "1" }
 # Phase 36 — UTC timestamps in the JSON event stream. Workspace already
@@ -59,3 +69,28 @@ predicates = "3"
 [[test]]
 name = "phase_36_cli"
 path = "../../tests/smoke/phase_36_cli.rs"
+
+# Phase 17g — binary hardening flag tripwire. Filesystem-only:
+# asserts workspace [profile.release] uses fat LTO + panic=abort,
+# the CLI build.rs emits Linux RELRO/NOW flags, the Tauri build.rs
+# carries the same, and SECURITY.md documents Phase 17g as shipped.
+[[test]]
+name = "phase_17g_hardening"
+path = "../../tests/smoke/phase_17g_hardening.rs"
+
+# Phase 14d — scheduled-job render. Drives copythat_cli::schedule
+# against Windows / macOS / Linux host targets, exercises the
+# Phase 17a path-safety bar at the renderer's entry, and asserts
+# the rejection paths for relative paths / unsupported job kinds /
+# missing [schedule] block.
+[[test]]
+name = "phase_14d_schedule"
+path = "../../tests/smoke/phase_14d_schedule.rs"
+
+# Phase 14f — queue-while-locked / volume-arrival watcher. Drives
+# the polling loop with a scripted probe so the test owns the
+# transition timeline; covers Arrival / Departure / cancellation /
+# Phase 17a traversal rejection.
+[[test]]
+name = "phase_14f_queue_locked"
+path = "../../tests/smoke/phase_14f_queue_locked.rs"

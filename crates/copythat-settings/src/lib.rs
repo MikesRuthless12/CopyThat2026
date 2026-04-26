@@ -391,6 +391,30 @@ pub struct TransferSettings {
     /// survives the trip. Default ON; only meaningful when
     /// `preserve_security_metadata` is also ON.
     pub appledouble_fallback: bool,
+    /// Phase 38 — destination dedup ladder mode. Wire string
+    /// mirrors `copythat_platform::DedupMode`:
+    /// `"auto-ladder" | "reflink-only" | "hardlink-aggressive" | "off"`.
+    /// Default `"off"` — the engine takes its regular `copy_file`
+    /// path until the user opts in to the ladder. Stored as a
+    /// stringly-typed field so this crate stays free of a
+    /// `copythat-platform` dep edge.
+    pub dedup_mode: String,
+    /// Phase 38 — when the dedup ladder reaches the hardlink leg,
+    /// what files does it apply to? Wire string mirrors
+    /// `copythat_platform::HardlinkPolicy`:
+    /// `"never" | "read-only-only" | "always"`. Default
+    /// `"read-only-only"` — hardlinks share state, so the safe
+    /// default only hardlinks files the user already marked
+    /// read-only.
+    pub dedup_hardlink_policy: String,
+    /// Phase 38 — opt-in pre-pass dedup scan. When `true`, the
+    /// runner BLAKE3-hashes both the source + destination trees
+    /// in parallel before kicking off the copy and surfaces a
+    /// modal proposing per-file hardlink / reflink / skip actions
+    /// for content that's already at the destination. Defaults to
+    /// `false` because hashing two trees adds I/O the user hasn't
+    /// asked for unless they want it.
+    pub dedup_prescan: bool,
 }
 
 impl Default for TransferSettings {
@@ -413,6 +437,9 @@ impl Default for TransferSettings {
             preserve_selinux_contexts: true,
             preserve_resource_forks: true,
             appledouble_fallback: true,
+            dedup_mode: "off".into(),
+            dedup_hardlink_policy: "read-only-only".into(),
+            dedup_prescan: false,
         }
     }
 }
@@ -1729,6 +1756,13 @@ pub struct SftpBackendConfig {
     pub port: u16,
     pub username: String,
     pub root: String,
+    /// Path to an OpenSSH-format `known_hosts` file. Empty falls
+    /// back to `$HOME/.ssh/known_hosts` at IPC time. With a
+    /// missing/empty file the backend's host-key verifier returns
+    /// `Ok(true)` for any presented key (silent TOFU); the
+    /// fallback closes that gap on every host that has the
+    /// standard OpenSSH layout.
+    pub known_hosts_path: String,
 }
 
 impl Default for SftpBackendConfig {
@@ -1738,6 +1772,7 @@ impl Default for SftpBackendConfig {
             port: 22,
             username: String::new(),
             root: String::new(),
+            known_hosts_path: String::new(),
         }
     }
 }

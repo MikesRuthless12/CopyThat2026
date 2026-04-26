@@ -375,8 +375,20 @@ impl SftpTarget {
                 .success()
         } else {
             // Password auth (default — no KEY_ENC/KEY prefix, or
-            // explicit PASS prefix).
-            let pw = self.secret.strip_prefix("PASS\n").unwrap_or(&self.secret);
+            // explicit PASS prefix). Normalise CRLF → LF before
+            // strip_prefix so a Windows wizard producing
+            // `PASS\r\nhunter2` doesn't slip the literal `PASS\r`
+            // prefix and a trailing `\n` into the password (the
+            // strip would miss `PASS\n` and the server would fail
+            // auth with a misleading error). Also trim trailing
+            // CR/LF/whitespace so a copy-paste artefact doesn't
+            // turn into part of the credential.
+            let normalized = self.secret.replace("\r\n", "\n").replace('\r', "\n");
+            let pw_owned = normalized
+                .strip_prefix("PASS\n")
+                .map(|s| s.to_string())
+                .unwrap_or(normalized);
+            let pw = pw_owned.trim_end_matches(['\n', '\r', ' ', '\t']);
             session
                 .authenticate_password(&self.config.username, pw)
                 .await

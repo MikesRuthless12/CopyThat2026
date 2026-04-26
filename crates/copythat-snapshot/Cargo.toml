@@ -19,11 +19,22 @@ unsafe_code = "allow"
 all = { level = "warn", priority = -1 }
 
 [features]
-default = []
+# `vss-com` ships in the default feature set: verified end-to-end on
+# a real Windows admin run (followup-8). Eliminates the ~300-700 ms
+# PowerShell startup per shadow and removes the format-string
+# interpolation surface. Inert on non-Windows targets via the cfg
+# gate at the top of `backends/vss_com.rs`. Drop it with
+# `--no-default-features` to fall back to the PowerShell+WMI path
+# preserved in `backends/vss.rs`.
+default = ["vss-com"]
 # Long-running integration tests (loopback Btrfs subvolume + flock;
 # real VSS snapshot create/delete). Off by default so normal
 # workspace test runs stay snappy.
 slow-tests = []
+# Phase 17 follow-up — IVssBackupComponents COM port. Replaces the
+# PowerShell+WMI shellouts in backends/vss.rs with direct VSS COM
+# calls.
+vss-com = ["dep:winapi"]
 
 [dependencies]
 # Phase 19b — SnapshotHook trait + CopyError live in core. Taking a
@@ -47,6 +58,11 @@ tokio = { version = "1", features = [
 ] }
 tracing = "0.1"
 uuid = { version = "1", features = ["v4"] }
+# Phase 17 follow-up — 256-bit pipe-name suffix via getrandom +
+# hex-encode for the named-pipe handshake. Fall-back to Uuid v4
+# when getrandom fails.
+getrandom = "0.3"
+hex = "0.4"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -62,9 +78,32 @@ windows-sys = { version = "0.59", features = [
     "Win32_Storage_FileSystem",
     "Win32_System_Com",
     "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_SystemServices",
     "Win32_System_Threading",
     "Win32_UI_Shell",
 ] }
+# Phase 17 follow-up — winapi 0.3 ships full IVssBackupComponents
+# bindings in winapi::um::vsbackup which the modern windows-sys /
+# windows crates don't (Microsoft's metadata project hasn't bound
+# vsbackup.h yet). winapi-0.3 is in maintenance mode but well-
+# proven on Windows targets. Optional + feature-gated so the dep
+# only enters the build when `vss-com` is on.
+winapi = { version = "0.3", features = [
+    "combaseapi",
+    "guiddef",
+    "minwindef",
+    "ntdef",
+    "objbase",
+    "objidl",
+    "objidlbase",
+    "vsbackup",
+    "vss",
+    "vsserror",
+    "winerror",
+    "winnt",
+    "wtypesbase",
+], optional = true }
 
 [dev-dependencies]
 tempfile = "3"

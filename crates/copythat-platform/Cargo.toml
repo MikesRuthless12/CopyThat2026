@@ -29,6 +29,10 @@ slow-tests = []
 copythat-core = { path = "../copythat-core", version = "1" }
 reflink-copy = "0.1"
 thiserror = "2"
+# Phase 38 — dedup options + outcome types are TOML-persistable and
+# IPC-serialized, so serde + serde_json land in the dep graph here.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tokio = { version = "1", features = [
     "fs",
     "io-util",
@@ -54,6 +58,17 @@ windows-sys = { version = "0.59", features = [
     # Phase 37 follow-up #2 — `SetThreadExecutionState` for the
     # mobile companion's "Keep desktop awake" toggle.
     "Win32_System_Power",
+    # Phase 31b — `SHQueryUserNotificationState` for the
+    # presentation / fullscreen probe.
+    "Win32_UI_Shell",
+    # Phase 38 follow-up — overlapped I/O fast path
+    # (`windows_overlapped.rs`): VirtualAlloc / VirtualFree for
+    # sector-aligned ring-buffer allocation; INFINITE waits;
+    # SECURITY_ATTRIBUTES for CreateFileW (it accepts a pointer
+    # but we always pass null).
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_Security",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -64,12 +79,14 @@ core-foundation-sys = "0.8"
 [target.'cfg(target_os = "linux")'.dependencies]
 # Phase 37 follow-up #2 — `org.freedesktop.ScreenSaver.Inhibit` for
 # the mobile companion's "Keep desktop awake" toggle. Pure-Rust
-# dbus client. MIT.
-zbus = { version = "5", default-features = false, features = ["tokio"] }
+# dbus client. MIT. `blocking-api` is gated as a separate feature
+# in zbus 5.x; the wake-lock backend uses `zbus::blocking::*`.
+zbus = { version = "5", default-features = false, features = ["tokio", "blocking-api"] }
 
 [dev-dependencies]
 blake3 = "1"
 tempfile = "3"
+serde_json = "1"
 tokio = { version = "1", features = [
     "fs",
     "io-util",
@@ -95,3 +112,17 @@ path = "../../tests/smoke/phase_23_sparse.rs"
 [[test]]
 name = "phase_24_meta"
 path = "../../tests/smoke/phase_24_meta.rs"
+
+# Phase 38 smoke test — destination dedup ladder.
+[[test]]
+name = "phase_38_dedup"
+path = "../../tests/smoke/phase_38_dedup.rs"
+
+# Phase 13c — parallel multi-chunk copy gating tripwire. Asserts
+# the env-var-gated path stays opt-in (single-stream wins on every
+# measured topology), the min-file-size threshold + default chunk
+# count haven't drifted, and the regression conclusions are
+# documented in COMPETITOR-TEST.md.
+[[test]]
+name = "phase_13c_parallel"
+path = "../../tests/smoke/phase_13c_parallel.rs"

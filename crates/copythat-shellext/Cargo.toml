@@ -58,3 +58,12 @@ tempfile = "3"
 [[test]]
 name = "phase_07b_shellext"
 path = "../../tests/smoke/phase_07b_shellext.rs"
+
+# Phase 7 partials — shell-integration tripwire. Filesystem-only
+# verification that macOS NSServicesMenu plist, Windows
+# IExplorerCommand registry stanza, and Linux Nautilus / KDE /
+# Thunar packaging files carry the keys / shapes the runtime
+# extension expects.
+[[test]]
+name = "phase_07_partials"
+path = "../../tests/smoke/phase_07_partials.rs"

@@ -49,7 +49,24 @@ use crate::outcome::ChosenStrategy;
 /// We put it back to 256 MiB (Windows Explorer's default); the
 /// 10 GiB C→C workload still picks up the NO_BUFFERING path
 /// since it sits well above the threshold.
-const NO_BUFFERING_THRESHOLD: u64 = 256 * 1024 * 1024;
+///
+/// Phase 38 follow-up: the threshold can be overridden at runtime
+/// via `COPYTHAT_NO_BUFFERING_THRESHOLD_MB=<N>` (set to a very
+/// large number to effectively disable). Used by `xtask bench-vs`
+/// to A/B test on Dev Drive / NVMe-equipped machines where the
+/// page-cache regression argument may not apply.
+const NO_BUFFERING_THRESHOLD_DEFAULT: u64 = 256 * 1024 * 1024;
+
+fn no_buffering_threshold() -> u64 {
+    static CACHED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *CACHED.get_or_init(|| {
+        std::env::var("COPYTHAT_NO_BUFFERING_THRESHOLD_MB")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(|mb| mb.saturating_mul(1024 * 1024))
+            .unwrap_or(NO_BUFFERING_THRESHOLD_DEFAULT)
+    })
+}
 const PROGRESS_MIN_BYTES: u64 = 16 * 1024;
 const PROGRESS_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
 const ERROR_REQUEST_ABORTED: u32 = 1235;
@@ -144,6 +161,51 @@ pub(crate) async fn try_native_copy(
     ctrl: CopyControl,
     events: mpsc::Sender<CopyEvent>,
 ) -> NativeOutcome {
+    // Phase 38 follow-up — opt-in Robocopy-style overlapped I/O
+    // pipeline for large files. Gate behind
+    // `COPYTHAT_OVERLAPPED_IO=1` so users can A/B test against
+    // the default `CopyFileExW` path on NVMe / Dev Drive hardware
+    // without risking the default path until numbers prove it
+    // universally wins.
+    if super::windows_overlapped::requested(total).is_some() {
+        return super::windows_overlapped::try_overlapped_copy(src, dst, total, ctrl, events).await;
+    }
+
+    // Phase 41 — auto-engage overlapped pipeline for cross-volume
+    // large-file copies. The COMPETITOR-TEST.md baseline showed
+    // Robocopy beat us by ~48 % on 10 GiB · C→E (USB-attached
+    // SSD) because its overlapped pipeline kept the slow USB
+    // command queue deeper than our default `CopyFileExW`
+    // single-stream. Auto-engaging the overlapped path with
+    // 8 in-flight 4 MiB slots and buffered I/O (NO_BUFFERING off,
+    // because USB drives often have small on-device caches that
+    // benefit from the OS write-behind) closes that gap on USB
+    // and external SATA / NVMe enclosures without affecting
+    // same-volume NVMe (which still gets the
+    // `CopyFileExW`-default fast path).
+    //
+    // Opt out via `COPYTHAT_DISABLE_AUTO_OVERLAPPED=1` if the
+    // heuristic regresses on a specific user's hardware.
+    if total >= 1024 * 1024 * 1024
+        && std::env::var("COPYTHAT_DISABLE_AUTO_OVERLAPPED")
+            .ok()
+            .as_deref()
+            .is_none_or(|v| !matches!(v, "1" | "true" | "on"))
+        && is_cross_volume(&src, &dst)
+    {
+        return super::windows_overlapped::try_overlapped_copy_with_config(
+            src,
+            dst,
+            total,
+            ctrl,
+            events,
+            Some(8),     // 8 in-flight slots — Robocopy's internal default for USB
+            Some(4096),  // 4 MiB per slot — bigger amortises USB protocol round-trips
+            Some(false), // NO_BUFFERING off — USB cache helps, NVMe direct hurts
+        )
+        .await;
+    }
+
     // Phase 13c — opt-in parallel multi-chunk copy for large files.
     // Gate behind `COPYTHAT_PARALLEL_CHUNKS=<N>` env var so users
     // can A/B test it against the single-stream `CopyFileExW` path
@@ -213,7 +275,7 @@ pub(crate) async fn try_native_copy(
     let src_w = wide(&src);
     let dst_w = wide(&dst);
 
-    let flags: u32 = if total >= NO_BUFFERING_THRESHOLD {
+    let flags: u32 = if total >= no_buffering_threshold() {
         COPY_FILE_NO_BUFFERING
     } else {
         0
@@ -279,6 +341,28 @@ fn wide(path: &Path) -> Vec<u16> {
     let mut v: Vec<u16> = OsStr::new(path).encode_wide().collect();
     v.push(0);
     v
+}
+
+/// Phase 41 — returns true iff `src` and `dst` (or `dst`'s parent
+/// directory if `dst` doesn't exist yet) live on different volumes
+/// per `helpers::volume_id`. Used by the auto-engage heuristic for
+/// the overlapped-pipeline path on cross-volume large copies.
+///
+/// Conservative: any failure to identify a volume returns `false`
+/// so we don't accidentally engage the deeper-pipeline path on a
+/// same-volume NVMe copy where `CopyFileExW` already wins.
+fn is_cross_volume(src: &Path, dst: &Path) -> bool {
+    let src_id = match crate::helpers::volume_id(src) {
+        Some(id) => id,
+        None => return false,
+    };
+    // dst probably doesn't exist yet — probe its parent.
+    let dst_probe = dst.parent().unwrap_or(dst);
+    let dst_id = match crate::helpers::volume_id(dst_probe) {
+        Some(id) => id,
+        None => return false,
+    };
+    src_id != dst_id
 }
 
 // ---------------------------------------------------------------------

@@ -471,6 +471,23 @@ pub struct CopyOptions {
     /// construction). The engine applies those exclusions
     /// automatically when the sink is present.
     pub transform: Option<Arc<dyn TransformSink>>,
+
+    /// Phase 17 follow-up — destination jail. When `Some`, the
+    /// engine refuses to open any destination path that doesn't
+    /// canonicalise to a descendant of the configured root.
+    /// Closes the absolute-path-without-`..` case the lexical
+    /// guard misses (e.g. `/etc/passwd` is path-traversal-free
+    /// from a lexical standpoint, but it's outside any user-
+    /// chosen staging root).
+    ///
+    /// The engine canonicalises both `dst` and `dest_jail_root`
+    /// before the comparison, so symlinks at the dst-parent level
+    /// are followed once and validated. Combined with the
+    /// `O_NOFOLLOW` flag on the dst open itself, an attacker can't
+    /// race a symlink from outside the jail into a name inside.
+    ///
+    /// `None` (default) preserves pre-Phase-17-followup behaviour.
+    pub dest_jail_root: Option<std::path::PathBuf>,
 }
 
 /// Bridge contract for the Phase 32 cloud sink.
@@ -643,6 +660,7 @@ impl Default for CopyOptions {
             chunk_store: None,
             cloud_sink: None,
             transform: None,
+            dest_jail_root: None,
         }
     }
 }

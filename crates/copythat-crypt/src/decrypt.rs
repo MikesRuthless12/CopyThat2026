@@ -132,6 +132,19 @@ where
 /// prompts the user and calls [`Identity::with_ssh`] /
 /// [`Identity::with_x25519`] explicitly for those.
 pub fn load_identities_from(dir: &Path) -> io::Result<Identity> {
+    /// Per-file size cap for the identity loader. age secret keys
+    /// are ~62 chars; SSH private keys peak around ~14 KiB for
+    /// 4096-bit RSA in PEM. 64 KiB gives generous headroom while
+    /// keeping a malicious `~/Downloads`-pointed import from
+    /// reading huge attacker files into memory.
+    const MAX_IDENTITY_FILE_BYTES: u64 = 64 * 1024;
+    /// Allowed identity-file extensions. Anything else is skipped
+    /// silently — pointing the picker at a generic dir like
+    /// `~/Downloads` would otherwise silently slurp every `*.txt`
+    /// the user has, including potentially attacker-planted
+    /// secrets that happen to parse as X25519 / SSH keys.
+    const IDENTITY_EXTENSIONS: &[&str] = &["age", "key", "txt", "pem", "id_ed25519", "id_rsa"];
+
     let mut id = Identity::new();
     let entries = std::fs::read_dir(dir)?;
     for ent in entries {
@@ -140,6 +153,31 @@ pub fn load_identities_from(dir: &Path) -> io::Result<Identity> {
             continue;
         }
         let path = ent.path();
+        let ext_ok = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| {
+                let lower = e.to_ascii_lowercase();
+                IDENTITY_EXTENSIONS.iter().any(|w| *w == lower)
+            })
+            .unwrap_or_else(|| {
+                // Files with no extension (e.g. `id_ed25519`) match by
+                // their full file_name when it's in the allowlist.
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| {
+                        let lower = n.to_ascii_lowercase();
+                        IDENTITY_EXTENSIONS.iter().any(|w| *w == lower)
+                    })
+                    .unwrap_or(false)
+            });
+        if !ext_ok {
+            continue;
+        }
+        let md = ent.metadata()?;
+        if md.len() > MAX_IDENTITY_FILE_BYTES {
+            continue;
+        }
         let raw = std::fs::read_to_string(&path)?;
         // Try each parse order: X25519 secret key string, then SSH
         // private key. Failures are non-fatal — we only want to
