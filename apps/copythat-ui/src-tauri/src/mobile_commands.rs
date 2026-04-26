@@ -19,9 +19,7 @@
 use std::sync::{Arc, RwLock};
 
 use base64::Engine;
-use copythat_mobile::pairing::{
-    PairingToken, generate_qr_png, mint_desktop_keypair, mint_peer_id,
-};
+use copythat_mobile::pairing::{PairingToken, generate_qr_png, mint_desktop_keypair, mint_peer_id};
 use copythat_mobile::server::{
     CollisionAction, HistoryRow, JobSummary, RemoteCommand, RemoteResponse, SessionAuth,
     dispatch_with_auth,
@@ -171,8 +169,8 @@ pub async fn mobile_pair_start(
     // previous shape encoded only the seed; the phone had no way
     // to know the desktop's pubkey, so the SAS computation
     // degenerated into matching against zeros).
-    let token = PairingToken::new(peer_id.clone(), public_bytes)
-        .map_err(|e| format!("token: {e}"))?;
+    let token =
+        PairingToken::new(peer_id.clone(), public_bytes).map_err(|e| format!("token: {e}"))?;
     let qr_url = token.to_url();
     let qr_b64 = generate_qr_png(&qr_url, 6)
         .ok()

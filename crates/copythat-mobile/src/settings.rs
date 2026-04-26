@@ -79,17 +79,25 @@ pub fn validate_peerjs_broker(raw: &str) -> Result<(), String> {
     // Reject obvious URL-injection shapes: control chars, embedded
     // whitespace, path/query/fragment characters, user-info `@`,
     // backslash, embedded NUL.
-    if trimmed
-        .chars()
-        .any(|c| c.is_control() || c.is_whitespace() || matches!(c, '@' | '\\' | '?' | '#' | '<' | '>' | '"' | '\''))
-    {
+    if trimmed.chars().any(|c| {
+        c.is_control()
+            || c.is_whitespace()
+            || matches!(c, '@' | '\\' | '?' | '#' | '<' | '>' | '"' | '\'')
+    }) {
         return Err("peerjs_broker contains forbidden characters".into());
     }
     // Two acceptable shapes: a bare hostname (no scheme) or an
     // explicit `https://` URL whose authority matches a hostname.
     if let Some(rest) = trimmed.strip_prefix("https://") {
         let host = rest.split('/').next().unwrap_or("");
-        if host.is_empty() || host.contains(':') && !host.split(':').nth(1).map(|p| p.chars().all(|c| c.is_ascii_digit())).unwrap_or(false) {
+        if host.is_empty()
+            || host.contains(':')
+                && !host
+                    .split(':')
+                    .nth(1)
+                    .map(|p| p.chars().all(|c| c.is_ascii_digit()))
+                    .unwrap_or(false)
+        {
             return Err("peerjs_broker https URL has malformed authority".into());
         }
         Ok(())
@@ -104,9 +112,7 @@ pub fn validate_peerjs_broker(raw: &str) -> Result<(), String> {
         }
         for c in trimmed.chars() {
             if !(c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':')) {
-                return Err(format!(
-                    "peerjs_broker contains illegal character {c:?}"
-                ));
+                return Err(format!("peerjs_broker contains illegal character {c:?}"));
             }
         }
         Ok(())

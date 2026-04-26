@@ -247,11 +247,16 @@ pub(crate) fn run(argv: Vec<String>) -> Result<(), String> {
         steps.push(skipped(Section::Frontend, "pnpm tsc --noEmit", why));
     } else {
         let ui = root.join("apps").join("copythat-ui");
+        // On Windows, pnpm ships as `pnpm.cmd` (a npm shim), and
+        // Rust's `Command::new("pnpm")` only resolves .exe extensions
+        // — so the bare name `pnpm` fails to spawn even when it's
+        // on PATH. Use the `.cmd` extension explicitly.
+        let pnpm_exe = if cfg!(windows) { "pnpm.cmd" } else { "pnpm" };
         steps.push(run_cmd(
             Section::Frontend,
             "pnpm svelte-check",
             &ui,
-            "pnpm",
+            pnpm_exe,
             &["exec", "svelte-check", "--tsconfig", "./tsconfig.json"],
         ));
         log_last(&steps);
@@ -259,7 +264,7 @@ pub(crate) fn run(argv: Vec<String>) -> Result<(), String> {
             Section::Frontend,
             "pnpm tsc --noEmit",
             &ui,
-            "pnpm",
+            pnpm_exe,
             &["exec", "tsc", "--noEmit"],
         ));
         log_last(&steps);
@@ -321,7 +326,11 @@ pub(crate) fn run(argv: Vec<String>) -> Result<(), String> {
 
     // §5 performance --------------------------------------------------
     if args.skip_bench {
-        steps.push(skipped(Section::Performance, "xtask bench-ci", "--skip-bench"));
+        steps.push(skipped(
+            Section::Performance,
+            "xtask bench-ci",
+            "--skip-bench",
+        ));
     } else {
         let t0 = Instant::now();
         let (outcome, note) = match crate::bench::run(true) {
@@ -515,8 +524,7 @@ fn run_cargo_audit(root: &Path) -> Step {
             name: "cargo audit".into(),
             outcome: Outcome::Skipped,
             duration: t0.elapsed(),
-            note: "cargo-audit not installed (cargo install --locked cargo-audit)"
-                .into(),
+            note: "cargo-audit not installed (cargo install --locked cargo-audit)".into(),
         };
     }
 
@@ -677,8 +685,8 @@ fn short_section(s: Section) -> &'static str {
 /// id sits on its own line as `"RUSTSEC-YYYY-NNNN",`, which a string
 /// scan handles unambiguously.
 fn read_advisory_ignores(root: &Path) -> Result<Vec<String>, String> {
-    let body = fs::read_to_string(root.join("deny.toml"))
-        .map_err(|e| format!("read deny.toml: {e}"))?;
+    let body =
+        fs::read_to_string(root.join("deny.toml")).map_err(|e| format!("read deny.toml: {e}"))?;
     let mut ids: Vec<String> = Vec::new();
     for line in body.lines() {
         let line = line.trim();
@@ -704,16 +712,14 @@ fn read_advisory_ignores(root: &Path) -> Result<Vec<String>, String> {
 // Reporting
 // ---------------------------------------------------------------------
 
-fn finalize(
-    root: &Path,
-    steps: &[Step],
-    started: Instant,
-    args: &Args,
-) -> Result<(), String> {
+fn finalize(root: &Path, steps: &[Step], started: Instant, args: &Args) -> Result<(), String> {
     let total = started.elapsed();
     let pass = steps.iter().filter(|s| s.outcome == Outcome::Pass).count();
     let fail = steps.iter().filter(|s| s.outcome == Outcome::Fail).count();
-    let skip = steps.iter().filter(|s| s.outcome == Outcome::Skipped).count();
+    let skip = steps
+        .iter()
+        .filter(|s| s.outcome == Outcome::Skipped)
+        .count();
 
     println!();
     println!("===== xtask qa-automate summary =====");
@@ -759,7 +765,10 @@ fn finalize(
 fn render_markdown(steps: &[Step], total: Duration) -> String {
     let pass = steps.iter().filter(|s| s.outcome == Outcome::Pass).count();
     let fail = steps.iter().filter(|s| s.outcome == Outcome::Fail).count();
-    let skip = steps.iter().filter(|s| s.outcome == Outcome::Skipped).count();
+    let skip = steps
+        .iter()
+        .filter(|s| s.outcome == Outcome::Skipped)
+        .count();
     let mut out = String::new();
     out.push_str("# `xtask qa-automate` report\n\n");
     out.push_str(&format!(
@@ -876,8 +885,7 @@ mod tests {
             })
             .collect();
         declared.sort();
-        let mut listed: Vec<String> =
-            WORKSPACE_CRATES.iter().map(|s| (*s).to_string()).collect();
+        let mut listed: Vec<String> = WORKSPACE_CRATES.iter().map(|s| (*s).to_string()).collect();
         listed.sort();
         assert_eq!(
             listed, declared,

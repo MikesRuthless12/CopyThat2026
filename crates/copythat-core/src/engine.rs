@@ -60,7 +60,9 @@ pub async fn copy_file(
         // The dst may not exist yet (we're about to create it), so
         // canonicalise its parent and append the leaf manually.
         let parent = dst_path.parent().unwrap_or(std::path::Path::new(""));
-        let canon_parent = parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf());
+        let canon_parent = parent
+            .canonicalize()
+            .unwrap_or_else(|_| parent.to_path_buf());
         let canon_jail = jail.canonicalize().unwrap_or_else(|_| jail.to_path_buf());
         if !canon_parent.starts_with(&canon_jail) {
             return Err(CopyError::path_escape(

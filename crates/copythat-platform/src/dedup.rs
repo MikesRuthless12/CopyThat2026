@@ -193,8 +193,7 @@ pub fn try_dedup(src: &Path, dst: &Path, opts: &DedupOptions) -> io::Result<Dedu
     //    let the caller skip `copy_file`, leaving the destination
     //    file empty. Until the engine wiring lands, fall through to
     //    the byte-copy fallback so dst still gets the bytes.
-    let _chunk_share_intent =
-        opts.mode == DedupMode::AutoLadder && opts.chunk_share_enabled;
+    let _chunk_share_intent = opts.mode == DedupMode::AutoLadder && opts.chunk_share_enabled;
 
     // 4. Byte-copy fallback.
     Ok(DedupOutcome {

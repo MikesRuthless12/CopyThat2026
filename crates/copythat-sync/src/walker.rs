@@ -125,10 +125,7 @@ pub(crate) fn join_relpath(root: &Path, relpath: &str) -> Option<PathBuf> {
     if relpath.contains("..") || relpath.contains('\0') {
         return None;
     }
-    if relpath
-        .chars()
-        .any(|c| c.is_control() && c != '\t')
-    {
+    if relpath.chars().any(|c| c.is_control() && c != '\t') {
         return None;
     }
     // A Windows drive prefix or absolute root inside the relpath
@@ -258,8 +255,7 @@ mod tests {
     #[test]
     fn join_relpath_round_trips() {
         let root = Path::new("/tmp/sync");
-        let joined =
-            join_relpath(root, "foo/bar/baz.txt").expect("safe relpath joins to Some(_)");
+        let joined = join_relpath(root, "foo/bar/baz.txt").expect("safe relpath joins to Some(_)");
         assert!(joined.ends_with("foo/bar/baz.txt") || joined.ends_with("foo\\bar\\baz.txt"));
     }
 

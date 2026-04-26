@@ -184,6 +184,8 @@ err-verify-failed = Post-copy verification failed
 err-path-escape = Path rejected — contains parent-directory (..) segments or illegal bytes
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+err-helper-grant-out-of-band = GrantCapabilities must be handled by the helper run-loop, not the stateless handler
+err-randomness-unavailable = OS random-number generator failed; cannot mint a session id
 err-sparseness-mismatch = Sparse layout could not be preserved on destination
 err-io-other = Unknown I/O error
 

@@ -172,6 +172,8 @@ err-path-escape = Ścieżka odrzucona — zawiera segmenty katalogu nadrzędnego
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
 err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+err-helper-grant-out-of-band = GrantCapabilities must be handled by the helper run-loop, not the stateless handler
+err-randomness-unavailable = OS random-number generator failed; cannot mint a session id
 # MT
 err-io-other = Nieznany błąd we/wy
 err-sparseness-mismatch = Nie udało się zachować układu rozrzedzonego w miejscu docelowym  # MT

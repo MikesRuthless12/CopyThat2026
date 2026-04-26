@@ -111,7 +111,7 @@ pub(crate) fn create_secure_named_pipe_server(name: &str) -> io::Result<NamedPip
     // CreateNamedPipeW has copied the descriptor into the kernel
     // object and we can drop it.
     let mut sd = SecurityDescriptor::new()?;
-    let mut sa = SECURITY_ATTRIBUTES {
+    let sa = SECURITY_ATTRIBUTES {
         nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
         lpSecurityDescriptor: sd.as_psd(),
         bInheritHandle: FALSE,
@@ -127,13 +127,9 @@ pub(crate) fn create_secure_named_pipe_server(name: &str) -> io::Result<NamedPip
     // NamedPipeServer::from_raw_handle registers the handle with
     // its I/O completion port — synchronous pipes are rejected
     // with ERROR_INVALID_PARAMETER (87).
-    let open_mode: u32 = (PIPE_ACCESS_DUPLEX as u32)
-        | (FILE_FLAG_FIRST_PIPE_INSTANCE as u32)
-        | (FILE_FLAG_OVERLAPPED as u32);
-    let pipe_mode: u32 = (PIPE_TYPE_BYTE as u32)
-        | (PIPE_READMODE_BYTE as u32)
-        | (PIPE_WAIT as u32)
-        | (PIPE_REJECT_REMOTE_CLIENTS as u32);
+    let open_mode: u32 = PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED;
+    let pipe_mode: u32 =
+        PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS;
 
     // SAFETY: `wide` is a NUL-terminated UTF-16 buffer; `&mut sa`
     // is a stack-local with a valid SECURITY_DESCRIPTOR
@@ -149,7 +145,7 @@ pub(crate) fn create_secure_named_pipe_server(name: &str) -> io::Result<NamedPip
             PIPE_BUF_BYTES,
             PIPE_BUF_BYTES,
             DEFAULT_TIMEOUT_MS,
-            &mut sa,
+            &sa,
         )
     };
     if handle.is_null() || handle == INVALID_HANDLE_VALUE {
@@ -197,8 +193,7 @@ impl SecurityDescriptor {
         // SAFETY: the buffer was sized + filled by GetTokenInformation;
         // the first field is a `TOKEN_USER` whose `User.Sid` points
         // into the same buffer.
-        let user_sid: PSID =
-            unsafe { (*(token_user_buf.as_ptr() as *const TOKEN_USER)).User.Sid };
+        let user_sid: PSID = unsafe { (*(token_user_buf.as_ptr() as *const TOKEN_USER)).User.Sid };
 
         let admins_sid = allocate_admins_sid()?;
 
@@ -208,16 +203,14 @@ impl SecurityDescriptor {
         // generous slack; the actual size set by InitializeAcl is
         // what the kernel honours.
         let dacl_size: u32 = (std::mem::size_of::<ACL>()
-            + 2 * (std::mem::size_of::<ACCESS_ALLOWED_ACE>()))
-            as u32
+            + 2 * (std::mem::size_of::<ACCESS_ALLOWED_ACE>())) as u32
             + 256;
         let mut dacl: Vec<u8> = vec![0u8; dacl_size as usize];
 
         // SAFETY: `dacl` is a freshly-zeroed buffer of `dacl_size`
         // bytes. `InitializeAcl` writes a valid ACL header.
-        let init_ok: BOOL = unsafe {
-            InitializeAcl(dacl.as_mut_ptr() as *mut ACL, dacl_size, ACL_REVISION as u32)
-        };
+        let init_ok: BOOL =
+            unsafe { InitializeAcl(dacl.as_mut_ptr() as *mut ACL, dacl_size, ACL_REVISION) };
         if init_ok == FALSE {
             // Drop will FreeSid the admins handle even on this
             // early return.
@@ -231,7 +224,7 @@ impl SecurityDescriptor {
         let add_ok: BOOL = unsafe {
             AddAccessAllowedAce(
                 dacl.as_mut_ptr() as *mut ACL,
-                ACL_REVISION as u32,
+                ACL_REVISION,
                 GENERIC_READ | GENERIC_WRITE,
                 user_sid,
             )
@@ -245,7 +238,7 @@ impl SecurityDescriptor {
         let add_ok: BOOL = unsafe {
             AddAccessAllowedAce(
                 dacl.as_mut_ptr() as *mut ACL,
-                ACL_REVISION as u32,
+                ACL_REVISION,
                 GENERIC_READ | GENERIC_WRITE,
                 admins_sid,
             )
@@ -353,13 +346,7 @@ fn current_user_token_user() -> io::Result<Vec<u8>> {
     // SAFETY: GetCurrentProcess returns a pseudo-handle to this
     // process; OpenProcessToken with TOKEN_QUERY is the documented
     // way to fetch the user SID.
-    let ok: BOOL = unsafe {
-        OpenProcessToken(
-            GetCurrentProcess(),
-            TOKEN_QUERY,
-            &mut token_handle,
-        )
-    };
+    let ok: BOOL = unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token_handle) };
     if ok == FALSE {
         return Err(io::Error::last_os_error());
     }
@@ -369,15 +356,8 @@ fn current_user_token_user() -> io::Result<Vec<u8>> {
     // with ERROR_INSUFFICIENT_BUFFER on a too-small buffer and
     // write the required size into `needed`. We pass a 0-byte
     // buffer for the probe.
-    let _ = unsafe {
-        GetTokenInformation(
-            token_handle,
-            TokenUser,
-            ptr::null_mut(),
-            0,
-            &mut needed,
-        )
-    };
+    let _ =
+        unsafe { GetTokenInformation(token_handle, TokenUser, ptr::null_mut(), 0, &mut needed) };
     if needed == 0 {
         // SAFETY: token_handle was opened above.
         unsafe { CloseHandle(token_handle) };
@@ -411,6 +391,14 @@ fn current_user_token_user() -> io::Result<Vec<u8>> {
     Ok(buf)
 }
 
+// Suppress warnings for the LocalFree import; reserved for future
+// SetEntriesInAcl-based DACL builds where the API allocates the
+// returned ACL itself.
+#[allow(dead_code)]
+fn _local_free_marker(p: *mut std::ffi::c_void) {
+    unsafe { LocalFree(p as *mut _) };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -425,19 +413,18 @@ mod tests {
     #[tokio::test]
     async fn create_secure_pipe_server_smoke() {
         let id: u128 = u128::from_le_bytes(
-            (0..16).map(|_| 0xAA_u8).collect::<Vec<u8>>().try_into().unwrap(),
+            (0..16)
+                .map(|_| 0xAA_u8)
+                .collect::<Vec<u8>>()
+                .try_into()
+                .unwrap(),
         );
         let name = format!(r"\\.\pipe\copythat-snap-test-{id:032x}");
         let server = create_secure_named_pipe_server(&name);
-        assert!(server.is_ok(), "create_secure_named_pipe_server: {server:?}");
+        assert!(
+            server.is_ok(),
+            "create_secure_named_pipe_server: {server:?}"
+        );
         // Drop closes the handle.
     }
-}
-
-// Suppress warnings for the LocalFree import; reserved for future
-// SetEntriesInAcl-based DACL builds where the API allocates the
-// returned ACL itself.
-#[allow(dead_code)]
-fn _local_free_marker(p: *mut std::ffi::c_void) {
-    unsafe { LocalFree(p as *mut _) };
 }

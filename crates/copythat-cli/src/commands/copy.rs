@@ -38,14 +38,14 @@ pub(crate) async fn run(
     let shape_sink = if let Some(rate) = &args.shape {
         match parse_byte_rate(rate) {
             Ok(bps) => {
-                let _ = writer.human(&format!(
-                    "(info) bandwidth shape `{rate}` ({bps} B/s)"
-                ));
+                let _ = writer.human(&format!("(info) bandwidth shape `{rate}` ({bps} B/s)"));
                 let shape = std::sync::Arc::new(copythat_shape::Shape::new(Some(
                     copythat_shape::ByteRate::new(bps),
                 )));
-                Some(std::sync::Arc::new(copythat_shape::CopyThatShapeSink::new(shape))
-                    as std::sync::Arc<dyn copythat_core::ShapeSink>)
+                Some(
+                    std::sync::Arc::new(copythat_shape::CopyThatShapeSink::new(shape))
+                        as std::sync::Arc<dyn copythat_core::ShapeSink>,
+                )
             }
             Err(e) => {
                 let _ = writer.emit(JsonEventKind::Error {
@@ -122,12 +122,9 @@ pub(crate) async fn run(
         // every machine consumer was reading. The atomics let the
         // pump task own the increment side and the runner own the
         // read side after `event_pump.await`.
-        let bytes_acc =
-            std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-        let files_acc =
-            std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-        let errors_acc =
-            std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let bytes_acc = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let files_acc = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let errors_acc = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
         let bytes_for_pump = bytes_acc.clone();
         let files_for_pump = files_acc.clone();
         let errors_for_pump = errors_acc.clone();

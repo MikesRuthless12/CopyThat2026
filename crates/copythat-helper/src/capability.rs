@@ -74,9 +74,7 @@ impl Capability {
             // is defence-in-depth: even if a future caller routes
             // GrantCapabilities through `handle_request`, the
             // capability gate doesn't refuse it.
-            Request::Hello { .. }
-            | Request::Shutdown
-            | Request::GrantCapabilities { .. } => None,
+            Request::Hello { .. } | Request::Shutdown | Request::GrantCapabilities { .. } => None,
             Request::ElevatedRetry { .. } => Some(Self::ElevatedRetry),
             Request::InstallShellExtension { .. } | Request::UninstallShellExtension { .. } => {
                 Some(Self::ShellExtension)
