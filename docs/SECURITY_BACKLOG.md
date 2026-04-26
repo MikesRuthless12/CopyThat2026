@@ -74,6 +74,62 @@ losing track. Each item is sized small enough to ship as its own PR.
 
 ## Deferred (open)
 
+### 17i — Replace VSS PowerShell shellouts with `IVssBackupComponents` COM
+
+- The current Windows VSS backend (`crates/copythat-snapshot/src/backends/vss.rs`)
+  shells to PowerShell + WMI for `Win32_ShadowCopy::Create` and
+  `Delete`. The Phase 38-followup-4 hardening (absolute powershell
+  path, validated argv, `reject_remote_clients`, 256-bit pipe
+  suffix, custom DACL via `win_pipe_security`) closes the immediate
+  attack surface, but the PowerShell process startup is ~300–700 ms
+  per shadow-create and the format-string interpolation pattern is
+  fragile against future contributor edits.
+- Port to direct `IVssBackupComponents` COM via `windows-rs` /
+  `windows-sys`:
+  - `CoInitializeEx` + `CoInitializeSecurity`
+  - `CreateVssBackupComponents` → returns `IVssBackupComponents*`
+  - `InitializeForBackup` + `SetContext(VSS_CTX_BACKUP)`
+  - `StartSnapshotSet` → snapshot-set GUID
+  - `AddToSnapshotSet(volume_path)` → shadow GUID
+  - `DoSnapshotSet` (returns `IVssAsync*`; poll `QueryStatus`
+    until `VSS_S_ASYNC_FINISHED`)
+  - `GetSnapshotProperties(shadow_id)` → `VSS_SNAPSHOT_PROP` with
+    `pwszSnapshotDeviceObject` = `\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopyN`
+  - `DeleteSnapshots` for cleanup
+- Eliminates the format-string interpolation pattern entirely
+  (every value passed via typed COM args, no shell escape needed).
+- Estimated 600–1200 lines of FFI; needs feature-flagging
+  (`Win32_Storage_Vss` + `Win32_System_Variant`) and a real
+  Windows test environment to verify end-to-end. The
+  `helper_vss.rs` binary stays as the elevation harness; only
+  `create_shadow` / `release_shadow` change implementation.
+
+### 17j — Helper-argv signing / capability binding
+
+- When the per-OS spawn helper for `copythat-helper` lands
+  (UAC / sudo / polkit), the elevated child accepts a
+  `--capabilities=` argv flag declaring which `Capability` set the
+  caller wants. Today the parser at `crates/copythat-helper/src/bin/helper.rs`
+  honours whatever argv arrived, so a local non-admin attacker who
+  can race-modify the spawn command line (process injection on the
+  unprivileged side, intercept-and-resign of the
+  `Start-Process -Verb RunAs` line) can declare `hardware_erase` /
+  `shell_extension` after the user only consented to
+  `elevated_retry`.
+- Bind capability declaration to the consent ceremony:
+  - Unprivileged main app generates an ephemeral HMAC key.
+  - Signs `<spawn_pid>:<capability_set>:<expiry_ms>` and embeds
+    both in the spawn argv as `--cap-token=<base64>`.
+  - Helper verifies before honouring. Key delivery survives the
+    elevation barrier via either (a) a side-channel named-pipe
+    handshake immediately after spawn (parent verifies child PID
+    via `GetNamedPipeClientProcessId`) or (b) shared filesystem
+    secret pre-elevation that the helper reads from a
+    user-protected location.
+- Not exploitable today (helper runs in-process under the user's
+  own privileges; no real elevation exists yet). Reactivates the
+  moment the spawn ceremony lands.
+
 ### 17d — Privilege separation (`copythat-helper`)
 
 - New `copythat-helper` binary that holds *only* the elevated paths:

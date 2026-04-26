@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
+use tokio::net::windows::named_pipe::NamedPipeServer;
 use tokio::process::Command;
 
 use crate::SnapshotHandle;
@@ -232,32 +232,17 @@ async fn spawn_helper() -> Result<HelperConn, SnapshotError> {
     // Create both pipe server ends BEFORE launching the helper, so
     // its connect attempts never race ahead of us.
     //
-    // Phase 17 follow-up — the default Win32 pipe DACL grants
-    // GENERIC_READ|GENERIC_WRITE to the Everyone SID, meaning a
-    // local non-admin attacker on the same desktop session could
-    // enumerate `\\.\pipe\copythat-vss-*` and connect as the
-    // helper-side client first, racing the legitimate parent. We
-    // can't pass a SECURITY_ATTRIBUTES through tokio's
-    // `ServerOptions::create`, but `reject_remote_clients(true)`
-    // closes the over-network case and `first_pipe_instance(true)`
-    // detects an existing-name squat at construction. The full
-    // DACL fix (current-user SID + BUILTIN\\Administrators only)
-    // requires a raw `CreateNamedPipeW` call with SECURITY_ATTRIBUTES,
-    // which lands in the IVssBackupComponents COM port; in the
-    // meantime, the random Uuid v4 in the pipe name already keeps
-    // the surface obscure — bumping it to 256-bit random would
-    // close most of the gap.
-    let reader_pipe = ServerOptions::new()
-        .first_pipe_instance(true)
-        .max_instances(1)
-        .reject_remote_clients(true)
-        .create(&out_pipe_name)
+    // Phase 17 follow-up — pipes use a custom DACL granting
+    // pipe access only to the current user SID and
+    // BUILTIN\Administrators (see `win_pipe_security`). The
+    // default Win32 pipe DACL would otherwise grant
+    // GENERIC_READ|GENERIC_WRITE to every process in the same
+    // desktop session, letting a local non-admin attacker
+    // enumerate `\\.\pipe\copythat-vss-*` and race the legitimate
+    // helper to the connect.
+    let reader_pipe = super::win_pipe_security::create_secure_named_pipe_server(&out_pipe_name)
         .map_err(|e| SnapshotError::Protocol(format!("create out-pipe: {e}")))?;
-    let writer_pipe = ServerOptions::new()
-        .first_pipe_instance(true)
-        .max_instances(1)
-        .reject_remote_clients(true)
-        .create(&in_pipe_name)
+    let writer_pipe = super::win_pipe_security::create_secure_named_pipe_server(&in_pipe_name)
         .map_err(|e| SnapshotError::Protocol(format!("create in-pipe: {e}")))?;
 
     let helper_str = helper_path.to_string_lossy().to_string();

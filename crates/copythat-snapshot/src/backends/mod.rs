@@ -18,6 +18,8 @@ mod btrfs;
 mod unix_mount;
 #[cfg(windows)]
 mod vss;
+#[cfg(windows)]
+mod win_pipe_security;
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 mod zfs;
 
