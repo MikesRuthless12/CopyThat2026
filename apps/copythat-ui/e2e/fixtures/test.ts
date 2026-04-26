@@ -132,6 +132,15 @@ export interface TauriFixture {
   setDefault: (
     handler: (args: Record<string, unknown> | undefined) => unknown,
   ) => Promise<void>;
+
+  /**
+   * Register a handler that returns a static JSON-serializable value
+   * — useful when the value is built from helpers in Node (e.g.
+   * `fullSettings({...})`) since `handle()` / `handles()` can't
+   * close over Node-side scope (function bodies are stringified
+   * and re-evaluated in the page context).
+   */
+  handleValue: (cmd: string, value: unknown) => Promise<void>;
 }
 
 interface Fixtures {
@@ -397,6 +406,15 @@ export const test = base.extend<Fixtures>({
           const fn = new Function("args", `return (${fnSrc})(args);`) as InvokeHandler;
           window.__copythat_e2e__?.setDefaultHandler(fn);
         }, fnSrc);
+      },
+      async handleValue(cmd, value) {
+        await page.evaluate(
+          ({ cmd, value }) => {
+            const v = value;
+            window.__copythat_e2e__?.setHandler(cmd, () => v);
+          },
+          { cmd, value },
+        );
       },
     };
 

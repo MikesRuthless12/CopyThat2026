@@ -200,7 +200,7 @@ deferred true-end-to-end tauri-driver path.
 
 - [x] Settings → Transfer → Verify = `blake3`. Run a copy → after
       bytes finish, verify pass runs → green checkmark in the row.
-      *(harness stub at `e2e/qa-section-4-3-verify.spec.ts`)*
+      *(harness implemented at `e2e/qa-section-4-3-verify.spec.ts`)*
 - [x] Inject a verify mismatch (modify the destination mid-copy
       via a separate process) → engine surfaces `VerifyFailed` →
       partial destination removed. *(harness stub at
