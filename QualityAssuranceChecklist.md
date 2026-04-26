@@ -282,16 +282,16 @@ deferred true-end-to-end tauri-driver path.
       *(harness exemplar at `e2e/qa-section-4-10-cli.spec.ts`;
       runs against a built `copythat` binary)*
 - [x] `copythat copy <src> <dst> --json` emits one event per line
-      on stdout; every line parses. *(harness stub at
+      on stdout; every line parses. *(harness implemented at
       `e2e/qa-section-4-10-cli.spec.ts`)*
 - [x] `copythat plan --spec sample.toml` reports the action list
-      and exits 2 with pending actions. *(harness stub at
+      and exits 2 with pending actions. *(harness implemented at
       `e2e/qa-section-4-10-cli.spec.ts`)*
 - [x] `copythat apply --spec sample.toml` runs them; re-applying
-      exits 0 with zero new actions (idempotency). *(harness stub
+      exits 0 with zero new actions (idempotency). *(harness implemented
       at `e2e/qa-section-4-10-cli.spec.ts`)*
 - [x] `copythat verify <file> --algo blake3 --against <sidecar>`
-      with a tampered sidecar exits 4. *(harness stub at
+      with a tampered sidecar exits 4. *(harness implemented at
       `e2e/qa-section-4-10-cli.spec.ts`)*
 
 ### 4.11a Phase 37 follow-up #2 (deferred items closed)
