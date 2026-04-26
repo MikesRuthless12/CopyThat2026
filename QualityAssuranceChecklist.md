@@ -244,7 +244,7 @@ deferred true-end-to-end tauri-driver path.
 
 - [x] History → Mount snapshot → Explorer (or Finder / `ls`) opens
       the read-only mount. Random-access read of a chunk-sharded
-      file works. *(harness stub at
+      file works. *(harness implemented at
       `e2e/qa-section-4-7-mount.spec.ts`; random-access correctness
       is engine-side, covered by `cargo test -p copythat-mount`)*
 - [x] Unmount → mountpoint disappears. *(harness stub at
