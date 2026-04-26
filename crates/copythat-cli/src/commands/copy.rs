@@ -90,10 +90,19 @@ pub(crate) async fn run(
             dst.display()
         ));
 
+        // Phase 39 — attach the platform fast-copy hook so the CLI
+        // exercises the same `CopyFileExW` + parallel-chunk + reflink
+        // path the GUI does. Without this, the CLI silently fell
+        // through to the pure-Rust async loop, which made bench-vs
+        // numbers diverge from real-world UI numbers and hid the
+        // CLI/UI gap that Phase 39 set out to close.
+        let fast_copy_hook: std::sync::Arc<dyn copythat_core::FastCopyHook> =
+            std::sync::Arc::new(copythat_platform::PlatformFastCopyHook);
         let mut copy_opts = CopyOptions {
             fail_if_exists: args.fail_if_exists,
             follow_symlinks: args.follow_symlinks,
             shape: shape_sink.clone(),
+            fast_copy_hook: Some(fast_copy_hook),
             ..CopyOptions::default()
         };
 

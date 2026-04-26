@@ -316,6 +316,14 @@ fn apply_options(
         ..Default::default()
     };
 
+    // Phase 39 — attach the platform fast-copy hook unconditionally.
+    // Without this, the engine's reflink + `CopyFileExW` paths are
+    // dark and every UI copy falls through to the pure-Rust async
+    // loop. Phase 39 bench on Win 11 NVMe: with hook = 2429 MiB/s,
+    // without = ~600 MiB/s on a 10 GiB same-volume copy. Stateless
+    // unit struct; Arc is effectively free.
+    opts.fast_copy_hook = Some(std::sync::Arc::new(copythat_platform::PlatformFastCopyHook));
+
     // Phase 23 — attach the platform extent-introspection hook whenever
     // sparseness preservation is enabled. The hook is stateless (a
     // unit struct) so the Arc is effectively free; the engine skips
@@ -888,13 +896,20 @@ pub async fn history_rerun(
     } else {
         None
     };
+    // Phase 39 — rerun must attach the platform fast-copy hook too,
+    // otherwise the engine falls through to the async-fallback Rust
+    // loop and runs at ~600 MiB/s instead of CopyFileExW's 2400+.
+    let mut copy_opts = CopyOptions::default();
+    copy_opts.fast_copy_hook = Some(std::sync::Arc::new(
+        copythat_platform::PlatformFastCopyHook,
+    ));
     Ok(crate::shell::enqueue_jobs(
         &app,
         state.inner(),
         kind,
         sources,
         &dst_root,
-        CopyOptions::default(),
+        copy_opts,
         None,
         copythat_core::CollisionPolicy::default(),
         copythat_core::ErrorPolicy::Ask,

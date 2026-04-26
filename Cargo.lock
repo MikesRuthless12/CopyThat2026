@@ -1343,6 +1343,7 @@ dependencies = [
  "copythat-core",
  "copythat-hash",
  "copythat-history",
+ "copythat-platform",
  "copythat-settings",
  "copythat-shape",
  "predicates",

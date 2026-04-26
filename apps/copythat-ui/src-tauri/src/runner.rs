@@ -650,23 +650,33 @@ async fn forward_events(
                 total,
                 rate_bps,
             } => {
-                // Only let per-file Progress events drive the queue's
-                // aggregate counters in *single-file* mode. Inside a
-                // tree, TreeProgress is the authoritative aggregate
-                // source — letting per-file Progress write here
-                // would clobber `files_total` back to 1 and
-                // `bytes_total` to the current file's size, which is
-                // what made the ring + bottom bar show the active
-                // file instead of the tree total.
+                // Phase 39 GUI fix — rate-limit BOTH the aggregate
+                // emit (`EVENT_JOB_PROGRESS` + globals) and the
+                // per-row activity emit. Tauri 2's `emit` JSON-
+                // serialises and hops the WebView2 boundary on
+                // every call, and benchmarks (Tauri discussion
+                // #11915) show ~10-200 ms per emit on Windows. The
+                // engine throttles per-file Progress to 50 ms, but
+                // 4 parallel-chunk workers can push 80+ events/sec
+                // through this branch — driving the WebView2 IPC
+                // queue into seconds of backlog on a 10 GiB copy.
+                // Gating to ~8 Hz (120 ms) is well above the human-
+                // perception ceiling and recovers measurable
+                // throughput on the GUI side.
+                let throttle_now = last_progress_emit.elapsed() >= progress_min_interval;
                 if !in_tree_mode {
+                    // Always update the in-memory queue state so a
+                    // late-attaching subscriber sees current bytes.
                     state.queue.set_progress(id, bytes, total, 0, 1);
-                    emit_progress(&app, &state, id, bytes, total, 0, 1, rate_bps);
+                    if throttle_now {
+                        emit_progress(&app, &state, id, bytes, total, 0, 1, rate_bps);
+                    }
                 }
                 // Rate-limited per-file progress tick for the
                 // activity list. This is the per-row bar that IS
                 // meant to follow the individual file — tree mode
                 // or not — so it stays outside the `if` above.
-                if last_progress_emit.elapsed() >= progress_min_interval {
+                if throttle_now {
                     activity_seq += 1;
                     let _ = app.emit(
                         crate::ipc::EVENT_FILE_ACTIVITY,

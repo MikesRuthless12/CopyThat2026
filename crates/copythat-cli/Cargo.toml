@@ -46,6 +46,11 @@ tokio = { version = "1", features = [
 # Phase 36 — wraps the engine for `copythat copy` / `move` / `verify`.
 copythat-core = { path = "../copythat-core", version = "1" }
 copythat-hash = { path = "../copythat-hash", version = "1" }
+# Phase 39 — attach `PlatformFastCopyHook` so the CLI's `copy`
+# subcommand uses the same `CopyFileExW` + parallel-chunk + reflink
+# fast paths as the GUI shell, instead of falling back to the
+# pure-Rust async loop. Same engine, same numbers — bench parity.
+copythat-platform = { path = "../copythat-platform", version = "1" }
 copythat-settings = { path = "../copythat-settings", version = "1" }
 # Phase 38 follow-up — `copythat copy --shape RATE` wires through
 # Shape + CopyThatShapeSink so the CLI honours bandwidth caps.

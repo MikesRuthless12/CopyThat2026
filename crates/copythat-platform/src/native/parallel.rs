@@ -99,25 +99,31 @@ fn chunk_buf_size(total_file_bytes: u64, num_chunks: usize) -> usize {
 }
 
 /// Returns the chunk count for the parallel path, or `None` if the
-/// file is below [`MIN_FILE_FOR_PARALLEL`]. Default is
-/// [`DEFAULT_NUM_CHUNKS`] — the Phase 13c matched-memory A/B on
-/// C → D showed parallel-at-budget (4 × 256 KiB = 1 MiB total)
-/// beats single-stream CopyFileExW by ~9 % on 10 GiB files, so the
-/// parallel path is now the default for large files. The
-/// `COPYTHAT_PARALLEL_CHUNKS` env override still lets users disable
-/// (set to `1` or `0`) or tune the chunk count (2..=16).
+/// file is below [`MIN_FILE_FOR_PARALLEL`] OR the env var isn't set.
+///
+/// Phase 13c had this default-on for files ≥1 GiB based on a
+/// matched-memory A/B on C → D that showed +9 % vs single-stream
+/// CopyFileExW. **Phase 39 re-bench on Windows 11 NVMe** showed
+/// the opposite: parallel-chunks-4 hits 1128 MiB/s while raw
+/// CopyFileExW hits **2429 MiB/s** on a 10 GiB same-volume copy.
+/// Modern NVMe + Windows 11's CopyFileExW already saturates the
+/// per-device queue with one stream; splitting into 4 streams
+/// adds per-chunk seek + handle-open overhead and contends for
+/// the same hardware queue.
+///
+/// Default is now **off**. Users with hardware that benefits
+/// (RAID arrays, NVMe-over-fabric, distributed FS) can opt in
+/// via `COPYTHAT_PARALLEL_CHUNKS=<N>` (clamped 2..=16).
 pub(crate) fn requested_chunks(total: u64) -> Option<usize> {
     if total < MIN_FILE_FOR_PARALLEL {
         return None;
     }
-    if let Ok(raw) = std::env::var("COPYTHAT_PARALLEL_CHUNKS") {
-        let n: usize = raw.parse().ok()?;
-        if n < 2 {
-            return None;
-        }
-        return Some(n.clamp(2, 16));
+    let raw = std::env::var("COPYTHAT_PARALLEL_CHUNKS").ok()?;
+    let n: usize = raw.parse().ok()?;
+    if n < 2 {
+        return None;
     }
-    Some(DEFAULT_NUM_CHUNKS)
+    Some(n.clamp(2, 16))
 }
 
 /// Run the parallel multi-chunk copy. Caller guarantees:
