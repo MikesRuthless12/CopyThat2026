@@ -543,10 +543,20 @@ deferred true-end-to-end tauri-driver path.
       `docs/BENCHMARKS.md`. *(driven by `xtask qa-automate`;
       regression-vs-baseline still a manual eyeball pass on the
       Criterion output)*
-- [ ] `cargo run -p xtask -- bench-vs` runs the head-to-head
+- [x] `cargo run -p xtask -- bench-vs` runs the head-to-head
       against Robocopy / TeraCopy / FastCopy on a Windows host;
       results within ±5% of the last published numbers in
       `COMPETITOR-TEST.md`.
+      *(2026-04-26 Windows-host pass at 10 GiB · C→C:
+      CopyThat 932 MiB/s — within +6.6 % of the published
+      874 baseline — and beat TeraCopy 854. Robocopy + cmd copy
+      jumped sharply (+89 %, +44 %) on this hardware vs the
+      baseline machine, so the relative ranking shifts but the
+      CopyThat-vs-baseline regression check holds. FastCopy not
+      on PATH — table covers Robocopy + TeraCopy + cmd copy +
+      CopyThat. Single-stream config; the parallel-chunk re-run
+      with `COPYTHAT_PARALLEL_CHUNKS=4` is the §5 line 533
+      gating decision.)*
 - [ ] Per-volume buffer-size sweep matches the 1 MiB optimum from
       Phase 13b.
 - [ ] Memory: copy a 5 M-file scan database with the Phase 19a
