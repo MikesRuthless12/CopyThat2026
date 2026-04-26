@@ -1,31 +1,70 @@
 /**
  * §4.11b Locale sync (Phase 38 PWA i18n).
+ *
+ * Frontend coverage: language picker → setLocale → update_settings.
+ * The PWA-side bundle reload is mediated by the Rust runtime
+ * (`mobile_locale_push` doesn't exist in the frontend today;
+ * pairing pushes the locale through the same WebRTC channel as
+ * other settings).
  */
 
-import { test } from "./fixtures/test";
+import { expect, test } from "./fixtures/test";
+import { fullSettings } from "./fixtures/settings";
 
 test.describe("§4.11b Locale sync (Phase 38 PWA i18n)", () => {
-  test.fixme(
-    "Switch desktop to French → PWA strings flip to French within 1 s",
-    async ({ page: _page, tauri: _tauri }) => {
-      // Open SettingsModal → General → Language. Pick French.
-      // Assert `update_settings` invoked with
-      // `general.locale = "fr"`. Mock the `mobile_locale_push`
-      // IPC and assert it fires with `locale: "fr"` after the
-      // update_settings round-trip — that's the desktop→PWA
-      // sync edge.
-    },
-  );
+  test("Switch desktop to French → update_settings carries general.language = fr", async ({
+    page,
+    tauri,
+  }) => {
+    await page.goto("/");
+    await expect(page.getByText(/drop files or folders/i)).toBeVisible();
 
-  test.fixme(
-    "Repeat for ja, ar (RTL), zh — PWA loads matching bundle",
-    async ({ page: _page, tauri: _tauri }) => {
-      // Same as above for each locale. For ar, assert the
-      // settings dialog itself flips `dir = "rtl"` (Svelte
-      // store wires this through `theme.ts`). MT-flagged
-      // strings fall back to en — that's a Fluent runtime
-      // behaviour and is covered by the i18n unit tests; this
-      // checkbox just verifies the locale push.
-    },
-  );
+    await tauri.handleValue("get_settings", fullSettings());
+    await tauri.handles({
+      update_settings: (args) => args?.dto,
+      list_profiles: () => [],
+    });
+
+    await page.getByRole("button", { name: /settings/i }).first().click();
+    const settingsModal = page
+      .getByRole("dialog")
+      .filter({ hasText: /settings/i });
+    await expect(settingsModal).toBeVisible({ timeout: 5_000 });
+
+    // The Language picker is on the General tab (the default).
+    const langSelect = settingsModal.locator("select").first();
+    await langSelect.selectOption("fr");
+
+    const updateCall = await tauri.waitForCall("update_settings");
+    const dto = updateCall.args?.dto as { general?: { language?: string } } | undefined;
+    expect(dto?.general?.language).toBe("fr");
+  });
+
+  test("Arabic locale flips html dir to rtl", async ({ page, tauri }) => {
+    await page.goto("/");
+    await expect(page.getByText(/drop files or folders/i)).toBeVisible();
+
+    await tauri.handleValue("get_settings", fullSettings());
+    await tauri.handles({
+      update_settings: (args) => args?.dto,
+      list_profiles: () => [],
+    });
+
+    await page.getByRole("button", { name: /settings/i }).first().click();
+    const settingsModal = page
+      .getByRole("dialog")
+      .filter({ hasText: /settings/i });
+    await expect(settingsModal).toBeVisible({ timeout: 5_000 });
+
+    const langSelect = settingsModal.locator("select").first();
+    await langSelect.selectOption("ar");
+
+    // setLocale("ar") sets html dir="rtl" via theme.ts.
+    await page.waitForFunction(
+      () => document.documentElement.getAttribute("dir") === "rtl",
+      undefined,
+      { timeout: 5_000 },
+    );
+    expect(await page.evaluate(() => document.documentElement.getAttribute("dir"))).toBe("rtl");
+  });
 });
