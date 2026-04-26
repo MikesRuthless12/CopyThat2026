@@ -18,11 +18,26 @@
 
 [CmdletBinding()]
 param(
-    [string]$Path = (Join-Path $PSScriptRoot 'vss-test-locked.bin'),
+    [string]$Path = '',
     [int]$SizeBytes = 4096
 )
 
 $ErrorActionPreference = 'Stop'
+
+# `$PSScriptRoot` is empty when PowerShell evaluates the param-
+# block default in some 5.1 invocation paths (running via
+# `powershell -File ...`). Compute the script-relative default in
+# the body where every variable is reliably populated.
+if ([string]::IsNullOrEmpty($Path)) {
+    $scriptDir = if ($PSScriptRoot) {
+        $PSScriptRoot
+    } elseif ($MyInvocation.MyCommand.Path) {
+        Split-Path -Parent $MyInvocation.MyCommand.Path
+    } else {
+        (Get-Location).Path
+    }
+    $Path = Join-Path $scriptDir 'vss-test-locked.bin'
+}
 
 # Seed the file with deterministic content (a repeating 0..255 pattern)
 # so the smoke harness can verify byte-exact reads off the shadow.

@@ -55,8 +55,18 @@ Note "VSS service: $((Get-Service VSS).Status)"
 Step "current VSS shadow inventory (pre-test)"
 & vssadmin list shadows /for=$Volume 2>&1 | Out-String | ForEach-Object { Note $_.TrimEnd() }
 
-# Build with vss-com feature
-$repoRoot = Split-Path -Parent $PSScriptRoot
+# Resolve the repo root robustly. `$PSScriptRoot` can be empty in
+# some PowerShell 5.1 invocation paths (`powershell -File ...`),
+# so fall back to `$MyInvocation.MyCommand.Path` and finally to
+# the current location.
+$scriptDir = if ($PSScriptRoot) {
+    $PSScriptRoot
+} elseif ($MyInvocation.MyCommand.Path) {
+    Split-Path -Parent $MyInvocation.MyCommand.Path
+} else {
+    (Get-Location).Path
+}
+$repoRoot = Split-Path -Parent $scriptDir
 if (-not $SkipBuild) {
     Step "cargo check -p copythat-snapshot --features vss-com"
     Push-Location $repoRoot
