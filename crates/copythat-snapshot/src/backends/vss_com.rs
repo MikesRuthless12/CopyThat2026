@@ -587,4 +587,126 @@ mod tests {
         );
         release_shadow_via_com(&shadow_id).expect("release_shadow_via_com");
     }
+
+    /// End-to-end locked-file probe: while `tests/lock_file.ps1` keeps
+    /// `COPYTHAT_VSS_LOCKED_FILE_PATH` exclusively open, this test
+    /// proves the snapshot fallback's contract — direct read fails
+    /// with a sharing violation, but the same file read off the
+    /// shadow's GLOBALROOT path returns the bytes, which we then copy
+    /// to `COPYTHAT_VSS_DEST_DIR` and byte-compare.
+    ///
+    /// Driven by `tests\vss_com_smoke.ps1 -LockedFilePath ...`.
+    /// Requires Administrator + a running `lock_file.ps1` holding the
+    /// target file; ignored by default.
+    #[test]
+    #[ignore = "requires Administrator + a running lock_file.ps1"]
+    fn vss_com_copy_locked_file_via_shadow() {
+        use std::fs;
+        use std::path::{Path, PathBuf};
+
+        let locked = std::env::var("COPYTHAT_VSS_LOCKED_FILE_PATH")
+            .expect("COPYTHAT_VSS_LOCKED_FILE_PATH must be set");
+        let dest_dir = std::env::var("COPYTHAT_VSS_DEST_DIR")
+            .expect("COPYTHAT_VSS_DEST_DIR must be set");
+
+        let locked_path = PathBuf::from(&locked);
+        assert!(
+            locked_path.is_absolute(),
+            "COPYTHAT_VSS_LOCKED_FILE_PATH must be absolute: {locked:?}"
+        );
+
+        // (1) Confirm the file IS exclusively locked. Direct
+        // `OpenOptions::read` should fail with ERROR_SHARING_VIOLATION
+        // (raw os error 32) — that's the situation the snapshot
+        // fallback exists to recover from.
+        let direct_err = fs::OpenOptions::new()
+            .read(true)
+            .open(&locked_path)
+            .err()
+            .expect(
+                "direct read of locked file unexpectedly succeeded — is lock_file.ps1 running?",
+            );
+        let raw = direct_err.raw_os_error();
+        eprintln!("direct read err: {direct_err:?} (raw_os_error={raw:?})");
+        assert_eq!(
+            raw,
+            Some(32),
+            "expected ERROR_SHARING_VIOLATION (32) on direct read"
+        );
+
+        // (2) Resolve the volume to snapshot. We require
+        // `[A-Za-z]:\<rest>` — the same shape `applies_to` enforces
+        // upstream. `Path::components` would normalise away the
+        // leading prefix on Windows, so go to the bytes.
+        let s = locked_path.to_string_lossy().into_owned();
+        let bytes = s.as_bytes();
+        assert!(
+            bytes.len() >= 3
+                && bytes[0].is_ascii_alphabetic()
+                && bytes[1] == b':'
+                && (bytes[2] == b'\\' || bytes[2] == b'/'),
+            "locked path must start with `X:\\`: {s:?}"
+        );
+        let drive = format!("{}:\\", (bytes[0] as char).to_ascii_uppercase());
+        let rest = &s[3..]; // strip the `X:\` prefix
+
+        // (3) Mint the shadow.
+        let (shadow_id, device_path) = create_shadow_via_com(&drive)
+            .expect("create_shadow_via_com");
+        eprintln!("shadow_id   = {shadow_id}");
+        eprintln!("device_path = {device_path}");
+
+        // Wrap the rest of the test so we always release the shadow,
+        // even on assertion failure.
+        let result = std::panic::catch_unwind(|| {
+            // (4) Read the file off the shadow.
+            let shadow_path = format!("{device_path}\\{rest}");
+            eprintln!("shadow_path = {shadow_path}");
+            let bytes_via_shadow = fs::read(&shadow_path)
+                .expect("read locked file via shadow GLOBALROOT path");
+            assert!(
+                !bytes_via_shadow.is_empty(),
+                "shadow read returned empty file"
+            );
+
+            // (5) Verify the deterministic pattern lock_file.ps1 wrote
+            // (0..255 repeating, default 4096 bytes).
+            for (i, b) in bytes_via_shadow.iter().enumerate() {
+                assert_eq!(
+                    *b as usize,
+                    i % 256,
+                    "byte {i} = 0x{b:02X}, expected 0x{:02X}",
+                    i % 256
+                );
+            }
+
+            // (6) Copy to the destination folder + byte-compare.
+            let dest_dir_p = Path::new(&dest_dir);
+            fs::create_dir_all(dest_dir_p).expect("create dest dir");
+            let dest_file = dest_dir_p.join(
+                locked_path
+                    .file_name()
+                    .expect("locked path has a file name"),
+            );
+            fs::write(&dest_file, &bytes_via_shadow).expect("write copy to dest");
+
+            let dest_bytes = fs::read(&dest_file).expect("read copy back");
+            assert_eq!(
+                bytes_via_shadow, dest_bytes,
+                "destination copy does not match shadow read"
+            );
+            eprintln!(
+                "copied {} bytes from shadow -> {}",
+                bytes_via_shadow.len(),
+                dest_file.display()
+            );
+        });
+
+        // (7) Always release.
+        release_shadow_via_com(&shadow_id).expect("release_shadow_via_com");
+
+        if let Err(p) = result {
+            std::panic::resume_unwind(p);
+        }
+    }
 }
