@@ -1,10 +1,10 @@
-# Phase 17 follow-up — locked-file fixture for VSS testing.
+# Phase 17 follow-up - locked-file fixture for VSS testing.
 #
 # Creates `tests\vss-test-locked.bin` (or the path you pass in
 # via -Path), opens it with FileShare.None, and holds the handle
 # until you press Ctrl+C. While the script is running, any other
 # process reading that file gets ERROR_SHARING_VIOLATION (0x20)
-# — the exact condition the engine's snapshot fallback is meant
+# - the exact condition the engine's snapshot fallback is meant
 # to recover from.
 #
 # Usage:
@@ -46,7 +46,7 @@ for ($i = 0; $i -lt $SizeBytes; $i++) { $pattern[$i] = ($i % 256) }
 [System.IO.File]::WriteAllBytes($Path, $pattern)
 Write-Host "[lock_file] wrote $SizeBytes bytes to $Path"
 
-# Open with FileShare.None — any other process attempting to
+# Open with FileShare.None - any other process attempting to
 # Read or Write fails with ERROR_SHARING_VIOLATION until this
 # script releases the handle (Ctrl+C).
 $fs = [System.IO.File]::Open($Path, 'Open', 'ReadWrite', 'None')
