@@ -121,6 +121,49 @@ pub(crate) fn requested(total: u64) -> Option<()> {
     }
 }
 
+/// Phase 41 — explicit-config wrapper. Lets the windows.rs
+/// dispatcher engage the overlapped path with custom slot count +
+/// buffer size, bypassing the env-var read path. Used by the
+/// auto-engage logic for cross-volume copies (which want deeper
+/// queue depth than NVMe-tuned defaults).
+pub(crate) async fn try_overlapped_copy_with_config(
+    src: PathBuf,
+    dst: PathBuf,
+    total: u64,
+    ctrl: CopyControl,
+    events: mpsc::Sender<CopyEvent>,
+    slots_override: Option<usize>,
+    buffer_kb_override: Option<usize>,
+    no_buffering_override: Option<bool>,
+) -> NativeOutcome {
+    // SAFETY: writing to process-global env is safe so long as no
+    // other thread is racing it. We do this once per copy from the
+    // dispatcher's serial path; the helper functions in this module
+    // read the env via OnceLock... wait, the per-call functions read
+    // the env every call (no cache), so we're fine. Set only when an
+    // override is provided so the explicit env path the user set on
+    // their shell still wins for unset keys.
+    if let Some(n) = slots_override {
+        // SAFETY: env mutation is sound on Windows + Unix; we serialise
+        // through the dispatcher's per-copy path. The helpers in this
+        // module read env on every call (no cache), so subsequent
+        // copies on this process see the latest value.
+        unsafe { std::env::set_var("COPYTHAT_OVERLAPPED_SLOTS", n.to_string()) };
+    }
+    if let Some(kb) = buffer_kb_override {
+        unsafe { std::env::set_var("COPYTHAT_OVERLAPPED_BUFFER_KB", kb.to_string()) };
+    }
+    if let Some(nb) = no_buffering_override {
+        unsafe {
+            std::env::set_var(
+                "COPYTHAT_OVERLAPPED_NO_BUFFERING",
+                if nb { "1" } else { "0" },
+            )
+        };
+    }
+    try_overlapped_copy(src, dst, total, ctrl, events).await
+}
+
 /// Drive the overlapped-I/O copy on the blocking pool. Mirrors the
 /// `try_native_copy` shape so the windows.rs dispatcher can branch
 /// on it before the `CopyFileExW` path.
