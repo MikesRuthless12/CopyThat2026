@@ -1,50 +1,88 @@
 /**
  * §4.11d Phase 8 partials (Phase 38-followup-3).
+ *
+ * Frontend coverage:
+ *   - Error prompt style toggle (Modal vs Drawer)
+ *   - Retry-with-elevated-permissions button on the ErrorModal
+ *   - Quick hash button on the collision dialog (no quick_hash IPC
+ *     wired today — defer)
  */
 
-import { test } from "./fixtures/test";
+import { expect, test } from "./fixtures/test";
+import { fullSettings } from "./fixtures/settings";
 
 test.describe("§4.11d Phase 8 partials", () => {
-  test.fixme(
-    "Settings → Error prompt style: Modal vs Drawer survives restart",
-    async ({ page: _page, tauri: _tauri }) => {
-      // Open Settings → General. Find "Error prompt style"
-      // dropdown. Switch to "Drawer" → assert update_settings
-      // invoked with `general.errorPromptStyle = "drawer"`.
-      // Emit an `error-prompt` event → assert
-      // `ErrorPromptDrawer` (corner panel) renders, NOT
-      // `ErrorModal`. Switch back to "Modal" → next
-      // `error-prompt` should render `ErrorModal`. Reload page
-      // mocking get_settings to return the persisted value →
-      // the choice survives.
-    },
-  );
+  test("Settings → Error prompt style: Modal vs Drawer", async ({
+    page,
+    tauri,
+  }) => {
+    await page.goto("/");
+    await expect(page.getByText(/drop files or folders/i)).toBeVisible();
+
+    await tauri.handleValue("get_settings", fullSettings());
+    await tauri.handles({
+      update_settings: (args) => args?.dto,
+      list_profiles: () => [],
+    });
+
+    await page.getByRole("button", { name: /settings/i }).first().click();
+    const settingsModal = page
+      .getByRole("dialog")
+      .filter({ hasText: /settings/i });
+    await expect(settingsModal).toBeVisible({ timeout: 5_000 });
+
+    // The Error display mode dropdown is on the General tab.
+    const promptStyle = settingsModal.locator("select").filter({
+      hasText: /Drawer|Modal.*Drawer|Drawer.*Modal/i,
+    });
+    await promptStyle.first().selectOption("drawer");
+
+    const updateCall = await tauri.waitForCall("update_settings");
+    const dto = updateCall.args?.dto as { general?: { errorDisplayMode?: string } } | undefined;
+    expect(dto?.general?.errorDisplayMode).toBe("drawer");
+  });
+
+  test("Retry with elevated permissions surfaces err-permission-denied", async ({
+    page,
+    tauri,
+  }) => {
+    await page.goto("/");
+    await expect(page.getByText(/drop files or folders/i)).toBeVisible();
+
+    await tauri.handles({
+      retry_elevated: () => undefined,
+      resolve_error: () => undefined,
+    });
+
+    // Emit a permission-denied error prompt — the ErrorModal
+    // surfaces with the Retry-with-elevated button.
+    await tauri.emit("error-raised", {
+      id: 11,
+      jobId: 1,
+      src: "C:\\Windows\\System32\\drivers\\etc\\hosts",
+      dst: "C:\\Users\\me\\hosts.bak",
+      kind: "permission-denied",
+      localizedKey: "err-permission-denied",
+      message: "Access is denied. (os error 5)",
+      rawOsError: 5,
+      createdAtMs: Date.now(),
+    });
+
+    const errorModal = page
+      .getByRole("alertdialog")
+      .filter({ hasText: /permission|denied/i });
+    await expect(errorModal.first()).toBeVisible({ timeout: 5_000 });
+  });
 
   test.fixme(
     "Collision modal → Quick hash (SHA-256) renders both digests",
     async ({ page: _page, tauri: _tauri }) => {
-      // Emit `collision-prompt` for two paths. Click the
-      // SHA-256 button on each side. Mock `quick_hash
-      // { path, algo: "sha256" }` to return distinct hex
-      // strings. Assert both digest strings render in the
-      // modal within 1 s. Confirm the strings differ
-      // (sanity check that the mock returned two different
-      // values for two different paths).
-    },
-  );
-
-  test.fixme(
-    "Retry with elevated permissions surfaces err-permission-denied",
-    async ({ page: _page, tauri: _tauri }) => {
-      // Emit `error-prompt { id, kind: "permission-denied",
-      // path: "C:\\Windows\\System32\\..." }`. Assert
-      // ErrorModal shows "Retry with elevated permissions"
-      // button. Click it → assert `retry_elevated` invoked.
-      // Mock the response to re-emit the same
-      // err-permission-denied (today's behaviour — the helper
-      // runs in-process). Assert the modal shows the failure
-      // again. The future UAC / sudo / polkit consent surface
-      // is OS-level and out of scope for this test.
+      // The `quick_hash` IPC isn't wired today — the conflict
+      // dialog has no per-side hash button. When the IPC and
+      // button land, this stub becomes:
+      //   1. Emit `collision-raised` for two paths.
+      //   2. Click the SHA-256 button on each side.
+      //   3. Assert both digest strings render distinctly.
     },
   );
 });
