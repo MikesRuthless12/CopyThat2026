@@ -460,7 +460,7 @@ pub fn run() {
                 // without a UI poll.
                 state::apply_network_settings_to_shape(&state.shape, &snap.network);
                 let poll_handle = handle.clone();
-                tokio::spawn(async move {
+                tauri::async_runtime::spawn(async move {
                     let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
                     // Skip the immediate first tick — startup already
                     // applied the rate above.
@@ -513,9 +513,14 @@ pub fn run() {
             if let Some(state) = app.handle().try_state::<AppState>() {
                 let app_state: AppState = state.inner().clone();
                 let probes = copythat_power::ProbeSet::production();
-                let _poller = app_state
-                    .power_bus
-                    .spawn_poller(probes, copythat_power::bus::DEFAULT_POLL_PERIOD);
+                // `spawn_poller` calls bare `tokio::spawn` inside; we
+                // need to enter Tauri's tokio context first. See the
+                // shell.rs:89 comment about the setup-hook path.
+                let _poller = tauri::async_runtime::block_on(async {
+                    app_state
+                        .power_bus
+                        .spawn_poller(probes, copythat_power::bus::DEFAULT_POLL_PERIOD)
+                });
                 let _subscriber = power::spawn_power_subscriber(app_state, app.handle().clone());
             }
 
