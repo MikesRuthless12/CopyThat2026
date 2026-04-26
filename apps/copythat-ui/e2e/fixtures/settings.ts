@@ -83,7 +83,14 @@ export function fullSettings(overrides: Record<string, unknown> = {}): Record<st
       dismissedVersion: "",
       checkIntervalSecs: 86400,
     },
-    network: { rateBps: null, scheduleEnabled: false },
+    network: {
+      mode: "off",
+      fixedBytesPerSecond: 0,
+      scheduleSpec: "",
+      autoOnMetered: { mode: "off", fixedBytesPerSecond: 0 },
+      autoOnBattery: { mode: "off", fixedBytesPerSecond: 0 },
+      autoOnCellular: { mode: "off", fixedBytesPerSecond: 0 },
+    },
     audit: {
       enabled: true,
       format: "json-lines",

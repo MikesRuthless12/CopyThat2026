@@ -53,6 +53,10 @@ const TRANSLATION_LOCALES = [
 type LocaleCode = (typeof TRANSLATION_LOCALES)[number];
 
 const translationCache: Record<string, Record<string, string>> = {};
+export const ALL_LOCALES = TRANSLATION_LOCALES;
+export function translationsFor(locale: string): Record<string, string> {
+  return loadTranslations(locale);
+}
 function loadTranslations(locale: string): Record<string, string> {
   if (translationCache[locale]) return translationCache[locale];
   const path = resolve(REPO_ROOT, "locales", locale, "copythat.ftl");
