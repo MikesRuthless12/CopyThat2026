@@ -1,4 +1,4 @@
-# Phase 17 follow-up — IVssBackupComponents COM port smoke harness.
+# Phase 17 follow-up - IVssBackupComponents COM port smoke harness.
 #
 # What it does:
 #  1. Confirms VSS service + provider are up.
@@ -43,7 +43,7 @@ Note "admin: ok"
 Step "checking VSS service"
 $svc = Get-Service -Name VSS -ErrorAction SilentlyContinue
 if (-not $svc) {
-    Write-Error "VSS service not found. Reinstall Windows. Just kidding — but VSS is missing."
+    Write-Error "VSS service not found. Reinstall Windows. Just kidding - but VSS is missing."
 }
 if ($svc.Status -ne 'Running') {
     Note "VSS is $($svc.Status); starting it"
@@ -105,7 +105,12 @@ if ($LockedFilePath) {
     try {
         $bytes = [System.IO.File]::ReadAllBytes($LockedFilePath)
         $len = $bytes.Length
-        Write-Warning ("expected sharing violation, but read succeeded ({0} bytes). Is lock_file.ps1 running?" -f $len)
+        # PowerShell 5.1 has a known parser quirk where literal
+        # parens inside a string passed via parenthesised-argument
+        # syntax to certain cmdlets misparse. Build the message in
+        # a separate variable to bypass.
+        $warnMsg = "expected sharing violation but read succeeded $len bytes. Is lock_file.ps1 running?"
+        Write-Warning $warnMsg
     } catch [System.IO.IOException] {
         $msg = $_.Exception.Message
         Note "sharing violation confirmed: $msg"
