@@ -84,7 +84,13 @@ export function fullSettings(overrides: Record<string, unknown> = {}): Record<st
       checkIntervalSecs: 86400,
     },
     network: { rateBps: null, scheduleEnabled: false },
-    audit: { enabled: false, format: "jsonl", path: null, worm: false },
+    audit: {
+      enabled: true,
+      format: "json-lines",
+      filePath: "/tmp/audit.log",
+      maxSizeBytes: 10485760,
+      worm: "off",
+    },
     crypt: { encryption: { recipients: [], recipientsFile: null }, compression: { mode: "off", level: 3 } },
     mobile: {
       pairEnabled: true,
