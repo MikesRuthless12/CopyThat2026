@@ -339,8 +339,13 @@ pub async fn refresh_oauth_token(
         // Allow only RFC 6749 short error codes through; anything
         // else collapses to a generic label.
         let safe_err = match err.as_str() {
-            "invalid_grant" | "invalid_client" | "invalid_request" | "invalid_scope"
-            | "unauthorized_client" | "unsupported_grant_type" | "access_denied" => err,
+            "invalid_grant"
+            | "invalid_client"
+            | "invalid_request"
+            | "invalid_scope"
+            | "unauthorized_client"
+            | "unsupported_grant_type"
+            | "access_denied" => err,
             _ => format!("token endpoint returned status {status_code}"),
         };
         return Err(OAuthError::Provider(safe_err));

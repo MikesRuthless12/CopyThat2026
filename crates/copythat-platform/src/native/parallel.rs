@@ -187,9 +187,7 @@ pub(crate) async fn parallel_chunk_copy(
                 // fires — keeps the emitter from burning a wakeup
                 // every 50 ms forever on an indefinitely-paused job.
                 if ctrl_for_progress.is_paused() {
-                    if cancelled.load(Ordering::Relaxed)
-                        || ctrl_for_progress.is_cancelled()
-                    {
+                    if cancelled.load(Ordering::Relaxed) || ctrl_for_progress.is_cancelled() {
                         break;
                     }
                     continue;

@@ -281,11 +281,9 @@ fn release_in_process_blocking(shadow_id: &str) -> Result<(), SnapshotError> {
             message: format!("refusing to release non-GUID shadow_id {shadow_id:?}"),
         });
     }
-    super::vss_com::release_shadow_via_com(shadow_id).map_err(|msg| {
-        SnapshotError::BackendFailure {
-            kind: SnapshotKind::Vss,
-            message: msg,
-        }
+    super::vss_com::release_shadow_via_com(shadow_id).map_err(|msg| SnapshotError::BackendFailure {
+        kind: SnapshotKind::Vss,
+        message: msg,
     })
 }
 
@@ -611,10 +609,7 @@ fn powershell_escape(s: &str) -> String {
 /// boundary for the helper bin.
 fn is_valid_drive_root(s: &str) -> bool {
     let bytes = s.as_bytes();
-    bytes.len() == 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && bytes[2] == b'\\'
+    bytes.len() == 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'\\'
 }
 
 /// Accept `{` + 32 hex digits with 4 hyphens + `}` (Win32

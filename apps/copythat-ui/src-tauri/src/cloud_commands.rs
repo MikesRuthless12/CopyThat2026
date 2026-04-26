@@ -283,8 +283,8 @@ pub async fn test_backend_connection(
         }),
         Err(_elapsed) => Ok(TestConnectionResult {
             ok: false,
-            reason: Some("network".into()),
-            detail: Some("test connection timed out after 15s".into()),
+            reason: Some("network"),
+            detail: Some("test connection timed out after 15s".to_string()),
         }),
     }
 }

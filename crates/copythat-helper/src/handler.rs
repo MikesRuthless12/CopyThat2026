@@ -85,7 +85,8 @@ pub fn handle_request(request: &Request, granted: &[Capability]) -> Response {
             Response::Failed {
                 localized_key: "err-helper-grant-out-of-band".to_string(),
                 message: "GrantCapabilities must be handled by the helper binary's run-loop, \
-                          not the stateless handle_request entry point".to_string(),
+                          not the stateless handle_request entry point"
+                    .to_string(),
             }
         }
     }

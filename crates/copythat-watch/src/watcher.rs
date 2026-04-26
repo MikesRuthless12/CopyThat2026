@@ -439,11 +439,7 @@ fn enumerate_dir_into(dir: &Path, queue: &mut DebounceQueue, now: Instant) {
         // outside the watch root would otherwise produce
         // `Modified(<path-inside-watched>/...)` events that point
         // at files outside the user's intended watch scope.
-        if entry
-            .file_type()
-            .map(|t| t.is_symlink())
-            .unwrap_or(false)
-        {
+        if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
             continue;
         }
         queue.push(FsEvent::Modified(path), now);

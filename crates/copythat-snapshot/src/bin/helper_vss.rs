@@ -343,18 +343,13 @@ mod windows_main {
             .ok()
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| r"C:\Windows".to_string());
-        format!(
-            r"{sysroot}\System32\WindowsPowerShell\v1.0\powershell.exe"
-        )
+        format!(r"{sysroot}\System32\WindowsPowerShell\v1.0\powershell.exe")
     }
 
     /// Reject anything not matching `[A-Za-z]:\` exactly.
     fn is_valid_drive_root(s: &str) -> bool {
         let bytes = s.as_bytes();
-        bytes.len() == 3
-            && bytes[0].is_ascii_alphabetic()
-            && bytes[1] == b':'
-            && bytes[2] == b'\\'
+        bytes.len() == 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'\\'
     }
 
     /// Accept `{` + 32 hex digits with 4 hyphens + `}` (Win32

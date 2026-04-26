@@ -135,8 +135,8 @@ fn case2_reserved_name_gets_underscore_suffix() {
         reserved_name_strategy: ReservedNameStrategy::Suffix,
         ..PathPolicy::default()
     };
-    let out = translate_path(&src, &PathBuf::from("/out"), &linux_suffix_policy)
-        .expect("translate");
+    let out =
+        translate_path(&src, &PathBuf::from("/out"), &linux_suffix_policy).expect("translate");
     assert_eq!(
         out.file_name().unwrap().to_string_lossy(),
         "CON_.txt",

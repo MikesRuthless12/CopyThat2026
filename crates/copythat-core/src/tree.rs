@@ -896,10 +896,9 @@ async fn copy_tree_inner(
             let mtime = FileTime::from_last_modification_time(&src_md);
             let dst_for_err = dst.clone();
             let src_for_err = src.clone();
-            let result = tokio::task::spawn_blocking(move || {
-                filetime::set_file_times(&dst, atime, mtime)
-            })
-            .await;
+            let result =
+                tokio::task::spawn_blocking(move || filetime::set_file_times(&dst, atime, mtime))
+                    .await;
             match result {
                 Ok(Ok(())) => {}
                 Ok(Err(e)) => {

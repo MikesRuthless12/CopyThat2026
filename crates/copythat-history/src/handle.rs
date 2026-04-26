@@ -350,8 +350,8 @@ impl History {
         let clamped_days = days.min(MAX_DAYS);
         task::spawn_blocking(move || -> Result<u64, HistoryError> {
             let conn = inner.conn.lock().expect("history conn poisoned");
-            let cutoff = now_ms_sync()
-                .saturating_sub(i64::from(clamped_days).saturating_mul(86_400_000));
+            let cutoff =
+                now_ms_sync().saturating_sub(i64::from(clamped_days).saturating_mul(86_400_000));
             let n = conn.execute("DELETE FROM jobs WHERE started_at_ms < ?1", params![cutoff])?;
             Ok(n as u64)
         })

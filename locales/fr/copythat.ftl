@@ -172,6 +172,8 @@ err-path-escape = Chemin rejeté — contient des segments de répertoire parent
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
 err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+err-helper-grant-out-of-band = GrantCapabilities must be handled by the helper run-loop, not the stateless handler
+err-randomness-unavailable = OS random-number generator failed; cannot mint a session id
 # MT
 err-io-other = Erreur d'E/S inconnue
 err-sparseness-mismatch = La disposition clairsemée n'a pas pu être préservée sur la destination  # MT

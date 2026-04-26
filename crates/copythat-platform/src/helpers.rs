@@ -135,14 +135,32 @@ fn free_space_impl(_path: &Path) -> Option<u64> {
 fn volume_id_impl(path: &Path) -> Option<u64> {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
+    // GetVolumeInformationW requires a volume root (e.g. `C:\`). For
+    // an arbitrary file/dir path, walk up to the volume mount point
+    // first via GetVolumePathNameW. Files that don't yet exist are
+    // resolved via their parent dir.
     let target: &Path = if path.is_file() { path.parent()? } else { path };
     let mut wide: Vec<u16> = OsStr::new(target).encode_wide().collect();
     wide.push(0);
+    let mut root_buf: [u16; 260] = [0; 260];
+    // SAFETY: wide is NUL-terminated; root_buf is a fixed-size buffer
+    // sized to MAX_PATH + 1.
+    let path_ok = unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetVolumePathNameW(
+            wide.as_ptr(),
+            root_buf.as_mut_ptr(),
+            root_buf.len() as u32,
+        )
+    };
+    if path_ok == 0 {
+        return None;
+    }
     let mut serial: u32 = 0;
-    // SAFETY: wide is NUL-terminated, serial lives for the call.
+    // SAFETY: root_buf is NUL-terminated by the prior call; serial
+    // lives for the duration of the call.
     let ok = unsafe {
         windows_sys::Win32::Storage::FileSystem::GetVolumeInformationW(
-            wide.as_ptr(),
+            root_buf.as_ptr(),
             std::ptr::null_mut(),
             0,
             &mut serial,

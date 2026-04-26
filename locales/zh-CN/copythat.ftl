@@ -172,6 +172,8 @@ err-path-escape = 路径被拒绝 — 包含父目录（..）段或非法字节
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
 err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+err-helper-grant-out-of-band = GrantCapabilities must be handled by the helper run-loop, not the stateless handler
+err-randomness-unavailable = OS random-number generator failed; cannot mint a session id
 # MT
 err-io-other = 未知 I/O 错误
 err-sparseness-mismatch = 无法在目标保留稀疏布局  # MT

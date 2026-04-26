@@ -172,6 +172,8 @@ err-path-escape = पथ अस्वीकृत — मूल-निर्द�
 err-path-invalid-encoding = Path rejected — string contains invalid UTF-8 / replacement characters
 # MT
 err-helper-invalid-json = Privileged helper received malformed JSON; ignoring this request
+err-helper-grant-out-of-band = GrantCapabilities must be handled by the helper run-loop, not the stateless handler
+err-randomness-unavailable = OS random-number generator failed; cannot mint a session id
 # MT
 err-io-other = अज्ञात I/O त्रुटि
 err-sparseness-mismatch = गंतव्य पर स्पार्स लेआउट संरक्षित नहीं किया जा सका  # MT

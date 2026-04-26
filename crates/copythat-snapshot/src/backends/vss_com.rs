@@ -132,8 +132,7 @@ fn ensure_com_initialised() -> Result<(), String> {
     // multiple times per thread; the second-and-later calls
     // return S_FALSE which means "already initialised in this
     // mode", which is what we want.
-    let hr =
-        unsafe { CoInitializeEx(ptr::null_mut(), COINIT_MULTITHREADED) };
+    let hr = unsafe { CoInitializeEx(ptr::null_mut(), COINIT_MULTITHREADED) };
     if hr != S_OK && hr != S_FALSE {
         // RPC_E_CHANGED_MODE (0x80010106) — another part of the
         // process initialised COM in STA. We can still proceed
@@ -193,9 +192,7 @@ fn wait_for_async(op: &AsyncOp, label: &str) -> Result<(), String> {
     }
     let mut status: HRESULT = 0;
     let mut reserved: HRESULT = 0;
-    let hr = unsafe {
-        ((*(*op.ptr).lpVtbl).QueryStatus)(op.ptr, &mut status, &mut reserved)
-    };
+    let hr = unsafe { ((*(*op.ptr).lpVtbl).QueryStatus)(op.ptr, &mut status, &mut reserved) };
     if hr != S_OK {
         return Err(format!("{label}: QueryStatus hr=0x{:x}", hr as u32));
     }
@@ -235,7 +232,9 @@ fn format_guid(guid: &GUID) -> String {
 fn parse_guid(s: &str) -> Result<GUID, String> {
     let bytes = s.as_bytes();
     if bytes.len() != 38 || bytes[0] != b'{' || bytes[37] != b'}' {
-        return Err(format!("malformed GUID {s:?}: missing braces or wrong length"));
+        return Err(format!(
+            "malformed GUID {s:?}: missing braces or wrong length"
+        ));
     }
     let inner = &s[1..37];
     let parts: Vec<&str> = inner.split('-').collect();
@@ -248,12 +247,9 @@ fn parse_guid(s: &str) -> Result<GUID, String> {
     {
         return Err(format!("malformed GUID {s:?}: wrong segment lengths"));
     }
-    let data1 = u32::from_str_radix(parts[0], 16)
-        .map_err(|e| format!("GUID Data1: {e}"))?;
-    let data2 = u16::from_str_radix(parts[1], 16)
-        .map_err(|e| format!("GUID Data2: {e}"))?;
-    let data3 = u16::from_str_radix(parts[2], 16)
-        .map_err(|e| format!("GUID Data3: {e}"))?;
+    let data1 = u32::from_str_radix(parts[0], 16).map_err(|e| format!("GUID Data1: {e}"))?;
+    let data2 = u16::from_str_radix(parts[1], 16).map_err(|e| format!("GUID Data2: {e}"))?;
+    let data3 = u16::from_str_radix(parts[2], 16).map_err(|e| format!("GUID Data3: {e}"))?;
     let mut data4 = [0u8; 8];
     let part3_bytes: Vec<u8> = (0..2)
         .map(|i| {
@@ -281,7 +277,10 @@ fn parse_guid(s: &str) -> Result<GUID, String> {
 fn to_wide_zstr(s: &str) -> Vec<u16> {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
-    OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+    OsStr::new(s)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 /// Read a Windows wide string out of a `*const u16` until the
@@ -336,9 +335,7 @@ pub fn create_shadow_via_com(volume: &str) -> Result<(String, String), String> {
     }
 
     // 2. InitializeForBackup(NULL).
-    let hr = unsafe {
-        ((*(*backup.ptr).lpVtbl).InitializeForBackup)(backup.ptr, ptr::null_mut())
-    };
+    let hr = unsafe { ((*(*backup.ptr).lpVtbl).InitializeForBackup)(backup.ptr, ptr::null_mut()) };
     if hr != S_OK {
         return Err(format!("InitializeForBackup hr=0x{:x}", hr as u32));
     }
@@ -366,18 +363,16 @@ pub fn create_shadow_via_com(volume: &str) -> Result<(String, String), String> {
     //    Persistent + no-auto-release so the shadow outlives this
     //    `IVssBackupComponents` instance. `release_shadow_via_com`
     //    explicitly tears it down with DeleteSnapshots.
-    let hr = unsafe {
-        ((*(*backup.ptr).lpVtbl).SetContext)(backup.ptr, VSS_CTX_APP_ROLLBACK as LONG)
-    };
+    let hr =
+        unsafe { ((*(*backup.ptr).lpVtbl).SetContext)(backup.ptr, VSS_CTX_APP_ROLLBACK as LONG) };
     if hr != S_OK {
         return Err(format!("SetContext hr=0x{:x}", hr as u32));
     }
 
     // 5. StartSnapshotSet.
     let mut snapshot_set_id: GUID = unsafe { std::mem::zeroed() };
-    let hr = unsafe {
-        ((*(*backup.ptr).lpVtbl).StartSnapshotSet)(backup.ptr, &mut snapshot_set_id)
-    };
+    let hr =
+        unsafe { ((*(*backup.ptr).lpVtbl).StartSnapshotSet)(backup.ptr, &mut snapshot_set_id) };
     if hr != S_OK {
         return Err(format!("StartSnapshotSet hr=0x{:x}", hr as u32));
     }
@@ -400,9 +395,7 @@ pub fn create_shadow_via_com(volume: &str) -> Result<(String, String), String> {
 
     // 7. PrepareForBackup — async; poll until done.
     let mut prepare_async: *mut IVssAsync = ptr::null_mut();
-    let hr = unsafe {
-        ((*(*backup.ptr).lpVtbl).PrepareForBackup)(backup.ptr, &mut prepare_async)
-    };
+    let hr = unsafe { ((*(*backup.ptr).lpVtbl).PrepareForBackup)(backup.ptr, &mut prepare_async) };
     if hr != S_OK {
         return Err(format!("PrepareForBackup hr=0x{:x}", hr as u32));
     }
@@ -412,9 +405,7 @@ pub fn create_shadow_via_com(volume: &str) -> Result<(String, String), String> {
 
     // 8. DoSnapshotSet — async; poll until done.
     let mut do_async: *mut IVssAsync = ptr::null_mut();
-    let hr = unsafe {
-        ((*(*backup.ptr).lpVtbl).DoSnapshotSet)(backup.ptr, &mut do_async)
-    };
+    let hr = unsafe { ((*(*backup.ptr).lpVtbl).DoSnapshotSet)(backup.ptr, &mut do_async) };
     if hr != S_OK {
         return Err(format!("DoSnapshotSet hr=0x{:x}", hr as u32));
     }
@@ -439,9 +430,7 @@ pub fn create_shadow_via_com(volume: &str) -> Result<(String, String), String> {
     }
     props_holder.populated = true;
 
-    let device_path = unsafe {
-        wide_to_string(props_holder.props.m_pwszSnapshotDeviceObject)
-    };
+    let device_path = unsafe { wide_to_string(props_holder.props.m_pwszSnapshotDeviceObject) };
     let shadow_id_str = format_guid(&shadow_id);
 
     // The BackupComponents Drop releases the IVssBackupComponents
@@ -469,19 +458,19 @@ pub fn release_shadow_via_com(shadow_id_str: &str) -> Result<(), String> {
         return Err("CreateVssBackupComponents returned null pointer".into());
     }
 
-    let hr = unsafe {
-        ((*(*backup.ptr).lpVtbl).InitializeForBackup)(backup.ptr, ptr::null_mut())
-    };
+    let hr = unsafe { ((*(*backup.ptr).lpVtbl).InitializeForBackup)(backup.ptr, ptr::null_mut()) };
     if hr != S_OK {
-        return Err(format!("InitializeForBackup (release) hr=0x{:x}", hr as u32));
+        return Err(format!(
+            "InitializeForBackup (release) hr=0x{:x}",
+            hr as u32
+        ));
     }
     // Match the context used at create-time so DeleteSnapshots
     // sees the persistent shadow (non-persistent VSS_CTX_BACKUP
     // would auto-release on the create-side instance teardown
     // and surface VSS_E_OBJECT_NOT_FOUND here).
-    let hr = unsafe {
-        ((*(*backup.ptr).lpVtbl).SetContext)(backup.ptr, VSS_CTX_APP_ROLLBACK as LONG)
-    };
+    let hr =
+        unsafe { ((*(*backup.ptr).lpVtbl).SetContext)(backup.ptr, VSS_CTX_APP_ROLLBACK as LONG) };
     if hr != S_OK {
         return Err(format!("SetContext (release) hr=0x{:x}", hr as u32));
     }
@@ -541,8 +530,8 @@ mod tests {
             "",
             "{}",
             "{AABBCCDD-1122-3344-5566-778899AABBCC", // missing close brace
-            "AABBCCDD-1122-3344-5566-778899AABBCC",   // missing braces entirely
-            "{AABBCCDD11223344556677889AABBCC}",      // missing hyphens
+            "AABBCCDD-1122-3344-5566-778899AABBCC",  // missing braces entirely
+            "{AABBCCDD11223344556677889AABBCC}",     // missing hyphens
             "{ZZZZZZZZ-1122-3344-5566-778899AABBCC}", // non-hex
         ] {
             assert!(
@@ -571,10 +560,10 @@ mod tests {
     #[test]
     #[ignore = "requires Administrator + Windows VSS service"]
     fn vss_com_create_release_round_trip() {
-        let volume = std::env::var("COPYTHAT_VSS_TEST_VOLUME")
-            .unwrap_or_else(|_| r"C:\".to_string());
-        let (shadow_id, device_path) = create_shadow_via_com(&volume)
-            .expect("create_shadow_via_com");
+        let volume =
+            std::env::var("COPYTHAT_VSS_TEST_VOLUME").unwrap_or_else(|_| r"C:\".to_string());
+        let (shadow_id, device_path) =
+            create_shadow_via_com(&volume).expect("create_shadow_via_com");
         eprintln!("shadow_id   = {shadow_id}");
         eprintln!("device_path = {device_path}");
         assert!(
@@ -606,8 +595,8 @@ mod tests {
 
         let locked = std::env::var("COPYTHAT_VSS_LOCKED_FILE_PATH")
             .expect("COPYTHAT_VSS_LOCKED_FILE_PATH must be set");
-        let dest_dir = std::env::var("COPYTHAT_VSS_DEST_DIR")
-            .expect("COPYTHAT_VSS_DEST_DIR must be set");
+        let dest_dir =
+            std::env::var("COPYTHAT_VSS_DEST_DIR").expect("COPYTHAT_VSS_DEST_DIR must be set");
 
         let locked_path = PathBuf::from(&locked);
         assert!(
@@ -622,8 +611,7 @@ mod tests {
         let direct_err = fs::OpenOptions::new()
             .read(true)
             .open(&locked_path)
-            .err()
-            .expect(
+            .expect_err(
                 "direct read of locked file unexpectedly succeeded — is lock_file.ps1 running?",
             );
         let raw = direct_err.raw_os_error();
@@ -651,8 +639,8 @@ mod tests {
         let rest = &s[3..]; // strip the `X:\` prefix
 
         // (3) Mint the shadow.
-        let (shadow_id, device_path) = create_shadow_via_com(&drive)
-            .expect("create_shadow_via_com");
+        let (shadow_id, device_path) =
+            create_shadow_via_com(&drive).expect("create_shadow_via_com");
         eprintln!("shadow_id   = {shadow_id}");
         eprintln!("device_path = {device_path}");
 
@@ -662,8 +650,8 @@ mod tests {
             // (4) Read the file off the shadow.
             let shadow_path = format!("{device_path}\\{rest}");
             eprintln!("shadow_path = {shadow_path}");
-            let bytes_via_shadow = fs::read(&shadow_path)
-                .expect("read locked file via shadow GLOBALROOT path");
+            let bytes_via_shadow =
+                fs::read(&shadow_path).expect("read locked file via shadow GLOBALROOT path");
             assert!(
                 !bytes_via_shadow.is_empty(),
                 "shadow read returned empty file"

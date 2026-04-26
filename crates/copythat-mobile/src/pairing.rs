@@ -96,10 +96,7 @@ impl PairingToken {
     /// Mint a fresh pairing token. The caller supplies the desktop's
     /// PeerJS peer-id and long-term X25519 public key; this function
     /// generates the SAS seed.
-    pub fn new(
-        peer_id: impl Into<String>,
-        desktop_pubkey: [u8; 32],
-    ) -> Result<Self, PairingError> {
+    pub fn new(peer_id: impl Into<String>, desktop_pubkey: [u8; 32]) -> Result<Self, PairingError> {
         let mut sas_seed = [0u8; PAIRING_SAS_SEED_BYTES];
         getrandom::fill(&mut sas_seed).map_err(|e| PairingError::Random(e.to_string()))?;
         Ok(Self {
