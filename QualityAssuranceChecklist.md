@@ -89,8 +89,13 @@ limited time.
       `supply-chain/config.toml` (Mozilla / Google / Embark /
       Bytecode Alliance / Zcash) still resolve. *(driven by
       `xtask qa-automate` — non-blocking, mirrors `ci.yml`)*
-- [ ] `cargo run -p copythat-cli --bin copythat -- verify <sample>
+- [x] `cargo run -p copythat-cli --bin copythat -- verify <sample>
       --algo blake3` round-trips on a known-good file.
+      *(Windows-host pass 2026-04-26: 32 MiB sample, happy path
+      `verify ok: blake3 8e047b09…` exit 0; tampered sidecar +
+      tampered file both exit 4 with `verify FAILED: blake3`.
+      Sidecar parser at `crates/copythat-cli/src/commands/verify.rs`
+      handles GNU `*sum`-style entries.)*
 - [x] Path-safety tests run: `cargo test -p copythat-core
       --test phase_17_security` (rejects `..` traversal at the
       engine boundary). *(covered by `cargo test -p copythat-core`
@@ -138,16 +143,32 @@ limited time.
       bullet). User-triggered + billable; not part of the
       automated harness.
 - [ ] **Phase 37 mobile-companion sanity:**
-  - [ ] `MobileSettings::desktop_peer_id` is randomized — distinct
+  - [x] `MobileSettings::desktop_peer_id` is randomized — distinct
         across two fresh installs.
+        *(verified 2026-04-26: `mint_peer_id()` at
+        `crates/copythat-mobile/src/pairing.rs:395` calls
+        `getrandom::fill(&mut [u8; 20])` — OS CSPRNG
+        (`BCryptGenRandom` on Windows). Existing test
+        `mint_peer_id_yields_distinct_ids_per_call` re-ran clean.)*
   - [ ] Pairing requires explicit user click on "Start pairing" +
         SAS confirmation; nothing pairs silently.
   - [ ] PWA shows "Desktop not reachable" when the desktop is
         offline; can't drive any control surface in that state.
   - [ ] PWA Exit button cleanly disconnects PeerJS + clears any
         in-memory session.
-  - [ ] APNs/FCM credential strings never appear in stderr / log
+  - [x] APNs/FCM credential strings never appear in stderr / log
         output.
+        *(verified 2026-04-26 via grep + code reading: zero
+        `tracing::*` / `eprintln!` / `println!` sites in
+        `crates/copythat-mobile/` or `apps/copythat-ui/src-tauri/
+        src/mobile_commands.rs`. The lone error-formatter at
+        `mobile_commands.rs:471` renders `PushSendError`'s
+        `Display`, which only emits `provider`, `status`, server
+        `body`, and `jsonwebtoken` error names — never PEM bytes.
+        Defence-in-depth: `copythat-audit::layer::is_sensitive_field`
+        already redacts `p8`, `p8_pem`, `service_account`,
+        `private_key`, `kid`, `secret`, `token`, `bearer`,
+        `authorization`, `credentials`, `sas`.)*
   - [ ] `cargo deny check advisories` does not flag the rsa /
         nix / mach inheritance from age / battery / fuser if those
         upstream chains have updated since last release.
@@ -577,9 +598,14 @@ Mobile (Phase 37) checks:
 
 ## 7. Edge cases
 
-- [ ] Locked files (Phase 19b): copy a file Excel has open →
+- [x] Locked files (Phase 19b): copy a file Excel has open →
       VSS snapshot path engages → copy completes from the
       shadow copy.
+      *(user-confirmed manual pass 2026-04-26 via the
+      elevated-PowerShell smoke `tests/vss_com_smoke.ps1` —
+      drives `IVssBackupComponents::DoSnapshotSet` through the
+      COM port that landed in this PR, copies a locked file
+      from the shadow, restores byte-for-byte.)*
 - [ ] Resume across reboot (Phase 20): start a 5 GiB copy →
       reboot mid-flight → relaunch → resume modal offers to
       continue from the last journal checkpoint.
