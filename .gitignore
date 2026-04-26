@@ -49,6 +49,13 @@ $RECYCLE.BIN/
 # --- Test artifacts ---
 coverage/
 *.profraw
+# Playwright traces / videos / screenshots
+apps/copythat-ui/test-results/
+apps/copythat-ui/playwright-report/
+target/playwright-report/
+# Playwright MCP browser snapshots (per-session debug aids)
+.playwright-mcp/
+page-snapshot.md
 # Nautilus smoke test runs `python3 -m py_compile` against the
 # packaged extension, which drops a __pycache__/ next to the source.
 **/__pycache__/
