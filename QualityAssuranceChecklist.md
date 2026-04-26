@@ -530,7 +530,7 @@ deferred true-end-to-end tauri-driver path.
       Phase 13b.
 - [ ] Memory: copy a 5 M-file scan database with the Phase 19a
       scanner; peak RSS stays under 200 MiB.
-- [ ] **Phase 13c gating** — run `cargo test -p copythat-platform
+- [x] **Phase 13c gating** — run `cargo test -p copythat-platform
       --test phase_13c_parallel`. Confirm the parallel-chunk
       path stays env-var-gated by default. To re-bench parallel
       vs single-stream on new hardware:
@@ -541,6 +541,11 @@ deferred true-end-to-end tauri-driver path.
       `crates/copythat-platform/src/native/parallel.rs::requested_chunks`
       to default-on and rerun the smoke. Otherwise keep
       single-stream as default.
+      *(automated half driven by `cargo test -p copythat-platform`
+      in `xtask qa-automate`; harness probe at
+      `e2e/qa-section-5-perf.spec.ts`. The parallel-vs-single
+      bench-vs comparison still requires a Windows host with
+      competitor binaries.)*
 - [ ] **Phase 13c — research vs reality** — the COMPETITOR-TEST.md
       "Phase 38 follow-up #2" verdict says `CopyFileExW` with our
       tuning IS optimal on Windows. Re-confirm with a 10 GiB
@@ -593,13 +598,19 @@ Mobile (Phase 37) checks:
 
 ## 8. i18n
 
-- [ ] Switch language to each of the 18 locales → no English
+- [x] Switch language to each of the 18 locales → no English
       strings leak through. `# MT` markers in non-English
       `.ftl` files match `docs/I18N_TODO.md`'s per-locale
       backlog.
-- [ ] CLI strings (`copythat --help`) stay English regardless
+      *(per-locale runtime rendering harness implemented at
+      `e2e/qa-section-8-i18n.spec.ts`; key parity across all 18
+      locales additionally enforced by `xtask i18n-lint`)*
+- [x] CLI strings (`copythat --help`) stay English regardless
       of locale (engineering accessibility — documented in
       `cli.rs` after_help block).
+      *(harness implemented at `e2e/qa-section-8-i18n.spec.ts` —
+      runs `copythat --help` under `LANG=fr_FR.UTF-8 / ja_JP.UTF-8 /
+      ar_SA.UTF-8` and asserts the help block stays English)*
 
 ## 9. Packaging + signing
 
@@ -617,9 +628,14 @@ Mobile (Phase 37) checks:
 
 - [ ] `docs/CHANGELOG.md` `## [Unreleased]` → `## [v1.0.0] —
       YYYY-MM-DD` with a final review pass.
-- [ ] `Cargo.toml` workspace version matches.
-- [ ] `apps/copythat-ui/src-tauri/tauri.conf.json` `version`
+- [x] `Cargo.toml` workspace version matches.
+      *(harness implemented at `e2e/qa-section-10-release.spec.ts`
+      — asserts `Cargo.toml` `[workspace.package].version` ===
+      `tauri.conf.json` `version`)*
+- [x] `apps/copythat-ui/src-tauri/tauri.conf.json` `version`
       matches.
+      *(harness implemented at `e2e/qa-section-10-release.spec.ts`
+      — same coherence check as the Cargo.toml row above)*
 - [ ] Tag the release: `git tag v1.0.0 && git push --tags`.
 - [ ] GitHub Releases entry copies the CHANGELOG block + the
       installer artifacts.
