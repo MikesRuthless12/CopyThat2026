@@ -129,10 +129,28 @@ workloads.
 
 ### Performance
 
-- **1 MiB** is the measured optimum buffer size; all other sizes regressed in the Phase 13b sweep — see [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
-- **Head-to-head measurements** against Robocopy, TeraCopy, FastCopy, and `cmd copy` live in [`COMPETITOR-TEST.md`](COMPETITOR-TEST.md) at the repo root (256 MiB + 10 GiB workloads across same-volume, cross-NTFS, and external-exFAT destinations).
+- **Beats every measured competitor on Windows 11 NVMe** (10 GiB · same-volume copy):
+
+  | Tool | MiB/s | vs CopyThat CLI |
+  | --- | ---: | ---: |
+  | **CopyThat CLI / engine** | **2429** | — |
+  | **CopyThat UI (Phase 40)** | **2198** | −9 % |
+  | Robocopy | 1305 | **−46 %** |
+  | FastCopy | 1006 | **−59 %** |
+  | cmd copy | 940-1147 | **−53-61 %** |
+  | TeraCopy | 855 | **−65 %** |
+
+  CopyThat's UI also beats every competitor by 68-157 % on the same workload. Caveat: cross-volume copies (C→D, C→E) are bound by the destination disk's write speed and tend to tie across all tools — engine speed only matters when the disk isn't the bottleneck.
+
+- **`PlatformFastCopyHook` everywhere** — every entry point (CLI, UI start_copy, UI rerun, CLI shell-extension enqueue) attaches the hook so reflink + `CopyFileExW` + the Phase 38 dedup ladder are the default fast paths.
+- **Phase 40 named-pipe broker** — `copythat-ui --enqueue` invocations forward argv to the running first instance via named pipe in **110 ms** instead of booting a fresh ~5 second Tauri runtime per call.
+- **Phase 41 cross-volume auto-engage** — `is_cross_volume(src, dst)` automatically routes large cross-volume copies through the overlapped-IOCP pipeline with 8 in-flight × 4 MiB buffers + cached I/O (matches Robocopy's USB tuning).
+- **1 MiB** is the measured optimum buffer size on the default `CopyFileExW` path; all other sizes regressed in the Phase 13b sweep — see [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
+- **Head-to-head methodology + per-scenario numbers** live in [`COMPETITOR-TEST.md`](COMPETITOR-TEST.md) at the repo root (256 MiB + 10 GiB workloads across same-volume, cross-NTFS, external-SSD destinations).
 - **Cross-volume reflink guard** avoids a pointless syscall on copies that can't possibly reflink (different volume IDs).
 - **Criterion benches** live at `crates/copythat-core/benches/copy_bench.rs`: `single_huge_file`, `buffer_size_sweep`, `many_small_files` (10 KiB / 100 KiB / 1 MiB / 10 MiB mix), `mixed_tree` (10 KiB → 250 MiB).
+- **Power-user env-var tunables** documented in [`docs/PERFORMANCE_TUNING.md`](docs/PERFORMANCE_TUNING.md): `COPYTHAT_PARALLEL_CHUNKS`, `COPYTHAT_OVERLAPPED_IO`, `COPYTHAT_OVERLAPPED_BUFFER_KB`, `COPYTHAT_OVERLAPPED_SLOTS`, `COPYTHAT_OVERLAPPED_NO_BUFFERING`, `COPYTHAT_NO_BUFFERING_THRESHOLD_MB`, `COPYTHAT_SKIP_ZERO_FILL` (admin-only), `COPYTHAT_DISABLE_AUTO_OVERLAPPED`.
+- **Research underpinnings** — every default backed by data: [`docs/RESEARCH_PHASE_39.md`](docs/RESEARCH_PHASE_39.md) (Win32 + NTFS internals + IoRing + DirectStorage + scatter/gather), [`docs/RESEARCH_PHASE_40.md`](docs/RESEARCH_PHASE_40.md) (UI-bypass + Win32-skip evaluation, hard-cap analysis).
 
 ## Targets
 
