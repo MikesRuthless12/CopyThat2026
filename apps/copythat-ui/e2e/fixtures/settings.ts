@@ -91,7 +91,12 @@ export function fullSettings(overrides: Record<string, unknown> = {}): Record<st
       maxSizeBytes: 10485760,
       worm: "off",
     },
-    crypt: { encryption: { recipients: [], recipientsFile: null }, compression: { mode: "off", level: 3 } },
+    crypt: {
+      encryptionMode: "off",
+      recipientsFile: "",
+      compressionMode: "off",
+      compressionLevel: 3,
+    },
     mobile: {
       pairEnabled: true,
       autoConnect: false,

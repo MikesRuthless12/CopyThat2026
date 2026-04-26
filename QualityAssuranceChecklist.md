@@ -268,12 +268,12 @@ deferred true-end-to-end tauri-driver path.
 
 - [x] Settings → Transfer → Encryption = recipients + a recipients
       file with one `age1…` line. Copy → destination is age-
-      encrypted (`rage --decrypt` round-trips). *(harness stub at
+      encrypted (`rage --decrypt` round-trips). *(harness implemented at
       `e2e/qa-section-4-9-encryption.spec.ts`; age round-trip
       itself covered by `cargo test -p copythat-crypt`)*
 - [x] Compression = Smart, level 3. Copy a `.txt` → destination
       shrinks. Copy a `.jpg` → destination unchanged (smart
-      deny-list skipped it). *(harness stub at
+      deny-list skipped it). *(harness implemented at
       `e2e/qa-section-4-9-encryption.spec.ts`)*
 
 ### 4.10 CLI (Phase 36)
