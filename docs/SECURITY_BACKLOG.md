@@ -78,14 +78,23 @@ losing track. Each item is sized small enough to ship as its own PR.
 
 - The current Windows VSS backend (`crates/copythat-snapshot/src/backends/vss.rs`)
   shells to PowerShell + WMI for `Win32_ShadowCopy::Create` and
-  `Delete`. The Phase 38-followup-4 hardening (absolute powershell
-  path, validated argv, `reject_remote_clients`, 256-bit pipe
-  suffix, custom DACL via `win_pipe_security`) closes the immediate
-  attack surface, but the PowerShell process startup is ~300–700 ms
-  per shadow-create and the format-string interpolation pattern is
-  fragile against future contributor edits.
-- Port to direct `IVssBackupComponents` COM via `windows-rs` /
-  `windows-sys`:
+  `Delete`. Hardening landed in followup-4 / -6 / -7 closes the
+  immediate attack surface:
+  - Absolute `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`
+    path (no PATH-hijack at elevated integrity).
+  - Both `helper_vss::create_shadow`/`release_shadow` AND the
+    in-process `vss::create_in_process`/`release_in_process` paths
+    validate `volume == [A-Za-z]:\` and `shadow_id == {GUID}`
+    before interpolation.
+  - Bad-request rate limiter on the helper.
+  - Pipe DACL via `win_pipe_security` + 256-bit random name suffix.
+  - Post-handshake capability grant (17j).
+  
+  Remaining gap: PowerShell process startup is ~300–700 ms per
+  shadow-create (perf, not correctness) and the format-string
+  interpolation pattern is fragile against future contributor
+  edits even with input validation.
+- Port to direct `IVssBackupComponents` COM:
   - `CoInitializeEx` + `CoInitializeSecurity`
   - `CreateVssBackupComponents` → returns `IVssBackupComponents*`
   - `InitializeForBackup` + `SetContext(VSS_CTX_BACKUP)`
@@ -96,39 +105,75 @@ losing track. Each item is sized small enough to ship as its own PR.
   - `GetSnapshotProperties(shadow_id)` → `VSS_SNAPSHOT_PROP` with
     `pwszSnapshotDeviceObject` = `\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopyN`
   - `DeleteSnapshots` for cleanup
-- Eliminates the format-string interpolation pattern entirely
-  (every value passed via typed COM args, no shell escape needed).
-- Estimated 600–1200 lines of FFI; needs feature-flagging
-  (`Win32_Storage_Vss` + `Win32_System_Variant`) and a real
-  Windows test environment to verify end-to-end. The
-  `helper_vss.rs` binary stays as the elevation harness; only
-  `create_shadow` / `release_shadow` change implementation.
 
-### 17j — Helper-argv signing / capability binding
+**Binding-source survey (followup-7).** The IVssBackupComponents
+COM interface is declared in Microsoft's `vsbackup.h`, which is
+**not bound** by `windows-sys 0.59` / `0.60.2` / `0.61.2` (the
+generated metadata excludes vsbackup) NOR by the higher-level
+`windows 0.61.3` / `0.62.2` crates' `Win32::Storage::Vss` modules
+— only adjacent VSS structs (`VSS_SNAPSHOT_PROP`,
+`VSS_SNAPSHOT_CONTEXT`) and provider interfaces appear. The
+options for shipping this:
 
-- When the per-OS spawn helper for `copythat-helper` lands
-  (UAC / sudo / polkit), the elevated child accepts a
-  `--capabilities=` argv flag declaring which `Capability` set the
-  caller wants. Today the parser at `crates/copythat-helper/src/bin/helper.rs`
-  honours whatever argv arrived, so a local non-admin attacker who
-  can race-modify the spawn command line (process injection on the
-  unprivileged side, intercept-and-resign of the
-  `Start-Process -Verb RunAs` line) can declare `hardware_erase` /
-  `shell_extension` after the user only consented to
-  `elevated_retry`.
-- Bind capability declaration to the consent ceremony:
-  - Unprivileged main app generates an ephemeral HMAC key.
-  - Signs `<spawn_pid>:<capability_set>:<expiry_ms>` and embeds
-    both in the spawn argv as `--cap-token=<base64>`.
-  - Helper verifies before honouring. Key delivery survives the
-    elevation barrier via either (a) a side-channel named-pipe
-    handshake immediately after spawn (parent verifies child PID
-    via `GetNamedPipeClientProcessId`) or (b) shared filesystem
-    secret pre-elevation that the helper reads from a
-    user-protected location.
-- Not exploitable today (helper runs in-process under the user's
-  own privileges; no real elevation exists yet). Reactivates the
-  moment the spawn ceremony lands.
+1. **Hand-write extern bindings** alongside the existing
+   PowerShell path in `vss_com.rs`. Roughly 400 lines of vtable
+   layouts + GUID constants + struct definitions; high error
+   surface without a Windows VSS test environment.
+2. **Add `winapi-0.3.9`** as a dep — the older crate ships
+   `IVssBackupComponents` in `winapi::um::vsbackup`. winapi-0.3
+   is in maintenance mode but proven; ~3 MB compile-time cost.
+3. **Wait for `windows-sys` to expose `Win32_Storage_Vss::Backup`**
+   — Microsoft's metadata project has been adding more
+   interfaces; vsbackup may land in a future minor release.
+
+Recommendation: option 2 (winapi-0.3) when a Windows VSS test
+environment is available. Implementing without that environment
+ships unsafe FFI nobody can verify works correctly. The
+PowerShell path with the followup-4/-6/-7 hardening is the
+production code until then.
+
+### ~~17j — Helper-argv signing / capability binding~~ (shipped, redesigned)
+
+Originally scoped as HMAC-bound argv signing. Implementation in
+followup-7 took a different (better) shape: **post-handshake
+capability grant over the (DACL-restricted) pipe**.
+
+Shipped:
+
+- New `Request::GrantCapabilities { capabilities: Vec<Capability> }` /
+  `Response::CapabilitiesGranted { granted: Vec<Capability> }`
+  wire-protocol additions in `crates/copythat-helper/src/rpc.rs`.
+- `bin/helper.rs`'s run-loop maintains `pipe_granted: Vec<Capability>`
+  state (starts empty); the legacy `--capabilities=` argv flag is
+  retained as the *upper bound* (you can never grant more than
+  the spawn argv asked for) but no longer the source of truth for
+  the active set.
+- Capability checks gate against
+  `effective = argv_requested ∩ pipe_granted`. Capability-bearing
+  requests received before any `GrantCapabilities` arrives surface
+  as `CapabilityDenied`.
+- Smoke tests in `bin/helper.rs::tests` cover all three matrix
+  cells: deny-before-grant, grant-then-serve, clamp-to-argv when
+  the pipe asks for more than argv allowed.
+
+Why the redesign vs. HMAC: the originally-proposed HMAC binding
+needed a key both the unprivileged parent and the elevated child
+could read, which on Windows means the key sits in either argv
+(visible to any same-user process via `Get-Process | Select
+CommandLine`) or environment (also same-user-readable). HMAC
+without confidentiality of the key isn't a meaningful defence
+against the realistic threat (same-user attacker reading argv).
+
+The pipe-handshake design defends against the actual threat
+window — argv injection between `Start-Process -Verb RunAs` and
+helper-startup. The DACL-restricted pipe (`win_pipe_security`,
+followup-6) plus 256-bit random pipe-name suffix (followup-4) is
+what limits who can connect; the post-handshake grant means even
+if argv is forged, the elevated helper does nothing
+capability-bearing until it sees a grant message from the
+legitimate caller over the secured pipe.
+
+### 17i — Replace VSS PowerShell shellouts with `IVssBackupComponents` COM
 
 ### 17d — Privilege separation (`copythat-helper`)
 

@@ -75,6 +75,19 @@ pub fn handle_request(request: &Request, granted: &[Capability]) -> Response {
                 device.display()
             ),
         },
+        Request::GrantCapabilities { .. } => {
+            // The binary's run-loop handles this special-cased
+            // because it mutates per-session state. If a caller
+            // ever routes a GrantCapabilities through the
+            // stateless `handle_request` directly, surface a
+            // typed `Failed` rather than panicking — the request
+            // shape is valid, the call site is wrong.
+            Response::Failed {
+                localized_key: "err-helper-grant-out-of-band".to_string(),
+                message: "GrantCapabilities must be handled by the helper binary's run-loop, \
+                          not the stateless handle_request entry point".to_string(),
+            }
+        }
     }
 }
 
