@@ -104,20 +104,20 @@ if ($LockedFilePath) {
     Note "verifying $LockedFilePath is currently locked..."
     try {
         $bytes = [System.IO.File]::ReadAllBytes($LockedFilePath)
-        Write-Warning "expected sharing violation, but read succeeded ($($bytes.Length) bytes). Is lock_file.ps1 running?"
+        $len = $bytes.Length
+        Write-Warning ("expected sharing violation, but read succeeded ({0} bytes). Is lock_file.ps1 running?" -f $len)
     } catch [System.IO.IOException] {
-        Note "sharing violation confirmed: $($_.Exception.Message)"
+        $msg = $_.Exception.Message
+        Note "sharing violation confirmed: $msg"
     }
 
-    # Second: drive the COM port via a small one-shot Rust binary.
-    # We piggyback on the cargo test we already ran above by
-    # writing a tiny helper here.
+    # Second: surface what was tested vs. what is deferred.
     Write-Host ""
     Write-Host "Manual verification: while lock_file.ps1 keeps the lock," -ForegroundColor Yellow
     Write-Host "the cargo test above already proved the COM port can" -ForegroundColor Yellow
-    Write-Host "create + release a shadow on $Volume." -ForegroundColor Yellow
-    Write-Host "Reading the locked file from the shadow's device path is" -ForegroundColor Yellow
-    Write-Host "a read-only operation against \\?\GLOBALROOT\..., bypassing" -ForegroundColor Yellow
+    Write-Host "create plus release a shadow on $Volume." -ForegroundColor Yellow
+    Write-Host "Reading the locked file from the shadow device path is" -ForegroundColor Yellow
+    Write-Host "a read-only operation against the GLOBALROOT path, bypassing" -ForegroundColor Yellow
     Write-Host "the sharing-violation gate. Verified at the engine level by" -ForegroundColor Yellow
     Write-Host "tests/smoke/phase_19_snapshot.rs (already passing in CI)." -ForegroundColor Yellow
 }
