@@ -24,15 +24,20 @@
 //!   registered VSS writer (`GatherWriterMetadata` + per-writer
 //!   PrepareForBackup callbacks) so apps like SQL Server can
 //!   freeze their journals before the snapshot fires. CopyThat
-//!   only needs file-system-consistent reads; we use
-//!   `VSS_CTX_BACKUP` with `bSelectComponents=false` and skip the
-//!   writer dance entirely. Microsoft documents this as supported
-//!   for "no-writer" backup callers (the same shape `Get-WmiObject
+//!   only needs file-system-consistent reads; we set
+//!   `bSelectComponents=false` and skip the writer dance entirely.
+//!   Microsoft documents this shape as supported for "no-writer"
+//!   backup callers (the same surface `Get-WmiObject
 //!   Win32_ShadowCopy::Create` uses under the hood).
-//! - **Persistent shadows.** The shadows we mint are
-//!   client-accessible non-persistent — they release on caller
-//!   process exit unless explicitly preserved. Matches the
-//!   PowerShell path.
+//! - **Persistent shadows.** Context is `VSS_CTX_APP_ROLLBACK`
+//!   (`PERSISTENT | NO_AUTO_RELEASE`) so the shadow survives
+//!   `IVssBackupComponents::Release` at the end of
+//!   `create_shadow_via_com`. `release_shadow_via_com` opens a
+//!   fresh `IVssBackupComponents` and calls `DeleteSnapshots`
+//!   to tear the shadow down. The non-persistent `VSS_CTX_BACKUP`
+//!   would auto-release on instance teardown — the resulting
+//!   `VSS_E_OBJECT_NOT_FOUND` (HRESULT 0x80042308) on the second
+//!   call surfaced this on a real Windows admin run.
 //! - **Mount points.** The returned `\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopyN`
 //!   path is read directly; we don't expose a drive-letter mount.
 
@@ -52,7 +57,7 @@ use winapi::um::vsbackup::{
     CreateVssBackupComponents, IVssBackupComponents, VssFreeSnapshotProperties,
 };
 use winapi::um::vss::{
-    IVssAsync, VSS_BT_FULL, VSS_CTX_BACKUP, VSS_OBJECT_SNAPSHOT, VSS_SNAPSHOT_PROP,
+    IVssAsync, VSS_BT_FULL, VSS_CTX_APP_ROLLBACK, VSS_OBJECT_SNAPSHOT, VSS_SNAPSHOT_PROP,
 };
 use winapi::um::vsserror::VSS_S_ASYNC_FINISHED;
 
@@ -357,9 +362,12 @@ pub(crate) fn create_shadow_via_com(volume: &str) -> Result<(String, String), St
         return Err(format!("SetBackupState hr=0x{:x}", hr as u32));
     }
 
-    // 4. SetContext(VSS_CTX_BACKUP).
+    // 4. SetContext(VSS_CTX_APP_ROLLBACK).
+    //    Persistent + no-auto-release so the shadow outlives this
+    //    `IVssBackupComponents` instance. `release_shadow_via_com`
+    //    explicitly tears it down with DeleteSnapshots.
     let hr = unsafe {
-        ((*(*backup.ptr).lpVtbl).SetContext)(backup.ptr, VSS_CTX_BACKUP as LONG)
+        ((*(*backup.ptr).lpVtbl).SetContext)(backup.ptr, VSS_CTX_APP_ROLLBACK as LONG)
     };
     if hr != S_OK {
         return Err(format!("SetContext hr=0x{:x}", hr as u32));
@@ -467,8 +475,12 @@ pub(crate) fn release_shadow_via_com(shadow_id_str: &str) -> Result<(), String> 
     if hr != S_OK {
         return Err(format!("InitializeForBackup (release) hr=0x{:x}", hr as u32));
     }
+    // Match the context used at create-time so DeleteSnapshots
+    // sees the persistent shadow (non-persistent VSS_CTX_BACKUP
+    // would auto-release on the create-side instance teardown
+    // and surface VSS_E_OBJECT_NOT_FOUND here).
     let hr = unsafe {
-        ((*(*backup.ptr).lpVtbl).SetContext)(backup.ptr, VSS_CTX_BACKUP as LONG)
+        ((*(*backup.ptr).lpVtbl).SetContext)(backup.ptr, VSS_CTX_APP_ROLLBACK as LONG)
     };
     if hr != S_OK {
         return Err(format!("SetContext (release) hr=0x{:x}", hr as u32));
