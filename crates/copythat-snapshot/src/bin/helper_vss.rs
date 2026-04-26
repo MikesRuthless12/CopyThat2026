@@ -214,6 +214,26 @@ mod windows_main {
         }
     }
 
+    // VSS create / release primitives. With `vss-com` (default), the
+    // helper goes straight to `IVssBackupComponents` via the lib's
+    // re-exported COM port — same primitive the in-process snapshot
+    // path uses. With `--no-default-features` we fall back to the
+    // PowerShell + `Get-WmiObject Win32_ShadowCopy` shellout. Either
+    // way the validation gates are unconditional: no path through
+    // here lets a crafted volume string or shadow_id reach the
+    // privileged backend without the shape check fronting it.
+
+    #[cfg(feature = "vss-com")]
+    fn create_shadow(volume: &str) -> Result<(String, String), String> {
+        if !is_valid_drive_root(volume) {
+            return Err(format!(
+                "refusing to shadow non-drive-root volume {volume:?}; expected `X:\\\\`"
+            ));
+        }
+        copythat_snapshot::vss_com::create_shadow_via_com(volume)
+    }
+
+    #[cfg(not(feature = "vss-com"))]
     fn create_shadow(volume: &str) -> Result<(String, String), String> {
         // Validate the volume identifier before interpolation. The
         // pipe peer is the unprivileged caller (or, in a future
@@ -227,10 +247,6 @@ mod windows_main {
                 "refusing to shadow non-drive-root volume {volume:?}; expected `X:\\\\`"
             ));
         }
-        // PowerShell's Win32_ShadowCopy::Create is the same path the
-        // in-process elevated code uses. Having both paths share the
-        // one syscall-shape keeps the "works on one platform, works
-        // on both" invariant cheap.
         let script = format!(
             concat!(
                 "$ErrorActionPreference='Stop';",
@@ -271,6 +287,17 @@ mod windows_main {
         Err(format!("could not parse shadow ID + device from: {text:?}"))
     }
 
+    #[cfg(feature = "vss-com")]
+    fn release_shadow(shadow_id: &str) -> Result<(), String> {
+        if !is_valid_guid_brace(shadow_id) {
+            return Err(format!(
+                "refusing to release non-GUID shadow_id {shadow_id:?}"
+            ));
+        }
+        copythat_snapshot::vss_com::release_shadow_via_com(shadow_id)
+    }
+
+    #[cfg(not(feature = "vss-com"))]
     fn release_shadow(shadow_id: &str) -> Result<(), String> {
         // Reject anything that isn't the WMI GUID shape
         // `{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}` (case
@@ -310,6 +337,7 @@ mod windows_main {
     /// Resolve the absolute path to PowerShell. Falls back to
     /// `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`
     /// when the env var is missing.
+    #[cfg(not(feature = "vss-com"))]
     fn powershell_exe() -> String {
         let sysroot = std::env::var("SystemRoot")
             .ok()
@@ -352,6 +380,7 @@ mod windows_main {
         true
     }
 
+    #[cfg(not(feature = "vss-com"))]
     fn ps_escape(s: &str) -> String {
         s.replace('\'', "''")
     }

@@ -318,7 +318,7 @@ unsafe fn wide_to_string(p: *const u16) -> String {
 /// `volume` must be the canonical `[A-Za-z]:\` form. Caller is
 /// responsible for validating; this function trusts the input.
 #[allow(dead_code)]
-pub(crate) fn create_shadow_via_com(volume: &str) -> Result<(String, String), String> {
+pub fn create_shadow_via_com(volume: &str) -> Result<(String, String), String> {
     ensure_com_initialised()?;
 
     // 1. Create the IVssBackupComponents instance.
@@ -455,7 +455,7 @@ pub(crate) fn create_shadow_via_com(volume: &str) -> Result<(String, String), St
 /// Release a previously-minted shadow. Mirrors the wire-shape
 /// the PowerShell path uses (`{GUID}` shadow id).
 #[allow(dead_code)]
-pub(crate) fn release_shadow_via_com(shadow_id_str: &str) -> Result<(), String> {
+pub fn release_shadow_via_com(shadow_id_str: &str) -> Result<(), String> {
     ensure_com_initialised()?;
     let shadow_id = parse_guid(shadow_id_str)?;
 

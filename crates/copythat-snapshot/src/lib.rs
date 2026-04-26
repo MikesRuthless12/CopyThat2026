@@ -48,6 +48,17 @@ mod kind;
 #[cfg(windows)]
 pub mod rpc;
 
+/// Direct `IVssBackupComponents` COM primitives, re-exported so the
+/// sibling `copythat-helper-vss` binary can call the same shape the
+/// in-process snapshot path uses. Only available on Windows builds
+/// with `--features vss-com` (the default). For typical consumers the
+/// snapshot orchestration in [`create_snapshot`] is the right entry
+/// point — these re-exports are deliberately low-level.
+#[cfg(all(windows, feature = "vss-com"))]
+pub mod vss_com {
+    pub use crate::backends::vss_com::{create_shadow_via_com, release_shadow_via_com};
+}
+
 pub use error::SnapshotError;
 pub use hook::CopyThatSnapshotHook;
 pub use kind::SnapshotKind;

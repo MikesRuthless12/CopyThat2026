@@ -53,6 +53,13 @@ coverage/
 # packaged extension, which drops a __pycache__/ next to the source.
 **/__pycache__/
 *.pyc
+# Phase 17 follow-up — VSS COM smoke fixtures regenerated each run by
+# `tests/lock_file.ps1` (writes a 4096-byte 0..255 pattern, holds an
+# exclusive lock) and the `vss_com_copy_locked_file_via_shadow` test
+# (copies the file off the shadow into a sibling restored/ folder).
+# Both are reproducible from scratch — no value in tracking.
+/tests/vss-test-locked.bin
+/tests/vss-test-restored/
 
 # --- Generated tauri assets we don't want in git ---
 apps/copythat-ui/src-tauri/Cargo.lock
