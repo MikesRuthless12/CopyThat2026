@@ -61,6 +61,14 @@ windows-sys = { version = "0.59", features = [
     # Phase 31b — `SHQueryUserNotificationState` for the
     # presentation / fullscreen probe.
     "Win32_UI_Shell",
+    # Phase 38 follow-up — overlapped I/O fast path
+    # (`windows_overlapped.rs`): VirtualAlloc / VirtualFree for
+    # sector-aligned ring-buffer allocation; INFINITE waits;
+    # SECURITY_ATTRIBUTES for CreateFileW (it accepts a pointer
+    # but we always pass null).
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_Security",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

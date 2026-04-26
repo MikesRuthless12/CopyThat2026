@@ -161,6 +161,16 @@ pub(crate) async fn try_native_copy(
     ctrl: CopyControl,
     events: mpsc::Sender<CopyEvent>,
 ) -> NativeOutcome {
+    // Phase 38 follow-up — opt-in Robocopy-style overlapped I/O
+    // pipeline for large files. Gate behind
+    // `COPYTHAT_OVERLAPPED_IO=1` so users can A/B test against
+    // the default `CopyFileExW` path on NVMe / Dev Drive hardware
+    // without risking the default path until numbers prove it
+    // universally wins.
+    if super::windows_overlapped::requested(total).is_some() {
+        return super::windows_overlapped::try_overlapped_copy(src, dst, total, ctrl, events).await;
+    }
+
     // Phase 13c — opt-in parallel multi-chunk copy for large files.
     // Gate behind `COPYTHAT_PARALLEL_CHUNKS=<N>` env var so users
     // can A/B test it against the single-stream `CopyFileExW` path
