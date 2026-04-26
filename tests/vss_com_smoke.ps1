@@ -93,22 +93,32 @@ try {
 }
 Note "round-trip test: passed"
 
-# Optional locked-file read-from-shadow probe
+# Optional locked-file copy-via-shadow probe.
+#
+# End-to-end demonstration of the COM port + GLOBALROOT-path read +
+# write-to-destination. While `lock_file.ps1` holds an exclusive lock
+# on `LockedFilePath`, the ignored test `vss_com_copy_locked_file_via_shadow`:
+#  1. confirms direct read fails with ERROR_SHARING_VIOLATION (32),
+#  2. mints a shadow and reads the file off
+#     `\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopyN\<rest>`,
+#  3. writes the bytes into `tests\vss-test-restored\` (a sibling
+#     folder under the repo's `tests/` root),
+#  4. verifies the bytes match the deterministic pattern
+#     `lock_file.ps1` wrote (0..255 repeating).
 if ($LockedFilePath) {
-    Step "locked-file read-from-shadow probe: $LockedFilePath"
+    Step "locked-file copy-via-shadow probe: $LockedFilePath"
     if (-not (Test-Path $LockedFilePath)) {
         Write-Error "LockedFilePath does not exist: $LockedFilePath"
     }
 
-    # First: verify the file actually IS locked (sharing violation).
+    # Surface lock state to the user before kicking off cargo. The
+    # cargo test asserts the same condition, but seeing it print here
+    # makes a misconfigured run obvious without sifting through Rust
+    # output.
     Note "verifying $LockedFilePath is currently locked..."
     try {
         $bytes = [System.IO.File]::ReadAllBytes($LockedFilePath)
         $len = $bytes.Length
-        # PowerShell 5.1 has a known parser quirk where literal
-        # parens inside a string passed via parenthesised-argument
-        # syntax to certain cmdlets misparse. Build the message in
-        # a separate variable to bypass.
         $warnMsg = "expected sharing violation but read succeeded $len bytes. Is lock_file.ps1 running?"
         Write-Warning $warnMsg
     } catch [System.IO.IOException] {
@@ -116,15 +126,32 @@ if ($LockedFilePath) {
         Note "sharing violation confirmed: $msg"
     }
 
-    # Second: surface what was tested vs. what is deferred.
-    Write-Host ""
-    Write-Host "Manual verification: while lock_file.ps1 keeps the lock," -ForegroundColor Yellow
-    Write-Host "the cargo test above already proved the COM port can" -ForegroundColor Yellow
-    Write-Host "create plus release a shadow on $Volume." -ForegroundColor Yellow
-    Write-Host "Reading the locked file from the shadow device path is" -ForegroundColor Yellow
-    Write-Host "a read-only operation against the GLOBALROOT path, bypassing" -ForegroundColor Yellow
-    Write-Host "the sharing-violation gate. Verified at the engine level by" -ForegroundColor Yellow
-    Write-Host "tests/smoke/phase_19_snapshot.rs (already passing in CI)." -ForegroundColor Yellow
+    $destDir = Join-Path $repoRoot 'tests\vss-test-restored'
+    Note "destination dir: $destDir"
+    Step "cargo test --features vss-com vss_com_copy_locked_file_via_shadow --ignored"
+    Push-Location $repoRoot
+    try {
+        $env:COPYTHAT_VSS_LOCKED_FILE_PATH = $LockedFilePath
+        $env:COPYTHAT_VSS_DEST_DIR = $destDir
+        & cargo test -p copythat-snapshot --features vss-com `
+            vss_com_copy_locked_file_via_shadow -- --ignored --nocapture
+        $rc = $LASTEXITCODE
+        Remove-Item Env:COPYTHAT_VSS_LOCKED_FILE_PATH -ErrorAction SilentlyContinue
+        Remove-Item Env:COPYTHAT_VSS_DEST_DIR -ErrorAction SilentlyContinue
+        if ($rc -ne 0) { Write-Error "locked-file copy-via-shadow probe failed (rc=$rc)" }
+    } finally {
+        Pop-Location
+    }
+
+    # Echo the artefact path so the user can inspect / hash / diff.
+    $copyPath = Join-Path $destDir (Split-Path -Leaf $LockedFilePath)
+    if (Test-Path $copyPath) {
+        $info = Get-Item $copyPath
+        $sizeMsg = "copied artefact: $($info.FullName) ($($info.Length) bytes)"
+        Note $sizeMsg
+    } else {
+        Write-Warning "expected copy at $copyPath but it is not present"
+    }
 }
 
 Step "done"

@@ -3,8 +3,11 @@
 //! Two paths, picked at runtime:
 //!
 //! - **In-process.** When the parent is already elevated (Administrator
-//!   token), we shell to PowerShell's `Win32_ShadowCopy::Create` to
-//!   mint the shadow. No child binary needed.
+//!   token), we mint the shadow with the `IVssBackupComponents` COM
+//!   port in [`super::vss_com`]. No child binary, no PowerShell
+//!   shellout. With `--no-default-features` (i.e. the `vss-com`
+//!   feature off) the in-process path falls back to PowerShell's
+//!   `Win32_ShadowCopy::Create`.
 //! - **Helper binary + UAC.** Otherwise we start the sibling
 //!   `copythat-helper-vss.exe` via `Start-Process -Verb RunAs`, which
 //!   triggers the UAC prompt. The helper connects to two named pipes
@@ -125,13 +128,45 @@ pub(crate) fn release_blocking(c: Cleanup) -> Result<(), SnapshotError> {
     }
 }
 
-// --- In-process PowerShell path ------------------------------------
+// --- In-process path ----------------------------------------------
+//
+// Two implementations, feature-gated on `vss-com`:
+//
+// * Default (`vss-com` on): direct `IVssBackupComponents` COM via
+//   `super::vss_com`. No PowerShell, no WMI, no string interpolation.
+// * Fallback (`--no-default-features`): the original PowerShell +
+//   `Get-WmiObject Win32_ShadowCopy` shellout, kept for users who
+//   need to drop the COM dep (e.g. ultra-minimal Windows builds).
 
+#[cfg(feature = "vss-com")]
 async fn create_in_process(volume: &str) -> Result<(String, String), SnapshotError> {
-    // Defence-in-depth — `volume_letter_for` already restricts to
-    // the `[A-Za-z]:\` shape upstream, but if a future caller
-    // bypasses that helper, the same shape check fires here too.
-    // Mirrors the validation in `helper_vss::create_shadow`.
+    // Defence-in-depth — `volume_letter_for` already restricts to the
+    // `[A-Za-z]:\` shape upstream. `vss_com::create_shadow_via_com`
+    // documents that it trusts the input, so we keep the same gate
+    // active even on the COM path.
+    if !is_valid_drive_root(volume) {
+        return Err(SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: format!(
+                "refusing to shadow non-drive-root volume {volume:?}; expected `X:\\\\`"
+            ),
+        });
+    }
+    let volume = volume.to_string();
+    tokio::task::spawn_blocking(move || {
+        super::vss_com::create_shadow_via_com(&volume).map_err(|msg| {
+            SnapshotError::BackendFailure {
+                kind: SnapshotKind::Vss,
+                message: msg,
+            }
+        })
+    })
+    .await
+    .map_err(|e| SnapshotError::Protocol(format!("vss_com create spawn_blocking: {e}")))?
+}
+
+#[cfg(not(feature = "vss-com"))]
+async fn create_in_process(volume: &str) -> Result<(String, String), SnapshotError> {
     if !is_valid_drive_root(volume) {
         return Err(SnapshotError::BackendFailure {
             kind: SnapshotKind::Vss,
@@ -173,12 +208,34 @@ async fn create_in_process(volume: &str) -> Result<(String, String), SnapshotErr
     parse_id_device(&String::from_utf8_lossy(&out.stdout))
 }
 
+#[cfg(feature = "vss-com")]
+async fn release_in_process(shadow_id: &str) -> Result<(), SnapshotError> {
+    if !is_valid_guid_brace(shadow_id) {
+        return Err(SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: format!("refusing to release non-GUID shadow_id {shadow_id:?}"),
+        });
+    }
+    let shadow_id = shadow_id.to_string();
+    tokio::task::spawn_blocking(move || {
+        super::vss_com::release_shadow_via_com(&shadow_id).map_err(|msg| {
+            SnapshotError::BackendFailure {
+                kind: SnapshotKind::Vss,
+                message: msg,
+            }
+        })
+    })
+    .await
+    .map_err(|e| SnapshotError::Protocol(format!("vss_com release spawn_blocking: {e}")))?
+}
+
+#[cfg(not(feature = "vss-com"))]
 async fn release_in_process(shadow_id: &str) -> Result<(), SnapshotError> {
     // Mirror the helper-side validation: shadow_id must be the
-    // braced-GUID shape WMI hands back from
-    // `Win32_ShadowCopy.ID`. Refuses anything else so a bug in a
-    // future caller can't smuggle a script-fragment-bearing
-    // string past `powershell_escape` (which only handles `'`).
+    // braced-GUID shape WMI hands back from `Win32_ShadowCopy.ID`.
+    // Refuses anything else so a bug in a future caller can't smuggle
+    // a script-fragment-bearing string past `powershell_escape`
+    // (which only handles `'`).
     if !is_valid_guid_brace(shadow_id) {
         return Err(SnapshotError::BackendFailure {
             kind: SnapshotKind::Vss,
@@ -216,6 +273,23 @@ async fn release_in_process(shadow_id: &str) -> Result<(), SnapshotError> {
     }
 }
 
+#[cfg(feature = "vss-com")]
+fn release_in_process_blocking(shadow_id: &str) -> Result<(), SnapshotError> {
+    if !is_valid_guid_brace(shadow_id) {
+        return Err(SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: format!("refusing to release non-GUID shadow_id {shadow_id:?}"),
+        });
+    }
+    super::vss_com::release_shadow_via_com(shadow_id).map_err(|msg| {
+        SnapshotError::BackendFailure {
+            kind: SnapshotKind::Vss,
+            message: msg,
+        }
+    })
+}
+
+#[cfg(not(feature = "vss-com"))]
 fn release_in_process_blocking(shadow_id: &str) -> Result<(), SnapshotError> {
     // Same GUID-shape gate as the async `release_in_process`.
     if !is_valid_guid_brace(shadow_id) {
@@ -511,6 +585,7 @@ fn make_pipe_names() -> (String, String) {
     )
 }
 
+#[cfg(not(feature = "vss-com"))]
 fn parse_id_device(stdout: &str) -> Result<(String, String), SnapshotError> {
     for line in stdout.lines() {
         let line = line.trim();
@@ -609,6 +684,7 @@ mod tests {
         assert_eq!(volume_letter_for(Path::new(r".\rel")), None);
     }
 
+    #[cfg(not(feature = "vss-com"))]
     #[test]
     fn parse_id_device_splits_on_tab() {
         let (id, dev) =
@@ -618,6 +694,7 @@ mod tests {
         assert_eq!(dev, r"\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy5");
     }
 
+    #[cfg(not(feature = "vss-com"))]
     #[test]
     fn parse_id_device_surfaces_empty_input_as_error() {
         assert!(parse_id_device("").is_err());
