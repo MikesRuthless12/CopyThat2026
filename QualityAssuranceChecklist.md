@@ -172,16 +172,16 @@ deferred true-end-to-end tauri-driver path.
       `e2e/qa-section-4-1-copy.spec.ts`; manual physical-drag
       pass still required pre-tag)*
 - [x] Drag a 1 GiB folder → tree-progress bar accumulates →
-      completes → totals bump in the footer. *(harness stub at
+      completes → totals bump in the footer. *(harness implemented at
       `e2e/qa-section-4-1-copy.spec.ts`)*
 - [x] Drag onto a destination that already has the file → collision
       modal → pick "Overwrite" → file replaced. Repeat with
       "Skip" → file untouched. Repeat with "Rename" → unique
-      sibling created. *(harness stub at
+      sibling created. *(harness implemented at
       `e2e/qa-section-4-1-copy.spec.ts`)*
 - [x] Cross-volume copy → engine falls back from reflink to byte-
       copy (Phase 6 fast-paths). No reflink event in the journal.
-      *(harness stub at `e2e/qa-section-4-1-copy.spec.ts`;
+      *(harness implemented at `e2e/qa-section-4-1-copy.spec.ts`;
       reflink-vs-copy decision itself covered by
       `cargo test -p copythat-platform`)*
 

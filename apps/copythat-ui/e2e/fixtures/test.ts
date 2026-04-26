@@ -29,6 +29,7 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
 
 import type {
   CopyThatE2EHandle,
@@ -38,7 +39,44 @@ import type {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const SHIM_PATH = resolve(__dirname, "tauri-shim.ts");
+// fixtures/ → e2e/ → copythat-ui/ → apps/ → repo root
+const REPO_ROOT = resolve(__dirname, "../../../..");
+
+// Mirror of the Rust-side i18n parser: collects `key = value` pairs,
+// skipping comments / continuations / attributes. Loaded once per
+// worker so every test sees the real en + locale strings without
+// re-reading the .ftl files on every page.
+const TRANSLATION_LOCALES = [
+  "en", "es", "zh-CN", "hi", "ar", "pt-BR", "ru", "ja", "de",
+  "fr", "ko", "it", "tr", "vi", "pl", "nl", "id", "uk",
+] as const;
+type LocaleCode = (typeof TRANSLATION_LOCALES)[number];
+
+const translationCache: Record<string, Record<string, string>> = {};
+function loadTranslations(locale: string): Record<string, string> {
+  if (translationCache[locale]) return translationCache[locale];
+  const path = resolve(REPO_ROOT, "locales", locale, "copythat.ftl");
+  if (!existsSync(path)) {
+    translationCache[locale] = {};
+    return {};
+  }
+  const out: Record<string, string> = {};
+  for (const raw of readFileSync(path, "utf8").split(/\r?\n/)) {
+    if (!raw.length) continue;
+    const first = raw[0];
+    if (first === " " || first === "\t" || first === "." || first === "*" ||
+        first === "[" || first === "}" || first === "#") continue;
+    const eq = raw.indexOf("=");
+    if (eq < 0) continue;
+    const key = raw.slice(0, eq).trim();
+    if (!key) continue;
+    out[key] = raw.slice(eq + 1).trim();
+  }
+  translationCache[locale] = out;
+  return out;
+}
+// Pre-warm the en bundle since every page boot needs it.
+loadTranslations("en");
 
 declare global {
   interface Window {
@@ -103,21 +141,141 @@ interface Fixtures {
 export const test = base.extend<Fixtures>({
   tauri: async ({ page }, use) => {
     // Install the shim before any of the page's own scripts run.
-    // `addInitScript({ path })` evaluates the file as a classic
-    // script in the page's main world, which is what we need for
-    // the shim's `installTauriShim()` IIFE to land before the
-    // Vite bundle imports `@tauri-apps/api/core`.
-    await page.addInitScript({ path: SHIM_PATH });
+    // The shim body has to be a plain inline function — `path` mode
+    // would feed Playwright a TypeScript source it can't parse, and
+    // we want zero build step in the e2e harness.
+    await page.addInitScript(() => {
+      if ((window as unknown as { __copythat_e2e__?: unknown }).__copythat_e2e__) return;
 
+      const handlers = new Map<string, (args: Record<string, unknown> | undefined) => unknown | Promise<unknown>>();
+      const callbacks = new Map<number, (response: unknown) => void>();
+      const calls: { cmd: string; args: Record<string, unknown> | undefined; at: number }[] = [];
+      const listenersByEvent = new Map<string, Set<number>>();
+      let nextCallbackId = 1;
+      let defaultHandler: ((args: Record<string, unknown> | undefined) => unknown | Promise<unknown>) | null = () => undefined;
+
+      const transformCallback = (callback: (response: unknown) => void, once?: boolean): number => {
+        const id = nextCallbackId++;
+        if (once) {
+          callbacks.set(id, (response: unknown) => {
+            callbacks.delete(id);
+            callback(response);
+          });
+        } else {
+          callbacks.set(id, callback);
+        }
+        return id;
+      };
+
+      const invoke = async (cmd: string, args?: Record<string, unknown>): Promise<unknown> => {
+        calls.push({ cmd, args, at: Date.now() });
+        if (cmd === "plugin:event|listen" && args) {
+          const event = args.event as string | undefined;
+          const handlerId = args.handler as number | undefined;
+          if (typeof event === "string" && typeof handlerId === "number") {
+            let set = listenersByEvent.get(event);
+            if (!set) {
+              set = new Set();
+              listenersByEvent.set(event, set);
+            }
+            set.add(handlerId);
+            return handlerId;
+          }
+        }
+        if (cmd === "plugin:event|unlisten" && args) {
+          const event = args.event as string | undefined;
+          const handlerId = args.eventId as number | undefined;
+          if (typeof event === "string" && typeof handlerId === "number") {
+            listenersByEvent.get(event)?.delete(handlerId);
+            callbacks.delete(handlerId);
+          }
+          return undefined;
+        }
+        const handler = handlers.get(cmd) ?? defaultHandler;
+        if (!handler) {
+          throw new Error("[copythat e2e] no handler for invoke('" + cmd + "')");
+        }
+        return await handler(args);
+      };
+
+      (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+        invoke,
+        transformCallback,
+        metadata: {
+          currentWindow: { label: "main" },
+          currentWebview: { label: "main" },
+        },
+        convertFileSrc: (filePath: string) => filePath,
+        runtimeAuthToken: "copythat-e2e-shim",
+      };
+
+      (window as unknown as { __copythat_e2e__: unknown }).__copythat_e2e__ = {
+        setHandler(cmd: string, handler: (args: Record<string, unknown> | undefined) => unknown | Promise<unknown>) {
+          handlers.set(cmd, handler);
+        },
+        setHandlerIfMissing(cmd: string, handler: (args: Record<string, unknown> | undefined) => unknown | Promise<unknown>) {
+          if (!handlers.has(cmd)) handlers.set(cmd, handler);
+        },
+        clearHandler(cmd: string) {
+          handlers.delete(cmd);
+        },
+        reset() {
+          handlers.clear();
+          callbacks.clear();
+          listenersByEvent.clear();
+          calls.length = 0;
+          nextCallbackId = 1;
+          defaultHandler = () => undefined;
+        },
+        emit(event: string, payload: unknown) {
+          const set = listenersByEvent.get(event);
+          if (!set) return;
+          const message = { event, id: 0, payload };
+          for (const id of set) {
+            const cb = callbacks.get(id);
+            cb?.(message);
+          }
+        },
+        calls() {
+          return calls.slice();
+        },
+        listenerCount(event: string) {
+          return listenersByEvent.get(event)?.size ?? 0;
+        },
+        setDefaultHandler(handler: (args: Record<string, unknown> | undefined) => unknown | Promise<unknown>) {
+          defaultHandler = handler;
+        },
+      };
+    });
+
+    // Real en translations preloaded into every page so `t(...)`
+    // calls hit actual strings rather than the `{key}` placeholder.
+    // Tests that exercise locale switching can override the
+    // `translations` handler per test.
+    const enTranslations = loadTranslations("en");
     // Per-test default handlers cover the boot path so a spec
     // that only asserts on, say, the drop-stack flow doesn't have
     // to pre-register `globals`, `list_jobs`, etc. Specs that need
     // a different shape override these by name.
-    await page.addInitScript(() => {
-      const reg = window.__copythat_e2e__;
+    await page.addInitScript((seed: { en: Record<string, string> }) => {
+      const reg = window.__copythat_e2e__ as unknown as {
+        setHandler: (cmd: string, h: (args: Record<string, unknown> | undefined) => unknown) => void;
+        setHandlerIfMissing: (cmd: string, h: (args: Record<string, unknown> | undefined) => unknown) => void;
+        setDefaultHandler: (h: (args: Record<string, unknown> | undefined) => unknown) => void;
+      } | undefined;
       if (!reg) return;
       const noop = () => undefined;
-      reg.setHandler("globals", () => ({
+      // Stash the en bundle so the default `translations` handler
+      // can serve it; tests that override `translations` for non-en
+      // locales just re-register their own handler.
+      const enBundle = seed.en;
+      // `setHandlerIfMissing` is the right primitive here: this init
+      // script re-runs on every navigation, but a test may have
+      // already registered overrides via `tauri.handles({...})` on
+      // the about:blank page. Using `setHandler` would clobber those
+      // overrides on `page.goto("/")` — surfaced as IPC mocks that
+      // silently revert to the default value mid-test.
+      reg.setHandlerIfMissing("globals", () => ({
         state: "idle",
         activeJobs: 0,
         queuedJobs: 0,
@@ -130,24 +288,27 @@ export const test = base.extend<Fixtures>({
         etaSeconds: null,
         errors: 0,
       }));
-      reg.setHandler("list_jobs", () => []);
-      reg.setHandler("error_log", () => []);
-      reg.setHandler("history_search", () => []);
-      reg.setHandler("history_totals", () => ({
+      reg.setHandlerIfMissing("list_jobs", () => []);
+      reg.setHandlerIfMissing("error_log", () => []);
+      reg.setHandlerIfMissing("history_search", () => []);
+      reg.setHandlerIfMissing("history_totals", () => ({
         bytes: 0,
         files: 0,
         jobs: 0,
         avgRateBps: 0,
         peakRateBps: 0,
       }));
-      reg.setHandler("history_daily", () => []);
-      reg.setHandler("available_locales", () => [
+      reg.setHandlerIfMissing("history_daily", () => []);
+      reg.setHandlerIfMissing("available_locales", () => [
         "en", "es", "zh-CN", "hi", "ar", "pt-BR", "ru", "ja", "de",
         "fr", "ko", "it", "tr", "vi", "pl", "nl", "id", "uk",
       ]);
-      reg.setHandler("system_locale", () => "en");
-      reg.setHandler("translations", () => ({}));
-      reg.setHandler("get_settings", () => ({
+      reg.setHandlerIfMissing("system_locale", () => "en");
+      reg.setHandlerIfMissing("translations", (args) => {
+        const locale = (args?.locale as string | undefined) ?? "en";
+        return locale === "en" ? enBundle : {};
+      });
+      reg.setHandlerIfMissing("get_settings", () => ({
         general: {
           locale: "en",
           theme: "system",
@@ -166,12 +327,10 @@ export const test = base.extend<Fixtures>({
         network: { rateBps: null, scheduleEnabled: false },
         power: { policy: "always" },
       }));
-      reg.setHandler("pending_resumes", () => []);
-      reg.setHandler("plugin:dialog|open", () => null);
-      // Default fallback so a stray invoke doesn't reject — tests
-      // that need stricter assertions can override.
+      reg.setHandlerIfMissing("pending_resumes", () => []);
+      reg.setHandlerIfMissing("plugin:dialog|open", () => null);
       reg.setDefaultHandler(noop);
-    });
+    }, { en: enTranslations });
 
     const fixture: TauriFixture = {
       async handle(cmd, handler) {
