@@ -259,7 +259,7 @@ deferred true-end-to-end tauri-driver path.
       covered by `cargo test -p copythat-audit`)*
 - [x] WORM mode on → try to truncate the audit file → OS refuses
       (Linux `chattr +a`, Windows read-only attribute).
-      *(harness stub at `e2e/qa-section-4-8-audit.spec.ts`)*
+      *(harness implemented at `e2e/qa-section-4-8-audit.spec.ts`)*
 - [x] `Verify chain` button → green for an untampered log; red
       after `dd` overwrites a record. *(harness stub at
       `e2e/qa-section-4-8-audit.spec.ts`)*
