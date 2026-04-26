@@ -126,11 +126,28 @@ options for shipping this:
    — Microsoft's metadata project has been adding more
    interfaces; vsbackup may land in a future minor release.
 
-Recommendation: option 2 (winapi-0.3) when a Windows VSS test
-environment is available. Implementing without that environment
-ships unsafe FFI nobody can verify works correctly. The
-PowerShell path with the followup-4/-6/-7 hardening is the
-production code until then.
+**Followup-8 — scaffolded behind `vss-com` feature flag.** Took
+option 2: `crates/copythat-snapshot/src/backends/vss_com.rs`
+ships `create_shadow_via_com` + `release_shadow_via_com` with
+the full IVssBackupComponents flow (CreateVssBackupComponents →
+InitializeForBackup → SetBackupState → SetContext →
+StartSnapshotSet → AddToSnapshotSet → PrepareForBackup [async
+poll] → DoSnapshotSet [async poll] → GetSnapshotProperties →
+DeleteSnapshots), RAII wrappers for `IVssBackupComponents` /
+`IVssAsync` / `VSS_SNAPSHOT_PROP` so every interface pointer
+releases on Drop, GUID round-trip helpers matching the WMI
+`{XXXXXXXX-...}` shape, and a `#[tokio::test] #[ignore]` smoke
+that runs the full create/release cycle when invoked with
+`--ignored` from an admin shell on a Windows VSS host. The
+companion fixtures `tests/lock_file.ps1` and
+`tests/vss_com_smoke.ps1` drive the verification.
+
+Production code still uses the PowerShell path — the feature
+flag stays off by default until the Windows VSS test environment
+verifies the COM bindings work end-to-end. Flip the call sites
+in `backends/vss.rs::{create_in_process, release_in_process,
+release_in_process_blocking}` to call `super::vss_com::*` once
+the round-trip test passes.
 
 ### ~~17j — Helper-argv signing / capability binding~~ (shipped, redesigned)
 

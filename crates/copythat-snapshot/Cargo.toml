@@ -24,6 +24,13 @@ default = []
 # real VSS snapshot create/delete). Off by default so normal
 # workspace test runs stay snappy.
 slow-tests = []
+# Phase 17 follow-up — IVssBackupComponents COM port. Replaces the
+# PowerShell+WMI shellouts in backends/vss.rs with direct VSS COM
+# calls (eliminates ~300-700 ms PowerShell startup per shadow,
+# removes the format-string interpolation pattern). Off by default
+# until verified on a real Windows VSS test environment; the
+# PowerShell path is the production code in the meantime.
+vss-com = ["dep:winapi"]
 
 [dependencies]
 # Phase 19b — SnapshotHook trait + CopyError live in core. Taking a
@@ -72,6 +79,27 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Threading",
     "Win32_UI_Shell",
 ] }
+# Phase 17 follow-up — winapi 0.3 ships full IVssBackupComponents
+# bindings in winapi::um::vsbackup which the modern windows-sys /
+# windows crates don't (Microsoft's metadata project hasn't bound
+# vsbackup.h yet). winapi-0.3 is in maintenance mode but well-
+# proven on Windows targets. Optional + feature-gated so the dep
+# only enters the build when `vss-com` is on.
+winapi = { version = "0.3", features = [
+    "combaseapi",
+    "guiddef",
+    "minwindef",
+    "ntdef",
+    "objbase",
+    "objidl",
+    "objidlbase",
+    "vsbackup",
+    "vss",
+    "vsserror",
+    "winerror",
+    "winnt",
+    "wtypesbase",
+], optional = true }
 
 [dev-dependencies]
 tempfile = "3"
