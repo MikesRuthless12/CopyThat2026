@@ -1,0 +1,69 @@
+- 'main "{window-title}" [ref=e3]':
+  - generic [ref=e4]:
+    - img [ref=e6]
+    - generic [ref=e12]: "{state-idle}"
+    - 'toolbar "{header-toolbar-label}" [ref=e13]':
+      - 'button "{action-add-files}" [ref=e14] [cursor=pointer]':
+        - img [ref=e15]
+        - generic [ref=e18]: "{action-add-files}"
+      - 'button "{action-add-folders}" [ref=e19] [cursor=pointer]':
+        - img [ref=e20]
+        - generic [ref=e22]: "{action-add-folders}"
+      - 'button "{action-pause-all}" [disabled] [ref=e24]':
+        - img [ref=e25]
+      - 'button "{action-resume-all}" [disabled] [ref=e28]':
+        - img [ref=e29]
+      - 'button "{action-cancel-all}" [disabled] [ref=e31]':
+        - img [ref=e32]
+  - grid [ref=e35]:
+    - 'region "{empty-region-label}" [ref=e36]':
+      - img [ref=e38]
+      - paragraph [ref=e41]: "{empty-title}"
+      - paragraph [ref=e42]: "{empty-hint}"
+  - generic [ref=e43]:
+    - 'generic "{activity-title}" [ref=e44]':
+      - 'button "{activity-title}" [expanded] [ref=e45] [cursor=pointer]':
+        - img [ref=e46]
+        - generic [ref=e48]: "{activity-title}"
+        - generic [ref=e49]: "0"
+      - generic [ref=e50]:
+        - generic [ref=e51]: "{drop-dialog-sort-label}"
+        - 'combobox "{drop-dialog-sort-label}" [ref=e52] [cursor=pointer]':
+          - 'option "{sort-custom}" [selected]'
+          - 'option "{sort-name-asc-simple}"'
+          - 'option "{sort-name-desc-simple}"'
+          - 'option "{sort-size-asc-simple}"'
+          - 'option "{sort-size-desc-simple}"'
+    - list [ref=e53]:
+      - generic [ref=e54]: "{activity-empty}"
+  - progressbar [ref=e55]
+  - generic [ref=e56]:
+    - generic [ref=e57]:
+      - strong [ref=e58]: "0"
+      - text: "{footer-queued}"
+    - 'generic "{footer-total-bytes}" [ref=e59]':
+      - strong [ref=e60]: 0 B
+      - text: "{footer-total-bytes}"
+    - 'button "{error-log-title}" [ref=e61] [cursor=pointer]':
+      - strong [ref=e62]: "0"
+      - text: "{footer-errors}"
+    - 'generic "{activity-after-done}" [ref=e63]':
+      - generic [ref=e64]: "{activity-after-done}"
+      - 'combobox "{activity-after-done}" [ref=e65] [cursor=pointer]':
+        - 'option "{activity-keep-open}" [selected]'
+        - 'option "{activity-close-app}"'
+        - 'option "{activity-shutdown}"'
+        - 'option "{activity-logoff}"'
+        - 'option "{activity-sleep}"'
+    - 'button "{footer-totals}" [ref=e66] [cursor=pointer]':
+      - img [ref=e67]
+      - text: "{footer-totals}"
+    - 'button "{footer-history}" [ref=e69] [cursor=pointer]':
+      - img [ref=e70]
+      - text: "{footer-history}"
+    - 'button "{footer-sync}" [ref=e74] [cursor=pointer]':
+      - img [ref=e75]
+      - text: "{footer-sync}"
+    - 'button "{settings-title}" [ref=e80] [cursor=pointer]':
+      - img [ref=e81]
+  - status
