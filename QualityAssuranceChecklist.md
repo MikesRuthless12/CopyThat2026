@@ -222,10 +222,10 @@ deferred true-end-to-end tauri-driver path.
 
 - [x] Add a sync pair → toggle live-mirror → modify a file on the
       left tree → right tree updates within the watcher debounce.
-      *(harness stub at `e2e/qa-section-4-5-sync.spec.ts`)*
+      *(harness implemented at `e2e/qa-section-4-5-sync.spec.ts`)*
 - [x] Modify the same file on both sides → vector-clock conflict
       modal opens → pick "Keep left" → right side overwrites.
-      *(harness stub at `e2e/qa-section-4-5-sync.spec.ts`)*
+      *(harness implemented at `e2e/qa-section-4-5-sync.spec.ts`)*
 
 ### 4.6 Cloud (Phase 32)
 
