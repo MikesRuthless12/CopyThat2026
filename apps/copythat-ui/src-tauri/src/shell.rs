@@ -6,9 +6,9 @@
 //! they land identical jobs in the queue — same ids, same progress
 //! events, same terminal states.
 //!
-//! [`dispatch_cli_action`] is the entry point [`crate::lib::run`] and
+//! [`dispatch_cli_action`] is the entry point [`crate::run`] and
 //! the single-instance plugin callback both use to route an already-
-//! parsed [`cli::CliAction`] into the running app.
+//! parsed [`crate::cli::CliAction`] into the running app.
 
 use std::path::{Path, PathBuf};
 

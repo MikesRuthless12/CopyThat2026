@@ -39,7 +39,7 @@
 //!
 //! The module is **pure** — no filesystem access, no logging, no I/O.
 //! Callers compose [`translate_path`] at enqueue time to decide what
-//! the destination name should look like and [`translate_line_endings`]
+//! the destination name should look like and [`translate_content_line_endings`]
 //! at copy time to optionally rewrite text content. Engine wiring
 //! lives in the Tauri runner; this module stays testable at the
 //! value-type layer.
@@ -60,8 +60,11 @@ use thiserror::Error;
 /// is mounted on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TargetOs {
+    /// Windows destination — target NTFS / ReFS / SMB.
     Windows,
+    /// macOS destination — APFS / HFS+ / SMB to a Mac.
     MacOs,
+    /// Linux destination — ext4 / xfs / btrfs / SMB to a Linux box.
     Linux,
     /// Resolve to the host OS via `cfg!(target_os = …)`.
     #[default]
@@ -143,10 +146,16 @@ pub enum LongPathStrategy {
 /// with `PathPolicy::default()` and flips one or two knobs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PathPolicy {
+    /// Destination OS the engine is targeting.
     pub target_os: TargetOs,
+    /// Unicode normalization form to apply to the filename component.
     pub unicode_normalization: NormalizationMode,
+    /// Line-ending conversion mode for the file body.
     pub line_endings: LineEndingMode,
+    /// What to do when the source filename is a Windows reserved device
+    /// name (`CON`, `LPT1`, ...).
     pub reserved_name_strategy: ReservedNameStrategy,
+    /// What to do when a destination path would exceed Windows MAX_PATH.
     pub long_path_strategy: LongPathStrategy,
     /// Lowercase extensions (no leading dot) eligible for line-ending
     /// conversion. Only consulted when `line_endings != AsIs`.
@@ -182,17 +191,24 @@ pub fn default_text_extensions() -> Vec<String> {
 // Errors
 // ---------------------------------------------------------------------
 
+/// Errors raised by [`translate_path`].
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum TranslateError {
     /// Filename is a Windows reserved device name (`CON`, `LPT1`, …)
     /// and the caller selected [`ReservedNameStrategy::Reject`].
     #[error("filename `{name}` is reserved on Windows (device name)")]
-    ReservedName { name: String },
+    ReservedName {
+        /// The offending filename.
+        name: String,
+    },
 
     /// Destination path would exceed Windows MAX_PATH (260 chars)
     /// and the caller selected [`LongPathStrategy::Reject`].
     #[error("destination path length {len} exceeds Windows MAX_PATH (260)")]
-    PathTooLong { len: usize },
+    PathTooLong {
+        /// Composed path length the engine measured.
+        len: usize,
+    },
 
     /// Source path has no filename component (e.g. `"/"` or empty).
     #[error("source path has no filename component")]

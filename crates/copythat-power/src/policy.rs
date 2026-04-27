@@ -272,7 +272,7 @@ fn combine(a: PowerAction, b: PowerAction) -> PowerAction {
 /// dimensions, given the observed [`PowerState`].
 ///
 /// Walks the active conditions in priority order and combines each
-/// dimension's would-be action via [`combine`]. Order of evaluation
+/// dimension's would-be action via the private `combine` helper. Order of evaluation
 /// doesn't affect the final answer (combine is commutative-enough
 /// under the strictness ordering) but it's stable so tie-breaks are
 /// deterministic.

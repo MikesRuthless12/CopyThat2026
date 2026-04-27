@@ -1,6 +1,6 @@
 //! Phase 26 — live-mirror runner + registry.
 //!
-//! One [`LiveMirror`] instance per active sync pair in live mode.
+//! One [`LiveMirrorHandle`] per active sync pair in live mode.
 //! Each instance owns:
 //!
 //! - A [`copythat_watch::Watcher`] rooted at the pair's left side,

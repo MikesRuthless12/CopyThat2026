@@ -51,7 +51,7 @@ pub const EVENT_ERROR_RESOLVED: &str = "error-resolved";
 /// Phase 8 — mirror of [`EVENT_ERROR_RESOLVED`] for collisions.
 pub const EVENT_COLLISION_RESOLVED: &str = "collision-resolved";
 /// Phase 22 — a collision was resolved by the runner against the
-/// active [`ConflictProfile`] without ever showing a prompt to the
+/// active `ConflictProfile` without ever showing a prompt to the
 /// user. Emitted alongside the usual engine-side resolution so the
 /// aggregate dialog renders "via rule '*.docx → newer'" rows.
 pub const EVENT_COLLISION_AUTO_RESOLVED: &str = "collision-auto-resolved";
@@ -1370,7 +1370,7 @@ pub struct PendingResumeDto {
 
 /// Phase 19b — `snapshot-created` payload. Emitted when the engine
 /// falls through to a filesystem snapshot because the live source was
-/// locked. The frontend renders a "📷 Reading from <kind> snapshot"
+/// locked. The frontend renders a "📷 Reading from `<kind>` snapshot"
 /// badge on the active row until the file finishes.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

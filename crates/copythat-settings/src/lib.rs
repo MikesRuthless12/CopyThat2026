@@ -492,7 +492,7 @@ impl Default for TransferSettings {
 pub enum LockedFilePolicyChoice {
     /// Ask the user the first time per volume. Remembered choice
     /// (Skip / Retry / Snapshot) stored under
-    /// [`TransferSettings::volume_snapshot_prefs`] (added in the
+    /// `TransferSettings::volume_snapshot_prefs` (added in the
     /// per-volume remember follow-up).
     #[default]
     Ask,
@@ -1171,7 +1171,7 @@ pub struct ChunkStoreSettings {
     /// pay the disk cost of a chunk store they might not need.
     pub enabled: bool,
     /// Absolute path to the chunk-store root. Empty string = "use
-    /// [`copythat_chunk::default_chunk_store_path`] at runtime", which
+    /// `copythat_chunk::default_chunk_store_path` at runtime", which
     /// resolves to `<data-dir>/chunks/` under the Copy That project
     /// dir.
     pub location_override: String,
@@ -1904,18 +1904,18 @@ pub struct MountSettings {
 // ---------------------------------------------------------------------
 
 /// Enterprise-grade audit-log preferences. Off by default. When on,
-/// the Tauri runner opens a [`copythat_audit::AuditSink`] at startup
+/// the Tauri runner opens a `copythat_audit::AuditSink` at startup
 /// (or on the first `update_settings` flip) and records the
-/// brief's eight [`copythat_audit::AuditEvent`] variants.
+/// brief's eight `copythat_audit::AuditEvent` variants.
 ///
 /// `format` persists the kebab-case
-/// [`copythat_audit::AuditFormat`] identifier (`csv`, `json-lines`,
+/// `copythat_audit::AuditFormat` identifier (`csv`, `json-lines`,
 /// `syslog`, `cef`, `leef`) — the audit crate's enum is mirrored as a
 /// string here so [`Settings`] can round-trip without taking a hard
 /// dep on `copythat-audit` (keeps the settings crate a pure preference
 /// layer, consistent with the Phase 9 / 27 pattern).
 ///
-/// `worm` stores the kebab-case [`copythat_audit::WormMode`]
+/// `worm` stores the kebab-case `copythat_audit::WormMode`
 /// identifier (`off` / `on`) for the same reason.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
@@ -1960,7 +1960,7 @@ impl Default for AuditSettings {
 // ---------------------------------------------------------------------
 
 /// Persisted encryption + compression preferences. The live
-/// [`copythat_crypt::EncryptionPolicy`] / `CompressionPolicy` are
+/// `copythat_crypt::EncryptionPolicy` / `CompressionPolicy` are
 /// built from these strings at copy time by the Tauri runner.
 ///
 /// The enum-shaped fields (`encryption_mode`, `compression_mode`)

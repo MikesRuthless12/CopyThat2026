@@ -22,11 +22,14 @@ use std::path::Path;
 /// everything outside those ranges is a hole that reads back as zero.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ByteRange {
+    /// Byte offset of the first byte in the range.
     pub offset: u64,
+    /// Length of the range in bytes.
     pub len: u64,
 }
 
 impl ByteRange {
+    /// Construct a new byte range from `offset` and `len`.
     pub const fn new(offset: u64, len: u64) -> Self {
         Self { offset, len }
     }
@@ -110,15 +113,19 @@ impl SparseOps for DenseOnlySparseOps {
 /// to reformat the message in every locale.
 #[derive(Debug, Clone)]
 pub struct SparsenessMismatch {
+    /// Source extent layout observed before the copy.
     pub src_extents: Vec<ByteRange>,
+    /// Destination extent layout observed after the copy.
     pub dst_extents: Vec<ByteRange>,
 }
 
 impl SparsenessMismatch {
+    /// Number of allocated extents observed on the source.
     pub fn src_extent_count(&self) -> usize {
         self.src_extents.len()
     }
 
+    /// Number of allocated extents observed on the destination.
     pub fn dst_extent_count(&self) -> usize {
         self.dst_extents.len()
     }

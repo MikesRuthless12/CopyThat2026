@@ -182,14 +182,17 @@ impl Scanner {
         })
     }
 
+    /// Identifier the scan was registered under.
     pub fn scan_id(&self) -> ScanId {
         self.scan_id
     }
 
+    /// Absolute path to the SQLite scan database.
     pub fn db_path(&self) -> &Path {
         &self.db_path
     }
 
+    /// Source root the scan is walking.
     pub fn root(&self) -> &Path {
         &self.root
     }

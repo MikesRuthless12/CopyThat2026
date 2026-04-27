@@ -41,8 +41,12 @@ impl ChosenStrategy {
 /// Final success record returned by [`crate::fast_copy`].
 #[derive(Debug, Clone)]
 pub struct FastCopyOutcome {
+    /// Which acceleration path actually moved the bytes.
     pub strategy: ChosenStrategy,
+    /// Total bytes copied (== source size on success).
     pub bytes: u64,
+    /// Wall-clock duration end-to-end.
     pub duration: Duration,
+    /// Average throughput across the copy, bytes per second.
     pub rate_bps: u64,
 }

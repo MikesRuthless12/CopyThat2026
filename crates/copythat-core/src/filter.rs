@@ -27,20 +27,34 @@ use std::time::SystemTime;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use thiserror::Error;
 
+/// Caller-supplied include/exclude rules applied during a tree walk.
+/// All fields are optional; an all-default `FilterSet` matches every
+/// file. Compile via [`FilterSet::compile`] before passing to the
+/// engine.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FilterSet {
+    /// Whitelist globs. Empty = no whitelist.
     pub include_globs: Vec<String>,
+    /// Blacklist globs. Empty = no blacklist.
     pub exclude_globs: Vec<String>,
+    /// Skip files smaller than this many bytes.
     pub min_size_bytes: Option<u64>,
+    /// Skip files larger than this many bytes.
     pub max_size_bytes: Option<u64>,
+    /// Skip files modified before this instant.
     pub min_mtime: Option<SystemTime>,
+    /// Skip files modified after this instant.
     pub max_mtime: Option<SystemTime>,
+    /// Skip dotfiles / Windows hidden-attribute files.
     pub skip_hidden: bool,
+    /// Skip Windows system-attribute files.
     pub skip_system: bool,
+    /// Skip read-only files.
     pub skip_readonly: bool,
 }
 
 impl FilterSet {
+    /// `true` when no filter is active (i.e. every file passes).
     pub fn is_empty(&self) -> bool {
         self.include_globs.is_empty()
             && self.exclude_globs.is_empty()
@@ -53,6 +67,8 @@ impl FilterSet {
             && !self.skip_readonly
     }
 
+    /// Validate every glob pattern and return the engine-ready
+    /// [`CompiledFilters`] form.
     pub fn compile(&self) -> Result<CompiledFilters, FilterError> {
         let include = build_glob_set("include", &self.include_globs)?;
         let exclude = build_glob_set("exclude", &self.exclude_globs)?;
@@ -87,12 +103,17 @@ fn build_glob_set(kind: &'static str, patterns: &[String]) -> Result<GlobSet, Fi
     })
 }
 
+/// Errors raised by [`FilterSet::compile`].
 #[derive(Debug, Error)]
 pub enum FilterError {
+    /// One of the include/exclude glob patterns failed to parse.
     #[error("invalid {kind} glob pattern `{pattern}`: {source}")]
     InvalidGlob {
+        /// `"include"` or `"exclude"` — which list the bad pattern came from.
         kind: &'static str,
+        /// The user-supplied glob string.
         pattern: String,
+        /// Underlying parser error.
         #[source]
         source: globset::Error,
     },
@@ -114,6 +135,8 @@ pub struct CompiledFilters {
 }
 
 impl CompiledFilters {
+    /// `true` when the file at `rel_path` (with the given metadata)
+    /// passes every active filter and should be copied.
     pub fn passes_file(&self, rel_path: &Path, meta: &std::fs::Metadata) -> bool {
         if let Some(inc) = &self.include
             && !inc.is_match(rel_path)

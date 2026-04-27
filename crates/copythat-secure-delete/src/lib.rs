@@ -8,7 +8,7 @@
 //!   a fixed sequence of [`PassPattern`]s.
 //! - [`shred_file`] and [`shred_tree`] — async APIs mirroring the
 //!   shape of `copythat_core::copy_file` / `copy_tree`: caller passes
-//!   a [`CopyControl`] for pause / resume / cancel and an mpsc
+//!   a `copythat_core::CopyControl` for pause / resume / cancel and an mpsc
 //!   `Sender<ShredEvent>` for progress events.
 //! - [`is_ssd`] — best-effort probe of the underlying block device. On
 //!   SSDs the public API emits [`ShredEvent::SsdAdvisory`] before the

@@ -69,4 +69,7 @@ mod types;
 pub use error::HistoryError;
 pub use export::export_csv;
 pub use handle::History;
-pub use types::{DayTotal, HistoryFilter, ItemRow, JobRowId, JobSummary, KindBreakdown, Totals};
+pub use types::{
+    DEFAULT_SEARCH_LIMIT, DayTotal, HistoryFilter, ItemRow, JobRowId, JobSummary, KindBreakdown,
+    Totals,
+};

@@ -1,7 +1,7 @@
 //! Per-path debouncer with priority ordering + atomic-save collapse.
 //!
 //! The debouncer is a pure state machine — no threads, no I/O, no
-//! timers. The [`Watcher`] is responsible for feeding it events and
+//! timers. The [`crate::Watcher`] is responsible for feeding it events and
 //! calling [`DebounceQueue::flush`] on a wall-clock tick. That split
 //! keeps the logic fully deterministic for unit tests: seed a queue,
 //! feed a canned event sequence, flush at a controllable instant,

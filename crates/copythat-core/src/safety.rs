@@ -60,7 +60,10 @@ pub enum PathSafetyError {
     /// "simplify" `foo/../bar` back to `bar` because an attacker
     /// who slipped the `..` in once will slip in two more.
     #[error("path `{}` contains parent-directory (`..`) component(s) — rejected to prevent directory traversal", offending.display())]
-    ParentTraversal { offending: PathBuf },
+    ParentTraversal {
+        /// The rejected path, preserved verbatim for error messages.
+        offending: PathBuf,
+    },
 
     /// The path is empty after trimming. Engine callers that want
     /// to distinguish "no source" from "bad source" already do so

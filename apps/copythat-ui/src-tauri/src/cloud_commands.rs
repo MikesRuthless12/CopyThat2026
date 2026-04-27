@@ -221,7 +221,7 @@ pub fn remove_backend(name: String, state: tauri::State<'_, AppState>) -> Result
 /// Test a configured backend by building an
 /// [`copythat_cloud::opendal::Operator`] + issuing a `stat("/")`.
 /// Returns a DTO the frontend renders as "Connection successful" /
-/// "Connection failed — <reason>". The outer `Result` is always
+/// "Connection failed — `<reason>`". The outer `Result` is always
 /// `Ok` — failures are reported in-band via `TestConnectionResult`
 /// so the UI can render a localized reason. Tauri's async-command
 /// harness requires a `Result` return when `tauri::State<'_, _>` is

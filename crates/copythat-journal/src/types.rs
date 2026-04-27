@@ -47,7 +47,7 @@ pub struct JobRecord {
     pub kind: String,
     pub src_root: PathBuf,
     /// `None` for shred/delete jobs — the journal carries them so
-    /// the resume modal can show "DELETE in progress on <path>" at
+    /// the resume modal can show "DELETE in progress on `<path>`" at
     /// boot, even though there's no resume strategy for delete.
     pub dst_root: Option<PathBuf>,
     pub status: JobStatus,

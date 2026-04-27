@@ -4,7 +4,7 @@
 //! (iOS) or an FCM registration token (Android). The runner hands a
 //! `PushPayload` to a [`NotifyDispatcher`] and the dispatcher
 //! issues an HTTP POST against the provider endpoint configured in
-//! [`MobileSettings`].
+//! `MobileSettings`.
 //!
 //! **Provider-token signing (Phase 37 follow-up).** APNs uses
 //! ES256 JWTs minted from a `.p8` team key; FCM HTTP v1 uses RS256

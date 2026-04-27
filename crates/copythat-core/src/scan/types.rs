@@ -58,9 +58,13 @@ impl fmt::Display for ScanId {
 /// tree dispatcher from their relative paths).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EntryKind {
+    /// Regular file.
     File,
+    /// Directory.
     Dir,
+    /// Symbolic link (regardless of target type).
     Symlink,
+    /// Block device, FIFO, socket, or anything else the OS surfaces.
     Other,
 }
 
@@ -76,6 +80,8 @@ impl EntryKind {
         }
     }
 
+    /// Inverse of [`Self::to_i64`]. Unknown values map to
+    /// [`EntryKind::Other`].
     pub fn from_i64(v: i64) -> Self {
         match v {
             0 => EntryKind::File,
@@ -93,14 +99,19 @@ impl EntryKind {
 pub struct AttrFlags(pub u32);
 
 impl AttrFlags {
+    /// Hidden attribute (Windows hidden / Unix dotfile).
     pub const HIDDEN: u32 = 1 << 0;
+    /// Windows system attribute.
     pub const SYSTEM: u32 = 1 << 1;
+    /// Read-only attribute.
     pub const READONLY: u32 = 1 << 2;
 
+    /// All-zero attribute mask.
     pub fn empty() -> Self {
         Self(0)
     }
 
+    /// Set or clear `bit`.
     pub fn set(&mut self, bit: u32, on: bool) {
         if on {
             self.0 |= bit;
@@ -109,21 +120,25 @@ impl AttrFlags {
         }
     }
 
+    /// `true` when `bit` is set.
     pub fn has(&self, bit: u32) -> bool {
         self.0 & bit != 0
     }
 
+    /// SQLite encoding (`scan_items.attrs` INTEGER column).
     pub fn to_i64(self) -> i64 {
         self.0 as i64
     }
 
+    /// Inverse of [`Self::to_i64`].
     pub fn from_i64(v: i64) -> Self {
         Self(v as u32)
     }
 }
 
 /// One row of a scan. Serialized to `scan_items`; the cursor reader
-/// (see [`crate::scan::cursor`]) hydrates rows back into this shape.
+/// (see the private `crate::scan::cursor` module) hydrates rows back
+/// into this shape.
 #[derive(Debug, Clone)]
 pub struct ScanItem {
     /// Path relative to the scan root. Always present (the root
@@ -133,7 +148,9 @@ pub struct ScanItem {
     pub size: u64,
     /// Last-modification time captured at scan time.
     pub mtime: SystemTime,
+    /// Entry kind (file / dir / symlink / other).
     pub kind: EntryKind,
+    /// Attribute bits (hidden / system / read-only).
     pub attrs: AttrFlags,
     /// BLAKE3-256 of the file contents when the scan was run with
     /// [`ScanOptions::hash_during_scan`]. `None` otherwise.
@@ -144,7 +161,9 @@ pub struct ScanItem {
 /// the `scan_meta` totals row.
 #[derive(Debug, Clone, Default)]
 pub struct ScanStats {
+    /// Files visited so far (regardless of kind).
     pub total_files: u64,
+    /// Bytes summed across `File`-kind entries so far.
     pub total_bytes: u64,
     /// Count per entry kind. Dir / Symlink / Other keys only appear
     /// when those kinds were actually observed.
@@ -154,14 +173,20 @@ pub struct ScanStats {
 /// Lifecycle state persisted as a `TEXT` value in `scan_meta.status`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScanStatus {
+    /// Scan is currently walking the source tree.
     Running,
+    /// Caller paused the scan; in-progress totals are still accurate.
     Paused,
+    /// Scan walked the entire tree successfully; terminal.
     Complete,
+    /// Caller cancelled the scan; partial results may be on disk.
     Cancelled,
+    /// Scan terminated with an error; terminal.
     Failed,
 }
 
 impl ScanStatus {
+    /// Stable string encoding for `scan_meta.status`.
     pub fn as_str(self) -> &'static str {
         match self {
             ScanStatus::Running => "Running",
@@ -172,6 +197,7 @@ impl ScanStatus {
         }
     }
 
+    /// Inverse of [`Self::as_str`]. Unknown values return `None`.
     pub fn parse(s: &str) -> Option<Self> {
         Some(match s {
             "Running" => ScanStatus::Running,
@@ -237,10 +263,17 @@ fn num_logical_cpus() -> usize {
 /// Final success record for a completed scan.
 #[derive(Debug, Clone)]
 pub struct ScanReport {
+    /// Identifier the scan was registered under.
     pub scan_id: ScanId,
+    /// Absolute path to the on-disk SQLite scan database.
     pub db_path: PathBuf,
+    /// Root path that was scanned.
     pub root: PathBuf,
+    /// Final running counters (totals + per-kind breakdown).
     pub stats: ScanStats,
+    /// Wall-clock duration end-to-end.
     pub duration: Duration,
+    /// Number of files that received a content hash (0 unless
+    /// `hash_during_scan` was on).
     pub hashed_files: u64,
 }

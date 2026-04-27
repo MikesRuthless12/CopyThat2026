@@ -9,8 +9,8 @@
 //!
 //! Selection order:
 //!
-//! 1. `cfg(all(feature = "fuse", any(target_os = "linux", target_os = "macos")))` → [`FuseBackend`]
-//! 2. `cfg(all(feature = "winfsp", target_os = "windows"))` → [`WinFspBackend`]
+//! 1. `cfg(all(feature = "fuse", any(target_os = "linux", target_os = "macos")))` → [`crate::FuseBackend`]
+//! 2. `cfg(all(feature = "winfsp", target_os = "windows"))` → [`crate::WinFspBackend`]
 //! 3. Fallback → [`NoopBackend`]
 //!
 //! Phase 33c's real FUSE / WinFsp backends currently stub to

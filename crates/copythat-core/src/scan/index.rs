@@ -80,13 +80,19 @@ fn apply_index_migrations(conn: &mut Connection) -> Result<(), SchemaError> {
 /// [`list_unfinished`] so the app can offer to resume.
 #[derive(Debug, Clone)]
 pub struct ActiveScanRow {
+    /// Identifier the scan was registered under.
     pub scan_id: ScanId,
+    /// Absolute path to the SQLite scan database.
     pub db_path: PathBuf,
+    /// Job id this scan is associated with (if any).
     pub job_id: Option<String>,
+    /// Wall-clock millis since epoch when the row was inserted.
     pub created_at_ms: i64,
+    /// Lifecycle state at the time the row was last updated.
     pub status: ScanStatus,
 }
 
+/// Insert (or replace) one row in the `active_scans` index.
 pub fn register(
     conn: &Connection,
     scan_id: ScanId,
@@ -109,6 +115,7 @@ pub fn register(
     Ok(())
 }
 
+/// Move the row's `status` to a new value.
 pub fn update_status(
     conn: &Connection,
     scan_id: ScanId,
@@ -121,6 +128,7 @@ pub fn update_status(
     Ok(())
 }
 
+/// Delete the row from the index. No-op when not present.
 pub fn remove(conn: &Connection, scan_id: ScanId) -> Result<(), rusqlite::Error> {
     conn.execute(
         "DELETE FROM active_scans WHERE scan_id=?1",

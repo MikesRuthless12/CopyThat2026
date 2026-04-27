@@ -217,7 +217,7 @@ impl PairingToken {
 }
 
 /// 4-emoji short-authentication string. `[u8; SAS_EMOJI_SLOTS]`
-/// where each byte indexes into [`SAS_EMOJI_TABLE`] modulo 32.
+/// where each byte indexes into the private `SAS_EMOJI_TABLE` modulo 32.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SasFingerprint(pub [u8; SAS_EMOJI_SLOTS]);
 

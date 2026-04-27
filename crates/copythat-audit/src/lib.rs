@@ -10,7 +10,7 @@
 //!
 //! - [`AuditEvent`] — the finite, typed set of events worth
 //!   recording. The runner translates its high-level
-//!   [`copythat_core::CopyEvent`] + queue state changes into one
+//!   `copythat_core::CopyEvent` + queue state changes into one
 //!   [`AuditEvent`] per user-visible transition (job start/end, file
 //!   copied/failed, collision resolved, settings change, login,
 //!   unauthorized action).

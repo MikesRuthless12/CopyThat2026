@@ -11,7 +11,7 @@
 //!   namespace the calling user can read (`user.*`, `security.*`,
 //!   `system.posix_acl_*`, `trusted.*`). `system.posix_acl_access`
 //!   / `system.posix_acl_default` are also broken out into the
-//!   structured [`PosixAclBlob`] so the UI can render them; the
+//!   structured [`copythat_core::meta::PosixAclBlob`] so the UI can render them; the
 //!   raw xattr is kept too in case the destination cares about the
 //!   binary form.
 //! - **macOS**: `xattr` crate again, covering the
