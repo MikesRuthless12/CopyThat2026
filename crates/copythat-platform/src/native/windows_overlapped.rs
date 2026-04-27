@@ -397,15 +397,21 @@ unsafe fn do_overlapped_copy(
         )));
     }
 
-    // Phase 42 follow-up — `FILE_SKIP_COMPLETION_PORT_ON_SUCCESS`
-    // would let synchronously-completing I/Os bypass the IOCP queue
-    // (saves a `GetQueuedCompletionStatus` crossing per cached read).
-    // NOT enabled here: the loop below decrements `in_flight` only on
-    // IOCP completion, so a sync-success would deadlock the counter.
-    // Adopting the flag requires restructuring the loop to inspect
-    // ReadFile/WriteFile's immediate return and handle inline
-    // completion — tracked as a Phase 43 work item alongside the
-    // potential `compio` migration.
+    // Phase 42 (Phase-43 deferral closed) — set
+    // `FILE_SKIP_COMPLETION_PORT_ON_SUCCESS` +
+    // `FILE_SKIP_SET_EVENT_ON_HANDLE` so synchronously-completing
+    // I/Os bypass the IOCP queue. The main loop below handles
+    // inline completions via the `inline_queue` deque drained at
+    // the top of each iteration before `GetQueuedCompletionStatus`.
+    // Best-effort: any failure is non-fatal; the loop still works
+    // because GQCS will deliver every completion if the flag fails
+    // to set.
+    use windows_sys::Win32::Storage::FileSystem::SetFileCompletionNotificationModes;
+    const FILE_SKIP_COMPLETION_PORT_ON_SUCCESS: u8 = 0x1;
+    const FILE_SKIP_SET_EVENT_ON_HANDLE: u8 = 0x2;
+    let skip_flags = FILE_SKIP_COMPLETION_PORT_ON_SUCCESS | FILE_SKIP_SET_EVENT_ON_HANDLE;
+    let _ = SetFileCompletionNotificationModes(src_handle.0, skip_flags);
+    let _ = SetFileCompletionNotificationModes(dst_handle.0, skip_flags);
 
     // --- Allocate buffers + contexts --------------------------------
     let mut buffers: Vec<OwnedBuffer> = Vec::with_capacity(n_slots);
@@ -435,9 +441,15 @@ unsafe fn do_overlapped_copy(
         .collect();
 
     // --- Submit initial reads ---------------------------------------
+    //
+    // Phase 42 — `post_read` may return inline completion when the
+    // source bytes are already in the page cache. Collect those
+    // here and prime the inline_queue so the loop drains them
+    // before falling back to GQCS.
     let mut next_read_offset: u64 = 0;
     let mut in_flight: usize = 0;
     let mut bytes_written_total: u64 = 0;
+    let mut initial_inline: Vec<(*mut OpCtx, u32)> = Vec::new();
 
     for slot in 0..n_slots {
         if next_read_offset >= alloc_size {
@@ -445,67 +457,91 @@ unsafe fn do_overlapped_copy(
         }
         let want = (alloc_size - next_read_offset).min(buffer_bytes as u64) as u32;
         let aligned = round_up_sector(want, sector_bytes);
-        post_read(
+        match post_read(
             src_handle.0,
             buffers[slot].0,
             aligned,
             next_read_offset,
             &mut ctxs[slot],
-        )?;
+        )? {
+            Some(sync_bytes) => {
+                let ctx_ptr: *mut OpCtx = &mut *ctxs[slot];
+                initial_inline.push((ctx_ptr, sync_bytes));
+            }
+            None => {}
+        }
         next_read_offset += aligned as u64;
         in_flight += 1;
     }
 
     // --- IOCP loop ---------------------------------------------------
+    //
+    // Phase 42 (Phase-43 deferral closed) — with
+    // `FILE_SKIP_COMPLETION_PORT_ON_SUCCESS` set above, ReadFile /
+    // WriteFile that complete synchronously (cached reads, fast
+    // SSDs) return TRUE and do NOT enqueue an IOCP entry. The
+    // `inline_queue` deque collects those synchronous completions
+    // and the loop drains it before falling back to
+    // `GetQueuedCompletionStatus` for genuinely-pending I/Os.
+    use std::collections::VecDeque;
     let mut last_cancel_check = Instant::now();
     let mut cancelled = false;
+    let mut inline_queue: VecDeque<(*mut OpCtx, u32)> = VecDeque::with_capacity(n_slots * 2);
+    // Seed with any initial reads that completed synchronously.
+    for entry in initial_inline.drain(..) {
+        inline_queue.push_back(entry);
+    }
 
     while in_flight > 0 {
-        let mut bytes_xferred: u32 = 0;
-        let mut completion_key: usize = 0;
-        let mut overlapped_ptr: *mut OVERLAPPED = ptr::null_mut();
+        // Drain inline completions first — these are operations
+        // that returned synchronously and never hit the IOCP.
+        let (ctx_ptr, bytes_xferred): (*mut OpCtx, u32) =
+            if let Some(entry) = inline_queue.pop_front() {
+                entry
+            } else {
+                let mut bytes: u32 = 0;
+                let mut completion_key: usize = 0;
+                let mut overlapped_ptr: *mut OVERLAPPED = ptr::null_mut();
+                // 250 ms timeout so we can check cancellation between
+                // completions even on a stalled I/O — INFINITE would block
+                // the cancel signal indefinitely.
+                let ok = GetQueuedCompletionStatus(
+                    iocp,
+                    &mut bytes,
+                    &mut completion_key,
+                    &mut overlapped_ptr,
+                    250,
+                );
 
-        // 250 ms timeout so we can check cancellation between
-        // completions even on a stalled I/O — INFINITE would block
-        // the cancel signal indefinitely.
-        let ok = GetQueuedCompletionStatus(
-            iocp,
-            &mut bytes_xferred,
-            &mut completion_key,
-            &mut overlapped_ptr,
-            250,
-        );
-
-        // GQCS returns 0 + null overlapped on timeout.
-        if ok == 0 && overlapped_ptr.is_null() {
-            // Pure timeout — check cancel and loop.
-            if ctrl.is_cancelled() && !cancelled {
-                cancelled = true;
-                CancelIoEx(src_handle.0, ptr::null_mut());
-                CancelIoEx(dst_handle.0, ptr::null_mut());
-            }
-            continue;
-        }
-
-        // GQCS returned 0 with a non-null overlapped → I/O failed.
-        if ok == 0 {
-            let err = GetLastError();
-            // ERROR_HANDLE_EOF on a read past EOF or
-            // ERROR_OPERATION_ABORTED after CancelIoEx are both
-            // acceptable terminators for an in-flight slot.
-            if err == ERROR_HANDLE_EOF || cancelled {
-                if !overlapped_ptr.is_null() {
-                    let ctx_ptr = overlapped_ptr as *mut OpCtx;
-                    let _ctx = &mut *ctx_ptr;
-                    in_flight -= 1;
+                // GQCS returns 0 + null overlapped on timeout.
+                if ok == 0 && overlapped_ptr.is_null() {
+                    // Pure timeout — check cancel and loop.
+                    if ctrl.is_cancelled() && !cancelled {
+                        cancelled = true;
+                        CancelIoEx(src_handle.0, ptr::null_mut());
+                        CancelIoEx(dst_handle.0, ptr::null_mut());
+                    }
+                    continue;
                 }
-                continue;
-            }
-            return Err(io::Error::from_raw_os_error(err as i32));
-        }
 
-        // Successful completion: re-derive the OpCtx from the OVERLAPPED ptr.
-        let ctx_ptr = overlapped_ptr as *mut OpCtx;
+                // GQCS returned 0 with a non-null overlapped → I/O failed.
+                if ok == 0 {
+                    let err = GetLastError();
+                    // ERROR_HANDLE_EOF on a read past EOF or
+                    // ERROR_OPERATION_ABORTED after CancelIoEx are both
+                    // acceptable terminators for an in-flight slot.
+                    if err == ERROR_HANDLE_EOF || cancelled {
+                        in_flight -= 1;
+                        continue;
+                    }
+                    return Err(io::Error::from_raw_os_error(err as i32));
+                }
+
+                (overlapped_ptr as *mut OpCtx, bytes)
+            };
+
+        // Successful completion: re-derive the OpCtx from the
+        // OVERLAPPED ptr (its first field, repr(C) order).
         let ctx = &mut *ctx_ptr;
         let slot = ctx.slot_idx;
 
@@ -523,15 +559,25 @@ unsafe fn do_overlapped_copy(
                 let read_offset = ctx.file_offset;
                 ctx.op = OpKind::Write;
                 set_overlapped_offset(&mut ctx.overlapped, read_offset);
+                let mut sync_bytes: u32 = 0;
                 let ok = WriteFile(
                     dst_handle.0,
                     buffers[slot].0,
                     bytes_xferred,
-                    ptr::null_mut(),
+                    &mut sync_bytes,
                     &mut ctx.overlapped,
                 );
-                if ok == 0 && GetLastError() != ERROR_IO_PENDING {
-                    return Err(io::Error::last_os_error());
+                if ok != 0 {
+                    // Synchronous completion — IOCP won't fire.
+                    // Enqueue inline so the next loop iteration
+                    // processes it.
+                    inline_queue.push_back((ctx_ptr, sync_bytes));
+                } else {
+                    let err = GetLastError();
+                    if err != ERROR_IO_PENDING {
+                        return Err(io::Error::from_raw_os_error(err as i32));
+                    }
+                    // ERROR_IO_PENDING: IOCP will deliver completion.
                 }
             }
             OpKind::Write => {
@@ -546,21 +592,27 @@ unsafe fn do_overlapped_copy(
                     ctx.file_offset = next_read_offset;
                     ctx.op = OpKind::Read;
                     set_overlapped_offset(&mut ctx.overlapped, next_read_offset);
+                    let mut sync_bytes: u32 = 0;
                     let ok = ReadFile(
                         src_handle.0,
                         buffers[slot].0,
                         aligned,
-                        ptr::null_mut(),
+                        &mut sync_bytes,
                         &mut ctx.overlapped,
                     );
-                    if ok == 0 && GetLastError() != ERROR_IO_PENDING {
+                    if ok != 0 {
+                        // Synchronous read completion (cached / EOF).
+                        inline_queue.push_back((ctx_ptr, sync_bytes));
+                        next_read_offset += aligned as u64;
+                    } else {
                         let err = GetLastError();
-                        if err != ERROR_HANDLE_EOF {
+                        if err == ERROR_IO_PENDING {
+                            next_read_offset += aligned as u64;
+                        } else if err == ERROR_HANDLE_EOF {
+                            in_flight -= 1;
+                        } else {
                             return Err(io::Error::from_raw_os_error(err as i32));
                         }
-                        in_flight -= 1;
-                    } else {
-                        next_read_offset += aligned as u64;
                     }
                 } else {
                     in_flight -= 1;
@@ -644,6 +696,11 @@ unsafe fn seek_and_set_eof(handle: HANDLE, new_size: i64) -> io::Result<()> {
     Ok(())
 }
 
+/// Phase 42 — `post_read` returns `Ok(Some(bytes))` if ReadFile
+/// completed synchronously (with `FILE_SKIP_COMPLETION_PORT_ON_SUCCESS`
+/// set, no IOCP entry will arrive — caller must process the inline
+/// completion). `Ok(None)` means the I/O is pending and the IOCP
+/// will deliver completion. `Err` is a real failure.
 #[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn post_read(
     handle: HANDLE,
@@ -651,18 +708,24 @@ unsafe fn post_read(
     bytes: u32,
     file_offset: u64,
     ctx: &mut Box<OpCtx>,
-) -> io::Result<()> {
+) -> io::Result<Option<u32>> {
     ctx.op = OpKind::Read;
     ctx.file_offset = file_offset;
     ctx.op_bytes = bytes;
     set_overlapped_offset(&mut ctx.overlapped, file_offset);
     let ctx_ptr: *mut OpCtx = &mut **ctx;
     let overlapped_ptr: *mut OVERLAPPED = ctx_ptr as *mut OVERLAPPED;
-    let ok = ReadFile(handle, buffer, bytes, ptr::null_mut(), overlapped_ptr);
-    if ok == 0 && GetLastError() != ERROR_IO_PENDING {
-        return Err(io::Error::last_os_error());
+    let mut sync_bytes: u32 = 0;
+    let ok = ReadFile(handle, buffer, bytes, &mut sync_bytes, overlapped_ptr);
+    if ok != 0 {
+        return Ok(Some(sync_bytes));
     }
-    Ok(())
+    let err = GetLastError();
+    if err == ERROR_IO_PENDING {
+        Ok(None)
+    } else {
+        Err(io::Error::from_raw_os_error(err as i32))
+    }
 }
 
 #[inline]
