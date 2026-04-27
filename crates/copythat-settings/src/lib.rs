@@ -415,6 +415,41 @@ pub struct TransferSettings {
     /// `false` because hashing two trees adds I/O the user hasn't
     /// asked for unless they want it.
     pub dedup_prescan: bool,
+    /// Phase 42 — opt-in paranoid post-write verification.
+    ///
+    /// When `true`, the engine re-hashes the destination after the
+    /// byte copy completes (in addition to the streaming
+    /// [`verify`](Self::verify) checksum captured during read) so a
+    /// silent disk corruption between write + close is caught before
+    /// the job is marked successful. Defaults to `false` because the
+    /// extra read pass roughly doubles destination I/O and the
+    /// in-stream verify already covers the common-case "bytes left
+    /// the source intact" check.
+    ///
+    /// Mirrors the `paranoid_verify` field on
+    /// `copythat_core::CopyOptions` (Phase 42 engine knob); the
+    /// settings → engine bridge in the Tauri runner reads this flag
+    /// when constructing the per-job `CopyOptions`.
+    #[serde(default)]
+    pub paranoid_verify: bool,
+    /// Phase 42 — number of times the engine retries opening a
+    /// source file that returns a sharing-violation
+    /// (Windows `ERROR_SHARING_VIOLATION` / Linux `EBUSY`) before
+    /// surfacing the error to the [`on_locked`](Self::on_locked)
+    /// policy. Mirrors the `sharing_violation_retries` field on
+    /// `copythat_core::CopyOptions`. Default `3` matches the engine's
+    /// historical short-loop behaviour.
+    #[serde(default = "defaults::default_sharing_violation_retries")]
+    pub sharing_violation_retries: u32,
+    /// Phase 42 — base delay (milliseconds) for the exponential
+    /// backoff between sharing-violation retries. The engine doubles
+    /// this on each subsequent attempt up to
+    /// [`sharing_violation_retries`](Self::sharing_violation_retries)
+    /// total tries. Mirrors `sharing_violation_base_delay_ms` on
+    /// `copythat_core::CopyOptions`. Default `50` ms matches the
+    /// engine's historical timing.
+    #[serde(default = "defaults::default_sharing_violation_base_delay_ms")]
+    pub sharing_violation_base_delay_ms: u64,
 }
 
 impl Default for TransferSettings {
@@ -440,6 +475,9 @@ impl Default for TransferSettings {
             dedup_mode: "off".into(),
             dedup_hardlink_policy: "read-only-only".into(),
             dedup_prescan: false,
+            paranoid_verify: false,
+            sharing_violation_retries: defaults::default_sharing_violation_retries(),
+            sharing_violation_base_delay_ms: defaults::default_sharing_violation_base_delay_ms(),
         }
     }
 }
@@ -507,9 +545,26 @@ impl TransferSettings {
 /// Verify algorithm selection. Mirrors `copythat_hash::HashAlgorithm`
 /// plus an explicit `Off` variant. We keep a separate enum here so
 /// this crate doesn't depend on `copythat-hash`.
+///
+/// **Default UX note**: this enum defaults to [`Off`](Self::Off) while
+/// [`LockedFilePolicyChoice`] defaults to
+/// [`Ask`](LockedFilePolicyChoice::Ask). The asymmetry is intentional —
+/// see the doc comment on [`Off`](Self::Off) for the reasoning. Don't
+/// "fix" it without re-reading that note first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum VerifyChoice {
+    /// `Off` is the intentional default; verification is opt-in
+    /// because it doubles destination I/O (the engine has to re-read
+    /// every byte it just wrote to compute the post-write hash).
+    /// Users who care about silent-corruption resilience can flip
+    /// this to a hash family of their choice; everyone else gets the
+    /// fast path. This is the opposite stance from
+    /// [`LockedFilePolicyChoice`], which defaults to
+    /// [`Ask`](LockedFilePolicyChoice::Ask) — locked files are an
+    /// uncommon-but-correctness-critical event the user should
+    /// always be aware of, while verification is a cost-benefit
+    /// trade-off the user is best placed to make per-job.
     #[default]
     Off,
     Crc32,
@@ -642,9 +697,19 @@ pub struct AdvancedSettings {
     #[serde(skip_deserializing)]
     pub telemetry: bool,
     pub error_policy: ErrorPolicyChoice,
-    /// Days of history retained before auto-purge. `0` = never purge.
-    /// The `history_purge` IPC call honours the existing 30-day
-    /// default when the user hasn't customised this.
+    /// Days of history retained before auto-purge.
+    ///
+    /// Stored value `0` means "the user has not customised this
+    /// setting" — it is **not** "never purge". The `history_purge`
+    /// IPC call interprets `0` by falling back to its built-in
+    /// 30-day default, so a fresh install with a default-constructed
+    /// `Settings` still gets the 30-day rolling retention window the
+    /// rest of the product assumes. To opt out of auto-purge entirely
+    /// the user has to set an explicit large value (e.g. `36500` for
+    /// "100 years"). The `0`-as-sentinel scheme is what keeps the
+    /// settings TOML's "default-shaped" rows from accidentally
+    /// pinning retention to something other than 30 days when the
+    /// IPC call's default ever evolves.
     pub history_retention_days: u32,
     /// Override the SQLite database location. `None` = use
     /// `copythat_history::History::default_path()` (OS data dir).
