@@ -54,6 +54,7 @@ pub mod live_mirror;
 pub mod mobile_commands;
 pub mod mount_commands;
 pub mod power;
+pub mod progress_channel;
 pub mod reveal;
 pub mod runner;
 pub mod scan_commands;
@@ -291,6 +292,10 @@ pub fn run() {
             commands::pause_all,
             commands::resume_all,
             commands::cancel_all,
+            // Phase 42 / Gap #14 — Tauri 2.0 Channel<T> opt-in for
+            // hot-path progress. Frontend stays on `listen` until a
+            // future phase migrates it.
+            commands::register_progress_channel,
             commands::list_jobs,
             commands::globals,
             commands::file_icon,

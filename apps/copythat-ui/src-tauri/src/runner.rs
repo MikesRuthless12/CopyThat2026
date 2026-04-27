@@ -1085,18 +1085,25 @@ fn emit_progress(
     rate_bps: u64,
 ) {
     let eta = eta_seconds(bytes_done, bytes_total, rate_bps);
-    let _ = app.emit(
-        EVENT_JOB_PROGRESS,
-        JobProgressDto {
-            id: id.as_u64(),
-            bytes_done,
-            bytes_total,
-            files_done,
-            files_total,
-            rate_bps,
-            eta_seconds: eta,
-        },
-    );
+    let dto = JobProgressDto {
+        id: id.as_u64(),
+        bytes_done,
+        bytes_total,
+        files_done,
+        files_total,
+        rate_bps,
+        eta_seconds: eta,
+    };
+    // Legacy event-bus emit. Every existing `listen('job:progress',
+    // …)` surface keeps working off this; Phase 42 / Gap #14
+    // introduced a parallel `Channel<T>` path below for opt-in
+    // hot-path subscribers without breaking the listeners.
+    let _ = app.emit(EVENT_JOB_PROGRESS, dto.clone());
+    // Phase 42 / Gap #14 — best-effort dual-emit into the per-job
+    // `tauri::ipc::Channel<JobProgressDto>` if the frontend has
+    // opted in via `register_progress_channel`. Silent no-op when
+    // no channel is registered (the steady state until UI migrates).
+    let _ = state.progress_channels.try_send(id, dto);
     emit_globals(app, state);
 }
 

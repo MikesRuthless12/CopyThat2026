@@ -472,6 +472,45 @@ pub fn cancel_all(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+/// Phase 42 / Gap #14 — register a frontend-supplied
+/// [`tauri::ipc::Channel`] for a specific job's hot-path progress
+/// stream. After this returns, [`crate::runner::emit_progress`]
+/// dual-emits: the legacy `app.emit(EVENT_JOB_PROGRESS, …)` keeps
+/// firing for back-compat, and `state.progress_channels.try_send` also
+/// pushes the same DTO into the channel.
+///
+/// Frontend usage:
+///
+/// ```ts
+/// import { Channel, invoke } from '@tauri-apps/api/core';
+///
+/// const ids = await invoke<number[]>('start_copy', { sources, destination });
+/// const channel = new Channel<JobProgressDto>();
+/// channel.onmessage = (dto) => { /* update UI */ };
+/// await invoke('register_progress_channel', { jobId: ids[0], channel });
+/// ```
+///
+/// The `jobId` does not need to correspond to a live job —
+/// registering for an id that completes before any progress fires is
+/// harmless. The registry has no auto-eviction; future work can add a
+/// teardown call to the runner's terminal-state hooks if leaks become
+/// observable.
+#[tauri::command]
+pub fn register_progress_channel(
+    job_id: u64,
+    channel: tauri::ipc::Channel<crate::ipc::JobProgressDto>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // Look up the live `JobId` by its `u64` form. The shadowed
+    // binding mirrors the existing `pause_job` / `resume_job`
+    // shape — `self::job_id` errors when the queue has no record of
+    // the id, which is the right shape here too (registering for a
+    // phantom job is almost certainly a bug worth surfacing).
+    let id = self::job_id(job_id, &state)?;
+    state.progress_channels.register(id, channel);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn list_jobs(state: State<'_, AppState>) -> Vec<JobDto> {
     state
