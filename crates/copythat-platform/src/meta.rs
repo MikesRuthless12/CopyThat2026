@@ -94,6 +94,18 @@ struct ForeignStream {
 }
 
 fn ext_lower(path: &Path) -> String {
+    // `Path::extension` would happily return `"bashrc"` for a leading-
+    // dot file like `.bashrc` because the OS path API treats the dot
+    // as a separator. The translated-extension wire string should
+    // report `"none"` for dotfiles since they have no real extension —
+    // detect a leading dot with no internal dot in the basename and
+    // bail to `"none"` before calling `extension()`.
+    if let Some(stem) = path.file_name().and_then(|s| s.to_str())
+        && stem.starts_with('.')
+        && !stem[1..].contains('.')
+    {
+        return "none".to_string();
+    }
     path.extension()
         .and_then(|s| s.to_str())
         .map(|s| s.to_ascii_lowercase())
@@ -140,11 +152,11 @@ fn apply_for_host(
 ) -> io::Result<()> {
     apply_ntfs_streams(path, &snapshot.ads, outcome);
     // xattrs are foreign on Windows; route them to AppleDouble only
-    // if the user kept the relevant policy bits on. The capture side
+    // if the matching individual policy toggle is on. The capture side
     // never produces them on a Windows source — but the snapshot we
     // were handed may have come from Linux/macOS over SMB.
     for x in &snapshot.xattrs {
-        if !policy.preserve_xattrs && !is_structured_xattr(&x.name) {
+        if !foreign_xattr_permitted(&x.name, policy) {
             continue;
         }
         foreign.push(ForeignStream {
@@ -237,25 +249,40 @@ fn apply_for_host(
 fn apply_for_host(
     _path: &Path,
     snapshot: &MetaSnapshot,
-    _policy: &MetaPolicy,
+    policy: &MetaPolicy,
     _outcome: &mut MetaApplyOutcome,
     foreign: &mut Vec<ForeignStream>,
 ) -> io::Result<()> {
     // Unknown host — every stream is "foreign". Push them to the
-    // AppleDouble fallback so the data still survives the trip.
+    // AppleDouble fallback so the data still survives the trip,
+    // gating on the per-family policy toggle so disabled streams
+    // are dropped rather than smuggled through.
     for s in &snapshot.ads {
+        let gate = if s.name.eq_ignore_ascii_case("Zone.Identifier") {
+            policy.preserve_motw
+        } else {
+            policy.preserve_xattrs
+        };
+        if !gate {
+            continue;
+        }
         foreign.push(ForeignStream {
             name: s.name.clone(),
             payload: s.data.clone(),
         });
     }
     for x in &snapshot.xattrs {
+        if !foreign_xattr_permitted(&x.name, policy) {
+            continue;
+        }
         foreign.push(ForeignStream {
             name: x.name.clone(),
             payload: x.value.clone(),
         });
     }
-    if let Some(rf) = &snapshot.mac_resource_fork {
+    if let Some(rf) = &snapshot.mac_resource_fork
+        && policy.preserve_resource_forks
+    {
         foreign.push(ForeignStream {
             name: "com.apple.ResourceFork".to_string(),
             payload: rf.data.clone(),
@@ -269,6 +296,35 @@ fn is_structured_xattr(name: &str) -> bool {
     name.starts_with("system.posix_acl_")
         || name == "security.selinux"
         || name == "security.capability"
+}
+
+/// Per-toggle gate for routing a *foreign* xattr (one captured on a
+/// Linux/macOS source that landed on a non-Unix destination) into the
+/// AppleDouble sidecar. Each named family is keyed off its own policy
+/// bit so disabling `preserve_xattrs` doesn't accidentally smuggle a
+/// `security.selinux` or `security.capability` payload through, and
+/// disabling `preserve_selinux` actually drops the SELinux xattr.
+#[allow(dead_code)]
+fn foreign_xattr_permitted(name: &str, policy: &MetaPolicy) -> bool {
+    if name.starts_with("system.posix_acl_") {
+        return policy.preserve_posix_acls;
+    }
+    if name == "security.selinux" {
+        return policy.preserve_selinux;
+    }
+    if name == "security.capability" {
+        // No dedicated `preserve_capability` bit yet; gate it under
+        // the generic xattr toggle. Documenting the assumption here
+        // so a future audit doesn't have to grep for the link.
+        return policy.preserve_xattrs;
+    }
+    if name == "com.apple.ResourceFork" || name == "com.apple.FinderInfo" {
+        return policy.preserve_resource_forks;
+    }
+    if name == "Zone.Identifier" || name == "user.Zone.Identifier" {
+        return policy.preserve_motw;
+    }
+    policy.preserve_xattrs
 }
 
 // ============================================================
@@ -298,8 +354,9 @@ fn capture_xattrs(path: &Path) -> io::Result<Vec<XattrEntry>> {
             }),
             Ok(None) => {}
             // ENODATA can race when the xattr is removed between
-            // list and get. Skip; it's harmless.
-            Err(e) if e.raw_os_error() == Some(61) => {}
+            // list and get. Skip; it's harmless. `libc::ENODATA` is
+            // 61 on Linux but 96 on macOS, so source it portably.
+            Err(e) if e.raw_os_error() == Some(libc::ENODATA) => {}
             Err(e) => return Err(e),
         }
     }
@@ -516,16 +573,32 @@ fn wide_cstr_to_string(buf: &[u16]) -> String {
 /// Convert a `WIN32_FIND_STREAM_DATA::cStreamName` (which always looks
 /// like `:streamname:$DATA` with the `:` and `:$DATA` tags) into the
 /// bare stream name. Returns `None` for the unnamed default stream.
+///
+/// The trailing `:$DATA` tag is matched as the exact 6-byte literal at
+/// the end of the string (rather than a generic `rfind(':')`), so a
+/// stream name that itself contains a colon is not mis-parsed. Names
+/// that retain an embedded colon after stripping the trailing tag are
+/// rejected as malformed — NTFS rejects raw colons in stream names but
+/// the kernel could in principle hand us a buffer crafted by a hostile
+/// driver, so we refuse to mint a misleading [`NtfsStream::name`] from
+/// it.
 #[cfg(target_os = "windows")]
 fn parse_ads_name(raw: &str) -> Option<String> {
     let trimmed = raw.strip_prefix(':')?;
-    let end = trimmed.rfind(':')?;
-    let name = &trimmed[..end];
+    // The trailing tag is always exactly `:$DATA` (6 bytes). Strip it
+    // by suffix match instead of `rfind(':')` so a stream name that
+    // itself contains a colon is not truncated at the wrong boundary.
+    let name = trimmed.strip_suffix(":$DATA")?;
     if name.is_empty() {
-        None
-    } else {
-        Some(name.to_string())
+        return None;
     }
+    // Reject embedded colons — they should never appear in a valid
+    // NTFS stream name and signal either a parser bug here or a
+    // malformed kernel-supplied buffer.
+    if name.contains(':') {
+        return None;
+    }
+    Some(name.to_string())
 }
 
 #[cfg(target_os = "windows")]
@@ -561,7 +634,22 @@ fn apply_ntfs_streams(path: &Path, streams: &[NtfsStream], outcome: &mut MetaApp
 /// entry tagged with a synthesized entry-ID derived from a stable
 /// FNV-1a hash of the stream name — that way the same metadata
 /// re-applied via `tar` / `rsync` lands deterministically.
+///
+/// Two safeties layered on top of the FNV hash:
+///
+/// 1. Collision detection: if two stream names hash to the same
+///    entry-ID, the second entry linear-probes (incrementing the ID,
+///    skipping the canonical 0..=15 reserved range and wrapping past
+///    `u32::MAX`) until it finds a free slot. Without this an
+///    overwrite at read time would silently lose one of the streams.
+/// 2. Offset arithmetic runs in `u64` and is checked at write time
+///    before being narrowed to `u32` — the AppleDouble v2 entry
+///    descriptor stores a `u32` offset, so payloads totalling more
+///    than 4 GiB cannot fit and we surface the error rather than
+///    silently truncating.
 fn write_appledouble_sidecar(path: &Path, streams: &[ForeignStream]) -> io::Result<()> {
+    use std::collections::HashSet;
+
     let parent = path
         .parent()
         .ok_or_else(|| io::Error::other("appledouble: dst has no parent"))?;
@@ -580,24 +668,44 @@ fn write_appledouble_sidecar(path: &Path, streams: &[ForeignStream]) -> io::Resu
     //   for each entry: u32 id, u32 offset, u32 length  (BE)
     //   ... payloads ...
     let entry_count = streams.len() as u16;
-    let header_fixed = 4 + 4 + 16 + 2;
-    let entry_descriptor = 4 + 4 + 4;
-    let mut offset_cursor: u32 = (header_fixed + entry_descriptor * entry_count as usize) as u32;
+    let header_fixed = 4u64 + 4 + 16 + 2;
+    let entry_descriptor = 4u64 + 4 + 4;
+    // Run offset arithmetic in u64 so a >4 GiB total payload is
+    // detected at narrowing time rather than silently wrapping.
+    let mut offset_cursor: u64 = header_fixed + entry_descriptor * entry_count as u64;
 
-    let mut out: Vec<u8> = Vec::with_capacity(offset_cursor as usize);
+    let initial_capacity = usize::try_from(offset_cursor).unwrap_or(0);
+    let mut out: Vec<u8> = Vec::with_capacity(initial_capacity);
     out.extend_from_slice(&0x0005_1607u32.to_be_bytes());
     out.extend_from_slice(&0x0002_0000u32.to_be_bytes());
     out.extend_from_slice(&[0u8; 16]);
     out.extend_from_slice(&entry_count.to_be_bytes());
 
+    // Track entry IDs that have already been allocated so a FNV-1a
+    // collision (or an explicit 2 / 9 reuse) doesn't overwrite an
+    // earlier entry.
+    let mut used_ids: HashSet<u32> = HashSet::with_capacity(streams.len());
     let mut payloads: Vec<&[u8]> = Vec::with_capacity(streams.len());
     for s in streams {
-        let id = synth_entry_id(&s.name);
-        let len = s.payload.len() as u32;
+        let id = synth_entry_id(&s.name, &mut used_ids);
+        let len_u64 = s.payload.len() as u64;
+        let len_u32 = u32::try_from(len_u64).map_err(|_| {
+            io::Error::other(format!(
+                "appledouble: payload for {} exceeds 4 GiB ({} bytes)",
+                s.name,
+                s.payload.len()
+            ))
+        })?;
+        let offset_u32 = u32::try_from(offset_cursor).map_err(|_| {
+            io::Error::other(format!(
+                "appledouble: total payload offset exceeds 4 GiB at entry {} ({} bytes)",
+                s.name, offset_cursor
+            ))
+        })?;
         out.extend_from_slice(&id.to_be_bytes());
-        out.extend_from_slice(&offset_cursor.to_be_bytes());
-        out.extend_from_slice(&len.to_be_bytes());
-        offset_cursor = offset_cursor.saturating_add(len);
+        out.extend_from_slice(&offset_u32.to_be_bytes());
+        out.extend_from_slice(&len_u32.to_be_bytes());
+        offset_cursor = offset_cursor.saturating_add(len_u64);
         payloads.push(&s.payload);
     }
     for p in payloads {
@@ -612,22 +720,85 @@ fn write_appledouble_sidecar(path: &Path, streams: &[ForeignStream]) -> io::Resu
 /// 2 = resource fork, 9 = FinderInfo) by reserving ID 0..=15 for
 /// canonical Apple usage and rotating any FNV collision into the
 /// 16..=u32::MAX space.
-fn synth_entry_id(name: &str) -> u32 {
-    if name == "com.apple.ResourceFork" {
-        return 2;
+///
+/// `used` carries every ID we've already handed out for *this*
+/// sidecar; on a collision we linear-probe by incrementing (and
+/// skipping the canonical 0..=15 range) until we find a free slot.
+/// The canonical IDs `2` (ResourceFork) and `9` (FinderInfo) are
+/// always granted to the matching stream name — duplicates of those
+/// names also probe so a misbehaving snapshot can't shadow itself.
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+fn synth_entry_id(name: &str, used: &mut std::collections::HashSet<u32>) -> u32 {
+    let preferred = if name == "com.apple.ResourceFork" {
+        2
+    } else if name == "com.apple.FinderInfo" {
+        9
+    } else {
+        let mut hash: u32 = 0x811c_9dc5;
+        for b in name.bytes() {
+            hash ^= b as u32;
+            hash = hash.wrapping_mul(0x0100_0193);
+        }
+        if hash < 16 {
+            hash = hash.wrapping_add(16);
+        }
+        hash
+    };
+    let id = next_free_entry_id(preferred, used);
+    used.insert(id);
+    id
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+fn synth_entry_id(name: &str, used: &mut std::collections::HashSet<u32>) -> u32 {
+    let preferred = if name == "com.apple.ResourceFork" {
+        2
+    } else if name == "com.apple.FinderInfo" {
+        9
+    } else {
+        let mut hash: u32 = 0x811c_9dc5;
+        for b in name.bytes() {
+            hash ^= b as u32;
+            hash = hash.wrapping_mul(0x0100_0193);
+        }
+        if hash < 16 {
+            hash = hash.wrapping_add(16);
+        }
+        hash
+    };
+    let id = next_free_entry_id(preferred, used);
+    used.insert(id);
+    id
+}
+
+/// Linear-probe `start` against the `used` set, returning the first
+/// unused ID. Skips the canonical Apple range `0..=15` for non-canonical
+/// streams (the caller is allowed to seed with `2` or `9` for the
+/// known names) and wraps via `wrapping_add` past `u32::MAX`.
+fn next_free_entry_id(start: u32, used: &std::collections::HashSet<u32>) -> u32 {
+    // The canonical IDs 2 and 9 are explicitly handed back to the
+    // matching stream names by the caller; we honour that on the
+    // first try only. After that we skip the reserved 0..=15 band.
+    if !used.contains(&start) {
+        return start;
     }
-    if name == "com.apple.FinderInfo" {
-        return 9;
+    let mut probe = start;
+    loop {
+        probe = probe.wrapping_add(1);
+        if probe < 16 {
+            // Skip the canonical reserved range. Wrap into 16+.
+            probe = 16;
+        }
+        if !used.contains(&probe) {
+            return probe;
+        }
+        // u32 has 4 billion slots; running out means the caller is
+        // pushing >2^32 streams which is well outside what AppleDouble
+        // can describe (entry-count is u16). Defensive bail.
+        if probe == start {
+            return probe;
+        }
     }
-    let mut hash: u32 = 0x811c_9dc5;
-    for b in name.bytes() {
-        hash ^= b as u32;
-        hash = hash.wrapping_mul(0x0100_0193);
-    }
-    if hash < 16 {
-        hash = hash.wrapping_add(16);
-    }
-    hash
 }
 
 #[cfg(test)]
@@ -665,16 +836,88 @@ mod tests {
 
     #[test]
     fn synth_entry_id_uses_canonical_for_known_streams() {
-        assert_eq!(synth_entry_id("com.apple.ResourceFork"), 2);
-        assert_eq!(synth_entry_id("com.apple.FinderInfo"), 9);
+        let mut used = std::collections::HashSet::new();
+        assert_eq!(synth_entry_id("com.apple.ResourceFork", &mut used), 2);
+        let mut used = std::collections::HashSet::new();
+        assert_eq!(synth_entry_id("com.apple.FinderInfo", &mut used), 9);
         // Quarantine — non-canonical, should land in 16+ space.
-        assert!(synth_entry_id("com.apple.quarantine") >= 16);
+        let mut used = std::collections::HashSet::new();
+        assert!(synth_entry_id("com.apple.quarantine", &mut used) >= 16);
+    }
+
+    #[test]
+    fn synth_entry_id_resolves_collision_via_linear_probe() {
+        // Pre-seed the used set with a hash that we'll observe falls
+        // out of the FNV pass for "user.foo", forcing the linear
+        // probe.
+        let mut used = std::collections::HashSet::new();
+        let first = synth_entry_id("user.foo", &mut used);
+        // Asking again with the same name MUST mint a different ID
+        // even though the hash is identical, because `used` already
+        // contains the first one.
+        let second = synth_entry_id("user.foo", &mut used);
+        assert_ne!(first, second);
+        assert!(second >= 16);
+    }
+
+    #[test]
+    fn appledouble_collision_does_not_overwrite_entry() {
+        // Two streams whose hashes collide cannot share an ID; the
+        // second one must end up with a different one.
+        let tmp = tempfile::tempdir().unwrap();
+        let dst = tmp.path().join("file.bin");
+        std::fs::write(&dst, b"primary").unwrap();
+        // Crafted: the second name has the same FNV-1a output by
+        // construction is hard, so we synthesize the situation by
+        // forcing the same name twice. Same name → same hash → second
+        // one would otherwise overwrite the first.
+        let foreign = vec![
+            ForeignStream {
+                name: "user.dup".to_string(),
+                payload: vec![0xAA; 4],
+            },
+            ForeignStream {
+                name: "user.dup".to_string(),
+                payload: vec![0xBB; 4],
+            },
+        ];
+        write_appledouble_sidecar(&dst, &foreign).unwrap();
+        let sidecar = tmp.path().join("._file.bin");
+        let bytes = std::fs::read(&sidecar).unwrap();
+        // Two entries → two distinct IDs.
+        let id1 = u32::from_be_bytes(bytes[26..30].try_into().unwrap());
+        let id2 = u32::from_be_bytes(bytes[38..42].try_into().unwrap());
+        assert_ne!(id1, id2, "collision must be resolved into distinct IDs");
+    }
+
+    #[test]
+    fn parse_ads_name_strips_dollar_data_suffix() {
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(
+                parse_ads_name(":Zone.Identifier:$DATA").as_deref(),
+                Some("Zone.Identifier")
+            );
+            // Default unnamed stream is rejected.
+            assert!(parse_ads_name("::$DATA").is_none());
+            // Missing trailing tag → rejected.
+            assert!(parse_ads_name(":Zone.Identifier").is_none());
+        }
     }
 
     #[test]
     fn ext_lower_handles_no_extension() {
         assert_eq!(ext_lower(Path::new("/tmp/no-ext")), "none");
         assert_eq!(ext_lower(Path::new("/tmp/file.DOCX")), "docx");
+    }
+
+    #[test]
+    fn ext_lower_treats_dotfiles_as_no_extension() {
+        // `.bashrc` should report "none", not "bashrc".
+        assert_eq!(ext_lower(Path::new("/tmp/.bashrc")), "none");
+        assert_eq!(ext_lower(Path::new("/tmp/.gitignore")), "none");
+        // A dotfile WITH an extension still surfaces the extension.
+        assert_eq!(ext_lower(Path::new("/tmp/.config.json")), "json");
     }
 
     #[test]
