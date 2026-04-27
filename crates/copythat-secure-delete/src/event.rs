@@ -64,6 +64,29 @@ pub enum ShredEvent {
         duration: Duration,
         verified: bool,
     },
+    /// Advisory: the per-pass `sync_all` (durable flush to medium)
+    /// failed for `pass_index`. Emitted *before* the engine returns
+    /// the corresponding hard failure, so a UI can distinguish "drive
+    /// firmware refused fsync" from a generic write error. The shred
+    /// operation will fail; this event exists so the user sees that
+    /// the pass bytes were never confirmed durable.
+    PassFlushFailed {
+        pass_index: usize,
+        total_passes: usize,
+        /// String description of the underlying I/O error. Stable
+        /// across releases as a human-readable message; do not parse.
+        error: String,
+    },
+    /// Advisory: the SSD probe could not determine whether the target
+    /// lives on solid-state or spinning media. Distinct from the
+    /// `Some(false)` "definitely HDD" answer (no event) and from
+    /// `Some(true)` (`SsdAdvisory`). UI should render
+    /// "could not determine media type; SSD advisory not applicable".
+    SsdAdvisoryUnknown {
+        path: PathBuf,
+        /// Fluent message key. Current value: `shred-ssd-advisory-unknown`.
+        localized_key: &'static str,
+    },
     /// The caller pressed pause. Mirrors `CopyEvent::Paused`.
     Paused,
     /// The caller resumed. Mirrors `CopyEvent::Resumed`.

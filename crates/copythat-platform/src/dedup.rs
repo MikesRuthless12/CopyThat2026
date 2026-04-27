@@ -182,18 +182,22 @@ pub fn try_dedup(src: &Path, dst: &Path, opts: &DedupOptions) -> io::Result<Dedu
         }
     }
 
-    // 3. Chunk-share leg — runtime gate. The actual integration
-    //    lives in the engine: when the chunk store is enabled the
-    //    runner already routes the byte-copy through the chunk
-    //    write path, which dedups by content. Here we surface the
-    //    strategy so the UI can render the right badge — but ONLY
-    //    when the engine has actually wired the chunk-store hook
-    //    (`CopyOptions::chunk_store`). Today the engine does not
+    // 3. Chunk-share leg — gated until the engine wires
+    //    `CopyOptions::chunk_store`.
+    //
+    //    The actual integration lives in the engine: when the chunk
+    //    store is enabled the runner routes the byte-copy through
+    //    the chunk write path, which dedups by content. The ladder
+    //    surfaces `DedupStrategy::ChunkShare` so the UI can render
+    //    the right badge — but ONLY when the engine has actually
+    //    wired the chunk-store hook. Today the engine does not
     //    consult `chunk_store`; reporting `ChunkShare` here would
     //    let the caller skip `copy_file`, leaving the destination
-    //    file empty. Until the engine wiring lands, fall through to
-    //    the byte-copy fallback so dst still gets the bytes.
-    let _chunk_share_intent = opts.mode == DedupMode::AutoLadder && opts.chunk_share_enabled;
+    //    file empty. Until the engine wiring lands we deliberately
+    //    do not branch on `opts.chunk_share_enabled` — the ladder
+    //    falls through to the byte-copy fallback so dst always
+    //    gets the bytes. (When the engine wiring lands, this is
+    //    where the gated `if` returns `DedupStrategy::ChunkShare`.)
 
     // 4. Byte-copy fallback.
     Ok(DedupOutcome {

@@ -138,11 +138,13 @@ pub enum CopyEvent {
     /// byte 0); the UI surfaces the reason in a row toast so the
     /// user knows why a "resumable" copy went all the way back.
     ResumeAborted {
-        /// Stable wire string: `"prefix-hash-mismatch"` /
-        /// `"dst-shrunk"` / `"checkpoint-corrupt"`. New variants
-        /// land here as additional resume paths discover their own
-        /// abort modes.
-        reason: &'static str,
+        /// Typed reason — see [`ResumeAbortReason`]. Use
+        /// `reason.as_str()` to recover the stable wire string the
+        /// pre-Phase-38 shape exposed (`"prefix-hash-mismatch"` /
+        /// `"verify-incompatible"` / etc.); the typed enum lets a
+        /// UI render an explanatory string per variant without a
+        /// stringly-typed `match`.
+        reason: ResumeAbortReason,
         /// Best-effort offset where the mismatch was first observed.
         /// `0` if the mismatch was outside a per-byte compare (e.g.
         /// the dst length was already shorter than the journal
@@ -207,6 +209,61 @@ pub enum CopyEvent {
         ratio: f64,
         bytes_saved: u64,
     },
+}
+
+/// Why the engine refused to resume a partial copy and fell back to
+/// a fresh-start truncate+rewrite. Carried by
+/// [`CopyEvent::ResumeAborted`]. Each variant has a stable
+/// wire-string surface via [`Self::as_str`] — older log scrapers
+/// that compared the previous `&'static str` field continue to work
+/// on the string the variant returns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ResumeAbortReason {
+    /// Journal said `AlreadyComplete` but `dst.len()` no longer
+    /// matched the recorded total. Wire string:
+    /// `"dst-length-mismatch"`.
+    DstLengthMismatch,
+    /// Read-back of the existing destination prefix failed at the
+    /// OS level (permission, sharing violation, transient EIO).
+    /// Wire string: `"dst-read-failed"`.
+    DstReadFailed,
+    /// Journal said `AlreadyComplete` *and* dst.len() matched, but
+    /// the full-file re-hash did not match the recorded final
+    /// digest. Wire string: `"complete-hash-mismatch"`.
+    CompleteHashMismatch,
+    /// Journal said `Resume { offset, .. }` but the on-disk
+    /// destination was shorter than the journal believed.
+    /// Wire string: `"dst-shrunk"`.
+    DstShrunk,
+    /// Journal said `Resume { offset, src_hash_at_offset }` but the
+    /// re-hash of the existing destination's first `offset` bytes
+    /// did not match. Wire string: `"prefix-hash-mismatch"`.
+    PrefixHashMismatch,
+    /// The user asked for post-copy verify with a non-BLAKE3
+    /// algorithm; the partial source-side hasher state would not
+    /// match the journal's BLAKE3 prefix. Wire string:
+    /// `"verify-incompatible"`. The UI explanation: "the active
+    /// verify algorithm cannot resume from the journal — the partial
+    /// transfer was discarded and the file is being re-copied from
+    /// the start".
+    VerifyIncompatible,
+}
+
+impl ResumeAbortReason {
+    /// Stable wire string, matching the strings the pre-Phase-38
+    /// `&'static str` shape returned. Useful for log lines, JSON
+    /// emit, and UI fluent keys.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            ResumeAbortReason::DstLengthMismatch => "dst-length-mismatch",
+            ResumeAbortReason::DstReadFailed => "dst-read-failed",
+            ResumeAbortReason::CompleteHashMismatch => "complete-hash-mismatch",
+            ResumeAbortReason::DstShrunk => "dst-shrunk",
+            ResumeAbortReason::PrefixHashMismatch => "prefix-hash-mismatch",
+            ResumeAbortReason::VerifyIncompatible => "verify-incompatible",
+        }
+    }
 }
 
 impl Clone for CopyEvent {
@@ -339,7 +396,7 @@ impl Clone for CopyEvent {
                 snap_mount: snap_mount.clone(),
             },
             CopyEvent::ResumeAborted { reason, offset } => CopyEvent::ResumeAborted {
-                reason,
+                reason: *reason,
                 offset: *offset,
             },
             CopyEvent::SparsenessNotSupported { dst_fs } => {

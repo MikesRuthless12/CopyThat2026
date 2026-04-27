@@ -21,3 +21,23 @@ pub const MAX_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 /// hosts. `Shift` avoids colliding with the platform-native paste
 /// (Cmd+V / Ctrl+V) so users keep normal text-paste semantics.
 pub const DEFAULT_PASTE_SHORTCUT: &str = "CmdOrCtrl+Shift+V";
+
+/// Phase 42 — default retry count for sharing-violation opens.
+/// Mirrors `copythat_core::CopyOptions::sharing_violation_retries`
+/// (the engine's pre-Phase-42 hardcoded short-loop count). Exposed as
+/// a `fn` so it can be used as `#[serde(default = "...")]` on
+/// `TransferSettings::sharing_violation_retries`.
+#[inline]
+pub const fn default_sharing_violation_retries() -> u32 {
+    3
+}
+
+/// Phase 42 — default base delay (ms) between sharing-violation
+/// retries. Mirrors
+/// `copythat_core::CopyOptions::sharing_violation_base_delay_ms`.
+/// Exposed as a `fn` so it can be used as `#[serde(default = "...")]`
+/// on `TransferSettings::sharing_violation_base_delay_ms`.
+#[inline]
+pub const fn default_sharing_violation_base_delay_ms() -> u64 {
+    50
+}
