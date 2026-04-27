@@ -14,7 +14,12 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use crate::{AuditError, AuditFormat, Result, format::CHAIN_HASH_HEX_LEN, next_chain_hash};
+use subtle::ConstantTimeEq;
+
+use crate::{
+    AuditError, AuditFormat, Result, chain_hash_redacted, format::CHAIN_HASH_HEX_LEN,
+    next_chain_hash,
+};
 
 /// Outcome per line: whether the embedded `prev_hash` matched the
 /// recomputed chain.
@@ -88,19 +93,34 @@ pub fn verify_chain(path: &Path, format: AuditFormat) -> Result<VerifyReport> {
             None => {
                 report.missing += 1;
                 report.failed_lines.push(idx + 1);
+                // No prev-hash slot to redact; hash the raw line.
+                // The chain WILL drift after this — that's the
+                // expected outcome for a malformed record, and the
+                // verifier surfaces both this missing line and any
+                // downstream cascade.
                 chain = next_chain_hash(&chain, line);
                 continue;
             }
         };
 
         let expected_hex = hex::encode(chain);
-        if expected_hex == prev_hex {
+        // Constant-time compare: a naive `==` on hex strings leaks
+        // the position of the first mismatching byte through timing.
+        // BLAKE3's distinguisher resists that anyway, but a verify
+        // tool should not be the layer that re-introduces a
+        // timing-side-channel signal — the SIEM ingest paths can
+        // run on networks where timing is observable.
+        if expected_hex.as_bytes().ct_eq(prev_hex.as_bytes()).into() {
             report.matches += 1;
         } else {
             report.mismatches += 1;
             report.failed_lines.push(idx + 1);
         }
-        chain = next_chain_hash(&chain, line);
+        // Step forward over the same redacted bytes the writer
+        // used so the chain matches whether the file is being
+        // verified or appended.
+        let core = chain_hash_redacted(line, &prev_hex);
+        chain = next_chain_hash(&chain, &core);
     }
     Ok(report)
 }
