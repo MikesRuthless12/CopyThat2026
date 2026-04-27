@@ -312,12 +312,28 @@ impl MetaOps for NoopMetaOps {
 /// Convenience: capture + apply via an arc'd hook in one shot. Used
 /// by the engine after the byte copy finishes; saves the per-call site
 /// from juggling two spawn_blocking shells.
+///
+/// Fast-path: when every per-family policy bit is off the capture call
+/// would walk the source filesystem only to throw the result away on
+/// the next line. Bail before we even spawn the blocking worker so
+/// vanilla copies skip the syscall surface entirely.
 pub async fn transfer(
     ops: Arc<dyn MetaOps>,
     src: std::path::PathBuf,
     dst: std::path::PathBuf,
     policy: MetaPolicy,
 ) -> std::io::Result<MetaApplyOutcome> {
+    if !policy.preserve_motw
+        && !policy.preserve_xattrs
+        && !policy.preserve_posix_acls
+        && !policy.preserve_selinux
+        && !policy.preserve_resource_forks
+    {
+        // Every individual gate is off — capture would be wasted.
+        // Caller still gets the default outcome so existing
+        // signatures keep round-tripping.
+        return Ok(MetaApplyOutcome::default());
+    }
     tokio::task::spawn_blocking(move || {
         let mut snap = ops.capture(&src)?;
         if snap.is_empty() {
@@ -470,5 +486,58 @@ mod tests {
         .unwrap();
         assert!(!outcome.translated_to_appledouble);
         assert!(outcome.partial_failures.is_empty());
+    }
+
+    #[tokio::test]
+    async fn transfer_short_circuits_when_every_toggle_off() {
+        // Spy MetaOps that increments a counter on capture. When every
+        // policy bit is off the fast-path must skip the capture call
+        // entirely.
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        #[derive(Debug, Default)]
+        struct CountingOps {
+            captures: AtomicUsize,
+        }
+
+        impl MetaOps for CountingOps {
+            fn capture(&self, _path: &Path) -> std::io::Result<MetaSnapshot> {
+                self.captures.fetch_add(1, Ordering::SeqCst);
+                Ok(MetaSnapshot::default())
+            }
+            fn apply(
+                &self,
+                _path: &Path,
+                _snapshot: &MetaSnapshot,
+                _policy: &MetaPolicy,
+            ) -> std::io::Result<MetaApplyOutcome> {
+                Ok(MetaApplyOutcome::default())
+            }
+        }
+
+        let counting = Arc::new(CountingOps::default());
+        let ops: Arc<dyn MetaOps> = counting.clone();
+        let policy = MetaPolicy {
+            preserve_motw: false,
+            preserve_xattrs: false,
+            preserve_posix_acls: false,
+            preserve_selinux: false,
+            preserve_resource_forks: false,
+            appledouble_fallback: false,
+        };
+        let outcome = transfer(
+            ops,
+            std::path::PathBuf::from("/tmp/src"),
+            std::path::PathBuf::from("/tmp/dst"),
+            policy,
+        )
+        .await
+        .unwrap();
+        assert!(!outcome.translated_to_appledouble);
+        assert_eq!(
+            counting.captures.load(Ordering::SeqCst),
+            0,
+            "capture must be skipped when every individual toggle is off"
+        );
     }
 }

@@ -101,6 +101,20 @@ impl CloudSink for CopyThatCloudSink {
     /// full payload. Non-OpenDAL targets fall through to the trait
     /// default which reads-into-Vec then delegates to
     /// `put_blocking`.
+    ///
+    /// **Atomicity (HIGH bug fix):** the streaming path measures the
+    /// source's announced byte count up-front (via `metadata().len()`
+    /// before opening the writer) and compares it against the
+    /// `total` byte counter the chunked write loop accumulates. If
+    /// the worker crashes mid-upload — panic, OS-level error after
+    /// some chunks land, or any path that bypasses `writer.close()`
+    /// — the trait contract requires we surface a hard error to the
+    /// engine and best-effort delete the truncated remote object so
+    /// the engine cannot mistakenly mark the file "complete" while
+    /// the destination is partial. Without this guard, a panic
+    /// inside the runtime would surface as `worker thread panicked`
+    /// but the in-flight chunks may already have been flushed by
+    /// the OpenDAL multipart-upload helpers.
     fn put_stream_blocking(
         &self,
         path: &str,
@@ -116,6 +130,16 @@ impl CloudSink for CopyThatCloudSink {
             return self.put_blocking(path, &bytes);
         };
 
+        // Pre-measure the source file size so the worker thread can
+        // validate `bytes_uploaded == total_bytes` before declaring
+        // success. Failing this check (or losing the worker before
+        // it reports a total) means we hit the "partial bytes
+        // uploaded with crash mid-stream" path — return Err and
+        // attempt to delete the truncated remote object.
+        let announced_total = std::fs::metadata(source_path)
+            .map_err(|e| format!("stat {}: {e}", source_path.display()))?
+            .len();
+
         let path_owned = path.to_owned();
         let source_owned = source_path.to_path_buf();
         let buffer_size = buffer_size.clamp(64 * 1024, 16 * 1024 * 1024);
@@ -125,6 +149,11 @@ impl CloudSink for CopyThatCloudSink {
         // sends byte totals back to the caller's thread, which
         // invokes the callback. Avoids Send-bounding the closure.
         let (progress_tx, progress_rx) = std::sync::mpsc::channel::<u64>();
+
+        // Clone the operator + path for the cleanup path that runs
+        // on a fresh runtime thread when validation fails.
+        let cleanup_operator = operator.clone();
+        let cleanup_path = path_owned.clone();
 
         // Spawn the worker in a thread, then drain progress on this
         // thread until the worker joins.
@@ -174,9 +203,51 @@ impl CloudSink for CopyThatCloudSink {
         while let Ok(bytes_done) = progress_rx.recv() {
             on_progress(bytes_done);
         }
-        worker_handle
-            .join()
-            .map_err(|_| "worker thread panicked".to_owned())?
+        let join_outcome = worker_handle.join();
+        let result = match join_outcome {
+            Ok(inner) => inner,
+            Err(_) => Err("worker thread panicked".to_owned()),
+        };
+
+        match result {
+            Ok(total) if total == announced_total => Ok(total),
+            Ok(total) => {
+                // Worker reported success but byte count diverged
+                // from the source's announced length. Attempt to
+                // clean the truncated remote object so the engine
+                // cannot mistake a partial upload for a successful
+                // copy. Cleanup is best-effort — if it fails we
+                // still surface the original mismatch error.
+                let _ = Self::run_on_dedicated_thread(
+                    format!("copythat-cloud-stream-cleanup-{}", self.target.name()),
+                    move |rt| {
+                        rt.block_on(async move {
+                            let _ = cleanup_operator.delete(&cleanup_path).await;
+                            Ok::<(), String>(())
+                        })
+                    },
+                );
+                Err(format!(
+                    "cloud upload truncated: {total}/{announced_total} bytes — \
+                     remote object best-effort deleted"
+                ))
+            }
+            Err(e) => {
+                // Worker errored or panicked — same cleanup as the
+                // mismatch path: the writer may have flushed some
+                // multipart parts before failing.
+                let _ = Self::run_on_dedicated_thread(
+                    format!("copythat-cloud-stream-cleanup-{}", self.target.name()),
+                    move |rt| {
+                        rt.block_on(async move {
+                            let _ = cleanup_operator.delete(&cleanup_path).await;
+                            Ok::<(), String>(())
+                        })
+                    },
+                );
+                Err(e)
+            }
+        }
     }
 }
 

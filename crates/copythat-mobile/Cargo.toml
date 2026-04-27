@@ -31,6 +31,12 @@ x25519-dalek = { version = "2", default-features = false, features = [
 # Phase 37 — SHA-256 for the SAS fingerprint + the optional QR-
 # url integrity check. MIT/Apache-2.0.
 sha2 = "0.10"
+# Phase 38 follow-up — HMAC-SHA-256 for the per-session challenge-
+# response that proves the phone holds the X25519 secret matching
+# the public key on `Hello`. Without this, a peer that learns a
+# paired pubkey could replay the unsigned `Hello` and drive
+# privileged commands. MIT/Apache-2.0.
+hmac = "0.12"
 # Phase 37 — pairing tokens are base32 (Crockford alphabet) so the
 # QR rendering stays in `[0-9A-Z]`. MIT/Apache-2.0.
 base32 = "0.5"

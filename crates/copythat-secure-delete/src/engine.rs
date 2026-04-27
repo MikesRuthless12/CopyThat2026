@@ -42,6 +42,12 @@ const PROGRESS_MIN_INTERVAL: Duration = Duration::from_millis(50);
 /// Fluent message key emitted alongside [`ShredEvent::SsdAdvisory`].
 pub(crate) const SSD_ADVISORY_KEY: &str = "shred-ssd-advisory";
 
+/// Fluent message key emitted alongside
+/// [`ShredEvent::SsdAdvisoryUnknown`]. Surfaces "the probe couldn't
+/// answer" rather than letting the UI infer "definitely not SSD" from
+/// silence.
+pub(crate) const SSD_ADVISORY_UNKNOWN_KEY: &str = "shred-ssd-advisory-unknown";
+
 /// Securely delete a single regular file.
 ///
 /// `path` must point at a regular file — directories and symlinks are
@@ -110,13 +116,28 @@ async fn shred_file_inner(
         .await;
 
     // SSD advisory — emitted once per operation, before the first pass.
-    if let Some(true) = ssd::is_ssd(path) {
-        let _ = events
-            .send(ShredEvent::SsdAdvisory {
-                path: path.to_path_buf(),
-                localized_key: SSD_ADVISORY_KEY,
-            })
-            .await;
+    // Three-state: Some(true) = definitely SSD (advisory fires), Some(false)
+    // = definitely HDD (no event), None = probe failed (Unknown event so
+    // the UI can say "could not determine media type" rather than treat
+    // silence as "no advisory needed").
+    match ssd::is_ssd(path) {
+        Some(true) => {
+            let _ = events
+                .send(ShredEvent::SsdAdvisory {
+                    path: path.to_path_buf(),
+                    localized_key: SSD_ADVISORY_KEY,
+                })
+                .await;
+        }
+        None => {
+            let _ = events
+                .send(ShredEvent::SsdAdvisoryUnknown {
+                    path: path.to_path_buf(),
+                    localized_key: SSD_ADVISORY_UNKNOWN_KEY,
+                })
+                .await;
+        }
+        Some(false) => {}
     }
 
     // Open for write, re-used across passes. On Unix we could push
@@ -182,9 +203,23 @@ async fn shred_file_inner(
         file.flush()
             .await
             .map_err(|e| ShredError::from_io(path, e))?;
-        file.sync_all()
-            .await
-            .map_err(|e| ShredError::from_io(path, e))?;
+        // `sync_all` is the durable-flush guarantee: page cache → medium.
+        // If the drive firmware refuses (most often: SMR HDDs under
+        // pressure, broken USB enclosures, or removed SD cards), the
+        // pass we just wrote may not survive a power cycle. Emit a
+        // `PassFlushFailed` advisory so the UI can show the user what
+        // went wrong, *then* return the hard error — we will not pretend
+        // the pass succeeded when the medium never confirmed it.
+        if let Err(e) = file.sync_all().await {
+            let _ = events
+                .send(ShredEvent::PassFlushFailed {
+                    pass_index,
+                    total_passes: passes.len(),
+                    error: e.to_string(),
+                })
+                .await;
+            return Err(ShredError::from_io(path, e));
+        }
 
         let verified = if pass.verify() {
             verify_pass(&mut file, pass, file_size, path, pass_index, &ctrl).await?;

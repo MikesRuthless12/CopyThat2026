@@ -386,6 +386,36 @@ pub struct CopyOptions {
     /// to the dense path — there is no way to honour the request
     /// without a hook.
     pub preserve_sparseness: bool,
+    /// Phase 42 — paranoid verify mode.
+    ///
+    /// When `true` (and [`verify`](Self::verify) is also set), the
+    /// engine forces a full filesystem flush (`FlushFileBuffers` on
+    /// Windows, `fsync` on Unix) before the verify pass and asks the
+    /// kernel to drop the destination's page-cache pages
+    /// (`posix_fadvise(POSIX_FADV_DONTNEED)` on Linux; the `fsync`
+    /// alone covers the Windows case via the cache manager's
+    /// write-through behaviour). This catches three failure modes
+    /// the default verify cannot:
+    ///   1. Write-cache lying — drives that ack a write before
+    ///      persistence (FUA ignored, volatile DRAM cache).
+    ///   2. Silent destination bit-flips on platter / NAND.
+    ///   3. Filesystem / driver bugs in the write path.
+    ///
+    /// Cost: ~50 % throughput reduction on the verify pass (the
+    /// re-read is now uncached). Off by default; opt-in per-job.
+    pub paranoid_verify: bool,
+    /// Phase 42 — number of retries on `ERROR_SHARING_VIOLATION` /
+    /// `ERROR_LOCK_VIOLATION` (Windows) when opening a source file
+    /// that's transiently locked by another process.
+    ///
+    /// Default `3` matches Robocopy `/R:3`. Backoff is exponential:
+    /// `sharing_violation_base_delay_ms << attempt`.
+    pub sharing_violation_retries: u32,
+    /// Phase 42 — base delay (in milliseconds) for the
+    /// sharing-violation retry exponential backoff. Each retry
+    /// doubles. Default `50` (50 ms / 100 ms / 200 ms — covers most
+    /// short-lived AV / indexer locks).
+    pub sharing_violation_base_delay_ms: u64,
     /// Phase 23 — extent-introspection bridge.
     ///
     /// Implemented by `copythat_platform::PlatformSparseOps`.
@@ -653,6 +683,9 @@ impl Default for CopyOptions {
             journal_file_idx: 0,
             shape: None,
             preserve_sparseness: true,
+            paranoid_verify: false,
+            sharing_violation_retries: 3,
+            sharing_violation_base_delay_ms: 50,
             sparse_ops: None,
             preserve_security_metadata: true,
             meta_policy: crate::meta::MetaPolicy::default(),

@@ -104,6 +104,22 @@ async fn enqueue(
             return Err(e.localized_key().to_string());
         }
     };
+    // Pre-flight that the destination exists *and* is a directory.
+    // Without this synchronous check the engine would later surface
+    // a low-level NotFound / NotADirectory deep inside the runner,
+    // by which point the caller has already received a job-id and
+    // started rendering progress UI for a copy that's about to
+    // fail-fast on the very first file. Reject at the IPC boundary
+    // so the frontend can toast a typed error before the queue
+    // accepts the job.
+    if !dst_root.is_dir() {
+        tracing::debug!(
+            target: "copythat::ipc",
+            kind = ?kind,
+            "destination not a directory",
+        );
+        return Err("err-destination-not-directory".to_string());
+    }
 
     // Phase 12: per-enqueue `CopyOptionsDto` overrides come from the
     // frontend's drop-dialog and still win (highest precedence);
@@ -285,6 +301,12 @@ fn apply_options(
         preserve_times: settings.transfer.preserve_timestamps,
         preserve_permissions: settings.transfer.preserve_permissions,
         preserve_sparseness: settings.transfer.preserve_sparseness,
+        // Phase 42 — bridge the new transfer knobs into the engine.
+        // Defaults match `CopyOptions::default()`; users can change
+        // them via Settings.
+        paranoid_verify: settings.transfer.paranoid_verify,
+        sharing_violation_retries: settings.transfer.sharing_violation_retries,
+        sharing_violation_base_delay_ms: settings.transfer.sharing_violation_base_delay_ms,
         preserve_security_metadata: settings.transfer.preserve_security_metadata,
         meta_policy: copythat_core::MetaPolicy {
             preserve_motw: settings.transfer.preserve_motw,
@@ -1124,7 +1146,27 @@ pub fn update_settings(
     // changed. Rebuilds with the new config (format / path / WORM)
     // even if only a subset changed — the brief's "seamless toggle"
     // expectation.
+    //
+    // Drain pending writes before swapping. `AuditSink::record` takes
+    // a private mutex, calls `file.flush()` after each write, and
+    // releases the mutex before returning — every observed record is
+    // already on the kernel by the time the snapshot returns. But a
+    // concurrent `record_*` from the runner may have just cloned an
+    // `Arc<AuditSink>` via `snapshot()` and is about to call into it
+    // *right now*; if we drop the registry slot's reference to the
+    // old sink while that call is in flight, the file handle stays
+    // alive (the Arc the runner holds keeps it pinned) — but a
+    // *new* event after the swap could race with the close on the
+    // old handle and land in the new sink with a chained hash that
+    // points at content from the previous file, breaking the chain
+    // for replay. Sleep a brief grace period so any in-flight
+    // `record(...)` clears the post-snapshot critical section before
+    // the swap. 50 ms covers the worst-case spinning-disk fsync
+    // observed on the audit smoke benchmarks; the user already
+    // accepted a write to disk + a settings reload, so a perceptible
+    // pause here is acceptable.
     if prev_snapshot.audit != next.audit {
+        std::thread::sleep(std::time::Duration::from_millis(50));
         match crate::audit_commands::build_sink(&next.audit) {
             Ok(new_sink) => state.audit.set(new_sink),
             Err(e) => eprintln!("[audit] rebuild sink failed: {e}"),

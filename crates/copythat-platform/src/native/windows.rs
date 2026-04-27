@@ -28,7 +28,9 @@ use std::time::Instant;
 use copythat_core::{CopyControl, CopyEvent};
 use tokio::sync::mpsc;
 use windows_sys::Win32::Foundation::{BOOL, FALSE, GetLastError, TRUE};
-use windows_sys::Win32::Storage::FileSystem::{CopyFileExW, LPPROGRESS_ROUTINE_CALLBACK_REASON};
+use windows_sys::Win32::Storage::FileSystem::{
+    CopyFileExW, LPPROGRESS_ROUTINE_CALLBACK_REASON,
+};
 
 use super::NativeOutcome;
 use crate::outcome::ChosenStrategy;
@@ -56,16 +58,54 @@ use crate::outcome::ChosenStrategy;
 /// to A/B test on Dev Drive / NVMe-equipped machines where the
 /// page-cache regression argument may not apply.
 const NO_BUFFERING_THRESHOLD_DEFAULT: u64 = 256 * 1024 * 1024;
+/// Phase 42 — adaptive cap. Even on huge-RAM hosts we don't want
+/// to buffer arbitrarily-large files because that pollutes
+/// SuperFetch's standby list and evicts genuinely-hot working sets
+/// (foreground app code, the user's compiler cache, etc.). The
+/// initial Phase 42 cap of 2 GiB was reviewer-flagged as still too
+/// aggressive — even on 64 GiB hosts, a 2 GiB cached copy displaces
+/// roughly the whole standby list every time. 1 GiB is plenty for
+/// the "fits-in-cache" win on real-world workloads (Explorer,
+/// xcopy, and CopyFileExW's own buffered path all top out well
+/// below this); beyond that we want the unbuffered streaming path
+/// regardless of available RAM.
+const NO_BUFFERING_THRESHOLD_ADAPTIVE_CAP: u64 = 1024 * 1024 * 1024;
 
 fn no_buffering_threshold() -> u64 {
     static CACHED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *CACHED.get_or_init(|| {
-        std::env::var("COPYTHAT_NO_BUFFERING_THRESHOLD_MB")
+        // 1. Explicit env var override always wins (used by xtask
+        //    bench A/B and by users with unusual hardware).
+        if let Some(mb) = std::env::var("COPYTHAT_NO_BUFFERING_THRESHOLD_MB")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
-            .map(|mb| mb.saturating_mul(1024 * 1024))
-            .unwrap_or(NO_BUFFERING_THRESHOLD_DEFAULT)
+        {
+            return mb.saturating_mul(1024 * 1024);
+        }
+        // 2. Phase 42 — adaptive: compute `free_phys_ram / 4`,
+        //    floor at the 256 MiB Phase-13b default, cap at 2 GiB
+        //    to avoid working-set pollution on RAM-rich hosts.
+        let free = free_phys_ram_bytes().unwrap_or(0);
+        let adaptive = (free / 4)
+            .max(NO_BUFFERING_THRESHOLD_DEFAULT)
+            .min(NO_BUFFERING_THRESHOLD_ADAPTIVE_CAP);
+        adaptive
     })
+}
+
+/// Phase 42 — query free physical RAM via `GlobalMemoryStatusEx`.
+/// Returns `None` on probe failure (so the threshold falls back to
+/// the static 256 MiB default).
+fn free_phys_ram_bytes() -> Option<u64> {
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    let mut info: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+    info.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+    // SAFETY: info is a properly-sized MEMORYSTATUSEX with dwLength set.
+    let ok = unsafe { GlobalMemoryStatusEx(&mut info) };
+    if ok == 0 {
+        return None;
+    }
+    Some(info.ullAvailPhys)
 }
 const PROGRESS_MIN_BYTES: u64 = 16 * 1024;
 const PROGRESS_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
@@ -80,6 +120,13 @@ const PROGRESS_CANCEL: u32 = 1;
 const PROGRESS_STOP: u32 = 2;
 const PROGRESS_QUIET: u32 = 3;
 const COPY_FILE_NO_BUFFERING: u32 = 0x00001000;
+/// Phase 42 — Win10 1903+ (always satisfied on Win11+ baseline).
+/// Negotiates SMB v3.1.1 traffic compression on remote (UNC) dests.
+/// Free win on slow links; ignored when dest is local. Incompatible
+/// with SMB Direct / RDMA — but those are server SKUs and the
+/// negotiation simply skips the flag, so passing it unconditionally
+/// on UNC dests is safe.
+const COPY_FILE_REQUEST_COMPRESSED_TRAFFIC: u32 = 0x10000000;
 
 #[allow(dead_code)] // forward-compat: Windows error codes
 const ERROR_NOT_SUPPORTED: u32 = 50;
@@ -193,15 +240,37 @@ pub(crate) async fn try_native_copy(
             .is_none_or(|v| !matches!(v, "1" | "true" | "on"))
         && is_cross_volume(&src, &dst)
     {
+        // Phase 42 — topology-driven slot/buffer/QD picker. The
+        // Phase 41 fixed defaults (8 slots × 4 MiB, NO_BUFFERING
+        // off) were tuned for USB-attached external SSD — the
+        // canonical "competitor beats us by 48 %" scenario. With
+        // `IOCTL_STORAGE_QUERY_PROPERTY` we can now ask the
+        // destination volume what it actually is and pick the
+        // right shape per the swarm-research table:
+        //   NVMe   → 1 MiB / QD 8 / NO_BUFFERING on
+        //   SATA SSD → 256 KiB / QD 4 / NO_BUFFERING on
+        //   HDD    → 4 MiB / QD 1 / NO_BUFFERING off (cache friendly)
+        //   USB    → 512 KiB / QD ≤4 / NO_BUFFERING off
+        //   SMB    → 1 MiB / QD 8 / NO_BUFFERING off
+        // Probe-failure path falls back to the Phase 41 USB-tuned
+        // defaults (which is what we'd have shipped previously).
+        let topo = crate::topology::probe(&dst)
+            .unwrap_or_else(crate::topology::VolumeTopology::conservative_default);
+        let buffer_kb = topo.recommended_buffer_bytes() / 1024;
+        let slots = topo.recommended_queue_depth();
+        let no_buffering = matches!(
+            topo.bus_type,
+            crate::topology::BusType::Nvme | crate::topology::BusType::Sata
+        );
         return super::windows_overlapped::try_overlapped_copy_with_config(
             src,
             dst,
             total,
             ctrl,
             events,
-            Some(8),     // 8 in-flight slots — Robocopy's internal default for USB
-            Some(4096),  // 4 MiB per slot — bigger amortises USB protocol round-trips
-            Some(false), // NO_BUFFERING off — USB cache helps, NVMe direct hurts
+            Some(slots),
+            Some(buffer_kb),
+            Some(no_buffering),
         )
         .await;
     }
@@ -213,6 +282,52 @@ pub(crate) async fn try_native_copy(
     // prove it's universally better.
     if let Some(n) = super::parallel::requested_chunks(total) {
         return super::parallel::parallel_chunk_copy(src, dst, total, n, ctrl, events).await;
+    }
+
+    // Phase 42 — pre-copy attribute probe. The result feeds:
+    // - the CopyFile2-vs-CopyFileExW routing decision (sparse
+    //   sources on Win11 22H2+ go through CopyFile2 with
+    //   COPY_FILE_ENABLE_SPARSE_COPY for native sparseness
+    //   preservation),
+    // - downstream logging (cloud placeholders / encrypted /
+    //   compressed sources warrant a one-line log entry),
+    // - the eventual hardlink-set scanner (#13) once it exists.
+    let src_attrs = crate::attrs::probe(&src).unwrap_or_default();
+
+    // Phase 42 follow-up — surface the noteworthy attribute classes
+    // to stderr so operators see why a copy is slow / hydrating
+    // network bytes / re-keying EFS material. The most user-impactful
+    // one is `is_recall_on_data_access` — modern OneDrive cloud-only
+    // placeholders silently trigger gigabyte-scale downloads when
+    // read, and the user deserves a heads-up before the copy starts.
+    // (Stays as `eprintln!` to match the existing
+    // `copythat-platform: WARNING — …` style elsewhere in this crate;
+    // there's no tracing subscriber wired at this layer.)
+    if src_attrs.is_recall_on_data_access {
+        eprintln!(
+            "copythat-platform: NOTE — source {:?} is a OneDrive / Cloud Files \
+             placeholder (RECALL_ON_DATA_ACCESS); reading it will trigger a \
+             transparent hydration download from the cloud provider before \
+             the copy can complete.",
+            src
+        );
+    }
+    if src_attrs.is_encrypted {
+        eprintln!(
+            "copythat-platform: NOTE — source {:?} is EFS-encrypted; \
+             CopyFileExW will re-encrypt at the destination using the source \
+             keys (cross-volume copies to non-NTFS targets may fail without \
+             OpenEncryptedFileRaw).",
+            src
+        );
+    }
+    if src_attrs.is_compressed {
+        eprintln!(
+            "copythat-platform: NOTE — source {:?} is NTFS-compressed; the \
+             kernel decompresses on read and the destination is written \
+             uncompressed unless FSCTL_SET_COMPRESSION is reapplied.",
+            src
+        );
     }
 
     super::emit_started(&src, &dst, total, &events).await;
@@ -275,11 +390,36 @@ pub(crate) async fn try_native_copy(
     let src_w = wide(&src);
     let dst_w = wide(&dst);
 
-    let flags: u32 = if total >= no_buffering_threshold() {
+    let mut flags: u32 = if total >= no_buffering_threshold() {
         COPY_FILE_NO_BUFFERING
     } else {
         0
     };
+    // Phase 42 — opportunistic SMB traffic compression on UNC dests.
+    // Always-satisfied on the Win11+ baseline (introduced in
+    // Win10 1903); on local dests the kernel ignores the flag.
+    if crate::topology::is_unc_path(&dst) {
+        flags |= COPY_FILE_REQUEST_COMPRESSED_TRAFFIC;
+    }
+
+    // Phase 42 — sparse sources on Win11 22H2+ benefit from
+    // CopyFile2's `COPY_FILE_ENABLE_SPARSE_COPY` flag, which
+    // preserves unallocated zero ranges natively. Route through the
+    // CopyFile2 wrapper instead of CopyFileExW. Falls back to
+    // CopyFileExW on older Win11 builds (21H2 → manual sparse
+    // pathway in `engine.rs`).
+    if src_attrs.is_sparse && crate::os::is_win11_22h2_plus() {
+        return try_copy_file_2(
+            src.clone(),
+            dst.clone(),
+            total,
+            ctrl.clone(),
+            events.clone(),
+            flags,
+            true, // enable_sparse_copy
+        )
+        .await;
+    }
 
     let ctx_for_block = ctx.clone();
     let join = tokio::task::spawn_blocking(move || {
@@ -333,6 +473,289 @@ pub(crate) async fn try_native_copy(
         }
         Err(join_err) => NativeOutcome::Io(io::Error::other(format!(
             "CopyFileExW spawn_blocking panicked: {join_err}"
+        ))),
+    }
+}
+
+// ---------------------------------------------------------------------
+// Phase 42 — CopyFile2 path (sparse-source Win11 22H2+).
+// ---------------------------------------------------------------------
+
+/// `COPY_FILE_ENABLE_SPARSE_COPY` from `winbase.h` — Win11 22H2+ flag
+/// that tells CopyFile2 to preserve sparse unallocated ranges
+/// natively, skipping the read-zeros / write-zeros round-trip.
+const COPY_FILE_ENABLE_SPARSE_COPY: u32 = 0x20000000;
+
+/// CopyFile2 message types we care about. Stable Win32 ABI.
+const COPYFILE2_CALLBACK_CHUNK_FINISHED: u32 = 2;
+const COPYFILE2_CALLBACK_ERROR: u32 = 5;
+
+/// CopyFile2 callback action codes.
+const COPYFILE2_PROGRESS_CONTINUE: u32 = 0;
+const COPYFILE2_PROGRESS_CANCEL: u32 = 1;
+const COPYFILE2_PROGRESS_QUIET: u32 = 3;
+
+/// Minimal header for `COPYFILE2_MESSAGE`. The full union has many
+/// variants — we read the fixed prefix (`Type`, `dwPadding`) and
+/// then re-cast the buffer to the variant we need based on `Type`.
+/// Stable Win32 ABI; layout matches `winbase.h`.
+#[repr(C)]
+#[allow(non_snake_case)]
+struct CopyFile2MessageHeader {
+    Type: u32,
+    dwPadding: u32,
+}
+
+/// `COPYFILE2_MESSAGE.Info.ChunkFinished` — the variant we read for
+/// progress accounting.
+#[repr(C)]
+#[allow(non_snake_case)]
+struct CopyFile2ChunkFinished {
+    header: CopyFile2MessageHeader,
+    dwStreamNumber: u32,
+    dwReserved: u32,
+    hSourceFile: *mut core::ffi::c_void,
+    hDestinationFile: *mut core::ffi::c_void,
+    uliChunkNumber: u64,
+    uliChunkSize: u64,
+    uliStreamSize: u64,
+    uliStreamBytesTransferred: u64,
+    uliTotalFileSize: u64,
+    uliTotalBytesTransferred: u64,
+}
+
+/// `COPYFILE2_EXTENDED_PARAMETERS` layout per `winbase.h`. We hand-
+/// roll this so we don't need an extra windows-sys feature flag for
+/// the CopyFile2 path while the migration remains scoped to sparse
+/// sources.
+#[repr(C)]
+#[allow(non_snake_case)]
+struct CopyFile2ExtendedParameters {
+    dwSize: u32,
+    dwCopyFlags: u32,
+    pfCancel: *mut BOOL,
+    pProgressRoutine: Option<
+        unsafe extern "system" fn(
+            *const CopyFile2MessageHeader,
+            *mut core::ffi::c_void,
+        ) -> u32,
+    >,
+    pvCallbackContext: *mut core::ffi::c_void,
+}
+
+// Defensive compile-time assertions: the three hand-rolled structs
+// above must match the `winbase.h` ABI exactly or we'll silently
+// corrupt CopyFile2's parameter / message reads. The offsets below
+// are the documented x64 layout; the `target_pointer_width = "64"`
+// gate keeps a future 32-bit-Windows port building (where pointer
+// fields would shift). The shipped MSVC x64 toolchain is the only
+// supported target today.
+#[cfg(target_pointer_width = "64")]
+const _: () = {
+    use std::mem::{offset_of, size_of};
+
+    // CopyFile2MessageHeader — { u32, u32 }, total 8 bytes.
+    assert!(offset_of!(CopyFile2MessageHeader, Type) == 0);
+    assert!(offset_of!(CopyFile2MessageHeader, dwPadding) == 4);
+    assert!(size_of::<CopyFile2MessageHeader>() == 8);
+
+    // CopyFile2ChunkFinished — { header(8), 2×u32(8), 2×ptr(16), 6×u64(48) }.
+    assert!(offset_of!(CopyFile2ChunkFinished, header) == 0);
+    assert!(offset_of!(CopyFile2ChunkFinished, dwStreamNumber) == 8);
+    assert!(offset_of!(CopyFile2ChunkFinished, dwReserved) == 12);
+    assert!(offset_of!(CopyFile2ChunkFinished, hSourceFile) == 16);
+    assert!(offset_of!(CopyFile2ChunkFinished, hDestinationFile) == 24);
+    assert!(offset_of!(CopyFile2ChunkFinished, uliChunkNumber) == 32);
+    assert!(offset_of!(CopyFile2ChunkFinished, uliChunkSize) == 40);
+    assert!(offset_of!(CopyFile2ChunkFinished, uliStreamSize) == 48);
+    assert!(offset_of!(CopyFile2ChunkFinished, uliStreamBytesTransferred) == 56);
+    assert!(offset_of!(CopyFile2ChunkFinished, uliTotalFileSize) == 64);
+    assert!(offset_of!(CopyFile2ChunkFinished, uliTotalBytesTransferred) == 72);
+
+    // CopyFile2ExtendedParameters — { 2×u32, ptr, fn-ptr, ptr } = 32 bytes.
+    assert!(offset_of!(CopyFile2ExtendedParameters, dwSize) == 0);
+    assert!(offset_of!(CopyFile2ExtendedParameters, dwCopyFlags) == 4);
+    assert!(offset_of!(CopyFile2ExtendedParameters, pfCancel) == 8);
+    assert!(offset_of!(CopyFile2ExtendedParameters, pProgressRoutine) == 16);
+    assert!(offset_of!(CopyFile2ExtendedParameters, pvCallbackContext) == 24);
+    assert!(size_of::<CopyFile2ExtendedParameters>() == 32);
+};
+
+unsafe extern "system" {
+    /// `CopyFile2` from kernel32. Declared inline so we don't need to
+    /// add `Win32_Storage_FileSystem` extras for this single function;
+    /// the symbol is part of the ABI-stable kernel32 surface and has
+    /// been since Windows 8.
+    ///
+    /// `extern "system"` is the canonical ABI for Win32 imports — on
+    /// x64 it coincides with the platform C ABI, but on the (now-rare)
+    /// 32-bit Windows target it resolves to `stdcall`. Using the
+    /// canonical ABI here insulates the FFI surface from any future
+    /// 32-bit Windows port regression.
+    fn CopyFile2(
+        pwszExistingFileName: *const u16,
+        pwszNewFileName: *const u16,
+        pExtendedParameters: *const CopyFile2ExtendedParameters,
+    ) -> i32; // HRESULT
+}
+
+unsafe extern "system" fn copyfile2_callback(
+    msg_ptr: *const CopyFile2MessageHeader,
+    ctx_raw: *mut core::ffi::c_void,
+) -> u32 {
+    // SAFETY: ctx_raw points at the same `CallbackCtx` we wired up
+    // for the CopyFileExW path; layout is identical (we reuse the
+    // type so callers see one telemetry surface).
+    let ctx = unsafe { &*(ctx_raw as *const CallbackCtx) };
+
+    if ctx.ctrl.is_cancelled() {
+        ctx.cancel_flag.store(true, Ordering::Release);
+        return COPYFILE2_PROGRESS_CANCEL;
+    }
+
+    while ctx.ctrl.is_paused() {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        if ctx.ctrl.is_cancelled() {
+            ctx.cancel_flag.store(true, Ordering::Release);
+            return COPYFILE2_PROGRESS_CANCEL;
+        }
+    }
+
+    // SAFETY: msg_ptr is a valid CopyFile2 message for the duration
+    // of this callback per Win32 contract.
+    let header = unsafe { &*msg_ptr };
+    if header.Type == COPYFILE2_CALLBACK_CHUNK_FINISHED {
+        // Re-cast the message buffer to the ChunkFinished variant.
+        let chunk: &CopyFile2ChunkFinished =
+            unsafe { &*(msg_ptr as *const CopyFile2ChunkFinished) };
+        ctx.bytes
+            .store(chunk.uliTotalBytesTransferred, Ordering::Relaxed);
+        if chunk.uliTotalBytesTransferred == chunk.uliTotalFileSize {
+            return COPYFILE2_PROGRESS_QUIET;
+        }
+    } else if header.Type == COPYFILE2_CALLBACK_ERROR {
+        // Surfaced via the HRESULT return; no action needed here.
+        return COPYFILE2_PROGRESS_CONTINUE;
+    }
+
+    COPYFILE2_PROGRESS_CONTINUE
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn try_copy_file_2(
+    src: PathBuf,
+    dst: PathBuf,
+    total: u64,
+    ctrl: CopyControl,
+    events: mpsc::Sender<CopyEvent>,
+    base_flags: u32,
+    enable_sparse_copy: bool,
+) -> NativeOutcome {
+    super::emit_started(&src, &dst, total, &events).await;
+
+    let ctx = Arc::new(CallbackCtx {
+        ctrl: ctrl.clone(),
+        bytes: AtomicU64::new(0),
+        cancel_flag: AtomicBool::new(false),
+    });
+
+    let started = Instant::now();
+    let events_for_progress = events.clone();
+    let total_for_progress = total;
+    let ctx_for_poll = ctx.clone();
+    let progress_task = tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(PROGRESS_MIN_INTERVAL);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let mut last_emit_bytes: u64 = 0;
+        ticker.tick().await;
+        loop {
+            ticker.tick().await;
+            let bytes = ctx_for_poll.bytes.load(Ordering::Relaxed);
+            if bytes == last_emit_bytes {
+                if Arc::strong_count(&ctx_for_poll) == 1 {
+                    break;
+                }
+                continue;
+            }
+            if bytes.saturating_sub(last_emit_bytes) >= PROGRESS_MIN_BYTES {
+                let elapsed = started.elapsed();
+                let rate = super::fast_rate_bps(bytes, elapsed);
+                let _ = events_for_progress
+                    .send(CopyEvent::Progress {
+                        bytes,
+                        total: total_for_progress,
+                        rate_bps: rate,
+                    })
+                    .await;
+                last_emit_bytes = bytes;
+            }
+            if Arc::strong_count(&ctx_for_poll) == 1 {
+                break;
+            }
+        }
+    });
+
+    let src_w = wide(&src);
+    let dst_w = wide(&dst);
+    let mut flags = base_flags;
+    if enable_sparse_copy {
+        flags |= COPY_FILE_ENABLE_SPARSE_COPY;
+    }
+
+    let ctx_for_block = ctx.clone();
+    let join = tokio::task::spawn_blocking(move || {
+        let mut cancel: BOOL = FALSE;
+        let params = CopyFile2ExtendedParameters {
+            dwSize: std::mem::size_of::<CopyFile2ExtendedParameters>() as u32,
+            dwCopyFlags: flags,
+            pfCancel: &mut cancel as *mut BOOL,
+            pProgressRoutine: Some(copyfile2_callback),
+            pvCallbackContext: Arc::as_ptr(&ctx_for_block) as *mut core::ffi::c_void,
+        };
+        // SAFETY: src_w / dst_w are NUL-terminated UTF-16; params is a
+        // properly-sized COPYFILE2_EXTENDED_PARAMETERS owned by this
+        // scope; ctx is held via Arc for the duration of the call.
+        let hresult = unsafe { CopyFile2(src_w.as_ptr(), dst_w.as_ptr(), &params) };
+        if hresult >= 0 {
+            Ok(())
+        } else {
+            // HRESULT layout: bit 31 = severity, bits 16..29 = facility,
+            // bits 0..15 = code. `from_raw_os_error` only makes sense when
+            // facility == 7 (FACILITY_WIN32) — that's the case we get for
+            // the vast majority of CopyFile2 failures (file-not-found,
+            // access-denied, disk-full, etc.). For non-Win32 facilities
+            // (RPC=4, HTTP=12, security=9, …) the low 16 bits don't
+            // correspond to a Win32 error code at all, so synthesise a
+            // descriptive `io::Error::other` instead.
+            let facility = (hresult >> 16) & 0x1FFF;
+            let err = if facility == 7 {
+                io::Error::from_raw_os_error((hresult & 0xFFFF) as i32)
+            } else {
+                io::Error::other(format!(
+                    "CopyFile2 HRESULT 0x{hresult:08x} (facility {facility})"
+                ))
+            };
+            Err(err)
+        }
+    })
+    .await;
+
+    drop(ctx);
+    let _ = progress_task.await;
+
+    match join {
+        Ok(Ok(())) => NativeOutcome::Done {
+            strategy: ChosenStrategy::CopyFileExW, // share telemetry slot
+            bytes: total,
+        },
+        Ok(Err(e)) => {
+            if e.raw_os_error() == Some(ERROR_REQUEST_ABORTED as i32) {
+                return NativeOutcome::Cancelled;
+            }
+            NativeOutcome::Io(e)
+        }
+        Err(join_err) => NativeOutcome::Io(io::Error::other(format!(
+            "CopyFile2 spawn_blocking panicked: {join_err}"
         ))),
     }
 }
