@@ -60,10 +60,16 @@ use crate::outcome::ChosenStrategy;
 const NO_BUFFERING_THRESHOLD_DEFAULT: u64 = 256 * 1024 * 1024;
 /// Phase 42 — adaptive cap. Even on huge-RAM hosts we don't want
 /// to buffer arbitrarily-large files because that pollutes
-/// SuperFetch's standby list. 2 GiB is enough that any "fits in
-/// cache" gain is realised; beyond that the unbuffered path is
-/// the right call.
-const NO_BUFFERING_THRESHOLD_ADAPTIVE_CAP: u64 = 2 * 1024 * 1024 * 1024;
+/// SuperFetch's standby list and evicts genuinely-hot working sets
+/// (foreground app code, the user's compiler cache, etc.). The
+/// initial Phase 42 cap of 2 GiB was reviewer-flagged as still too
+/// aggressive — even on 64 GiB hosts, a 2 GiB cached copy displaces
+/// roughly the whole standby list every time. 1 GiB is plenty for
+/// the "fits-in-cache" win on real-world workloads (Explorer,
+/// xcopy, and CopyFileExW's own buffered path all top out well
+/// below this); beyond that we want the unbuffered streaming path
+/// regardless of available RAM.
+const NO_BUFFERING_THRESHOLD_ADAPTIVE_CAP: u64 = 1024 * 1024 * 1024;
 
 fn no_buffering_threshold() -> u64 {
     static CACHED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
@@ -288,6 +294,42 @@ pub(crate) async fn try_native_copy(
     // - the eventual hardlink-set scanner (#13) once it exists.
     let src_attrs = crate::attrs::probe(&src).unwrap_or_default();
 
+    // Phase 42 follow-up — surface the noteworthy attribute classes
+    // to stderr so operators see why a copy is slow / hydrating
+    // network bytes / re-keying EFS material. The most user-impactful
+    // one is `is_recall_on_data_access` — modern OneDrive cloud-only
+    // placeholders silently trigger gigabyte-scale downloads when
+    // read, and the user deserves a heads-up before the copy starts.
+    // (Stays as `eprintln!` to match the existing
+    // `copythat-platform: WARNING — …` style elsewhere in this crate;
+    // there's no tracing subscriber wired at this layer.)
+    if src_attrs.is_recall_on_data_access {
+        eprintln!(
+            "copythat-platform: NOTE — source {:?} is a OneDrive / Cloud Files \
+             placeholder (RECALL_ON_DATA_ACCESS); reading it will trigger a \
+             transparent hydration download from the cloud provider before \
+             the copy can complete.",
+            src
+        );
+    }
+    if src_attrs.is_encrypted {
+        eprintln!(
+            "copythat-platform: NOTE — source {:?} is EFS-encrypted; \
+             CopyFileExW will re-encrypt at the destination using the source \
+             keys (cross-volume copies to non-NTFS targets may fail without \
+             OpenEncryptedFileRaw).",
+            src
+        );
+    }
+    if src_attrs.is_compressed {
+        eprintln!(
+            "copythat-platform: NOTE — source {:?} is NTFS-compressed; the \
+             kernel decompresses on read and the destination is written \
+             uncompressed unless FSCTL_SET_COMPRESSION is reapplied.",
+            src
+        );
+    }
+
     super::emit_started(&src, &dst, total, &events).await;
 
     let ctx = Arc::new(CallbackCtx {
@@ -501,11 +543,55 @@ struct CopyFile2ExtendedParameters {
     pvCallbackContext: *mut core::ffi::c_void,
 }
 
-unsafe extern "C" {
+// Defensive compile-time assertions: the three hand-rolled structs
+// above must match the `winbase.h` ABI exactly or we'll silently
+// corrupt CopyFile2's parameter / message reads. The offsets below
+// are the documented x64 layout; the `target_pointer_width = "64"`
+// gate keeps a future 32-bit-Windows port building (where pointer
+// fields would shift). The shipped MSVC x64 toolchain is the only
+// supported target today.
+#[cfg(target_pointer_width = "64")]
+const _: () = {
+    use std::mem::{offset_of, size_of};
+
+    // CopyFile2MessageHeader — { u32, u32 }, total 8 bytes.
+    assert!(offset_of!(CopyFile2MessageHeader, Type) == 0);
+    assert!(offset_of!(CopyFile2MessageHeader, dwPadding) == 4);
+    assert!(size_of::<CopyFile2MessageHeader>() == 8);
+
+    // CopyFile2ChunkFinished — { header(8), 2×u32(8), 2×ptr(16), 6×u64(48) }.
+    assert!(offset_of!(CopyFile2ChunkFinished, header) == 0);
+    assert!(offset_of!(CopyFile2ChunkFinished, dwStreamNumber) == 8);
+    assert!(offset_of!(CopyFile2ChunkFinished, dwReserved) == 12);
+    assert!(offset_of!(CopyFile2ChunkFinished, hSourceFile) == 16);
+    assert!(offset_of!(CopyFile2ChunkFinished, hDestinationFile) == 24);
+    assert!(offset_of!(CopyFile2ChunkFinished, uliChunkNumber) == 32);
+    assert!(offset_of!(CopyFile2ChunkFinished, uliChunkSize) == 40);
+    assert!(offset_of!(CopyFile2ChunkFinished, uliStreamSize) == 48);
+    assert!(offset_of!(CopyFile2ChunkFinished, uliStreamBytesTransferred) == 56);
+    assert!(offset_of!(CopyFile2ChunkFinished, uliTotalFileSize) == 64);
+    assert!(offset_of!(CopyFile2ChunkFinished, uliTotalBytesTransferred) == 72);
+
+    // CopyFile2ExtendedParameters — { 2×u32, ptr, fn-ptr, ptr } = 32 bytes.
+    assert!(offset_of!(CopyFile2ExtendedParameters, dwSize) == 0);
+    assert!(offset_of!(CopyFile2ExtendedParameters, dwCopyFlags) == 4);
+    assert!(offset_of!(CopyFile2ExtendedParameters, pfCancel) == 8);
+    assert!(offset_of!(CopyFile2ExtendedParameters, pProgressRoutine) == 16);
+    assert!(offset_of!(CopyFile2ExtendedParameters, pvCallbackContext) == 24);
+    assert!(size_of::<CopyFile2ExtendedParameters>() == 32);
+};
+
+unsafe extern "system" {
     /// `CopyFile2` from kernel32. Declared inline so we don't need to
     /// add `Win32_Storage_FileSystem` extras for this single function;
     /// the symbol is part of the ABI-stable kernel32 surface and has
     /// been since Windows 8.
+    ///
+    /// `extern "system"` is the canonical ABI for Win32 imports — on
+    /// x64 it coincides with the platform C ABI, but on the (now-rare)
+    /// 32-bit Windows target it resolves to `stdcall`. Using the
+    /// canonical ABI here insulates the FFI surface from any future
+    /// 32-bit Windows port regression.
     fn CopyFile2(
         pwszExistingFileName: *const u16,
         pwszNewFileName: *const u16,
@@ -633,11 +719,23 @@ async fn try_copy_file_2(
         if hresult >= 0 {
             Ok(())
         } else {
-            // HRESULT facility-Win32 errors map back to win32 codes
-            // via HRESULT_FROM_WIN32; the inverse pulls the win32
-            // code out of the low 16 bits when facility == 7 (Win32).
-            let raw = (hresult & 0xFFFF) as i32;
-            Err(io::Error::from_raw_os_error(raw))
+            // HRESULT layout: bit 31 = severity, bits 16..29 = facility,
+            // bits 0..15 = code. `from_raw_os_error` only makes sense when
+            // facility == 7 (FACILITY_WIN32) — that's the case we get for
+            // the vast majority of CopyFile2 failures (file-not-found,
+            // access-denied, disk-full, etc.). For non-Win32 facilities
+            // (RPC=4, HTTP=12, security=9, …) the low 16 bits don't
+            // correspond to a Win32 error code at all, so synthesise a
+            // descriptive `io::Error::other` instead.
+            let facility = (hresult >> 16) & 0x1FFF;
+            let err = if facility == 7 {
+                io::Error::from_raw_os_error((hresult & 0xFFFF) as i32)
+            } else {
+                io::Error::other(format!(
+                    "CopyFile2 HRESULT 0x{hresult:08x} (facility {facility})"
+                ))
+            };
+            Err(err)
         }
     })
     .await;
