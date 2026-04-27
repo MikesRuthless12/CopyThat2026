@@ -310,4 +310,91 @@ mod tests {
         let id_b = HardlinkSet::identify(&new_dst).unwrap();
         assert_eq!(id_a, id_b);
     }
+
+    /// Phase 42 wave-2 — when the prior destination has been deleted
+    /// between `record()` and `dispatch()` (e.g. user undid a previous
+    /// copy, or a TOCTOU race against tree cleanup), `dispatch` must
+    /// return `Ok(false)` to let the caller fall back to a fresh
+    /// byte copy — NOT `Err(io::Error)` from a failed
+    /// `CreateHardLinkW` / `link(2)` syscall. This is the wave-1
+    /// hardening (`!prior_dst.exists()` early-return); pinning the
+    /// behaviour here.
+    #[test]
+    fn dispatch_returns_ok_false_when_prior_dst_deleted() {
+        let set = HardlinkSet::new();
+        let dir = tempdir().unwrap();
+        let src = dir.path().join("src.txt");
+        fs::write(&src, b"hello").unwrap();
+        let id = HardlinkSet::identify(&src).unwrap();
+
+        // Record a path that doesn't exist (prior copy was undone).
+        let prior_dst = dir.path().join("prior_deleted.txt");
+        // NOTE: never create the file. record(id, ...) accepts any
+        // path; we want the dispatch path to discover the missing
+        // file and short-circuit.
+        set.record(id, prior_dst.clone());
+        assert!(
+            !prior_dst.exists(),
+            "test precondition: prior_dst must not exist on disk"
+        );
+
+        let new_dst = dir.path().join("new.txt");
+        let outcome = set.dispatch(&src, &new_dst);
+        match outcome {
+            Ok(false) => {
+                // Correct: fell through to byte-copy path.
+                assert!(
+                    !new_dst.exists(),
+                    "Ok(false) means dispatch did NOT create the link"
+                );
+            }
+            Ok(true) => panic!(
+                "dispatch claimed success but prior_dst was missing — \
+                 should have fallen through"
+            ),
+            Err(e) => panic!(
+                "dispatch should return Ok(false) on missing prior_dst, \
+                 got Err: {e}"
+            ),
+        }
+    }
+
+    /// Phase 42 wave-2 — `is_unsupported` recognises the cross-volume
+    /// / FAT32-dest / no-hardlinks errors and folds them into
+    /// `Ok(false)` rather than `Err`. Locks in the error-mapping
+    /// surface so a future refactor doesn't accidentally narrow
+    /// `is_unsupported` and start propagating "wrong filesystem" as
+    /// a real error to the caller.
+    #[test]
+    fn is_unsupported_recognises_known_filesystem_limits() {
+        // Kind-based detection.
+        assert!(is_unsupported(&io::Error::new(
+            io::ErrorKind::Unsupported,
+            "no hardlinks"
+        )));
+        assert!(is_unsupported(&io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "bad arg"
+        )));
+        assert!(is_unsupported(&io::Error::new(
+            io::ErrorKind::CrossesDevices,
+            "cross volume"
+        )));
+
+        // Raw-os-error detection (Linux EXDEV=18; Windows
+        // ERROR_NOT_SAME_DEVICE=17 / ERROR_NOT_SUPPORTED=50).
+        assert!(is_unsupported(&io::Error::from_raw_os_error(17)));
+        assert!(is_unsupported(&io::Error::from_raw_os_error(18)));
+        assert!(is_unsupported(&io::Error::from_raw_os_error(50)));
+
+        // Real I/O failures must NOT be folded.
+        assert!(!is_unsupported(&io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "denied"
+        )));
+        assert!(!is_unsupported(&io::Error::new(
+            io::ErrorKind::NotFound,
+            "missing"
+        )));
+    }
 }

@@ -917,4 +917,72 @@ mod tests {
         assert!(is_worm_already_applied_message("Read-only file system"));
         assert!(!is_worm_already_applied_message("disk full"));
     }
+
+    /// Phase 42 wave-2 — round-trip the chain-hash redaction:
+    ///
+    /// 1. Build two log entries with DIFFERENT prev-hashes.
+    /// 2. Confirm the redacted-bytes input to BLAKE3 is byte-identical
+    ///    (the redaction zeros the prev-hash column so the chain input
+    ///    only covers the event payload, not the chain's own provenance).
+    /// 3. Confirm the resulting chain hashes still differ correctly
+    ///    (same redacted bytes + different `prev` arg = different output).
+    /// 4. Confirm `verify_chain` accepts an on-disk file built from
+    ///    these records — the writer + verifier agree on the redacted
+    ///    chain step.
+    #[test]
+    fn chain_hash_redaction_round_trip_writer_and_verifier_agree() {
+        use crate::AuditSink;
+        use crate::WormMode;
+        use crate::verify::verify_chain;
+
+        let event_a = sample_job_started();
+        let event_b = AuditEvent::FileCopied {
+            job_id: "j-1".into(),
+            src: "/tmp/src/a".into(),
+            dst: "/tmp/dst/a".into(),
+            hash: "deadbeef".to_string(),
+            size: 1024,
+            ts: chrono::Utc.with_ymd_and_hms(2026, 4, 24, 12, 0, 1).unwrap(),
+        };
+
+        // --- Step 1+2: redacted bytes are independent of the prev arg ---
+        let prev_zero = [0u8; 32];
+        let prev_seven = [7u8; 32];
+        let prev_zero_hex = hex::encode(prev_zero);
+        let prev_seven_hex = hex::encode(prev_seven);
+        let line_with_zero =
+            format_record(AuditFormat::JsonLines, &event_a, &prev_zero_hex).unwrap();
+        let line_with_seven =
+            format_record(AuditFormat::JsonLines, &event_a, &prev_seven_hex).unwrap();
+        let redacted_zero = chain_hash_redacted(&line_with_zero, &prev_zero_hex);
+        let redacted_seven = chain_hash_redacted(&line_with_seven, &prev_seven_hex);
+        assert_eq!(
+            redacted_zero, redacted_seven,
+            "redaction must produce identical bytes regardless of prev hash"
+        );
+
+        // --- Step 3: same redacted bytes + different prev = different chain hashes ---
+        let chain_zero = next_chain_hash(&prev_zero, &redacted_zero);
+        let chain_seven = next_chain_hash(&prev_seven, &redacted_seven);
+        assert_ne!(
+            chain_zero, chain_seven,
+            "different prev hashes must yield different chain outputs even when the \
+             redacted record bytes are identical"
+        );
+
+        // --- Step 4: writer + verifier agree on the redacted chain step ---
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("audit.log");
+        let sink = AuditSink::open(&path, AuditFormat::JsonLines, WormMode::Off)
+            .expect("open audit sink");
+        sink.record(&event_a).expect("record event_a");
+        sink.record(&event_b).expect("record event_b");
+        drop(sink);
+
+        let report = verify_chain(&path, AuditFormat::JsonLines).expect("verify");
+        assert_eq!(report.total, 2, "expected 2 records on disk");
+        assert_eq!(report.matches, 2, "verifier must accept both records");
+        assert_eq!(report.mismatches, 0, "no mismatches expected");
+        assert!(report.is_ok(), "report must be ok: {report:?}");
+    }
 }

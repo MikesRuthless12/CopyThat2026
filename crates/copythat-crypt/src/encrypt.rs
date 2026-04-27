@@ -308,4 +308,86 @@ mod tests {
             Ok(_) => panic!("expected InvalidRecipient, got Ok"),
         }
     }
+
+    /// Phase 42 wave-2 regression — pin the wave-1 critical fix that
+    /// makes dropping an [`EncryptionSink`] without explicit `finish()`
+    /// a hard panic. Earlier revisions stashed the drop-time finalise
+    /// error in an `Option<io::Error>` the caller had to poll, but
+    /// `?`-using call sites silently treated a missing MAC as success
+    /// — a verify-then-delete-source workflow could then erase the
+    /// source while the ciphertext on disk was half-written.
+    ///
+    /// `#[should_panic]` (above) covers the unwound-panic-message
+    /// surface; this test uses `catch_unwind` so we can additionally
+    /// assert the panic payload's structure WITHOUT relying on the
+    /// panic-message-substring matcher. That keeps the regression
+    /// signal robust if the panic message ever gets reformatted.
+    #[test]
+    fn drop_without_finish_panics_caught_via_catch_unwind() {
+        use std::panic;
+
+        let pw = SecretString::from("catch-unwind-test".to_string());
+        let policy = EncryptionPolicy::passphrase(pw);
+        // `catch_unwind` requires `UnwindSafe` for closures that move
+        // captured state; the closure builds the sink internally so we
+        // don't capture across the unwind boundary.
+        let result = panic::catch_unwind(|| {
+            let buf: Vec<u8> = Vec::new();
+            let mut sink = encrypted_writer(buf, &policy).expect("build sink");
+            sink.write_all(b"some-bytes").expect("write to sink");
+            // Deliberately drop without `finish()` — must panic.
+            drop(sink);
+        });
+        let payload = result.expect_err("Drop without finish() must panic");
+        // Confirm the payload is the &str / String produced by the
+        // explicit `panic!` macro in `Drop` and that it carries the
+        // documented contract message (substring check).
+        let msg = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&'static str>().copied())
+            .unwrap_or("");
+        assert!(
+            msg.contains("EncryptionSink dropped without calling .finish()"),
+            "unexpected panic payload: {msg:?}"
+        );
+    }
+
+    /// Phase 42 wave-2 — Drop suppresses its own panic when the
+    /// thread is already unwinding. The contract preserves the
+    /// primary panic and avoids a double-panic abort. Without this
+    /// guard, a write error inside the user's pipeline + the sink's
+    /// drop-time panic would produce a confusing abort instead of
+    /// surfacing the original failure.
+    #[test]
+    fn drop_suppresses_secondary_panic_during_unwind() {
+        use std::panic;
+
+        let pw = SecretString::from("nested-panic".to_string());
+        let policy = EncryptionPolicy::passphrase(pw);
+        let result = panic::catch_unwind(|| {
+            let buf: Vec<u8> = Vec::new();
+            let mut sink = encrypted_writer(buf, &policy).expect("build sink");
+            sink.write_all(b"payload").unwrap();
+            // First panic — the sink will be dropped during the
+            // unwind. The Drop impl checks `thread::panicking()` and
+            // suppresses its own panic so the primary signal makes
+            // it out cleanly.
+            panic!("primary panic");
+        });
+        let payload = result.expect_err("primary panic must propagate");
+        let msg = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&'static str>().copied())
+            .unwrap_or("");
+        assert!(
+            msg.contains("primary panic"),
+            "the primary panic must dominate; got: {msg:?}"
+        );
+        assert!(
+            !msg.contains("EncryptionSink dropped"),
+            "the drop-time panic must be suppressed when already unwinding"
+        );
+    }
 }

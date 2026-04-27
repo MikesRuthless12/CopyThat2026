@@ -719,23 +719,7 @@ async fn try_copy_file_2(
         if hresult >= 0 {
             Ok(())
         } else {
-            // HRESULT layout: bit 31 = severity, bits 16..29 = facility,
-            // bits 0..15 = code. `from_raw_os_error` only makes sense when
-            // facility == 7 (FACILITY_WIN32) — that's the case we get for
-            // the vast majority of CopyFile2 failures (file-not-found,
-            // access-denied, disk-full, etc.). For non-Win32 facilities
-            // (RPC=4, HTTP=12, security=9, …) the low 16 bits don't
-            // correspond to a Win32 error code at all, so synthesise a
-            // descriptive `io::Error::other` instead.
-            let facility = (hresult >> 16) & 0x1FFF;
-            let err = if facility == 7 {
-                io::Error::from_raw_os_error((hresult & 0xFFFF) as i32)
-            } else {
-                io::Error::other(format!(
-                    "CopyFile2 HRESULT 0x{hresult:08x} (facility {facility})"
-                ))
-            };
-            Err(err)
+            Err(copyfile2_hresult_to_io_error(hresult))
         }
     })
     .await;
@@ -764,6 +748,29 @@ fn wide(path: &Path) -> Vec<u16> {
     let mut v: Vec<u16> = OsStr::new(path).encode_wide().collect();
     v.push(0);
     v
+}
+
+/// Translate a CopyFile2 HRESULT failure into the right `io::Error`
+/// variant. Phase 42 ABI-safety hardening (wave-1) carved this out:
+///
+/// HRESULT layout: bit 31 = severity, bits 16..28 = facility, bits
+/// 0..15 = code. `io::Error::from_raw_os_error` only makes sense when
+/// facility == 7 (`FACILITY_WIN32`) — that's the case we get for the
+/// vast majority of CopyFile2 failures (file-not-found, access-denied,
+/// disk-full, etc.). For non-Win32 facilities (RPC=4, security=9,
+/// HTTP=12, etc.) the low 16 bits don't correspond to a Win32 error
+/// code at all, so synthesise a descriptive `io::Error::other`
+/// instead. Lifted out of the closure so the wave-2 unit test can
+/// exercise both branches without driving a real CopyFile2 call.
+fn copyfile2_hresult_to_io_error(hresult: i32) -> io::Error {
+    let facility = (hresult >> 16) & 0x1FFF;
+    if facility == 7 {
+        io::Error::from_raw_os_error((hresult & 0xFFFF) as i32)
+    } else {
+        io::Error::other(format!(
+            "CopyFile2 HRESULT 0x{hresult:08x} (facility {facility})"
+        ))
+    }
 }
 
 /// Phase 41 — returns true iff `src` and `dst` (or `dst`'s parent
@@ -880,5 +887,83 @@ mod tests {
         let body = &w[..w.len() - 1];
         let s = String::from_utf16(body).unwrap();
         assert_eq!(s, "C:/foo");
+    }
+
+    /// Phase 42 wave-2 — a CopyFile2 HRESULT with facility ==
+    /// FACILITY_WIN32 (7) maps to `io::Error::from_raw_os_error`,
+    /// preserving the real Win32 error code so call sites can match
+    /// `e.raw_os_error() == Some(ERROR_REQUEST_ABORTED)` and the
+    /// like.
+    #[test]
+    fn copyfile2_hresult_facility_win32_uses_from_raw_os_error() {
+        // 0x80070005 = severity-failure | facility 7 | code 5
+        // (ERROR_ACCESS_DENIED).
+        let hresult: i32 = 0x80070005u32 as i32;
+        let err = copyfile2_hresult_to_io_error(hresult);
+        assert_eq!(
+            err.raw_os_error(),
+            Some(5),
+            "FACILITY_WIN32 HRESULT must round-trip to its Win32 error code"
+        );
+    }
+
+    /// Phase 42 wave-2 — the wave-1 fix's payoff: HRESULTs in a
+    /// non-Win32 facility (FACILITY_RPC=4, FACILITY_SECURITY=9,
+    /// FACILITY_HTTP=12, …) must NOT pass through
+    /// `from_raw_os_error`. Their low 16 bits aren't a Win32 errno;
+    /// translating them as such would produce nonsense
+    /// `io::ErrorKind` mappings. The fix returns
+    /// `io::Error::other(...)` carrying the full HRESULT in the
+    /// message so log readers / SIEMs still see the original value.
+    #[test]
+    fn copyfile2_hresult_facility_rpc_uses_io_error_other() {
+        // 0x80040005 = severity-failure | facility 4 (FACILITY_RPC)
+        // | code 5. The low 16 bits look like ERROR_ACCESS_DENIED
+        // but they're really an RPC failure code; mapping via
+        // from_raw_os_error would mislabel the error.
+        let hresult: i32 = 0x80040005u32 as i32;
+        let err = copyfile2_hresult_to_io_error(hresult);
+        assert_eq!(
+            err.raw_os_error(),
+            None,
+            "non-Win32 facility must NOT be wrapped via from_raw_os_error \
+             (otherwise the Win32-error mapping would mislabel it)"
+        );
+        // io::Error::other lands in ErrorKind::Other on every Rust
+        // version; the message must carry the raw HRESULT so
+        // operators can decode it manually.
+        assert_eq!(err.kind(), io::ErrorKind::Other);
+        let rendered = format!("{err}");
+        assert!(
+            rendered.contains("0x80040005"),
+            "error message must include the original HRESULT for ops triage: {rendered}"
+        );
+        assert!(
+            rendered.contains("facility 4"),
+            "error message must include the parsed facility number: {rendered}"
+        );
+    }
+
+    /// Phase 42 wave-2 — additional non-Win32 facilities to lock
+    /// in the boundary (FACILITY_SECURITY=9, FACILITY_HTTP=12). All
+    /// should fall through to the io::Error::other branch.
+    #[test]
+    fn copyfile2_hresult_other_non_win32_facilities_use_io_error_other() {
+        for (hresult, facility) in [
+            (0x80090001u32 as i32, 9), // FACILITY_SECURITY
+            (0x800C0001u32 as i32, 12), // FACILITY_HTTP (Windows decimal 12 = 0xC)
+        ] {
+            let err = copyfile2_hresult_to_io_error(hresult);
+            assert_eq!(
+                err.raw_os_error(),
+                None,
+                "facility {facility}: must not pass through from_raw_os_error"
+            );
+            let rendered = format!("{err}");
+            assert!(
+                rendered.contains(&format!("facility {facility}")),
+                "facility {facility}: rendering missing facility tag: {rendered}"
+            );
+        }
     }
 }

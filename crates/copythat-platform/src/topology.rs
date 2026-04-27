@@ -184,16 +184,24 @@ pub fn is_unc_path(path: &Path) -> bool {
 // Implementation
 // ---------------------------------------------------------------------
 
+/// Phase 42 wave-2 — process-shared probe cache. Lifted out of
+/// `probe_impl` so the wave-2 poison-recovery tests can install a
+/// pre-poisoned cache and verify the wave-1 `unwrap_or_else(into_inner)`
+/// branch fires.
 #[cfg(target_os = "windows")]
-fn probe_impl(path: &Path) -> Option<VolumeTopology> {
+fn cache() -> &'static std::sync::Mutex<std::collections::HashMap<u64, VolumeTopology>> {
     use std::sync::Mutex;
     use std::sync::OnceLock;
-
-    // Cache by volume serial — re-probing a 2 ms IOCTL on every per-file
-    // copy in a 10 000-file tree is wasteful.
     static CACHE: OnceLock<Mutex<std::collections::HashMap<u64, VolumeTopology>>> =
         OnceLock::new();
-    let cache = CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+#[cfg(target_os = "windows")]
+fn probe_impl(path: &Path) -> Option<VolumeTopology> {
+    // Cache by volume serial — re-probing a 2 ms IOCTL on every per-file
+    // copy in a 10 000-file tree is wasteful.
+    let cache = cache();
 
     // Special-case UNC paths first — they have no `IOCTL_STORAGE_*` to
     // query.
@@ -504,5 +512,63 @@ mod tests {
     #[test]
     fn probe_does_not_panic_on_local_path() {
         let _ = probe(Path::new("."));
+    }
+
+    /// Phase 42 wave-2 — when a thread panics holding the topology
+    /// cache lock, the next caller must recover via
+    /// `unwrap_or_else(into_inner)` rather than propagating the
+    /// poison. Without that, every subsequent `probe()` would re-run
+    /// the 2 ms IOCTL forever, defeating the cache and adding latency
+    /// to every per-file copy in a 10 000-file tree.
+    #[cfg(windows)]
+    #[test]
+    fn probe_recovers_from_poisoned_cache_lock() {
+        use std::panic;
+        use std::thread;
+
+        // Step 1: poison the cache by panicking inside a guard.
+        // We use `catch_unwind` so the test process keeps running.
+        let result = thread::spawn(|| {
+            let cache_ref = super::cache();
+            let _guard = cache_ref.lock().expect("first lock");
+            panic!("intentional poison");
+        })
+        .join();
+        assert!(result.is_err(), "the poison thread must have panicked");
+        assert!(
+            super::cache().is_poisoned(),
+            "cache mutex must be poisoned after the panicking thread released it"
+        );
+
+        // Step 2: probe from a fresh thread; the wave-1 fix must
+        // recover, not re-panic. Use `catch_unwind` to assert that
+        // probe returns rather than unwinds.
+        let probe_outcome = panic::catch_unwind(|| {
+            // Use `.` so we don't require any specific volume to
+            // exist; probe walks up to the volume root.
+            probe(Path::new("."))
+        });
+        let topo_opt = probe_outcome
+            .expect("probe must not panic when the cache lock is poisoned");
+
+        // Recovery means we still get a sensible answer back. On
+        // Windows local paths the probe either succeeds (live volume)
+        // or returns the conservative default — either way it's
+        // `Some(...)`, never `None` for a local path.
+        assert!(
+            topo_opt.is_some(),
+            "probe should return Some(VolumeTopology) after poison recovery"
+        );
+
+        // Defensive sanity check on the returned topology: the
+        // physical sector size must be a power of two ≥ 512 (the
+        // probe normalises this; conservative default is 4096).
+        let topo = topo_opt.unwrap();
+        assert!(
+            topo.bytes_per_physical_sector >= 512
+                && topo.bytes_per_physical_sector.is_power_of_two(),
+            "post-recovery topology has invalid sector size: {}",
+            topo.bytes_per_physical_sector
+        );
     }
 }
