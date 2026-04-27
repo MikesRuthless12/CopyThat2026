@@ -1719,17 +1719,25 @@ async fn prime_blake3_from_dst_prefix(
 /// Best-effort sync-failure logger. Kept as a thin wrapper so the
 /// tracing dep stays internal — the engine itself does not panic
 /// or surface the error; it's informational.
-fn tracing_log_sync_failure(_dst: &Path, _err: &std::io::Error) {
-    // Intentionally a no-op until structured logging is wired
-    // workspace-wide. Keeping the call site so the future logger
-    // lands here without engine churn.
+fn tracing_log_sync_failure(dst: &Path, err: &std::io::Error) {
+    tracing::warn!(
+        dst = %dst.display(),
+        code = err.raw_os_error(),
+        error = %err,
+        "post-copy fsync failed (non-fatal)",
+    );
 }
 
 /// Best-effort meta-apply failure logger. Phase 24's apply pass is
 /// strictly post-byte-copy — losing xattrs / ADS / ACLs should not
 /// abort the operation that already succeeded.
-fn tracing_log_meta_failure(_dst: &Path, _err: &std::io::Error) {
-    // Same intentional no-op as `tracing_log_sync_failure`.
+fn tracing_log_meta_failure(dst: &Path, err: &std::io::Error) {
+    tracing::warn!(
+        dst = %dst.display(),
+        code = err.raw_os_error(),
+        error = %err,
+        "post-copy meta-apply failed (non-fatal)",
+    );
 }
 
 /// Phase 19b — open the source, then fall through to a snapshot if
