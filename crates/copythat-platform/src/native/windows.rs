@@ -389,6 +389,24 @@ pub(crate) async fn try_native_copy(
 
     let src_w = wide(&src);
     let dst_w = wide(&dst);
+    // Phase 42 — tightened invariants. `wide()` always appends a NUL,
+    // but we sanity-guard the FFI precondition explicitly so any future
+    // refactor that strips the terminator gets caught in debug.
+    debug_assert_eq!(
+        src_w.last().copied(),
+        Some(0u16),
+        "src wide buffer must be NUL-terminated for CopyFileExW"
+    );
+    debug_assert_eq!(
+        dst_w.last().copied(),
+        Some(0u16),
+        "dst wide buffer must be NUL-terminated for CopyFileExW"
+    );
+    // CopyFileExW with total == 0 is well-defined (creates an empty
+    // dst), but the dispatcher sizes its NO_BUFFERING decision off
+    // `total` and our progress / event story expects a positive byte
+    // count. Treat zero as a contract violation in debug.
+    debug_assert!(total > 0, "CopyFileExW path expects total > 0");
 
     let mut flags: u32 = if total >= no_buffering_threshold() {
         COPY_FILE_NO_BUFFERING
