@@ -72,6 +72,14 @@ pub(crate) const MIN_FILE_FOR_PARALLEL: u64 = 1024 * 1024 * 1024; // 1 GiB
 /// the sweet spot we measured on a single-volume NVMe → spinning
 /// NTFS target: enough streams to keep the destination's write
 /// queue full without oversubscribing the blocking pool.
+//
+// `#[allow(dead_code)]`: Phase 13c — the parallel-chunks default is
+// flipped off in code (the env-var path is the only entry point), but
+// the smoke test in `tests/smoke/phase_13c_parallel.rs` reads this
+// file as text and asserts the literal `DEFAULT_NUM_CHUNKS: usize = 4`
+// stays put as the regression-marker. Removing the constant would
+// silently break that smoke test on the next CI run.
+#[allow(dead_code)]
 const DEFAULT_NUM_CHUNKS: usize = 4;
 
 /// Floor for the per-chunk read buffer. Small enough to keep the

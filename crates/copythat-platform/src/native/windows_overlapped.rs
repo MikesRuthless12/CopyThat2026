@@ -126,6 +126,16 @@ pub(crate) fn requested(total: u64) -> Option<()> {
 /// buffer size, bypassing the env-var read path. Used by the
 /// auto-engage logic for cross-volume copies (which want deeper
 /// queue depth than NVMe-tuned defaults).
+//
+// `clippy::too_many_arguments`: this is a stable internal-API entry
+// point used by the dispatcher in `windows.rs`. Bundling the
+// (slots, buffer_kb, no_buffering) overrides into a struct would
+// just push the parameter count back the other direction (every
+// call site has to construct + tear down the struct). The signature
+// mirrors the existing `try_overlapped_copy` shape with three extra
+// optional overrides; refactoring it would touch the dispatcher's
+// auto-engage hot path for no behavioural win.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn try_overlapped_copy_with_config(
     src: PathBuf,
     dst: PathBuf,

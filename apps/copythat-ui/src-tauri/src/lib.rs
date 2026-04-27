@@ -558,6 +558,13 @@ pub fn run() {
                 // `spawn_poller` calls bare `tokio::spawn` inside; we
                 // need to enter Tauri's tokio context first. See the
                 // shell.rs:89 comment about the setup-hook path.
+                //
+                // `clippy::async_yields_async`: yielding the
+                // `JoinHandle` is the entire point — we keep it in
+                // `_poller` so the runtime keeps the task alive.
+                // Awaiting here would block until the poller exits,
+                // which never happens during normal app run.
+                #[allow(clippy::async_yields_async)]
                 let _poller = tauri::async_runtime::block_on(async {
                     app_state
                         .power_bus
