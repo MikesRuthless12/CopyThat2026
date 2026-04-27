@@ -631,6 +631,44 @@ async fn run_verify_pass(
         })
         .await;
 
+    // Phase 42 — paranoid verify mode: drop the destination's
+    // page-cache pages before the re-read so we measure what
+    // actually landed on disk, not what's still parked in RAM.
+    // This catches:
+    //   1. Drives that ack writes before flush (write-cache lying).
+    //   2. Silent destination bit-flips (the cached read sees the
+    //      original buffer, not the on-disk bytes).
+    //   3. Rare FS / driver bugs in the write path.
+    // The pre-verify `fsync_before_verify` already forces the
+    // kernel to drain dirty pages; here we additionally hint the
+    // page cache to evict, so the next read is a real disk read.
+    if opts.paranoid_verify {
+        #[cfg(target_os = "linux")]
+        {
+            // POSIX_FADV_DONTNEED — best-effort cache hint.
+            use std::ffi::CString;
+            use std::os::unix::ffi::OsStrExt;
+            if let Ok(c) = CString::new(dst_path.as_os_str().as_bytes()) {
+                // SAFETY: c is NUL-terminated; libc::open + fadvise +
+                // close are standard FFI.
+                unsafe {
+                    let fd = libc::open(c.as_ptr(), libc::O_RDONLY);
+                    if fd >= 0 {
+                        libc::posix_fadvise(fd, 0, 0, libc::POSIX_FADV_DONTNEED);
+                        libc::close(fd);
+                    }
+                }
+            }
+        }
+        // On Windows the kernel's cache manager already returns to
+        // disk after `FlushFileBuffers` (issued by the prior
+        // fsync_before_verify pass). The full NO_BUFFERING re-read
+        // path is tracked as a Phase 43 follow-up because it
+        // requires sector-aligned buffer setup throughout the verify
+        // pipeline; the fsync alone catches the dominant write-cache
+        // failure mode.
+    }
+
     let dst_file = File::open(dst_path)
         .await
         .map_err(|e| CopyError::from_io(src_path, dst_path, e))?;
@@ -1657,7 +1695,14 @@ async fn open_src_with_snapshot_fallback(
     opts: &CopyOptions,
     events: &mpsc::Sender<CopyEvent>,
 ) -> Result<(File, Option<SnapshotLease>), CopyError> {
-    match open_src_with_retry(src, opts.follow_symlinks).await {
+    match open_src_with_retry(
+        src,
+        opts.follow_symlinks,
+        opts.sharing_violation_retries,
+        opts.sharing_violation_base_delay_ms,
+    )
+    .await
+    {
         Ok(f) => Ok((f, None)),
         Err(e) if is_sharing_violation(&e) => {
             match opts.on_locked {
@@ -1674,7 +1719,14 @@ async fn open_src_with_snapshot_fallback(
                         })
                         .await;
                     let translated = lease.translated.clone();
-                    match open_src_with_retry(&translated, opts.follow_symlinks).await {
+                    match open_src_with_retry(
+                        &translated,
+                        opts.follow_symlinks,
+                        opts.sharing_violation_retries,
+                        opts.sharing_violation_base_delay_ms,
+                    )
+                    .await
+                    {
                         Ok(f) => Ok((f, Some(lease))),
                         Err(open_err) => Err(CopyError::from_io(src, dst, open_err)),
                     }
@@ -1736,7 +1788,12 @@ fn libc_ebusy() -> i32 {
 /// otherwise an absolute symlink at `src` (the common case for
 /// `follow_symlinks=true`) would fail with `ELOOP`/`ERROR_*` and
 /// break the default copy path.
-async fn open_src_with_retry(src: &Path, follow_symlinks: bool) -> std::io::Result<File> {
+async fn open_src_with_retry(
+    src: &Path,
+    follow_symlinks: bool,
+    retries: u32,
+    base_delay_ms: u64,
+) -> std::io::Result<File> {
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
@@ -1757,8 +1814,11 @@ async fn open_src_with_retry(src: &Path, follow_symlinks: bool) -> std::io::Resu
         } else {
             crate::safety::no_follow_open_flags()
         };
+        // Phase 42 — guard against zero-retry config: at least one
+        // attempt is always made.
+        let total_attempts = retries.max(1);
         let mut last_err: Option<std::io::Error> = None;
-        for attempt in 0..3u32 {
+        for attempt in 0..total_attempts {
             let mut opts = std::fs::OpenOptions::new();
             opts.read(true)
                 .share_mode(SHARE_ALL)
@@ -1770,11 +1830,14 @@ async fn open_src_with_retry(src: &Path, follow_symlinks: bool) -> std::io::Resu
             match res {
                 Ok(Ok(std_file)) => return Ok(File::from_std(std_file)),
                 Ok(Err(e)) => {
-                    // ERROR_SHARING_VIOLATION = 32. Retry with
-                    // exponential backoff; most short-lived locks
-                    // clear within a few hundred ms.
-                    if e.raw_os_error() == Some(32) {
-                        let ms = 50u64 << attempt; // 50, 100, 200
+                    // ERROR_SHARING_VIOLATION = 32 / ERROR_LOCK_VIOLATION = 33.
+                    // Retry with caller-tuned exponential backoff
+                    // (Phase 42 — was hard-coded to 50 ms × 3).
+                    if matches!(e.raw_os_error(), Some(32) | Some(33))
+                        && attempt + 1 < total_attempts
+                    {
+                        // Exponential backoff: base × 2^attempt, saturating.
+                        let ms = base_delay_ms.saturating_mul(1u64.checked_shl(attempt).unwrap_or(u64::MAX));
                         tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
                         last_err = Some(e);
                         continue;

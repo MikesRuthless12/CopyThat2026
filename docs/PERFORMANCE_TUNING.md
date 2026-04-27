@@ -174,3 +174,86 @@ queue-depth tuning + zero-fill skipping; everything else
 (scatter/gather, memory-mapped, IoRing, DirectStorage,
 kernel-mode drivers) is either marginal, the wrong tool, or not
 viable for an indie distribution.
+
+## Microsoft Defender / antivirus exclusions (Phase 42)
+
+**Defender real-time scanning double-scans every byte of every
+copy** (once on read, once on write). On bulk copy workloads this is
+frequently the dominant slowdown — sometimes more than the disk
+itself. The Phase 42 swarm research traced ~30-50 % throughput
+recovery on large workloads after adding the destination tree as a
+Defender path exclusion.
+
+**Copy That will never disable AV silently.** This is a manual,
+opt-in tuning step for users who have explicitly decided the
+workload is from a trusted source.
+
+### How to add a path exclusion (Windows 11)
+
+1. Open **Windows Security** (Start → "Windows Security").
+2. Go to **Virus & threat protection** → **Manage settings**.
+3. Scroll to **Exclusions** → **Add or remove exclusions**.
+4. Click **Add an exclusion** → **Folder**, then pick the
+   destination folder for the copy (e.g. your `D:\Backups\`).
+5. The exclusion is effective immediately.
+
+Or via PowerShell (admin):
+```powershell
+Add-MpPreference -ExclusionPath "D:\Backups"
+```
+
+To remove it after the copy:
+```powershell
+Remove-MpPreference -ExclusionPath "D:\Backups"
+```
+
+### When to use this
+
+- ✅ Bulk copying media archives, build outputs, VM disks, or
+  backups from a local source you trust.
+- ✅ Restoring from a known-good local backup.
+- ❌ Copying anything you downloaded today.
+- ❌ Copying from a network share whose contents you didn't put
+  there.
+
+For temporary exclusions you can wrap a single copy session, the
+PowerShell add/remove pair above is the right tool. Don't leave
+permanent exclusions on directories where untrusted files might
+land.
+
+### Other AV products
+
+The same principle applies to ESET, Bitdefender, Norton, Sophos,
+McAfee, Kaspersky, etc. — every behaviour-monitoring AV does
+on-access scans. Add the destination directory to the product's
+"trusted folders" / "scan exclusions" list before bulk copies, and
+remove the exclusion afterward.
+
+## Phase 42 — Win11+ baseline
+
+CopyThat 1.25.0 onward targets **Windows 11+ only** (build 22000+).
+Win10 was end-of-life October 2025. Several runtime-detected paths
+ride on the new floor:
+
+- **`COPY_FILE_REQUEST_COMPRESSED_TRAFFIC`** — engaged automatically
+  when the destination is a UNC path (`\\server\share`). Free win
+  on slow remote links via SMB v3.1.1 traffic compression.
+- **Win11 24H2 native block cloning inside `CopyFileExW`** —
+  on same-volume ReFS / Dev Drive copies, the OS itself fires
+  `FSCTL_DUPLICATE_EXTENTS_TO_FILE` and the copy becomes a
+  metadata-only operation (~94 % time savings on 1 GB files per
+  Microsoft's own benchmarks).
+- **Adaptive `COPY_FILE_NO_BUFFERING` threshold** — the cutoff is
+  now `max(256 MiB, min(2 GiB, free_phys_ram / 4))` instead of a
+  static 256 MiB. On RAM-constrained hosts the unbuffered path
+  engages earlier (avoiding SuperFetch standby-list pollution); on
+  RAM-rich hosts it caps at 2 GiB so a 64 GiB host doesn't try to
+  buffer a 16 GiB file.
+- **Storage topology probe** — `IOCTL_STORAGE_QUERY_PROPERTY` is
+  used at copy start to detect bus type (NVMe / SATA / USB / RAID
+  / iSCSI / VHDX) and seek penalty (HDD vs SSD), with results
+  cached per-volume.
+
+See [`docs/RESEARCH_PHASE_42.md`](RESEARCH_PHASE_42.md) for the
+full research deep-dive (~270 sources across 10 specialist
+research agents) and the gap-list audit.

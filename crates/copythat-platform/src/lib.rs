@@ -69,16 +69,22 @@
 
 #![allow(unsafe_code)] // Justified per-module: every fast path is a raw FFI call.
 
+pub mod attrs;
+#[cfg(feature = "compio-experimental")]
+pub mod compio_overlapped;
 pub mod dedup;
 mod dispatcher;
+pub mod hardlink_set;
 mod helpers;
 mod hook;
 pub mod meta;
 mod native;
+pub mod os;
 mod outcome;
 pub mod presence;
 mod reflink_path;
 pub mod sparse;
+pub mod topology;
 pub mod wake_lock;
 
 pub use dedup::{DedupMode, DedupOptions, DedupOutcome, DedupStrategy, HardlinkPolicy, try_dedup};

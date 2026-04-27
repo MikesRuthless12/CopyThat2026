@@ -76,7 +76,30 @@ pub async fn fast_copy(
         // same" so we don't mask reflink on unusual filesystems.
         _ => true,
     };
-    if same_volume && matches!(opts.strategy, CopyStrategy::Auto | CopyStrategy::AlwaysFast) {
+    // Phase 42 — on Win11 24H2+ with a ReFS / Dev Drive destination,
+    // `CopyFileExW` itself fires `FSCTL_DUPLICATE_EXTENTS_TO_FILE`
+    // natively (KB5034848+). Stage-1 reflink would do the same syscall;
+    // skipping it saves one extra `CreateFile` probe per copy. The
+    // CopyFileExW path always runs after — if its native block clone
+    // fails for any reason, no behaviour change.
+    let skip_explicit_reflink_for_24h2_refs = {
+        #[cfg(windows)]
+        {
+            crate::os::is_win11_24h2_plus()
+                && crate::helpers::filesystem_name(&dst_owned)
+                    .map(|s| s.eq_ignore_ascii_case("refs"))
+                    .unwrap_or(false)
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
+    };
+
+    if same_volume
+        && !skip_explicit_reflink_for_24h2_refs
+        && matches!(opts.strategy, CopyStrategy::Auto | CopyStrategy::AlwaysFast)
+    {
         match reflink_path::try_reflink(src_owned.clone(), dst_owned.clone()).await {
             ReflinkOutcome::Cloned => {
                 let elapsed = started.elapsed();

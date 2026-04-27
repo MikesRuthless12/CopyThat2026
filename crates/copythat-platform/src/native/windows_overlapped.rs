@@ -397,6 +397,16 @@ unsafe fn do_overlapped_copy(
         )));
     }
 
+    // Phase 42 follow-up — `FILE_SKIP_COMPLETION_PORT_ON_SUCCESS`
+    // would let synchronously-completing I/Os bypass the IOCP queue
+    // (saves a `GetQueuedCompletionStatus` crossing per cached read).
+    // NOT enabled here: the loop below decrements `in_flight` only on
+    // IOCP completion, so a sync-success would deadlock the counter.
+    // Adopting the flag requires restructuring the loop to inspect
+    // ReadFile/WriteFile's immediate return and handle inline
+    // completion — tracked as a Phase 43 work item alongside the
+    // potential `compio` migration.
+
     // --- Allocate buffers + contexts --------------------------------
     let mut buffers: Vec<OwnedBuffer> = Vec::with_capacity(n_slots);
     for _ in 0..n_slots {

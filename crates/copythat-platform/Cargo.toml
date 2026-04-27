@@ -24,6 +24,12 @@ default = []
 # Heavy integration tests (4 GB reflink timing assertion, 2 GB sparse
 # round-trip). Off by default; CI Linux/Btrfs runner opts in.
 slow-tests = []
+# Phase 42 — experimental compio-based overlapped path. Off by
+# default; the hand-rolled IOCP loop in `windows_overlapped.rs`
+# remains the shipping default until A/B benches confirm the
+# compio runtime is at parity. See `compio_overlapped.rs` for the
+# migration plan.
+compio-experimental = ["dep:compio"]
 
 [dependencies]
 copythat-core = { path = "../copythat-core", version = "1" }
@@ -42,6 +48,12 @@ tokio = { version = "1", features = [
     "sync",
     "time",
 ] }
+# Phase 42 — optional compio runtime. Provides genuine async file
+# I/O via IOCP on Windows and io_uring on Linux. Gated behind the
+# `compio-experimental` feature; default builds do not pull it in
+# so the dep graph and binary size stay unchanged for the shipping
+# release.
+compio = { version = "0.13", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -69,6 +81,12 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Memory",
     "Win32_System_Threading",
     "Win32_Security",
+    # Phase 42 — OS-version probe (RtlGetVersion via ntdll), free-RAM
+    # adaptive NO_BUFFERING threshold (GlobalMemoryStatusEx), and
+    # storage-topology probe (IOCTL_STORAGE_QUERY_PROPERTY).
+    "Win32_System_SystemInformation",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Ioctl",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
