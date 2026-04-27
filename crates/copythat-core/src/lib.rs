@@ -131,7 +131,10 @@ pub use collision::CollisionPolicy;
 pub use control::CopyControl;
 pub use engine::copy_file;
 pub use error::{CopyError, CopyErrorKind};
-pub use event::{Collision, CollisionResolution, CopyEvent, CopyReport, ErrorPrompt, TreeReport};
+pub use event::{
+    Collision, CollisionResolution, CopyEvent, CopyReport, ErrorPrompt, ResumeAbortReason,
+    TreeReport,
+};
 pub use filter::{CompiledFilters, FilterError, FilterSet};
 pub use meta::{
     FileCaps, FinderInfoBlob, MetaApplyOutcome, MetaOps, MetaPolicy, MetaSnapshot, NoopMetaOps,
