@@ -490,7 +490,10 @@ fn preflight_validate_command_paths(
         | RemoteCommand::RerunHistory { .. }
         | RemoteCommand::Goodbye
         | RemoteCommand::SetKeepAwake { .. }
-        | RemoteCommand::GetLocale => Ok(()),
+        | RemoteCommand::GetLocale
+        // Phase 42 — agent #7 challenge-response handshake; carries
+        // an HMAC-hex string + counter, no paths to validate.
+        | RemoteCommand::ChallengeResponse { .. } => Ok(()),
     }
 }
 
