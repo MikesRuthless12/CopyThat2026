@@ -86,11 +86,13 @@ base32 = "0.5"
 # output.
 secrecy = "0.10"
 # Phase 34 — process-wide tracing-subscriber registry. The audit
-# feature installs `AuditLayer` only when enabled; we still want a
-# default fmt layer for stderr dev logs so the registry is unused
-# today outside the audit path.
+# feature installs `AuditLayer` only when enabled; the default fmt
+# layer is now installed at boot (post wave-2 observability rollout)
+# so platform / engine / runner diagnostics route to stderr through
+# the standard subscriber instead of bare `eprintln!`. Filter is
+# controlled by `COPYTHAT_LOG=<level>` (defaults to `info`).
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["registry"] }
+tracing-subscriber = { version = "0.3", features = ["registry", "env-filter", "fmt"] }
 # Phase 34 — hostname for audit events (JobStarted/SettingsChanged
 # carry host + user). BSD-3-Clause.
 gethostname = "1"

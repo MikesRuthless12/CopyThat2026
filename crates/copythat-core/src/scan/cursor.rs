@@ -145,7 +145,7 @@ impl Iterator for ScanCursor {
             return Some(item);
         }
         if let Err(e) = self.refill() {
-            eprintln!("[scan::cursor] refill failed: {e}");
+            tracing::warn!(error = %e, "scan::cursor refill failed");
             return None;
         }
         self.buffer.next()

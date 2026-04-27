@@ -35,6 +35,12 @@ compio-experimental = ["dep:compio"]
 copythat-core = { path = "../copythat-core", version = "1" }
 reflink-copy = "0.1"
 thiserror = "2"
+# Observability — structured warnings/diagnostics for the platform
+# fast paths so consumers can route them through their own subscriber
+# rather than bare stderr noise. Pulled in even when no eprintln!
+# replacements live in non-test code today, so future Phase-42+
+# probe warnings can land without an additional dep churn.
+tracing = { version = "0.1", default-features = false, features = ["std"] }
 # Phase 38 — dedup options + outcome types are TOML-persistable and
 # IPC-serialized, so serde + serde_json land in the dep graph here.
 serde = { version = "1", features = ["derive"] }

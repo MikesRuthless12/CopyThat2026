@@ -74,6 +74,13 @@ use crate::state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Wave-2 observability — install a default tracing subscriber so
+    // structured `tracing::warn!` / `info!` / `debug!` calls from the
+    // platform + core engines + runner land on stderr instead of being
+    // silently dropped. Filter is `COPYTHAT_LOG`-controlled (defaults
+    // to `info`); a try-init keeps a future audit-side reconfiguration
+    // (Phase 34's `AuditLayer`) from panicking on a double-set.
+    init_tracing_subscriber();
     let argv: Vec<std::ffi::OsString> = std::env::args_os().collect();
     let action = cli::parse_args(argv).unwrap_or_else(|err| {
         // Flag errors print the reason + the usage block and launch
@@ -598,6 +605,23 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Copy That v1.25.0");
+}
+
+/// Wave-2 observability — install the process-wide tracing
+/// subscriber once. Honours `COPYTHAT_LOG` (e.g. `COPYTHAT_LOG=debug`,
+/// `COPYTHAT_LOG=copythat_core=trace,info`) and falls back to `info`
+/// when unset. Uses `try_init` so re-entry (tests that call `run()`
+/// multiple times, future audit-side overrides) doesn't panic.
+fn init_tracing_subscriber() {
+    use tracing_subscriber::EnvFilter;
+
+    let filter = EnvFilter::try_from_env("COPYTHAT_LOG")
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .with_target(true)
+        .try_init();
 }
 
 /// Phase 16 — restore the main window from the tray. `show` +
