@@ -1,6 +1,6 @@
-app-name = Copy That v1.25.0
+app-name = Copy That v1.0.0
 # MT
-window-title = Copy That v1.25.0
+window-title = Copy That v1.0.0
 # MT
 shred-ssd-advisory = Uyarı: bu hedef bir SSD üzerindedir. Yıpranma dengeleme ve aşırı tahsis, verileri mantıksal blok adresinin dışına taşıdığından, çok geçişli üzerine yazma işlemleri flash belleği güvenilir biçimde temizleyemez. Katı hal ortamları için ATA SECURE ERASE, Güvenli Silme ile NVMe Format veya anahtarı imha edilmiş tam disk şifrelemesini tercih edin.
 
@@ -1172,3 +1172,9 @@ dedup-badge-reflinked = ⚡ Reflinked  # MT
 dedup-badge-hardlinked = 🔗 Hardlinked  # MT
 dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
 dedup-badge-copied = 📋 Copied  # MT
+phase42-paranoid-verify-label = Paranoyak doğrulama
+phase42-paranoid-verify-hint = Hedefteki önbelleğe alınmış sayfaları atar ve yazma önbelleği yalanlarını ve sessiz bozulmayı yakalamak için diskten yeniden okur. Varsayılan doğrulamadan yaklaşık %50 daha yavaştır; varsayılan olarak kapalıdır.
+phase42-sharing-violation-retries-label = Kilitli kaynak dosyalarda yeniden deneme sayısı
+phase42-sharing-violation-retries-hint = Başka bir işlem kaynak dosyayı özel bir kilitle açık tuttuğunda kaç kez yeniden denenecek. Bekleme süresi her denemede iki katına çıkar (varsayılan olarak 50 ms / 100 ms / 200 ms). Varsayılan: 3, Robocopy /R:3 ile aynı.
+phase42-cloud-placeholder-warning = { $name } yalnızca bulutta bulunan bir OneDrive dosyasıdır. Kopyalanması, ağ bağlantınız üzerinden { $size }'a kadar bir indirme tetikleyecektir.
+phase42-defender-exclusion-hint = En yüksek kopyalama hızı için, toplu aktarımlardan önce hedef klasörü Microsoft Defender istisnalarına ekleyin. Bkz. docs/PERFORMANCE_TUNING.md.

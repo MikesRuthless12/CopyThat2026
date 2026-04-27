@@ -1,6 +1,6 @@
-app-name = Copy That v1.25.0
+app-name = Copy That v1.0.0
 # MT
-window-title = Copy That v1.25.0
+window-title = Copy That v1.0.0
 # MT
 shred-ssd-advisory = Внимание: целевой объект находится на SSD. Многократная перезапись ненадёжно очищает флеш-память, поскольку выравнивание износа и резервная ёмкость смещают данные относительно логического адреса блока. Для твердотельных накопителей предпочтительнее использовать ATA SECURE ERASE, NVMe Format с защищённым стиранием или полнодисковое шифрование с последующим уничтожением ключа.
 
@@ -1172,3 +1172,9 @@ dedup-badge-reflinked = ⚡ Reflinked  # MT
 dedup-badge-hardlinked = 🔗 Hardlinked  # MT
 dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
 dedup-badge-copied = 📋 Copied  # MT
+phase42-paranoid-verify-label = Параноидальная проверка
+phase42-paranoid-verify-hint = Сбрасывает кэшированные страницы места назначения и повторно считывает с диска, чтобы выявить ложь кэша записи и тихое повреждение данных. Примерно на 50 % медленнее обычной проверки; по умолчанию отключена.
+phase42-sharing-violation-retries-label = Количество повторных попыток для заблокированных исходных файлов
+phase42-sharing-violation-retries-hint = Сколько раз повторять попытку, когда другой процесс удерживает исходный файл открытым с эксклюзивной блокировкой. Задержка удваивается на каждой попытке (по умолчанию 50 мс / 100 мс / 200 мс). По умолчанию: 3, как в Robocopy /R:3.
+phase42-cloud-placeholder-warning = { $name } — это файл OneDrive, доступный только в облаке. Его копирование вызовет загрузку — до { $size } через ваше сетевое соединение.
+phase42-defender-exclusion-hint = Для максимальной скорости копирования перед массовыми передачами добавьте папку назначения в исключения Microsoft Defender. См. docs/PERFORMANCE_TUNING.md.

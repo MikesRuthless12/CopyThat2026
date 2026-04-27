@@ -104,6 +104,22 @@ async fn enqueue(
             return Err(e.localized_key().to_string());
         }
     };
+    // Pre-flight that the destination exists *and* is a directory.
+    // Without this synchronous check the engine would later surface
+    // a low-level NotFound / NotADirectory deep inside the runner,
+    // by which point the caller has already received a job-id and
+    // started rendering progress UI for a copy that's about to
+    // fail-fast on the very first file. Reject at the IPC boundary
+    // so the frontend can toast a typed error before the queue
+    // accepts the job.
+    if !dst_root.is_dir() {
+        tracing::debug!(
+            target: "copythat::ipc",
+            kind = ?kind,
+            "destination not a directory",
+        );
+        return Err("err-destination-not-directory".to_string());
+    }
 
     // Phase 12: per-enqueue `CopyOptionsDto` overrides come from the
     // frontend's drop-dialog and still win (highest precedence);
@@ -285,6 +301,12 @@ fn apply_options(
         preserve_times: settings.transfer.preserve_timestamps,
         preserve_permissions: settings.transfer.preserve_permissions,
         preserve_sparseness: settings.transfer.preserve_sparseness,
+        // Phase 42 — bridge the new transfer knobs into the engine.
+        // Defaults match `CopyOptions::default()`; users can change
+        // them via Settings.
+        paranoid_verify: settings.transfer.paranoid_verify,
+        sharing_violation_retries: settings.transfer.sharing_violation_retries,
+        sharing_violation_base_delay_ms: settings.transfer.sharing_violation_base_delay_ms,
         preserve_security_metadata: settings.transfer.preserve_security_metadata,
         meta_policy: copythat_core::MetaPolicy {
             preserve_motw: settings.transfer.preserve_motw,
@@ -447,6 +469,45 @@ pub fn cancel_all(state: State<'_, AppState>) -> Result<(), String> {
     for job in state.queue.snapshot() {
         state.queue.cancel_job(job.id);
     }
+    Ok(())
+}
+
+/// Phase 42 / Gap #14 — register a frontend-supplied
+/// [`tauri::ipc::Channel`] for a specific job's hot-path progress
+/// stream. After this returns, [`crate::runner::emit_progress`]
+/// dual-emits: the legacy `app.emit(EVENT_JOB_PROGRESS, …)` keeps
+/// firing for back-compat, and `state.progress_channels.try_send` also
+/// pushes the same DTO into the channel.
+///
+/// Frontend usage:
+///
+/// ```ts
+/// import { Channel, invoke } from '@tauri-apps/api/core';
+///
+/// const ids = await invoke<number[]>('start_copy', { sources, destination });
+/// const channel = new Channel<JobProgressDto>();
+/// channel.onmessage = (dto) => { /* update UI */ };
+/// await invoke('register_progress_channel', { jobId: ids[0], channel });
+/// ```
+///
+/// The `jobId` does not need to correspond to a live job —
+/// registering for an id that completes before any progress fires is
+/// harmless. The registry has no auto-eviction; future work can add a
+/// teardown call to the runner's terminal-state hooks if leaks become
+/// observable.
+#[tauri::command]
+pub fn register_progress_channel(
+    job_id: u64,
+    channel: tauri::ipc::Channel<crate::ipc::JobProgressDto>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // Look up the live `JobId` by its `u64` form. The shadowed
+    // binding mirrors the existing `pause_job` / `resume_job`
+    // shape — `self::job_id` errors when the queue has no record of
+    // the id, which is the right shape here too (registering for a
+    // phantom job is almost certainly a bug worth surfacing).
+    let id = self::job_id(job_id, &state)?;
+    state.progress_channels.register(id, channel);
     Ok(())
 }
 
@@ -899,10 +960,12 @@ pub async fn history_rerun(
     // Phase 39 — rerun must attach the platform fast-copy hook too,
     // otherwise the engine falls through to the async-fallback Rust
     // loop and runs at ~600 MiB/s instead of CopyFileExW's 2400+.
-    let mut copy_opts = CopyOptions::default();
-    copy_opts.fast_copy_hook = Some(std::sync::Arc::new(
-        copythat_platform::PlatformFastCopyHook,
-    ));
+    let copy_opts = CopyOptions {
+        fast_copy_hook: Some(std::sync::Arc::new(
+            copythat_platform::PlatformFastCopyHook,
+        )),
+        ..CopyOptions::default()
+    };
     Ok(crate::shell::enqueue_jobs(
         &app,
         state.inner(),
@@ -1124,7 +1187,26 @@ pub fn update_settings(
     // changed. Rebuilds with the new config (format / path / WORM)
     // even if only a subset changed — the brief's "seamless toggle"
     // expectation.
+    //
+    // Drain pending writes before swapping. `AuditSink::record` takes
+    // a private mutex, calls `file.flush()` after each write, and
+    // releases the mutex before returning — every observed record is
+    // already on the kernel by the time the snapshot returns. But a
+    // concurrent `record_*` from the runner may have just cloned an
+    // `Arc<AuditSink>` via `snapshot()` and is about to call into it
+    // *right now*; if we drop the registry slot's reference to the
+    // old sink while that call is in flight, the file handle stays
+    // alive (the Arc the runner holds keeps it pinned) — but a
+    // *new* event after the swap could race with the close on the
+    // old handle and land in the new sink with a chained hash that
+    // points at content from the previous file, breaking the chain
+    // for replay. `AuditRegistry::flush` re-acquires the sink's
+    // writer mutex (so it blocks until any in-flight `record()`
+    // clears the post-snapshot critical section) and then calls
+    // `file.flush()`. That is the correct synchronization primitive
+    // here — no wall-clock guess required.
     if prev_snapshot.audit != next.audit {
+        state.audit.flush();
         match crate::audit_commands::build_sink(&next.audit) {
             Ok(new_sink) => state.audit.set(new_sink),
             Err(e) => eprintln!("[audit] rebuild sink failed: {e}"),

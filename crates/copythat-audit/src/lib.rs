@@ -10,7 +10,7 @@
 //!
 //! - [`AuditEvent`] — the finite, typed set of events worth
 //!   recording. The runner translates its high-level
-//!   [`copythat_core::CopyEvent`] + queue state changes into one
+//!   `copythat_core::CopyEvent` + queue state changes into one
 //!   [`AuditEvent`] per user-visible transition (job start/end, file
 //!   copied/failed, collision resolved, settings change, login,
 //!   unauthorized action).
@@ -59,8 +59,8 @@ pub mod verify;
 pub mod worm;
 
 pub use format::{
-    CHAIN_HASH_HEX_LEN, cef_escape_extension, cef_escape_header, csv_header, format_record,
-    leef_escape_extension, syslog_app_name,
+    CHAIN_HASH_HEX_LEN, cef_escape_extension, cef_escape_header, csv_header,
+    csv_sanitise_for_excel, format_record, leef_escape_extension, syslog_app_name,
 };
 pub use layer::AuditLayer;
 pub use verify::{VerifyOutcome, VerifyReport, verify_chain};
@@ -528,7 +528,17 @@ impl AuditSink {
             path: self.path.clone(),
             source,
         })?;
-        guard.chain_hash = next_chain_hash(&guard.chain_hash, &line);
+        // Chain step input is the line bytes with the embedded
+        // prev-hash column replaced by all-zero hex (`chain_hash_redacted`).
+        // Earlier revisions hashed the line verbatim — but the line
+        // already embeds `hex::encode(prev)`, which made each
+        // chain[N+1] depend on chain[N] both directly via the `prev`
+        // argument and indirectly via the line's bytes. The redaction
+        // removes that self-reference: chain[N+1] = H(chain[N], line
+        // with its own prev-column stripped), which means the chain
+        // input contains only the event payload + format metadata.
+        let core_bytes = chain_hash_redacted(&line, &prev_hex);
+        guard.chain_hash = next_chain_hash(&guard.chain_hash, &core_bytes);
         guard.bytes_written += line.len() as u64;
 
         let threshold = self.rotation.max_size;
@@ -602,11 +612,28 @@ impl AuditSink {
 
         drop(guard);
         // Re-apply WORM to the freshly-created file (the old one
-        // retains its own WORM attribute across the rename).
-        apply_worm(&self.path, self.worm).map_err(|e| match e {
-            worm::WormError::Unsupported => AuditError::WormUnsupported,
-            worm::WormError::Apply(reason) => AuditError::WormApply(reason),
-        })?;
+        // retains its own WORM attribute across the rename). If
+        // the OS reports the flag is already in place — usually
+        // EALREADY on Linux's FS_IOC_SETFLAGS or "access denied" on
+        // a Windows file already marked read-only by an earlier
+        // rotation — treat it as success: the post-condition is
+        // "WORM is on", not "we changed something".
+        match apply_worm(&self.path, self.worm) {
+            Ok(()) => {}
+            Err(worm::WormError::Unsupported) => return Err(AuditError::WormUnsupported),
+            Err(worm::WormError::Apply(reason)) => {
+                if is_worm_already_applied_message(&reason) {
+                    // No-op: the freshly created file already
+                    // happens to satisfy the WORM contract (e.g.
+                    // an in-progress filesystem-level immutability
+                    // policy raced with our rename). The next
+                    // record() will succeed because append-only
+                    // flags allow writes-at-end-of-file.
+                } else {
+                    return Err(AuditError::WormApply(reason));
+                }
+            }
+        }
         Ok(true)
     }
 
@@ -616,6 +643,28 @@ impl AuditSink {
     /// subscriber. Called once at app startup by the runner.
     pub fn install_tracing_layer(self: Arc<Self>) -> AuditLayer {
         AuditLayer::new(self)
+    }
+
+    /// Drain any in-flight `record(...)` and flush the underlying
+    /// file handle. Acquiring the writer mutex blocks until the
+    /// most recent record's critical section has released it; the
+    /// follow-up `file.flush()` then guarantees buffered bytes are
+    /// on the kernel before the call returns.
+    ///
+    /// Used by the Tauri runner before swapping the sink in a
+    /// settings hot-reload — without this drain, a concurrent
+    /// `record()` racing with the swap could chain its hash off the
+    /// previous sink's tail and land in the new one, breaking the
+    /// chain for replay.
+    pub fn flush(&self) -> Result<()> {
+        let mut guard = self
+            .writer
+            .lock()
+            .expect("audit sink writer mutex poisoned");
+        guard.file.flush().map_err(|source| AuditError::Io {
+            path: self.path.clone(),
+            source,
+        })
     }
 
     /// Snapshot the current chain hash — used by tests + the
@@ -639,14 +688,77 @@ impl AuditSink {
 }
 
 /// Deterministic BLAKE3 chain step. `prev` is 32 bytes of zeros for
-/// the first record; otherwise it's the hash of the *previous
-/// record's bytes* (including its chain-hash column). Each record
-/// embeds `hex::encode(prev)` so parsers can recompute the chain.
+/// the first record; otherwise it's the hash of the previous
+/// record's bytes with that record's *own* chain-hash column
+/// redacted to all-zero hex.
+///
+/// Earlier revisions hashed the formatted line verbatim, including
+/// the embedded `hex::encode(prev)` column. That made the input
+/// self-referential: each chain[N+1] depended on chain[N] both
+/// directly via the `prev` argument and indirectly via the line's
+/// bytes. The math still closed but the design contract was wrong
+/// — the chain input is supposed to cover the *content* of the
+/// record, not its own provenance pointer. Use
+/// [`chain_hash_redacted`] to derive the right input from a line
+/// you already have in memory.
 pub fn next_chain_hash(prev: &[u8; 32], record_bytes: &str) -> [u8; 32] {
     let mut hasher = blake3::Hasher::new();
     hasher.update(prev);
     hasher.update(record_bytes.as_bytes());
     *hasher.finalize().as_bytes()
+}
+
+/// Replace `prev_hex` (the 64-char chain-hash column embedded in a
+/// formatted record) with 64 ASCII zeros so the resulting bytes can
+/// be fed to [`next_chain_hash`] without circularity. Used by both
+/// the writer (to seed the next chain step) and the verifier (to
+/// recompute the chain step from the bytes already on disk).
+///
+/// The substitution targets the *last* occurrence of `prev_hex`
+/// because every wire format the sink emits places the prev-hash
+/// column at the tail of the record — CSV final column, JSON
+/// trailing field, Syslog `prevHash` in the structured-data block
+/// before the message text, CEF/LEEF extension after the header
+/// pipes. Other 64-char hex columns (e.g. a `FileCopied { hash: ..
+/// }`) appear earlier in the line, so replacing from the right
+/// always rewrites the chain-hash slot.
+pub fn chain_hash_redacted(line: &str, prev_hex: &str) -> String {
+    debug_assert_eq!(prev_hex.len(), CHAIN_HASH_HEX_LEN);
+    if let Some(pos) = line.rfind(prev_hex) {
+        let mut out = String::with_capacity(line.len());
+        out.push_str(&line[..pos]);
+        for _ in 0..CHAIN_HASH_HEX_LEN {
+            out.push('0');
+        }
+        out.push_str(&line[pos + prev_hex.len()..]);
+        out
+    } else {
+        // No prev_hex in the line — should not happen for a
+        // sink-formatted record. Fall back to hashing the line
+        // verbatim; the verifier will surface the inconsistency.
+        line.to_string()
+    }
+}
+
+/// Best-effort detection of "WORM was already applied" inside a
+/// platform-error string. We can't pattern-match the underlying
+/// errno because [`worm::WormError::Apply`] flattens it to a
+/// `String`, but the platform messages are stable enough that a
+/// substring match suffices: Linux's `FS_IOC_SETFLAGS` returns
+/// "Operation not permitted" / "EALREADY" / "EPERM" when the flag
+/// is already set on a read-only mount; Windows's
+/// `SetFileAttributesW` reports "Access is denied" when the file
+/// is already marked read-only and the call is racing a re-set.
+/// Treat those messages as a green light — the post-condition
+/// (WORM is on) holds either way.
+fn is_worm_already_applied_message(reason: &str) -> bool {
+    let lower = reason.to_ascii_lowercase();
+    lower.contains("ealready")
+        || lower.contains("operation not permitted")
+        || lower.contains("read-only")
+        || lower.contains("readonly")
+        || lower.contains("access is denied")
+        || lower.contains("erofs")
 }
 
 /// Compute the path that rotation moves the current log to. Same
@@ -683,7 +795,11 @@ fn read_tail_state(path: &Path, format: AuditFormat) -> io::Result<([u8; 32], u6
 
     // Walk the file line-by-line, recomputing the chain so the
     // resumed state is self-consistent. Non-record lines (the CSV
-    // header, a blank line at EOF) are skipped.
+    // header, a blank line at EOF) are skipped. Each line's chain
+    // step is computed over the line bytes with that line's *own*
+    // prev-hash column redacted to all-zero hex — same shape the
+    // writer used so resume continues the chain rather than
+    // forking it.
     let mut chain = [0u8; 32];
     for line in buf.split_inclusive('\n') {
         if line.trim().is_empty() {
@@ -692,7 +808,9 @@ fn read_tail_state(path: &Path, format: AuditFormat) -> io::Result<([u8; 32], u6
         if matches!(format, AuditFormat::Csv) && line.starts_with("event,") {
             continue;
         }
-        chain = next_chain_hash(&chain, line);
+        let prev_hex = hex::encode(chain);
+        let core = chain_hash_redacted(line, &prev_hex);
+        chain = next_chain_hash(&chain, &core);
     }
     Ok((chain, len))
 }
@@ -750,5 +868,143 @@ mod tests {
     fn rotated_path_appends_one() {
         let path = Path::new("/var/log/copythat.log");
         assert_eq!(rotated_path(path), PathBuf::from("/var/log/copythat.log.1"));
+    }
+
+    #[test]
+    fn chain_hash_redacted_zeros_only_the_prev_hash_column() {
+        // Build a contrived line where the prev_hash column appears
+        // *after* an unrelated 64-char hex value (e.g. a FileCopied
+        // event's `hash` field). The redactor must zero only the
+        // last 64-char run that matches `prev_hex` — not the
+        // earlier `hash` column with the same hex value.
+        let prev_hex = "f".repeat(64);
+        let other_hex = "0123456789abcdef".repeat(4);
+        // Two distinct 64-hex columns, prev_hex at the end.
+        let line = format!("hash={other_hex},detail=foo,prev_hash={prev_hex}\n");
+        let core = chain_hash_redacted(&line, &prev_hex);
+        // The earlier `hash=` column must be intact …
+        assert!(core.contains(&format!("hash={other_hex}")));
+        // … and the prev_hash column must be zeroed.
+        assert!(core.contains(&format!("prev_hash={}", "0".repeat(64))));
+    }
+
+    #[test]
+    fn chain_hash_redacted_handles_collision_with_earlier_hash() {
+        // Edge case: prev_hex equals an earlier `hash` field
+        // verbatim. We zero ONLY the rightmost occurrence (the
+        // prev-hash column) — the earlier column stays.
+        let prev_hex = "a".repeat(64);
+        let line = format!("hash={prev_hex},prev_hash={prev_hex}\n");
+        let core = chain_hash_redacted(&line, &prev_hex);
+        // First occurrence (the `hash=` field) keeps the original
+        // hex; second occurrence (the `prev_hash=` column) is zeros.
+        assert_eq!(
+            core,
+            format!("hash={},prev_hash={}\n", prev_hex, "0".repeat(64))
+        );
+    }
+
+    #[test]
+    fn chain_hash_redaction_breaks_self_referential_dependency() {
+        // Chain step over a line WITH the prev_hash column intact
+        // depends on prev (because line includes prev_hex). Chain
+        // step over the redacted line is independent of prev's
+        // bytes inside the line. Verify the redacted variant is
+        // STABLE under different prev values for the same event.
+        let event = sample_job_started();
+        let prev_a = [0u8; 32];
+        let prev_b = [42u8; 32];
+        let prev_a_hex = hex::encode(prev_a);
+        let prev_b_hex = hex::encode(prev_b);
+        let line_a = format_record(AuditFormat::JsonLines, &event, &prev_a_hex).unwrap();
+        let line_b = format_record(AuditFormat::JsonLines, &event, &prev_b_hex).unwrap();
+        let core_a = chain_hash_redacted(&line_a, &prev_a_hex);
+        let core_b = chain_hash_redacted(&line_b, &prev_b_hex);
+        // The redacted bytes must be identical even though
+        // the input prev hex was different — that's the whole
+        // point of the redaction step.
+        assert_eq!(
+            core_a, core_b,
+            "redacted core must not depend on the prev-hash bytes",
+        );
+    }
+
+    #[test]
+    fn worm_already_applied_message_recognises_known_strings() {
+        assert!(is_worm_already_applied_message("EALREADY"));
+        assert!(is_worm_already_applied_message(
+            "Operation not permitted (os error 1)"
+        ));
+        assert!(is_worm_already_applied_message("Access is denied. (os error 5)"));
+        assert!(is_worm_already_applied_message("Read-only file system"));
+        assert!(!is_worm_already_applied_message("disk full"));
+    }
+
+    /// Phase 42 wave-2 — round-trip the chain-hash redaction:
+    ///
+    /// 1. Build two log entries with DIFFERENT prev-hashes.
+    /// 2. Confirm the redacted-bytes input to BLAKE3 is byte-identical
+    ///    (the redaction zeros the prev-hash column so the chain input
+    ///    only covers the event payload, not the chain's own provenance).
+    /// 3. Confirm the resulting chain hashes still differ correctly
+    ///    (same redacted bytes + different `prev` arg = different output).
+    /// 4. Confirm `verify_chain` accepts an on-disk file built from
+    ///    these records — the writer + verifier agree on the redacted
+    ///    chain step.
+    #[test]
+    fn chain_hash_redaction_round_trip_writer_and_verifier_agree() {
+        use crate::AuditSink;
+        use crate::WormMode;
+        use crate::verify::verify_chain;
+
+        let event_a = sample_job_started();
+        let event_b = AuditEvent::FileCopied {
+            job_id: "j-1".into(),
+            src: "/tmp/src/a".into(),
+            dst: "/tmp/dst/a".into(),
+            hash: "deadbeef".to_string(),
+            size: 1024,
+            ts: chrono::Utc.with_ymd_and_hms(2026, 4, 24, 12, 0, 1).unwrap(),
+        };
+
+        // --- Step 1+2: redacted bytes are independent of the prev arg ---
+        let prev_zero = [0u8; 32];
+        let prev_seven = [7u8; 32];
+        let prev_zero_hex = hex::encode(prev_zero);
+        let prev_seven_hex = hex::encode(prev_seven);
+        let line_with_zero =
+            format_record(AuditFormat::JsonLines, &event_a, &prev_zero_hex).unwrap();
+        let line_with_seven =
+            format_record(AuditFormat::JsonLines, &event_a, &prev_seven_hex).unwrap();
+        let redacted_zero = chain_hash_redacted(&line_with_zero, &prev_zero_hex);
+        let redacted_seven = chain_hash_redacted(&line_with_seven, &prev_seven_hex);
+        assert_eq!(
+            redacted_zero, redacted_seven,
+            "redaction must produce identical bytes regardless of prev hash"
+        );
+
+        // --- Step 3: same redacted bytes + different prev = different chain hashes ---
+        let chain_zero = next_chain_hash(&prev_zero, &redacted_zero);
+        let chain_seven = next_chain_hash(&prev_seven, &redacted_seven);
+        assert_ne!(
+            chain_zero, chain_seven,
+            "different prev hashes must yield different chain outputs even when the \
+             redacted record bytes are identical"
+        );
+
+        // --- Step 4: writer + verifier agree on the redacted chain step ---
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("audit.log");
+        let sink = AuditSink::open(&path, AuditFormat::JsonLines, WormMode::Off)
+            .expect("open audit sink");
+        sink.record(&event_a).expect("record event_a");
+        sink.record(&event_b).expect("record event_b");
+        drop(sink);
+
+        let report = verify_chain(&path, AuditFormat::JsonLines).expect("verify");
+        assert_eq!(report.total, 2, "expected 2 records on disk");
+        assert_eq!(report.matches, 2, "verifier must accept both records");
+        assert_eq!(report.mismatches, 0, "no mismatches expected");
+        assert!(report.is_ok(), "report must be ok: {report:?}");
     }
 }

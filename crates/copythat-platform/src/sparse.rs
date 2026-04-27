@@ -14,6 +14,18 @@ use std::path::Path;
 
 use copythat_core::sparse::{ByteRange, SparseOps};
 
+/// Hard cap on the number of allocated-range entries we'll request from
+/// `FSCTL_QUERY_ALLOCATED_RANGES` before giving up and treating the
+/// file as dense. Each entry is 16 bytes, so 100 000 entries ≈ 1.5 MiB
+/// of buffer — small enough that an extremely fragmented file can't
+/// exhaust memory, large enough to cover any realistic NTFS layout.
+/// When the cap is hit, [`unix_detect_extents`]'s pathological-densify
+/// fallback applies on the Windows side: we log a warning and fall back
+/// to a single dense extent covering the file length, which the engine
+/// treats as "no sparseness available" and copies densely.
+#[cfg(target_os = "windows")]
+const MAX_RANGE_ENTRIES: usize = 100_000;
+
 /// Platform-backed extent-introspection and sparse-marking hook.
 ///
 /// Drop one into [`CopyOptions::sparse_ops`](copythat_core::CopyOptions::sparse_ops)
@@ -118,7 +130,16 @@ fn unix_detect_extents(path: &Path) -> io::Result<Vec<ByteRange>> {
             return Err(err);
         }
         if hole <= data {
-            // Pathological: treat as dense remainder.
+            // Pathological: SEEK_HOLE returned a position at or before
+            // SEEK_DATA, which means the filesystem's extent map is
+            // unreliable for this file. Warn-log so an operator
+            // investigating "why is sparse copy slow" can correlate
+            // with the path, then treat the rest as dense.
+            eprintln!(
+                "copythat-platform: SEEK_HOLE <= SEEK_DATA on {} — extent detection unreliable \
+                 on this filesystem, densifying remainder",
+                path.display()
+            );
             let remain = (total - data) as u64;
             if remain > 0 {
                 extents.push(ByteRange::new(data as u64, remain));
@@ -211,9 +232,22 @@ fn windows_detect_extents(path: &Path) -> io::Result<Vec<ByteRange>> {
         }
         // SAFETY: GetLastError reads thread-local state.
         let code = unsafe { GetLastError() };
-        // ERROR_MORE_DATA — double the output buffer and retry.
-        if code == 234 && out.len() < 1_000_000 {
+        // ERROR_MORE_DATA — double the output buffer and retry, but
+        // bail out when we'd cross MAX_RANGE_ENTRIES (extremely
+        // fragmented filesystems could otherwise allocate gigabytes).
+        // On bail, fall back to a single dense extent so the engine
+        // copies the file densely instead of corrupting on truncated
+        // extent data.
+        if code == 234 {
             let new_len = out.len() * 2;
+            if new_len > MAX_RANGE_ENTRIES {
+                eprintln!(
+                    "copythat-platform: sparse extent count exceeded {MAX_RANGE_ENTRIES} on \
+                     {} — falling back to dense copy",
+                    path.display()
+                );
+                return Ok(vec![ByteRange::new(0, len)]);
+            }
             out.resize(
                 new_len,
                 FileAllocatedRangeBuffer {

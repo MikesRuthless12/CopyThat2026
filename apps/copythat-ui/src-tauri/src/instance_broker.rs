@@ -32,8 +32,16 @@
 //! Security note: the pipe DACL grants only the current user RW.
 //! No cross-user / cross-session traffic. Mutex + pipe both live
 //! in the `Local\` namespace so they're per-session, not global.
+//
+// `unsafe_code`: this module is pure Win32 FFI — every Pipe / Mutex /
+// File API the broker calls is `unsafe extern "system"`. Wrapping
+// each call in its own SAFETY-commented `unsafe` block (which we
+// already do, see below) is the contract; the workspace lint just
+// flags the *count* of unsafe blocks, not their soundness. Per-block
+// SAFETY comments document the invariants on each call site.
 
 #![cfg(windows)]
+#![allow(unsafe_code)]
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
@@ -58,7 +66,34 @@ use windows_sys::Win32::System::Threading::CreateMutexW;
 const MUTEX_NAME: &str = "Local\\copythat-ui-instance-mutex-v1";
 const PIPE_NAME: &str = "\\\\.\\pipe\\copythat-ui-enqueue-v1";
 
+/// Hard cap on the wire payload (newline-terminated JSON).
+///
+/// Equal to the pipe's buffer size so a single atomic Write fits
+/// comfortably; any well-formed `CliAction` is well under 1 KiB.
+/// Both client and server enforce this — anything larger is
+/// rejected without parsing.
+const MAX_WIRE_BYTES: usize = 64 * 1024;
+
 /// One-shot guard so we only register the mutex once per process.
+///
+/// # Lifetime + scope
+///
+/// Stored as a raw `usize` (the bit-pattern of the `HANDLE`) so
+/// `OnceLock` is `Send + Sync` — `windows_sys::HANDLE` is `*mut
+/// c_void` which isn't. The handle is **intentionally never
+/// closed**: the OS releases it at process exit, which is exactly
+/// the lifetime we want. A third invocation of the binary still
+/// finds the mutex owned because the kernel object outlives
+/// `is_second_instance()`'s stack frame and lives until the first
+/// instance terminates.
+///
+/// The `Local\` namespace prefix on [`MUTEX_NAME`] makes this
+/// session-local: a different user (or the same user in a
+/// different RDP / fast-user-switching session) gets a separate
+/// kernel namespace, so we can't false-positive across sessions.
+///
+/// **Effective lifetime:** process exit OR user logout, whichever
+/// comes first. Documented at `RESEARCH/RESEARCH_PHASE_42.md`.
 static MUTEX_HANDLE: OnceLock<usize> = OnceLock::new();
 
 /// Returns `true` iff another `copythat-ui` process is already
@@ -92,9 +127,23 @@ pub fn is_second_instance() -> bool {
 /// Attempt to forward `argv` to the running first instance via the
 /// named pipe broker. Returns `Ok(())` iff the running instance
 /// accepted the args (1-byte ack received). On any failure
-/// (no server, pipe busy timeout, write error) returns `Err` so
-/// the caller can fall through to the normal first-instance boot.
+/// (no server, pipe busy timeout, write error, ack timeout)
+/// returns `Err` so the caller can fall through to the normal
+/// first-instance boot.
+///
+/// Phase 42: every payload is HMAC-SHA256 authenticated under the
+/// 32-byte secret in `%LOCALAPPDATA%\CopyThat\session.token`. If
+/// the token is missing (the running instance is pre-Phase-42
+/// or hasn't finished writing the token yet), we fail closed —
+/// the caller falls through to the normal boot path which kicks
+/// in `tauri-plugin-single-instance`.
 pub fn try_forward_argv(argv: &[String]) -> Result<(), String> {
+    // Load the per-session HMAC secret first. Doing this BEFORE
+    // opening the pipe means a stale or missing token doesn't waste
+    // a connect+write+read round-trip.
+    let secret = crate::broker_auth::load_secret_for_client()
+        .map_err(|e| format!("session token unavailable: {e}"))?;
+
     let pipe_name: Vec<u16> = OsStr::new(PIPE_NAME)
         .encode_wide()
         .chain(Some(0))
@@ -155,10 +204,29 @@ pub fn try_forward_argv(argv: &[String]) -> Result<(), String> {
     }
     let pipe = OwnedH(handle);
 
-    // Wire payload: { "argv": ["copythat-ui.exe", "--enqueue", ...] }
-    let payload = serde_json::json!({ "argv": argv });
-    let mut wire = serde_json::to_vec(&payload).map_err(|e| format!("json serialize: {e}"))?;
+    // Wire payload v2 — JSON object with two fields:
+    //   { "argv": [..], "hmac": "<lower-hex sha256>" }
+    // The HMAC is computed over the canonical JSON of the inner
+    // `{argv: [..]}` object so the server recomputes the exact
+    // same bytes (no key-order ambiguity from re-serialising).
+    let inner = serde_json::json!({ "argv": argv });
+    let inner_bytes =
+        serde_json::to_vec(&inner).map_err(|e| format!("json serialize argv: {e}"))?;
+    let tag = crate::broker_auth::hmac_hex(&secret, &inner_bytes);
+    let outer = serde_json::json!({ "argv": argv, "hmac": tag });
+    let mut wire = serde_json::to_vec(&outer).map_err(|e| format!("json serialize wire: {e}"))?;
     wire.push(b'\n');
+
+    // Refuse oversized payloads on the client side too — the
+    // server hard-caps at 64 KiB and would reject anyway, but
+    // failing fast saves a useless round-trip.
+    if wire.len() > MAX_WIRE_BYTES {
+        return Err(format!(
+            "wire payload {} exceeds {} bytes",
+            wire.len(),
+            MAX_WIRE_BYTES
+        ));
+    }
 
     // Write the entire wire payload. Pipe writes are atomic for
     // payloads ≤ the pipe's buffer size (we set 64 KiB on the
@@ -182,35 +250,91 @@ pub fn try_forward_argv(argv: &[String]) -> Result<(), String> {
         ));
     }
 
-    // Wait for the server's ack byte. If the server crashed mid-
-    // dispatch, we'd hang here — that's why we cap with a 5-second
-    // read timeout via SetCommTimeouts... actually anonymous pipes
-    // don't honour those, so we rely on the server's prompt ack.
-    let mut ack = [0u8; 1];
-    let mut nread: u32 = 0;
-    // SAFETY: ack is a stack array of length 1.
-    let ok = unsafe { ReadFile(pipe.0, ack.as_mut_ptr(), 1, &mut nread, ptr::null_mut()) };
-    if ok == 0 || nread != 1 {
-        return Err(format!(
-            "ReadFile pipe ack failed: os error {}",
-            unsafe { GetLastError() }
-        ));
-    }
+    // Wait for the server's ack byte with a hard 5-second timeout.
+    // Synchronous `ReadFile` on a named pipe doesn't honour
+    // SetCommTimeouts (those are for serial / COM ports), so we
+    // run the read on a worker thread and use `recv_timeout` on
+    // a one-shot mpsc channel as the actual timeout primitive.
+    // If the timeout fires, we close the pipe handle (via Drop)
+    // which forces the parked ReadFile to fail — the worker
+    // thread exits and is no longer holding any borrowed state.
+    let pipe_handle = pipe.0;
+    // The handle bit-pattern is `Send` because the kernel object
+    // is shared; closing in the parent thread while the worker
+    // is mid-ReadFile is the documented Windows pattern for
+    // cancelling a synchronous I/O.
+    let pipe_handle_for_thread = pipe_handle as usize;
+    let (tx, rx) = std::sync::mpsc::channel::<Result<u8, String>>();
+    let _join = std::thread::Builder::new()
+        .name("copythat-broker-ack".into())
+        .spawn(move || {
+            let h = pipe_handle_for_thread as HANDLE;
+            let mut ack = [0u8; 1];
+            let mut nread: u32 = 0;
+            // SAFETY: ack is a stack array of length 1; h is a
+            // valid pipe handle owned by the caller's `OwnedH`
+            // (which outlives this thread because we join on rx
+            // before letting `pipe` drop, OR we let `pipe` drop
+            // on timeout which cancels the read).
+            let ok = unsafe { ReadFile(h, ack.as_mut_ptr(), 1, &mut nread, ptr::null_mut()) };
+            let result = if ok == 0 || nread != 1 {
+                Err(format!(
+                    "ReadFile pipe ack failed: os error {}",
+                    unsafe { GetLastError() }
+                ))
+            } else {
+                Ok(ack[0])
+            };
+            let _ = tx.send(result);
+        })
+        .map_err(|e| format!("spawn ack thread: {e}"))?;
+
+    let ack_byte = match rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(Ok(b)) => b,
+        Ok(Err(e)) => return Err(e),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            // Drop `pipe` so the kernel cancels the parked
+            // ReadFile in the worker thread; the worker will exit
+            // on the next wake. We deliberately don't `join` here
+            // — the worker is non-blocking once the handle is
+            // closed and we want to surface the timeout to the
+            // caller immediately.
+            return Err("ack timeout after 5s".to_string());
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            return Err("ack worker disconnected".to_string());
+        }
+    };
 
     // Single-byte ack: 0x06 (ACK) = success, anything else = failure.
-    if ack[0] == 0x06 {
+    if ack_byte == 0x06 {
         Ok(())
     } else {
-        Err(format!("server rejected (ack=0x{:02x})", ack[0]))
+        Err(format!("server rejected (ack=0x{:02x})", ack_byte))
     }
 }
 
 /// Spawn the named-pipe server in a dedicated OS thread. Lives for
 /// the lifetime of the first-instance process. Each connection
-/// reads one JSON `{argv: [...]}` payload, parses it via
+/// reads one JSON `{argv: [...], hmac: ".."}` payload, verifies
+/// the HMAC against the per-session secret, parses argv via
 /// [`crate::cli::parse_args`], dispatches via
 /// [`crate::shell::dispatch_cli_action`], and writes a 1-byte ack.
+///
+/// Phase 42: initialises the per-session HMAC secret + writes
+/// `%LOCALAPPDATA%\CopyThat\session.token` BEFORE the listener
+/// starts accepting connections, so a second instance racing the
+/// first instance's startup either reads the fresh token or
+/// retries (no window where a stale token is accepted).
 pub fn start_pipe_server(app: tauri::AppHandle) {
+    // Initialise the per-session secret first; failure here means
+    // the first instance can't authenticate any second-instance
+    // forwards, but we still want the listener to come up so the
+    // tauri-plugin-single-instance fallback can route argv.
+    if let Err(e) = crate::broker_auth::init_first_instance_secret() {
+        eprintln!("[broker] session-token init failed: {e} — pipe broker disabled");
+        return;
+    }
     std::thread::Builder::new()
         .name("copythat-pipe-broker".into())
         .spawn(move || pipe_server_loop(app))
@@ -279,77 +403,81 @@ fn pipe_server_loop(app: tauri::AppHandle) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Forward to a never-created pipe must return `Err` cleanly,
-    /// never panic. This is the safety net for "no first-instance
-    /// running" — `try_forward_argv` returns Err and the caller
-    /// falls through to the normal first-instance boot.
-    #[test]
-    fn forward_to_missing_pipe_errors_cleanly() {
-        let argv = vec!["copythat-ui.exe".to_string(), "--enqueue".to_string()];
-        let result = try_forward_argv(&argv);
-        // Any of the failure paths is acceptable; the only thing
-        // we MUST reject is the test panicking or hanging.
-        assert!(
-            result.is_err(),
-            "forward to missing pipe should error, got {:?}",
-            result
-        );
-    }
-
-    /// Mutex check returns `false` on first call within a process
-    /// (we just claimed ownership) and `true` on the second call
-    /// (the OS reports the name already exists). This is the only
-    /// behaviour the second-instance fast bail relies on.
-    #[test]
-    fn mutex_check_returns_false_then_true_within_process() {
-        let first = is_second_instance();
-        let second = is_second_instance();
-        assert!(!first, "first call should report first instance");
-        assert!(second, "second call within same process should report second instance");
-    }
-}
-
 fn handle_connection(pipe: HANDLE, app: &tauri::AppHandle) -> Result<(), String> {
-    // Read until newline or EOF. The wire payload is one line of JSON.
-    let mut buf = [0u8; 65536];
-    let mut total = 0usize;
-    while total < buf.len() {
+    // Read until newline or hard cap. We use a heap `Vec<u8>` that
+    // grows in 4 KiB chunks instead of a fixed 65 536-byte stack
+    // buffer — that earlier shape had two bugs:
+    //   1. an exact 65 536-byte payload with the newline at byte
+    //      65 537 silently truncated;
+    //   2. the bounds check `total < buf.len()` on a full buffer
+    //      raced with `nread == 0`.
+    // The heap-Vec approach is both safer and clearer: we read
+    // until a newline or until we hit `MAX_WIRE_BYTES`, at which
+    // point we reject explicitly.
+    let mut buf: Vec<u8> = Vec::with_capacity(4 * 1024);
+    loop {
+        if buf.len() >= MAX_WIRE_BYTES {
+            return Err(format!(
+                "wire payload exceeds {} bytes — refusing to parse",
+                MAX_WIRE_BYTES
+            ));
+        }
+        // Reserve up to (cap - len) bytes; cap at the hard limit
+        // so a single huge ReadFile can't overshoot.
+        let want = std::cmp::min(MAX_WIRE_BYTES - buf.len(), 4 * 1024);
+        let old_len = buf.len();
+        buf.resize(old_len + want, 0);
         let mut nread: u32 = 0;
-        // SAFETY: buf is a stack array of length 65536; we read at
-        // most (buf.len() - total) bytes into the unused suffix.
+        // SAFETY: `buf[old_len..]` is `want` bytes of writable
+        // memory we just reserved via `resize`.
         let ok = unsafe {
             ReadFile(
                 pipe,
-                buf[total..].as_mut_ptr(),
-                (buf.len() - total) as u32,
+                buf[old_len..].as_mut_ptr(),
+                want as u32,
                 &mut nread,
                 ptr::null_mut(),
             )
         };
         if ok == 0 || nread == 0 {
+            // Truncate back to what we actually filled before this
+            // failed read so the newline scan below doesn't see
+            // zero padding.
+            buf.truncate(old_len);
             break;
         }
-        total += nread as usize;
-        if buf[..total].contains(&b'\n') {
+        let new_len = old_len + nread as usize;
+        buf.truncate(new_len);
+        if buf.contains(&b'\n') {
             break;
         }
     }
-    let line = &buf[..total];
-    let line = match line.iter().position(|b| *b == b'\n') {
-        Some(idx) => &line[..idx],
-        None => line,
+    let line: &[u8] = match buf.iter().position(|b| *b == b'\n') {
+        Some(idx) => &buf[..idx],
+        None => &buf,
     };
 
-    // Parse the wire payload.
+    // Parse the outer wire envelope: {argv:[..], hmac:".."}.
     #[derive(serde::Deserialize)]
     struct Wire {
         argv: Vec<String>,
+        hmac: String,
     }
     let wire: Wire = serde_json::from_slice(line).map_err(|e| format!("json parse: {e}"))?;
+
+    // Verify the HMAC against the per-session secret BEFORE
+    // touching argv. The client's HMAC is computed over the
+    // canonical re-serialisation of `{argv: [..]}` — we recompute
+    // here using serde's canonical key order (argv first because
+    // that's the only key) so byte-equal matches succeed.
+    let secret = crate::broker_auth::init_first_instance_secret()
+        .map_err(|e| format!("secret unavailable: {e}"))?;
+    let inner = serde_json::json!({ "argv": wire.argv });
+    let inner_bytes =
+        serde_json::to_vec(&inner).map_err(|e| format!("json re-serialise argv: {e}"))?;
+    if !crate::broker_auth::verify_hmac(&secret, &inner_bytes, &wire.hmac) {
+        return Err("hmac verification failed — refusing to dispatch".to_string());
+    }
 
     // Dispatch on the Tauri main thread via the AppHandle. We use
     // tauri::async_runtime::spawn so dispatch_cli_action sees a
@@ -383,4 +511,46 @@ fn handle_connection(pipe: HANDLE, app: &tauri::AppHandle) -> Result<(), String>
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Forward to a never-created pipe must return `Err` cleanly,
+    /// never panic. This is the safety net for "no first-instance
+    /// running" — `try_forward_argv` returns Err and the caller
+    /// falls through to the normal first-instance boot.
+    #[test]
+    fn forward_to_missing_pipe_errors_cleanly() {
+        let argv = vec!["copythat-ui.exe".to_string(), "--enqueue".to_string()];
+        let result = try_forward_argv(&argv);
+        // Any of the failure paths is acceptable; the only thing
+        // we MUST reject is the test panicking or hanging.
+        assert!(
+            result.is_err(),
+            "forward to missing pipe should error, got {:?}",
+            result
+        );
+    }
+
+    /// Mutex check returns `false` on first call within a process
+    /// (we just claimed ownership) and `true` on the second call
+    /// (the OS reports the name already exists). This is the only
+    /// behaviour the second-instance fast bail relies on.
+    #[test]
+    fn mutex_check_returns_false_then_true_within_process() {
+        let first = is_second_instance();
+        let second = is_second_instance();
+        assert!(!first, "first call should report first instance");
+        assert!(second, "second call within same process should report second instance");
+    }
+
+    /// `MAX_WIRE_BYTES` must equal the pipe's buffer size — keeping
+    /// them in sync is the contract that lets `WriteFile` issue a
+    /// single atomic write of an in-bound payload.
+    #[test]
+    fn wire_cap_matches_pipe_buffer_size() {
+        assert_eq!(MAX_WIRE_BYTES, 64 * 1024);
+    }
 }

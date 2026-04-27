@@ -40,7 +40,7 @@ pub const DEFAULT_DENY_EXTENSIONS: &[&str] = &[
 
 /// Accumulates compression metrics for one file. Shared between the
 /// sink's drop (which writes the zstd epilogue) and the engine
-/// event emitter (which fires [`CompressionSavings`] after the
+/// event emitter (which fires `CopyEvent::CompressionSavings` after the
 /// encoder finalises).
 #[derive(Debug, Default, Clone)]
 pub struct CompressionMetrics {

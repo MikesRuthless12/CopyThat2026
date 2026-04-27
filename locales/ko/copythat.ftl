@@ -1,6 +1,6 @@
-app-name = Copy That v1.25.0
+app-name = Copy That v1.0.0
 # MT
-window-title = Copy That v1.25.0
+window-title = Copy That v1.0.0
 # MT
 shred-ssd-advisory = 경고: 이 대상은 SSD에 있습니다. 웨어 레벨링과 오버프로비저닝이 논리 블록 주소 아래의 데이터를 이동시키므로, 여러 번의 덮어쓰기로는 플래시 메모리를 안정적으로 말소할 수 없습니다. 솔리드 스테이트 매체에서는 ATA SECURE ERASE, NVMe Format(보안 삭제 포함), 또는 키를 파기한 전체 디스크 암호화를 우선적으로 사용하십시오.
 
@@ -1172,3 +1172,9 @@ dedup-badge-reflinked = ⚡ Reflinked  # MT
 dedup-badge-hardlinked = 🔗 Hardlinked  # MT
 dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
 dedup-badge-copied = 📋 Copied  # MT
+phase42-paranoid-verify-label = 편집증 검증
+phase42-paranoid-verify-hint = 대상의 캐시된 페이지를 버리고 디스크에서 다시 읽어 쓰기 캐시의 거짓 보고와 무성한 손상을 감지합니다. 기본 검증보다 약 50% 느리며, 기본적으로 꺼져 있습니다.
+phase42-sharing-violation-retries-label = 잠긴 원본 파일에 대한 재시도 횟수
+phase42-sharing-violation-retries-hint = 다른 프로세스가 원본 파일을 독점 잠금으로 열어 두고 있을 때 재시도할 횟수입니다. 대기 시간은 시도마다 두 배가 됩니다 (기본값 50 ms / 100 ms / 200 ms). 기본값은 3이며, Robocopy /R:3과 동일합니다.
+phase42-cloud-placeholder-warning = { $name }은(는) 클라우드 전용 OneDrive 파일입니다. 복사하면 네트워크 연결을 통해 최대 { $size }의 다운로드가 시작됩니다.
+phase42-defender-exclusion-hint = 최대 복사 처리량을 얻으려면 대량 전송 전에 대상 폴더를 Microsoft Defender 제외 항목에 추가하십시오. docs/PERFORMANCE_TUNING.md를 참조하십시오.

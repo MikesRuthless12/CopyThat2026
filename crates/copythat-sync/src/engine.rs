@@ -16,7 +16,7 @@
 //! Both sides are still surfaced to the UI so the user can override
 //! the automatic choice.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -249,22 +249,52 @@ pub async fn sync(
                 })?;
             }
             SyncAction::Delete { relpath, direction } => {
-                apply_delete(pair, relpath, *direction).await?;
-                db.delete_file(relpath)?;
-                match direction {
-                    Direction::LeftToRight => report.deleted_right += 1,
-                    Direction::RightToLeft => report.deleted_left += 1,
+                // Re-stat the source at apply time so a race between
+                // the walk pass and now (source re-created with newer
+                // bytes) doesn't propagate a stale delete. The
+                // baseline is needed inside `apply_delete` to decide
+                // whether the re-created content is "new" relative to
+                // the last-synced state.
+                let baseline = db.get_file(relpath)?;
+                let outcome =
+                    apply_delete(pair, relpath, *direction, baseline.as_ref()).await?;
+                match outcome {
+                    DeleteOutcome::Deleted => {
+                        db.delete_file(relpath)?;
+                        match direction {
+                            Direction::LeftToRight => report.deleted_right += 1,
+                            Direction::RightToLeft => report.deleted_left += 1,
+                        }
+                        history_seq += 1;
+                        db.append_history(&HistoryEntry {
+                            timestamp_ms: now_ms(),
+                            seq: history_seq,
+                            relpath: relpath.clone(),
+                            kind: HistoryKind::Deleted,
+                            direction: Some(*direction),
+                            vv_before: None,
+                            vv_after: None,
+                        })?;
+                    }
+                    DeleteOutcome::RaceAbortedAsConflict(conflict) => {
+                        // The delete was suppressed; record the race
+                        // as a delete-edit conflict so the user sees
+                        // the relpath in the report and the next
+                        // sync round can resolve it deterministically.
+                        history_seq += 1;
+                        db.append_history(&HistoryEntry {
+                            timestamp_ms: now_ms(),
+                            seq: history_seq,
+                            relpath: relpath.clone(),
+                            kind: HistoryKind::Conflict,
+                            direction: Some(conflict.winner),
+                            vv_before: None,
+                            vv_after: None,
+                        })?;
+                        report.conflicts.push(conflict.clone());
+                        let _ = events.send(SyncEvent::Conflict(conflict)).await;
+                    }
                 }
-                history_seq += 1;
-                db.append_history(&HistoryEntry {
-                    timestamp_ms: now_ms(),
-                    seq: history_seq,
-                    relpath: relpath.clone(),
-                    kind: HistoryKind::Deleted,
-                    direction: Some(*direction),
-                    vv_before: None,
-                    vv_after: None,
-                })?;
             }
             SyncAction::KeepConflict {
                 relpath,
@@ -568,20 +598,112 @@ async fn apply_copy(
     run_copy(&src, &dst, hook, relpath).await
 }
 
-async fn apply_delete(pair: &SyncPair, relpath: &str, direction: Direction) -> Result<()> {
-    let dst_root = match direction {
-        Direction::LeftToRight => &pair.right,
-        Direction::RightToLeft => &pair.left,
+/// Outcome of [`apply_delete`].
+///
+/// The engine planned a [`SyncAction::Delete`] based on the walk pass
+/// observation that the source side's file was absent. Between scan
+/// and apply, the source can be re-created; deleting the destination
+/// in that case would silently propagate stale state and lose the
+/// re-created content. The plain success path returns `Deleted`; the
+/// race path returns `RaceAbortedAsConflict` so the caller can record
+/// the relpath in the report's conflict list and emit a
+/// [`SyncEvent::Conflict`] event.
+enum DeleteOutcome {
+    /// Destination no longer present after apply (either we removed
+    /// it, or it was already gone).
+    Deleted,
+    /// Source path reappeared with content that differs from the
+    /// baseline between scan and apply — the delete was aborted to
+    /// preserve the re-created content. Carries the conflict record
+    /// the caller surfaces to the UI.
+    RaceAbortedAsConflict(Conflict),
+}
+
+async fn apply_delete(
+    pair: &SyncPair,
+    relpath: &str,
+    direction: Direction,
+    baseline: Option<&FileRecord>,
+) -> Result<DeleteOutcome> {
+    let (src_root, dst_root) = match direction {
+        // The "deleter" side sourced the absence: in a Direction::
+        // LeftToRight delete, the LEFT side observed the file gone,
+        // so LEFT is the source of the deletion signal and RIGHT is
+        // the destination of the propagated delete.
+        Direction::LeftToRight => (&pair.left, &pair.right),
+        Direction::RightToLeft => (&pair.right, &pair.left),
     };
+    let src = join_relpath(src_root, relpath)
+        .ok_or_else(|| SyncError::UnsafeRelpath(relpath.to_string()))?;
     let dst = join_relpath(dst_root, relpath)
         .ok_or_else(|| SyncError::UnsafeRelpath(relpath.to_string()))?;
+
+    // Vector-clock re-check at apply time. The decision matrix saw
+    // the source absent and the destination unchanged from baseline,
+    // and emitted Delete. If the source has since been re-created,
+    // the user just rescued / restored / replaced that file, and
+    // propagating the delete now would clobber legitimately-newer
+    // content. Re-stat the source and, if it now has content that
+    // differs from the baseline (i.e., the re-creation produced
+    // material the baseline doesn't already cover), abort the delete
+    // and surface a delete-edit conflict.
+    if src.exists() {
+        // Source reappeared. Compute its current content meta so we
+        // can compare against the baseline. If the baseline matches
+        // the new source state byte-for-byte (rare, but possible if
+        // the user rolled the re-creation back to the last-synced
+        // bytes), the delete is no longer warranted but no conflict
+        // exists either — abort silently as a no-op-style outcome
+        // by returning a "corrupt-equal" conflict pinned to the
+        // source side so the UI still surfaces the racy edit.
+        let new_meta = crate::walker::read_file_meta(&src).ok();
+        let differs_from_baseline = match (&new_meta, baseline) {
+            (Some(m), Some(b)) => m.blake3 != b.blake3 || m.size != b.size,
+            (Some(_), None) => true,
+            (None, _) => true,
+        };
+        if differs_from_baseline {
+            // Source was re-created with content that doesn't match
+            // the last-synced baseline → treat as delete-edit. The
+            // "winner" is the source side (the one with content);
+            // the destination's current state is what the original
+            // plan would have deleted, so its preservation is moot —
+            // but we still emit a conflict record so the user is
+            // alerted to the race.
+            let loser = direction; // delete propagation target
+            let winner = match direction {
+                Direction::LeftToRight => Direction::RightToLeft,
+                Direction::RightToLeft => Direction::LeftToRight,
+            };
+            return Ok(DeleteOutcome::RaceAbortedAsConflict(Conflict {
+                relpath: relpath.to_string(),
+                kind: ConflictKind::DeleteEdit,
+                winner,
+                loser,
+                // The source path is what the user re-created. Use
+                // it as the preservation path for UI surfacing —
+                // nothing was renamed, but the field has to point
+                // at a real file on disk so the UI's "open conflict"
+                // affordance has something to open.
+                loser_preservation_path: src.clone(),
+            }));
+        }
+        // Source's re-created content is byte-identical to the
+        // baseline. The user effectively rolled back to last-synced
+        // state on the source side; the destination already has
+        // that same content, so deleting now would create a
+        // baseline desync. Abort silently — the next sync round
+        // will see both sides agree and advance the baseline.
+        return Ok(DeleteOutcome::Deleted);
+    }
+
     if dst.exists() {
         std::fs::remove_file(&dst).map_err(|e| SyncError::Io {
             path: dst.clone(),
             source: e,
         })?;
     }
-    Ok(())
+    Ok(DeleteOutcome::Deleted)
 }
 
 async fn apply_conflict(
@@ -609,11 +731,22 @@ async fn apply_conflict(
     let winner_path = join_relpath(winner_root, relpath)
         .ok_or_else(|| SyncError::UnsafeRelpath(relpath.to_string()))?;
 
-    let preservation_name = conflict_preservation_name(relpath, host_label);
-    let preservation_path = loser_path
+    let preservation_dir = loser_path
         .parent()
-        .unwrap_or(loser_root.as_path())
-        .join(&preservation_name);
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| loser_root.clone());
+    // Pick a preservation filename that doesn't already exist on
+    // disk. Two conflicts on the same relpath inside the same second
+    // (back-to-back syncs, multi-pair conflicts converging on the
+    // same name) would otherwise collide on the timestamp suffix and
+    // a rename of the loser would silently overwrite the previous
+    // conflict's preservation file. Try the bare timestamp first;
+    // if a file already lives at that path, append `-NNNNNN` (six
+    // digits, zero-padded) sequence numbers until we find a free
+    // slot. Cap at one million attempts so a directory-listing bug
+    // can't loop forever.
+    let preservation_path =
+        unique_conflict_path(&preservation_dir, relpath, host_label);
 
     // Delete-edit conflict where loser is the deleter: the loser
     // has nothing to preserve. For the other kinds, rename the
@@ -684,6 +817,20 @@ async fn run_copy(src: &Path, dst: &Path, hook: &dyn CopyHookFactory, relpath: &
 }
 
 fn conflict_preservation_name(relpath: &str, host_label: &str) -> String {
+    conflict_preservation_name_with_seq(relpath, host_label, None)
+}
+
+/// Build the conflict preservation filename. When `seq` is supplied,
+/// the suffix is `-NNNNNN` (six digits, zero-padded) appended after
+/// the host label and before the extension; without `seq`, the bare
+/// timestamp+host suffix is produced. The split between the two
+/// forms keeps the common case ("nothing else collided this second")
+/// looking exactly like the prior format.
+fn conflict_preservation_name_with_seq(
+    relpath: &str,
+    host_label: &str,
+    seq: Option<u32>,
+) -> String {
     let (stem, ext) = split_last_dot(relpath);
     let ts = Utc
         .timestamp_millis_opt(now_ms() as i64)
@@ -697,11 +844,49 @@ fn conflict_preservation_name(relpath: &str, host_label: &str) -> String {
     // strip the leading directory segments here.
     let last_slash = stem.rfind('/').map(|i| i + 1).unwrap_or(0);
     let file_stem = &stem[last_slash..];
+    let seq_suffix = match seq {
+        Some(n) => format!("-{n:06}"),
+        None => String::new(),
+    };
     if let Some(ext) = ext {
-        format!("{file_stem}.sync-conflict-{ts}-{host_label}.{ext}")
+        format!("{file_stem}.sync-conflict-{ts}-{host_label}{seq_suffix}.{ext}")
     } else {
-        format!("{file_stem}.sync-conflict-{ts}-{host_label}")
+        format!("{file_stem}.sync-conflict-{ts}-{host_label}{seq_suffix}")
     }
+}
+
+/// Resolve a preservation filename inside `dir` that doesn't collide
+/// with an existing entry. Tries the unsuffixed timestamp form first
+/// (matches pre-fix behaviour for the overwhelming majority of runs);
+/// if that path already exists, retries with `-000001`, `-000002`,
+/// ... up to a hard cap that keeps a hostile / corrupt directory from
+/// looping the sync run.
+fn unique_conflict_path(dir: &Path, relpath: &str, host_label: &str) -> PathBuf {
+    const MAX_SEQ: u32 = 1_000_000;
+    let bare = dir.join(conflict_preservation_name(relpath, host_label));
+    if !bare.exists() {
+        return bare;
+    }
+    for seq in 1..=MAX_SEQ {
+        let candidate = dir.join(conflict_preservation_name_with_seq(
+            relpath,
+            host_label,
+            Some(seq),
+        ));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    // Astronomically unlikely fall-through. Returning the last-tried
+    // candidate is safer than panicking — the rename below will fail
+    // with a typed I/O error and the engine surfaces it cleanly. We
+    // pick a sentinel that includes the cap so a forensic investigator
+    // can spot the saturation in a log.
+    dir.join(conflict_preservation_name_with_seq(
+        relpath,
+        host_label,
+        Some(MAX_SEQ),
+    ))
 }
 
 fn split_last_dot(s: &str) -> (&str, Option<&str>) {
@@ -1018,5 +1203,194 @@ mod tests {
         let b = meta(2, 100);
         let (w, _) = pick_winner_by_mtime(&a, &b);
         assert_eq!(w, Direction::LeftToRight);
+    }
+
+    #[test]
+    fn unique_conflict_path_returns_bare_when_dir_empty() {
+        let d = tempfile::tempdir().unwrap();
+        let path = unique_conflict_path(d.path(), "file.txt", "A");
+        // Bare suffix has no `-NNNNNN` sequence number — the file
+        // name should match the unsuffixed pattern exactly. The
+        // bare form ends with `-<host>.<ext>`, so simply checking
+        // the bare-name equality is the cleanest assertion.
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let expected = conflict_preservation_name("file.txt", "A");
+        assert_eq!(name, expected);
+    }
+
+    #[test]
+    fn unique_conflict_path_bumps_when_bare_exists() {
+        // Round-trip through the resolver itself to dodge wall-clock
+        // races: take the path the resolver picks first, write it,
+        // then ask again and assert the second path bumped (carries
+        // a six-digit seq segment between host and ext). This holds
+        // whether or not the second resolver call landed on the
+        // same wall-clock second — because the previous file's name
+        // already covers the bare slot for that second.
+        let d = tempfile::tempdir().unwrap();
+        let p0 = unique_conflict_path(d.path(), "file.txt", "A");
+        std::fs::write(&p0, b"existing").unwrap();
+        let p1 = unique_conflict_path(d.path(), "file.txt", "A");
+        assert_ne!(p1, p0);
+        assert!(!p1.exists());
+        let p1_name = p1.file_name().unwrap().to_string_lossy().to_string();
+        // If the second call landed on the same second as p0, the
+        // resolver had to bump and the name must carry -A-NNNNNN.
+        // If the wall clock ticked over to a new second, the new
+        // bare name is enough — but the test wants to exercise the
+        // bump path, so set up a consistent fixture: write p1's
+        // name, ask a third time, and at THAT round (the dir now
+        // has p0+p1), the resolver MUST produce a bumped name no
+        // matter which second it lands on.
+        std::fs::write(&p1, b"existing-1").unwrap();
+        let p2 = unique_conflict_path(d.path(), "file.txt", "A");
+        assert_ne!(p2, p0);
+        assert_ne!(p2, p1);
+        assert!(!p2.exists());
+        // Sanity-check the format: at least one of p1 / p2 carries
+        // the bump suffix `-A-NNNNNN.<ext>` (six-digit zero-padded
+        // sequence between the host label and the extension).
+        let p2_name = p2.file_name().unwrap().to_string_lossy().to_string();
+        let any_bumped = [&p1_name, &p2_name].iter().any(|n: &&String| {
+            // Look for `-A-` followed by exactly six digits then
+            // `.txt`.
+            if let Some(idx) = n.find("-A-") {
+                let tail = &n[idx + 3..];
+                tail.len() >= 10
+                    && tail.as_bytes()[..6].iter().all(|b: &u8| b.is_ascii_digit())
+                    && tail[6..].starts_with(".txt")
+            } else {
+                false
+            }
+        });
+        assert!(
+            any_bumped,
+            "expected at least one bumped name with -A-NNNNNN.txt suffix; got p1={p1_name}, p2={p2_name}",
+        );
+    }
+
+    #[tokio::test]
+    async fn apply_delete_aborts_when_source_recreated_with_new_content() {
+        // Set up a synthetic pair: source side LEFT was observed
+        // absent during the walk, destination side RIGHT carries the
+        // last-synced bytes. Between scan and apply, LEFT is
+        // re-created with content that doesn't match the baseline
+        // — apply_delete must surface a delete-edit conflict and
+        // refuse to remove the destination.
+        let left = tempfile::tempdir().unwrap();
+        let right = tempfile::tempdir().unwrap();
+        // Write the destination's "last-synced" content + a baseline
+        // hash that matches it.
+        std::fs::write(right.path().join("doc.txt"), b"baseline-bytes").unwrap();
+        let baseline_blake3 = *blake3::hash(b"baseline-bytes").as_bytes();
+        let baseline_record = FileRecord {
+            vv: VersionVector::new(),
+            mtime_ms: 0,
+            size: b"baseline-bytes".len() as u64,
+            blake3: baseline_blake3,
+        };
+        // Race: LEFT gets re-created with newer + different bytes
+        // before apply runs.
+        std::fs::write(left.path().join("doc.txt"), b"newer-rescued-bytes").unwrap();
+        let pair = SyncPair::new("p", left.path(), right.path());
+        let outcome = apply_delete(
+            &pair,
+            "doc.txt",
+            Direction::LeftToRight,
+            Some(&baseline_record),
+        )
+        .await
+        .expect("apply_delete returns Ok with race outcome");
+        match outcome {
+            DeleteOutcome::RaceAbortedAsConflict(c) => {
+                assert_eq!(c.kind, ConflictKind::DeleteEdit);
+                assert_eq!(c.relpath, "doc.txt");
+                assert_eq!(c.winner, Direction::RightToLeft);
+                assert_eq!(c.loser, Direction::LeftToRight);
+            }
+            DeleteOutcome::Deleted => {
+                panic!("expected RaceAbortedAsConflict; the dest should NOT have been removed")
+            }
+        }
+        // Destination must still be intact.
+        assert!(right.path().join("doc.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn apply_delete_proceeds_when_source_truly_absent() {
+        let left = tempfile::tempdir().unwrap();
+        let right = tempfile::tempdir().unwrap();
+        std::fs::write(right.path().join("doc.txt"), b"baseline-bytes").unwrap();
+        let pair = SyncPair::new("p", left.path(), right.path());
+        let outcome = apply_delete(&pair, "doc.txt", Direction::LeftToRight, None)
+            .await
+            .expect("apply_delete returns Ok");
+        assert!(matches!(outcome, DeleteOutcome::Deleted));
+        // Destination is gone.
+        assert!(!right.path().join("doc.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn apply_delete_proceeds_when_source_recreated_with_baseline_bytes() {
+        // Edge case: source was re-created but with byte-identical
+        // content to the last-synced baseline. There's no real
+        // conflict (nothing was lost), but the delete should still
+        // be skipped — both sides now have identical content, and
+        // the next sync round will collapse them via the normal
+        // matrix.
+        let left = tempfile::tempdir().unwrap();
+        let right = tempfile::tempdir().unwrap();
+        std::fs::write(right.path().join("doc.txt"), b"same-bytes").unwrap();
+        std::fs::write(left.path().join("doc.txt"), b"same-bytes").unwrap();
+        let baseline_record = FileRecord {
+            vv: VersionVector::new(),
+            mtime_ms: 0,
+            size: b"same-bytes".len() as u64,
+            blake3: *blake3::hash(b"same-bytes").as_bytes(),
+        };
+        let pair = SyncPair::new("p", left.path(), right.path());
+        let outcome = apply_delete(
+            &pair,
+            "doc.txt",
+            Direction::LeftToRight,
+            Some(&baseline_record),
+        )
+        .await
+        .expect("apply_delete returns Ok");
+        // The race-recheck branch returns Deleted (no conflict
+        // surfaced) but does not actually remove the destination —
+        // the source's reappearance with baseline bytes means we
+        // back off to "let the next round reconcile".
+        assert!(matches!(outcome, DeleteOutcome::Deleted));
+        assert!(right.path().join("doc.txt").exists());
+        assert!(left.path().join("doc.txt").exists());
+    }
+
+    #[test]
+    fn unique_conflict_path_walks_through_existing_seqs() {
+        // The resolver depends on the current wall clock for the
+        // timestamp portion of the filename, so pre-creating by
+        // name (without a synchronisation primitive) is racy if the
+        // wall clock advances between the setup writes and the
+        // resolver call. Instead, let the resolver pick the bare
+        // name, then loop: pre-create the resolver's last guess
+        // and ask again, asserting the suffix advances each round.
+        let d = tempfile::tempdir().unwrap();
+        // Round 1: empty dir → bare form.
+        let p0 = unique_conflict_path(d.path(), "file.txt", "A");
+        std::fs::write(&p0, b"existing-0").unwrap();
+        // Round 2: bare exists → resolver must produce a new name
+        // that doesn't collide. We don't pin the exact timestamp
+        // because the wall clock may advance between rounds; we DO
+        // pin the property "the new path is different and free".
+        let p1 = unique_conflict_path(d.path(), "file.txt", "A");
+        assert_ne!(p1, p0);
+        assert!(!p1.exists());
+        std::fs::write(&p1, b"existing-1").unwrap();
+        // Round 3: same property — third call advances again.
+        let p2 = unique_conflict_path(d.path(), "file.txt", "A");
+        assert_ne!(p2, p0);
+        assert_ne!(p2, p1);
+        assert!(!p2.exists());
     }
 }

@@ -1,6 +1,6 @@
-app-name = Copy That v1.25.0
+app-name = Copy That v1.0.0
 # MT
-window-title = Copy That v1.25.0
+window-title = Copy That v1.0.0
 # MT
 shred-ssd-advisory = تحذير: هذا الهدف موجود على قرص SSD. لا توفر عمليات الكتابة المتعددة تطهيرًا موثوقًا لذاكرة الفلاش لأن موازنة التآكل والتخصيص الإضافي ينقلان البيانات بعيدًا عن عنوان الكتلة المنطقي. بالنسبة لوسائط الحالة الصلبة، يُفضَّل استخدام ATA SECURE ERASE أو NVMe Format مع المحو الآمن أو التشفير الكامل للقرص مع التخلص من المفتاح.
 
@@ -1172,3 +1172,9 @@ dedup-badge-reflinked = ⚡ Reflinked  # MT
 dedup-badge-hardlinked = 🔗 Hardlinked  # MT
 dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
 dedup-badge-copied = 📋 Copied  # MT
+phase42-paranoid-verify-label = التحقق المُتشكِّك
+phase42-paranoid-verify-hint = يُسقط الصفحات المخزنة مؤقتًا للوجهة ويُعيد القراءة من القرص لاكتشاف كذب ذاكرة التخزين المؤقت للكتابة والتلف الصامت. أبطأ بنحو 50٪ من التحقق الافتراضي؛ معطل افتراضيًا.
+phase42-sharing-violation-retries-label = محاولات إعادة المحاولة على ملفات المصدر المقفلة
+phase42-sharing-violation-retries-hint = عدد مرات إعادة المحاولة عندما تُبقي عملية أخرى ملف المصدر مفتوحًا بقفل حصري. يتضاعف وقت الانتظار في كل محاولة (50 ms / 100 ms / 200 ms افتراضيًا). الافتراضي: 3، بما يطابق Robocopy /R:3.
+phase42-cloud-placeholder-warning = { $name } هو ملف OneDrive سحابي فقط. سيؤدي نسخه إلى تشغيل تنزيل — يصل إلى { $size } عبر اتصال الشبكة الخاص بك.
+phase42-defender-exclusion-hint = للحصول على أقصى إنتاجية للنسخ، أضف مجلد الوجهة إلى استثناءات Microsoft Defender قبل عمليات النقل الجماعية. راجع docs/PERFORMANCE_TUNING.md.

@@ -1,4 +1,4 @@
-//! Copy That v1.25.0 — Tauri 2.x application shell.
+//! Copy That v1.0.0 — Tauri 2.x application shell.
 //!
 //! The Rust side wires the Phase 1–4 engines to the Svelte frontend:
 //!
@@ -45,6 +45,8 @@ pub mod global_paste;
 pub mod i18n;
 pub mod icon;
 #[cfg(windows)]
+pub mod broker_auth;
+#[cfg(windows)]
 pub mod instance_broker;
 pub mod ipc;
 pub mod ipc_safety;
@@ -52,6 +54,7 @@ pub mod live_mirror;
 pub mod mobile_commands;
 pub mod mount_commands;
 pub mod power;
+pub mod progress_channel;
 pub mod reveal;
 pub mod runner;
 pub mod scan_commands;
@@ -72,6 +75,13 @@ use crate::state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Wave-2 observability — install a default tracing subscriber so
+    // structured `tracing::warn!` / `info!` / `debug!` calls from the
+    // platform + core engines + runner land on stderr instead of being
+    // silently dropped. Filter is `COPYTHAT_LOG`-controlled (defaults
+    // to `info`); a try-init keeps a future audit-side reconfiguration
+    // (Phase 34's `AuditLayer`) from panicking on a double-set.
+    init_tracing_subscriber();
     let argv: Vec<std::ffi::OsString> = std::env::args_os().collect();
     let action = cli::parse_args(argv).unwrap_or_else(|err| {
         // Flag errors print the reason + the usage block and launch
@@ -282,6 +292,10 @@ pub fn run() {
             commands::pause_all,
             commands::resume_all,
             commands::cancel_all,
+            // Phase 42 / Gap #14 — Tauri 2.0 Channel<T> opt-in for
+            // hot-path progress. Frontend stays on `listen` until a
+            // future phase migrates it.
+            commands::register_progress_channel,
             commands::list_jobs,
             commands::globals,
             commands::file_icon,
@@ -429,7 +443,7 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "tray-quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &dropstack, &quit])?;
             let _tray = TrayIconBuilder::with_id("copythat-main-tray")
-                .tooltip("Copy That v1.25.0")
+                .tooltip("Copy That v1.0.0")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -549,6 +563,13 @@ pub fn run() {
                 // `spawn_poller` calls bare `tokio::spawn` inside; we
                 // need to enter Tauri's tokio context first. See the
                 // shell.rs:89 comment about the setup-hook path.
+                //
+                // `clippy::async_yields_async`: yielding the
+                // `JoinHandle` is the entire point — we keep it in
+                // `_poller` so the runtime keeps the task alive.
+                // Awaiting here would block until the poller exits,
+                // which never happens during normal app run.
+                #[allow(clippy::async_yields_async)]
                 let _poller = tauri::async_runtime::block_on(async {
                     app_state
                         .power_bus
@@ -595,7 +616,24 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running Copy That v1.25.0");
+        .expect("error while running Copy That v1.0.0");
+}
+
+/// Wave-2 observability — install the process-wide tracing
+/// subscriber once. Honours `COPYTHAT_LOG` (e.g. `COPYTHAT_LOG=debug`,
+/// `COPYTHAT_LOG=copythat_core=trace,info`) and falls back to `info`
+/// when unset. Uses `try_init` so re-entry (tests that call `run()`
+/// multiple times, future audit-side overrides) doesn't panic.
+fn init_tracing_subscriber() {
+    use tracing_subscriber::EnvFilter;
+
+    let filter = EnvFilter::try_from_env("COPYTHAT_LOG")
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .with_target(true)
+        .try_init();
 }
 
 /// Phase 16 — restore the main window from the tray. `show` +

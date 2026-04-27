@@ -95,6 +95,18 @@ pub fn add_backend(
     if name_trim.is_empty() {
         return Err("backend name is required".into());
     }
+    // Reject `Some("")` at the IPC boundary. The caller is expected to
+    // pass `None` when the user has not supplied a secret; an explicit
+    // empty string is almost certainly a wizard bug (uninitialised
+    // form field) and would otherwise either get written to the
+    // keychain as a zero-length value (some OSes accept it) or be
+    // silently skipped further down (`if !s.is_empty()`), neither of
+    // which is what the user asked for.
+    if let Some(ref s) = secret
+        && s.is_empty()
+    {
+        return Err("err-empty-secret".into());
+    }
 
     let entry = dto_to_entry(&dto).ok_or_else(|| "invalid backend config".to_string())?;
     let backend = entry_to_cloud_backend(&entry).map_err(|e| e.to_string())?;
@@ -137,6 +149,16 @@ pub fn update_backend(
     secret: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<BackendDto, String> {
+    // Mirror `add_backend`: `Some("")` is a wizard bug, never the
+    // user's intent. `None` (don't rotate the keychain entry) is
+    // still the legitimate "edit config without changing the secret"
+    // path the doc-comment above describes.
+    if let Some(ref s) = secret
+        && s.is_empty()
+    {
+        return Err("err-empty-secret".into());
+    }
+
     let entry = dto_to_entry(&dto).ok_or_else(|| "invalid backend config".to_string())?;
     let backend = entry_to_cloud_backend(&entry).map_err(|e| e.to_string())?;
 
@@ -199,7 +221,7 @@ pub fn remove_backend(name: String, state: tauri::State<'_, AppState>) -> Result
 /// Test a configured backend by building an
 /// [`copythat_cloud::opendal::Operator`] + issuing a `stat("/")`.
 /// Returns a DTO the frontend renders as "Connection successful" /
-/// "Connection failed — <reason>". The outer `Result` is always
+/// "Connection failed — `<reason>`". The outer `Result` is always
 /// `Ok` — failures are reported in-band via `TestConnectionResult`
 /// so the UI can render a localized reason. Tauri's async-command
 /// harness requires a `Result` return when `tauri::State<'_, _>` is
@@ -523,6 +545,12 @@ fn dto_to_entry(dto: &BackendDto) -> Option<BackendConfigEntry> {
                 port: if c.port == 0 { 21 } else { c.port },
                 username: c.username.clone(),
                 root: c.root.clone(),
+                // The wizard DTO does not yet surface
+                // `ca_bundle_path`; persisted entries that the
+                // user hand-edits in TOML round-trip via the
+                // settings layer. A future Settings panel can
+                // wire this through the DTO.
+                ca_bundle_path: None,
             });
         }
     }
@@ -668,6 +696,7 @@ fn entry_to_cloud_backend(
                 port: c.port,
                 username: c.username,
                 root: c.root,
+                ca_bundle_path: c.ca_bundle_path.clone(),
             })
         }
     };

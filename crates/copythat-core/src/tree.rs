@@ -1106,7 +1106,7 @@ fn enumerate_streaming(
     const CHUNK_SIZE: usize = 100_000;
     const PROGRESS_EMIT_EVERY: u64 = 500;
 
-    eprintln!("[tree::enumerate_streaming] begin root={}", root.display());
+    tracing::debug!(root = %root.display(), "tree::enumerate_streaming begin");
 
     let mut current = Plan::default();
     let mut total_files: u64 = 0;
@@ -1207,9 +1207,9 @@ fn enumerate_streaming(
             if chunk_tx.blocking_send(ready).is_err() {
                 // Receiver dropped — dispatcher cancelled mid-walk.
                 // Stop walking; the dispatcher handles teardown.
-                eprintln!(
-                    "[tree::enumerate_streaming] receiver dropped after {} chunks; stopping",
-                    chunks_sent
+                tracing::warn!(
+                    chunks_sent,
+                    "tree::enumerate_streaming receiver dropped; stopping walk"
                 );
                 return Ok(());
             }
@@ -1232,9 +1232,13 @@ fn enumerate_streaming(
     // will see `None` from `recv()` and exit its loop cleanly.
     drop(chunk_tx);
 
-    eprintln!(
-        "[tree::enumerate_streaming] done total_files={} total_bytes={} chunks={} skipped_denied={} skipped_by_filter={}",
-        total_files, total_bytes, chunks_sent, skipped_denied, skipped_by_filter
+    tracing::debug!(
+        total_files,
+        total_bytes,
+        chunks = chunks_sent,
+        skipped_denied,
+        skipped_by_filter,
+        "tree::enumerate_streaming done"
     );
     Ok(())
 }

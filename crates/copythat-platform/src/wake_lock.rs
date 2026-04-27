@@ -179,8 +179,22 @@ mod backend_macos {
 
     impl Drop for Inner {
         fn drop(&mut self) {
-            unsafe {
-                IOPMAssertionRelease(self.id);
+            // Capture the return code: if IOKit refuses to release the
+            // assertion the wake-lock persists silently, which on macOS
+            // means the laptop stays awake until reboot. Not a security
+            // risk, but a UX one — surface it loudly so someone can
+            // notice. Drop must not panic, so log + drop the error.
+            // SAFETY: `self.id` was returned by a successful
+            // `IOPMAssertionCreateWithName`; the only way it would be
+            // invalid is if a previous Drop already ran, which can't
+            // happen because Drop runs at most once per value.
+            let rc = unsafe { IOPMAssertionRelease(self.id) };
+            if rc != K_IO_RETURN_SUCCESS {
+                eprintln!(
+                    "copythat-platform: IOPMAssertionRelease returned {rc} for assertion id {} \
+                     — wake-lock may persist; the system could stay awake until reboot",
+                    self.id
+                );
             }
         }
     }

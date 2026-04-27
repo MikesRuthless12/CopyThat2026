@@ -41,6 +41,11 @@ pub(crate) async fn try_native_copy(
     total: u64,
     ctrl: CopyControl,
     events: mpsc::Sender<CopyEvent>,
+    // Phase 43 — accepted for API parity with the Windows path.
+    // Linux's `sendfile`/`copy_file_range` paths don't take a per-chunk
+    // callback so this is a no-op here. Threading it through keeps the
+    // dispatcher's invocation site uniform across platforms.
+    _disable_callback: bool,
 ) -> NativeOutcome {
     super::emit_started(&src, &dst, total, &events).await;
 

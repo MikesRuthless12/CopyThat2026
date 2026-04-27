@@ -27,6 +27,7 @@ pub struct ScanControl {
 }
 
 impl ScanControl {
+    /// Create a fresh handle in the running (not paused, not cancelled) state.
     pub fn new() -> Self {
         Self {
             shared: Arc::new(Shared {
@@ -62,10 +63,12 @@ impl ScanControl {
         self.shared.notify.notify_waiters();
     }
 
+    /// `true` while a [`pause`](Self::pause) request is in effect.
     pub fn is_paused(&self) -> bool {
         self.shared.flag.load(Ordering::Acquire) == PAUSED
     }
 
+    /// `true` once [`cancel`](Self::cancel) has been called. Terminal.
     pub fn is_cancelled(&self) -> bool {
         self.shared.flag.load(Ordering::Acquire) == CANCELLED
     }

@@ -1,6 +1,6 @@
 [package]
 name = "copythat-power"
-description = "Power-aware copying: battery / metered-network / presentation / fullscreen / thermal probes and policy engine for Copy That v1.25.0."
+description = "Power-aware copying: battery / metered-network / presentation / fullscreen / thermal probes and policy engine for Copy That v1.0.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

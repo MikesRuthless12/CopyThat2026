@@ -51,7 +51,7 @@ pub const EVENT_ERROR_RESOLVED: &str = "error-resolved";
 /// Phase 8 — mirror of [`EVENT_ERROR_RESOLVED`] for collisions.
 pub const EVENT_COLLISION_RESOLVED: &str = "collision-resolved";
 /// Phase 22 — a collision was resolved by the runner against the
-/// active [`ConflictProfile`] without ever showing a prompt to the
+/// active `ConflictProfile` without ever showing a prompt to the
 /// user. Emitted alongside the usual engine-side resolution so the
 /// aggregate dialog renders "via rule '*.docx → newer'" rows.
 pub const EVENT_COLLISION_AUTO_RESOLVED: &str = "collision-auto-resolved";
@@ -1152,6 +1152,24 @@ pub struct TransferDto {
     /// Phase 38 — pre-pass dedup scan opt-in.
     #[serde(default)]
     pub dedup_prescan: bool,
+    /// Phase 42 — re-hash the destination after the byte copy
+    /// completes (in addition to the streaming verify) so a silent
+    /// disk corruption between write + close is caught before the
+    /// job is marked successful. Defaults to `false`; older
+    /// frontends that omit the key fall through serde-default.
+    #[serde(default)]
+    pub paranoid_verify: bool,
+    /// Phase 42 — number of times the engine retries a source-open
+    /// that returns a sharing-violation before surfacing to the
+    /// `on_locked` policy. Default mirrors
+    /// `defaults::default_sharing_violation_retries()` (3).
+    #[serde(default = "default_sharing_violation_retries")]
+    pub sharing_violation_retries: u32,
+    /// Phase 42 — base delay (ms) for the exponential backoff
+    /// between sharing-violation retries. Default mirrors
+    /// `defaults::default_sharing_violation_base_delay_ms()` (50).
+    #[serde(default = "default_sharing_violation_base_delay_ms")]
+    pub sharing_violation_base_delay_ms: u64,
 }
 
 fn default_dedup_mode() -> String {
@@ -1160,6 +1178,14 @@ fn default_dedup_mode() -> String {
 
 fn default_dedup_hardlink_policy() -> String {
     "read-only-only".into()
+}
+
+fn default_sharing_violation_retries() -> u32 {
+    copythat_settings::defaults::default_sharing_violation_retries()
+}
+
+fn default_sharing_violation_base_delay_ms() -> u64 {
+    copythat_settings::defaults::default_sharing_violation_base_delay_ms()
 }
 
 fn default_true() -> bool {
@@ -1344,7 +1370,7 @@ pub struct PendingResumeDto {
 
 /// Phase 19b — `snapshot-created` payload. Emitted when the engine
 /// falls through to a filesystem snapshot because the live source was
-/// locked. The frontend renders a "📷 Reading from <kind> snapshot"
+/// locked. The frontend renders a "📷 Reading from `<kind>` snapshot"
 /// badge on the active row until the file finishes.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1631,6 +1657,9 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 dedup_mode: s.transfer.dedup_mode.clone(),
                 dedup_hardlink_policy: s.transfer.dedup_hardlink_policy.clone(),
                 dedup_prescan: s.transfer.dedup_prescan,
+                paranoid_verify: s.transfer.paranoid_verify,
+                sharing_violation_retries: s.transfer.sharing_violation_retries,
+                sharing_violation_base_delay_ms: s.transfer.sharing_violation_base_delay_ms,
             },
             shell: ShellDto {
                 context_menu_enabled: s.shell.context_menu_enabled,
@@ -1834,6 +1863,9 @@ impl SettingsDto {
         s.transfer.dedup_mode = self.transfer.dedup_mode;
         s.transfer.dedup_hardlink_policy = self.transfer.dedup_hardlink_policy;
         s.transfer.dedup_prescan = self.transfer.dedup_prescan;
+        s.transfer.paranoid_verify = self.transfer.paranoid_verify;
+        s.transfer.sharing_violation_retries = self.transfer.sharing_violation_retries;
+        s.transfer.sharing_violation_base_delay_ms = self.transfer.sharing_violation_base_delay_ms;
 
         s.shell.context_menu_enabled = self.shell.context_menu_enabled;
         s.shell.intercept_default_copy = self.shell.intercept_default_copy;

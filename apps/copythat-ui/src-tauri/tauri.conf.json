@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Copy That v1.25.0",
-  "version": "1.25.0",
+  "productName": "Copy That v1.0.0",
+  "version": "1.0.0",
   "identifier": "com.copythat.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Copy That v1.25.0",
+        "title": "Copy That v1.0.0",
         "width": 1120,
         "height": 640,
         "minWidth": 960,
@@ -33,7 +33,7 @@
     "createUpdaterArtifacts": false,
     "category": "Utility",
     "shortDescription": "Byte-exact cross-platform file copier.",
-    "longDescription": "Copy That v1.25.0 is a lightweight, cross-platform, async, byte-exact file and folder copier. Matches every TeraCopy feature while staying as fast as — or faster than — Explorer, Finder, cp, and rsync for typical desktop workloads.",
+    "longDescription": "Copy That v1.0.0 is a lightweight, cross-platform, async, byte-exact file and folder copier. Matches every TeraCopy feature while staying as fast as — or faster than — Explorer, Finder, cp, and rsync for typical desktop workloads.",
     "homepage": "https://github.com/MikesRuthless12/CopyThat2026",
     "publisher": "Copy That Contributors",
     "copyright": "Copyright (C) 2026 Copy That Contributors",

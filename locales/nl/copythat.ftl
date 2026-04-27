@@ -1,6 +1,6 @@
-app-name = Copy That v1.25.0
+app-name = Copy That v1.0.0
 # MT
-window-title = Copy That v1.25.0
+window-title = Copy That v1.0.0
 # MT
 shred-ssd-advisory = Waarschuwing: dit doel staat op een SSD. Meervoudig overschrijven saneert flashgeheugen niet betrouwbaar, omdat wear-leveling en overprovisioning gegevens buiten het logische blokadres verplaatsen. Gebruik bij solid-state media bij voorkeur ATA SECURE ERASE, NVMe Format met Secure Erase of volledige schijfversleuteling waarbij de sleutel wordt vernietigd.
 
@@ -1172,3 +1172,9 @@ dedup-badge-reflinked = ⚡ Reflinked  # MT
 dedup-badge-hardlinked = 🔗 Hardlinked  # MT
 dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
 dedup-badge-copied = 📋 Copied  # MT
+phase42-paranoid-verify-label = Paranoïde verificatie
+phase42-paranoid-verify-hint = Verwerpt de gecachte pagina's van de bestemming en leest opnieuw van schijf om leugens van de schrijfcache en stille corruptie op te sporen. Ongeveer 50 % langzamer dan de standaardverificatie; standaard uitgeschakeld.
+phase42-sharing-violation-retries-label = Pogingen bij vergrendelde bronbestanden
+phase42-sharing-violation-retries-hint = Hoe vaak opnieuw proberen wanneer een ander proces het bronbestand open houdt met een exclusieve vergrendeling. De wachttijd verdubbelt bij elke poging (standaard 50 ms / 100 ms / 200 ms). Standaard: 3, gelijk aan Robocopy /R:3.
+phase42-cloud-placeholder-warning = { $name } is een cloud-only OneDrive-bestand. Kopiëren start een download — tot { $size } via je netwerkverbinding.
+phase42-defender-exclusion-hint = Voor de maximale kopieersnelheid voeg je de doelmap toe aan de uitsluitingen van Microsoft Defender vóór bulkoverdrachten. Zie docs/PERFORMANCE_TUNING.md.

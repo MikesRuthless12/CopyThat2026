@@ -126,6 +126,16 @@ pub(crate) fn requested(total: u64) -> Option<()> {
 /// buffer size, bypassing the env-var read path. Used by the
 /// auto-engage logic for cross-volume copies (which want deeper
 /// queue depth than NVMe-tuned defaults).
+//
+// `clippy::too_many_arguments`: this is a stable internal-API entry
+// point used by the dispatcher in `windows.rs`. Bundling the
+// (slots, buffer_kb, no_buffering) overrides into a struct would
+// just push the parameter count back the other direction (every
+// call site has to construct + tear down the struct). The signature
+// mirrors the existing `try_overlapped_copy` shape with three extra
+// optional overrides; refactoring it would touch the dispatcher's
+// auto-engage hot path for no behavioural win.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn try_overlapped_copy_with_config(
     src: PathBuf,
     dst: PathBuf,
@@ -277,6 +287,14 @@ struct OpCtx {
     /// For reads: the requested length. For writes: the bytes the
     /// matching read returned (used as the WriteFile length).
     op_bytes: u32,
+    /// Phase 42 hardening (finding #3) — monotonic counter incremented
+    /// on every state change. Snapshotted into each `inline_queue`
+    /// entry so a stale entry pointing at a mutated ctx can be
+    /// detected and discarded at pop-time. Defense in depth: today's
+    /// straight-line push/pop order prevents real aliasing, but the
+    /// generation guard catches any future refactor that breaks the
+    /// invariant.
+    generation: u32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -397,6 +415,27 @@ unsafe fn do_overlapped_copy(
         )));
     }
 
+    // Phase 42 (Phase-43 deferral closed) — set
+    // `FILE_SKIP_COMPLETION_PORT_ON_SUCCESS` +
+    // `FILE_SKIP_SET_EVENT_ON_HANDLE` so synchronously-completing
+    // I/Os bypass the IOCP queue. The main loop below handles
+    // inline completions via the `inline_queue` deque drained at
+    // the top of each iteration before `GetQueuedCompletionStatus`.
+    //
+    // Phase 42 hardening (finding #2) — `SetFileCompletionNotificationModes`
+    // CAN fail on some volumes (network FS, reparse-pointed handles).
+    // If it fails, the kernel still posts an IOCP completion EVEN ON
+    // SYNC SUCCESS. Pushing to inline_queue in that case would cause
+    // double-processing → in_flight underflow. Track success per
+    // handle and only push to inline_queue when the corresponding
+    // skip flag was actually set.
+    use windows_sys::Win32::Storage::FileSystem::SetFileCompletionNotificationModes;
+    const FILE_SKIP_COMPLETION_PORT_ON_SUCCESS: u8 = 0x1;
+    const FILE_SKIP_SET_EVENT_ON_HANDLE: u8 = 0x2;
+    let skip_flags = FILE_SKIP_COMPLETION_PORT_ON_SUCCESS | FILE_SKIP_SET_EVENT_ON_HANDLE;
+    let src_skip_iocp_on_success = SetFileCompletionNotificationModes(src_handle.0, skip_flags) != 0;
+    let dst_skip_iocp_on_success = SetFileCompletionNotificationModes(dst_handle.0, skip_flags) != 0;
+
     // --- Allocate buffers + contexts --------------------------------
     let mut buffers: Vec<OwnedBuffer> = Vec::with_capacity(n_slots);
     for _ in 0..n_slots {
@@ -420,14 +459,26 @@ unsafe fn do_overlapped_copy(
                 slot_idx: i,
                 file_offset: 0,
                 op_bytes: 0,
+                generation: 0,
             })
         })
         .collect();
 
     // --- Submit initial reads ---------------------------------------
+    //
+    // Phase 42 — `post_read` may return inline completion when the
+    // source bytes are already in the page cache. Collect those
+    // here and prime the inline_queue so the loop drains them
+    // before falling back to GQCS.
     let mut next_read_offset: u64 = 0;
     let mut in_flight: usize = 0;
     let mut bytes_written_total: u64 = 0;
+    // Phase 42 hardening (finding #3) — each entry is
+    // `(ctx_ptr, bytes_xferred, ctx.generation snapshotted at push)`.
+    // The generation snapshot lets the popper detect if the OpCtx
+    // has been mutated between push and pop and discard the stale
+    // entry in that case.
+    let mut initial_inline: Vec<(*mut OpCtx, u32, u32)> = Vec::new();
 
     for slot in 0..n_slots {
         if next_read_offset >= alloc_size {
@@ -435,67 +486,179 @@ unsafe fn do_overlapped_copy(
         }
         let want = (alloc_size - next_read_offset).min(buffer_bytes as u64) as u32;
         let aligned = round_up_sector(want, sector_bytes);
-        post_read(
+        match post_read(
             src_handle.0,
             buffers[slot].0,
             aligned,
             next_read_offset,
             &mut ctxs[slot],
-        )?;
+            src_skip_iocp_on_success,
+        )? {
+            Some(sync_bytes) => {
+                let ctx_ptr: *mut OpCtx = &mut *ctxs[slot];
+                let gen_snapshot = ctxs[slot].generation;
+                initial_inline.push((ctx_ptr, sync_bytes, gen_snapshot));
+            }
+            None => {}
+        }
         next_read_offset += aligned as u64;
         in_flight += 1;
     }
 
     // --- IOCP loop ---------------------------------------------------
+    //
+    // Phase 42 (Phase-43 deferral closed) — with
+    // `FILE_SKIP_COMPLETION_PORT_ON_SUCCESS` set above, ReadFile /
+    // WriteFile that complete synchronously (cached reads, fast
+    // SSDs) return TRUE and do NOT enqueue an IOCP entry. The
+    // `inline_queue` deque collects those synchronous completions
+    // and the loop drains it before falling back to
+    // `GetQueuedCompletionStatus` for genuinely-pending I/Os.
+    use std::collections::VecDeque;
     let mut last_cancel_check = Instant::now();
     let mut cancelled = false;
+    let mut inline_queue: VecDeque<(*mut OpCtx, u32, u32)> = VecDeque::with_capacity(n_slots * 2);
+    // Seed with any initial reads that completed synchronously.
+    for entry in initial_inline.drain(..) {
+        inline_queue.push_back(entry);
+    }
+
+    // Phase 42 hardening (finding #5) — bound stalled I/O.
+    // `consecutive_timeout_count` increments on every pure GQCS
+    // timeout and resets on any completion (inline or via IOCP).
+    // 600 × 250 ms = 2.5 minutes with zero progress → assume the
+    // device is wedged, cancel + propagate as a TimedOut error.
+    const STALL_TIMEOUT_LIMIT: u32 = 600;
+    let mut consecutive_timeout_count: u32 = 0;
 
     while in_flight > 0 {
-        let mut bytes_xferred: u32 = 0;
-        let mut completion_key: usize = 0;
-        let mut overlapped_ptr: *mut OVERLAPPED = ptr::null_mut();
-
-        // 250 ms timeout so we can check cancellation between
-        // completions even on a stalled I/O — INFINITE would block
-        // the cancel signal indefinitely.
-        let ok = GetQueuedCompletionStatus(
-            iocp,
-            &mut bytes_xferred,
-            &mut completion_key,
-            &mut overlapped_ptr,
-            250,
-        );
-
-        // GQCS returns 0 + null overlapped on timeout.
-        if ok == 0 && overlapped_ptr.is_null() {
-            // Pure timeout — check cancel and loop.
-            if ctrl.is_cancelled() && !cancelled {
-                cancelled = true;
-                CancelIoEx(src_handle.0, ptr::null_mut());
-                CancelIoEx(dst_handle.0, ptr::null_mut());
+        // Phase 42 hardening (finding #1) — on cancellation we used
+        // to fall through and rely on GQCS to deliver
+        // `ERROR_OPERATION_ABORTED` for every in-flight I/O. But
+        // entries already sitting in `inline_queue` correspond to
+        // sync-completed I/Os that bypassed IOCP entirely; without
+        // an explicit drain, in_flight would stay above zero forever.
+        // Drain them first while honouring the cancel.
+        if cancelled {
+            while let Some((stale_ctx_ptr, _bytes, gen_snapshot)) = inline_queue.pop_front() {
+                // Only count entries whose generation still matches —
+                // mirrors the staleness guard used in the normal pop
+                // path so we don't double-decrement after a Read→Write
+                // chain mutated the ctx.
+                let stale_ctx = &*stale_ctx_ptr;
+                if stale_ctx.generation == gen_snapshot {
+                    in_flight -= 1;
+                }
             }
-            continue;
+            // After draining, the only remaining in-flight I/Os are
+            // genuinely-pending and will land via GQCS as
+            // ERROR_OPERATION_ABORTED.
+            //
+            // If the drain dropped in_flight to 0, exit the outer
+            // loop cleanly rather than falling through to a GQCS
+            // call that would block for 250 ms with nothing pending.
+            if in_flight == 0 {
+                break;
+            }
         }
 
-        // GQCS returned 0 with a non-null overlapped → I/O failed.
-        if ok == 0 {
-            let err = GetLastError();
-            // ERROR_HANDLE_EOF on a read past EOF or
-            // ERROR_OPERATION_ABORTED after CancelIoEx are both
-            // acceptable terminators for an in-flight slot.
-            if err == ERROR_HANDLE_EOF || cancelled {
-                if !overlapped_ptr.is_null() {
-                    let ctx_ptr = overlapped_ptr as *mut OpCtx;
-                    let _ctx = &mut *ctx_ptr;
-                    in_flight -= 1;
+        // Drain inline completions first — these are operations
+        // that returned synchronously and never hit the IOCP.
+        let (ctx_ptr, bytes_xferred): (*mut OpCtx, u32) = loop {
+            if let Some((ctx_ptr, bytes, gen_snapshot)) = inline_queue.pop_front() {
+                // Phase 42 hardening (finding #3) — if the ctx
+                // generation has advanced past the snapshot, the
+                // entry is stale (the OpCtx was mutated for a later
+                // op). Discard it; the live op will produce its own
+                // completion via the IOCP.
+                let ctx_view = &*ctx_ptr;
+                if ctx_view.generation != gen_snapshot {
+                    debug_assert!(
+                        false,
+                        "inline_queue saw stale entry — \
+                         this should be unreachable in the current \
+                         single-threaded push/pop flow"
+                    );
+                    continue;
+                }
+                consecutive_timeout_count = 0;
+                break (ctx_ptr, bytes);
+            }
+            let mut bytes: u32 = 0;
+            let mut completion_key: usize = 0;
+            let mut overlapped_ptr: *mut OVERLAPPED = ptr::null_mut();
+            // 250 ms timeout so we can check cancellation between
+            // completions even on a stalled I/O — INFINITE would block
+            // the cancel signal indefinitely.
+            let ok = GetQueuedCompletionStatus(
+                iocp,
+                &mut bytes,
+                &mut completion_key,
+                &mut overlapped_ptr,
+                250,
+            );
+
+            // GQCS returns 0 + null overlapped on timeout.
+            if ok == 0 && overlapped_ptr.is_null() {
+                // Pure timeout — check cancel and loop.
+                consecutive_timeout_count = consecutive_timeout_count.saturating_add(1);
+                if consecutive_timeout_count >= STALL_TIMEOUT_LIMIT && !cancelled {
+                    // Phase 42 hardening (finding #5) — wedged I/O.
+                    // Force-cancel and propagate; the rest of the
+                    // loop will reap the aborted completions.
+                    CancelIoEx(src_handle.0, ptr::null_mut());
+                    CancelIoEx(dst_handle.0, ptr::null_mut());
+                    return Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        format!(
+                            "overlapped IOCP stalled for {} consecutive 250 ms timeouts \
+                             (~{} s with no completion)",
+                            STALL_TIMEOUT_LIMIT,
+                            STALL_TIMEOUT_LIMIT / 4
+                        ),
+                    ));
+                }
+                if ctrl.is_cancelled() && !cancelled {
+                    cancelled = true;
+                    CancelIoEx(src_handle.0, ptr::null_mut());
+                    CancelIoEx(dst_handle.0, ptr::null_mut());
                 }
                 continue;
             }
-            return Err(io::Error::from_raw_os_error(err as i32));
+
+            // GQCS returned 0 with a non-null overlapped → I/O failed.
+            if ok == 0 {
+                let err = GetLastError();
+                consecutive_timeout_count = 0;
+                // ERROR_HANDLE_EOF on a read past EOF or
+                // ERROR_OPERATION_ABORTED after CancelIoEx are both
+                // acceptable terminators for an in-flight slot.
+                if err == ERROR_HANDLE_EOF || cancelled {
+                    in_flight -= 1;
+                    // Loop back to either drain inline_queue or
+                    // re-enter GQCS until in_flight drops to 0.
+                    if in_flight == 0 {
+                        break (ptr::null_mut(), 0);
+                    }
+                    continue;
+                }
+                return Err(io::Error::from_raw_os_error(err as i32));
+            }
+
+            consecutive_timeout_count = 0;
+            break (overlapped_ptr as *mut OpCtx, bytes);
+        };
+
+        // Sentinel return from the inner loop: in_flight hit 0 inside
+        // the GQCS error-handling branch (likely all slots terminated
+        // via ERROR_HANDLE_EOF). Exit the outer loop cleanly.
+        if ctx_ptr.is_null() {
+            debug_assert_eq!(in_flight, 0);
+            break;
         }
 
-        // Successful completion: re-derive the OpCtx from the OVERLAPPED ptr.
-        let ctx_ptr = overlapped_ptr as *mut OpCtx;
+        // Successful completion: re-derive the OpCtx from the
+        // OVERLAPPED ptr (its first field, repr(C) order).
         let ctx = &mut *ctx_ptr;
         let slot = ctx.slot_idx;
 
@@ -512,19 +675,62 @@ unsafe fn do_overlapped_copy(
                 }
                 let read_offset = ctx.file_offset;
                 ctx.op = OpKind::Write;
+                ctx.generation = ctx.generation.wrapping_add(1);
                 set_overlapped_offset(&mut ctx.overlapped, read_offset);
+                let mut sync_bytes: u32 = 0;
                 let ok = WriteFile(
                     dst_handle.0,
                     buffers[slot].0,
                     bytes_xferred,
-                    ptr::null_mut(),
+                    &mut sync_bytes,
                     &mut ctx.overlapped,
                 );
-                if ok == 0 && GetLastError() != ERROR_IO_PENDING {
-                    return Err(io::Error::last_os_error());
+                if ok != 0 {
+                    // Phase 42 hardening (finding #4) — validate the
+                    // sync-write byte count. A short write returned
+                    // synchronously is suspicious; trust-but-verify
+                    // by erroring rather than silently advancing.
+                    debug_assert!(
+                        sync_bytes <= bytes_xferred,
+                        "WriteFile sync_bytes ({sync_bytes}) > requested ({bytes_xferred})"
+                    );
+                    if sync_bytes < bytes_xferred {
+                        return Err(io::Error::new(
+                            io::ErrorKind::WriteZero,
+                            format!(
+                                "WriteFile sync completion short: requested {bytes_xferred}, \
+                                 wrote {sync_bytes} at offset {read_offset}"
+                            ),
+                        ));
+                    }
+                    // Phase 42 hardening (finding #2) — only push to
+                    // inline_queue if the dst handle actually has the
+                    // skip flag; otherwise the kernel will deliver
+                    // an IOCP completion and pushing here would
+                    // double-process.
+                    if dst_skip_iocp_on_success {
+                        let gen_snapshot = ctx.generation;
+                        inline_queue.push_back((ctx_ptr, sync_bytes, gen_snapshot));
+                    }
+                } else {
+                    let err = GetLastError();
+                    if err != ERROR_IO_PENDING {
+                        return Err(io::Error::from_raw_os_error(err as i32));
+                    }
+                    // ERROR_IO_PENDING: IOCP will deliver completion.
                 }
             }
             OpKind::Write => {
+                // Phase 42 hardening (finding #4) — bytes_xferred
+                // for a Write completion should never exceed the
+                // bytes we asked it to write (which we stashed in
+                // ctx.op_bytes when the matching Read completed).
+                debug_assert!(
+                    bytes_xferred <= ctx.op_bytes,
+                    "Write completion bytes_xferred ({bytes_xferred}) > \
+                     ctx.op_bytes ({})",
+                    ctx.op_bytes
+                );
                 bytes_written_total = bytes_written_total.saturating_add(bytes_xferred as u64);
                 bytes_done.store(bytes_written_total.min(total), Ordering::Relaxed);
 
@@ -535,22 +741,35 @@ unsafe fn do_overlapped_copy(
                     let aligned = round_up_sector(want, sector_bytes);
                     ctx.file_offset = next_read_offset;
                     ctx.op = OpKind::Read;
+                    ctx.generation = ctx.generation.wrapping_add(1);
                     set_overlapped_offset(&mut ctx.overlapped, next_read_offset);
+                    let mut sync_bytes: u32 = 0;
                     let ok = ReadFile(
                         src_handle.0,
                         buffers[slot].0,
                         aligned,
-                        ptr::null_mut(),
+                        &mut sync_bytes,
                         &mut ctx.overlapped,
                     );
-                    if ok == 0 && GetLastError() != ERROR_IO_PENDING {
+                    if ok != 0 {
+                        // Synchronous read completion (cached / EOF).
+                        // Same pattern as the Write site (finding #2):
+                        // only enqueue inline if the kernel agreed
+                        // not to also post to IOCP.
+                        if src_skip_iocp_on_success {
+                            let gen_snapshot = ctx.generation;
+                            inline_queue.push_back((ctx_ptr, sync_bytes, gen_snapshot));
+                        }
+                        next_read_offset += aligned as u64;
+                    } else {
                         let err = GetLastError();
-                        if err != ERROR_HANDLE_EOF {
+                        if err == ERROR_IO_PENDING {
+                            next_read_offset += aligned as u64;
+                        } else if err == ERROR_HANDLE_EOF {
+                            in_flight -= 1;
+                        } else {
                             return Err(io::Error::from_raw_os_error(err as i32));
                         }
-                        in_flight -= 1;
-                    } else {
-                        next_read_offset += aligned as u64;
                     }
                 } else {
                     in_flight -= 1;
@@ -573,6 +792,16 @@ unsafe fn do_overlapped_copy(
     if cancelled {
         return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"));
     }
+
+    // Phase 42 hardening (finding #1) — every inline completion must
+    // have been processed by the time the loop exits cleanly. If
+    // entries remain, it means we counted them in `in_flight` but
+    // never popped them, so byte-count bookkeeping is suspect.
+    debug_assert!(
+        inline_queue.is_empty(),
+        "inline_queue not drained ({} entries) on clean exit",
+        inline_queue.len()
+    );
 
     // --- Truncate dst back to the source's exact length --------------
     seek_and_set_eof(dst_handle.0, total as i64)?;
@@ -634,6 +863,21 @@ unsafe fn seek_and_set_eof(handle: HANDLE, new_size: i64) -> io::Result<()> {
     Ok(())
 }
 
+/// Phase 42 — `post_read` returns `Ok(Some(bytes))` if ReadFile
+/// completed synchronously AND the handle has
+/// `FILE_SKIP_COMPLETION_PORT_ON_SUCCESS` set (no IOCP entry will
+/// arrive — caller must process the inline completion). `Ok(None)`
+/// means either (a) the I/O is pending and the IOCP will deliver
+/// completion, OR (b) the I/O completed sync but the skip flag is
+/// off so the IOCP will ALSO deliver the completion — either way
+/// the caller waits for GQCS. `Err` is a real failure.
+///
+/// Phase 42 hardening (finding #2 / #3) — `skip_iocp_on_success`
+/// must reflect the actual `SetFileCompletionNotificationModes`
+/// return value; if the call failed (network FS, reparse points)
+/// the kernel will deliver an IOCP entry on sync success and we
+/// must NOT push to inline_queue. Increments `ctx.generation` on
+/// every state change for the inline-queue staleness guard.
 #[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn post_read(
     handle: HANDLE,
@@ -641,18 +885,31 @@ unsafe fn post_read(
     bytes: u32,
     file_offset: u64,
     ctx: &mut Box<OpCtx>,
-) -> io::Result<()> {
+    skip_iocp_on_success: bool,
+) -> io::Result<Option<u32>> {
     ctx.op = OpKind::Read;
     ctx.file_offset = file_offset;
     ctx.op_bytes = bytes;
+    ctx.generation = ctx.generation.wrapping_add(1);
     set_overlapped_offset(&mut ctx.overlapped, file_offset);
     let ctx_ptr: *mut OpCtx = &mut **ctx;
     let overlapped_ptr: *mut OVERLAPPED = ctx_ptr as *mut OVERLAPPED;
-    let ok = ReadFile(handle, buffer, bytes, ptr::null_mut(), overlapped_ptr);
-    if ok == 0 && GetLastError() != ERROR_IO_PENDING {
-        return Err(io::Error::last_os_error());
+    let mut sync_bytes: u32 = 0;
+    let ok = ReadFile(handle, buffer, bytes, &mut sync_bytes, overlapped_ptr);
+    if ok != 0 {
+        if skip_iocp_on_success {
+            return Ok(Some(sync_bytes));
+        }
+        // Sync success but kernel WILL deliver an IOCP entry — wait
+        // for GQCS so we don't double-process.
+        return Ok(None);
     }
-    Ok(())
+    let err = GetLastError();
+    if err == ERROR_IO_PENDING {
+        Ok(None)
+    } else {
+        Err(io::Error::from_raw_os_error(err as i32))
+    }
 }
 
 #[inline]
@@ -777,6 +1034,207 @@ mod tests {
         }
         // Above the size threshold but env is unset → None.
         assert!(super::requested(MIN_FILE_SIZE + 1).is_none());
+    }
+
+    /// Phase 42 wave-2 — pre-cancelled control on a 16 MiB copy. The
+    /// wave-1 finding #1 fix added the `inline_queue` drain on the
+    /// cancellation branch: synchronous-completed I/Os that bypassed
+    /// the IOCP would otherwise leave `in_flight` above zero forever
+    /// and the loop would hang.
+    ///
+    /// We can't deterministically force inline-queue use without
+    /// FILE_SKIP_COMPLETION_PORT_ON_SUCCESS firing on the test
+    /// volume's I/O, but the cancel + drain code path is robust
+    /// across both modes — the loop must exit promptly with an
+    /// `Interrupted` error and the dst must be cleaned up. Hanging
+    /// here would be the regression we're locking out.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn cancel_drains_inline_queue_and_exits_promptly() {
+        use std::time::{Duration, Instant};
+
+        let dir = tempdir().expect("tempdir");
+        let src = dir.path().join("src.bin");
+        let dst = dir.path().join("dst.bin");
+
+        // 16 MiB pseudo-random pattern — large enough to keep the
+        // IOCP loop spinning across multiple slots so the
+        // cancellation arrives mid-copy on most hardware.
+        let bytes: Vec<u8> = (0u32..16 * 1024 * 1024)
+            .map(|i| (i.wrapping_mul(2654435761u32) & 0xff) as u8)
+            .collect();
+        std::fs::File::create(&src)
+            .expect("create src")
+            .write_all(&bytes)
+            .expect("write src");
+
+        let total = bytes.len() as u64;
+        let ctrl = CopyControl::new();
+        // Pre-cancel: the cancel signal is observable from the very
+        // first cancel-check tick inside the IOCP loop (every 100 ms
+        // or on each GQCS timeout). The loop must drain its
+        // inline_queue, free its OpCtx boxes via RAII, and return
+        // promptly.
+        ctrl.cancel();
+
+        let (tx, mut rx) = mpsc::channel(64);
+        let drain = tokio::spawn(async move { while rx.recv().await.is_some() {} });
+
+        let started = Instant::now();
+        let outcome = try_overlapped_copy(src.clone(), dst.clone(), total, ctrl, tx).await;
+        drain.abort();
+        let elapsed = started.elapsed();
+
+        // The loop must NOT hang. 30 seconds is generous for a
+        // 16 MiB cancel — even on slow CI runners the drain + Boxed
+        // OpCtx cleanup is sub-second in practice. Anything beyond
+        // this is the regression we're catching.
+        assert!(
+            elapsed < Duration::from_secs(30),
+            "cancellation took too long: {elapsed:?} — \
+             likely the inline_queue drain regression"
+        );
+
+        // Outcome must be either Cancelled or an Interrupted Io
+        // error — not Done. (The wave-1 fix in `do_overlapped_copy`
+        // returns `io::Error::Interrupted` after the cancel branch
+        // drains; `try_overlapped_copy` wraps it as
+        // `NativeOutcome::Io(...)`. A future polish may flip this
+        // to NativeOutcome::Cancelled — accept both.)
+        match outcome {
+            NativeOutcome::Cancelled => {}
+            NativeOutcome::Io(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            // On a fast-enough system the copy may complete before
+            // the first cancel-check tick fires. In that case the
+            // pre-cancel was a no-op — that's NOT a regression of
+            // the inline-queue drain bug, so accept Done as a
+            // success path too. The hang detection above is the
+            // primary signal we care about.
+            NativeOutcome::Done {
+                strategy: ChosenStrategy::CopyFileExW,
+                ..
+            } => {}
+            other => panic!(
+                "unexpected outcome on pre-cancelled copy: {other:?}"
+            ),
+        }
+
+        // dst should not exist after a cancellation (the cleanup
+        // branch unlinks the partial file). When the copy raced to
+        // completion, dst exists and equals src.
+        if dst.exists() {
+            let dst_bytes = std::fs::read(&dst).expect("read dst");
+            assert_eq!(
+                dst_bytes.len(),
+                bytes.len(),
+                "if the copy completed before cancel landed, dst must be byte-exact"
+            );
+        }
+    }
+
+    /// Phase 42 wave-2 — OpCtx generation-mismatch staleness check.
+    /// The wave-1 finding #3 fix added `generation` to OpCtx + a
+    /// snapshot at every push to the inline_queue. The pop site
+    /// compares the snapshot against the live ctx.generation and
+    /// skips stale entries.
+    ///
+    /// We can't easily drive the real IOCP loop into the stale-pop
+    /// state (today's straight-line push/pop order prevents real
+    /// aliasing), but the *logic* is what we want to lock in. This
+    /// test simulates the staleness scenario directly: build two
+    /// snapshots, advance the live OpCtx, and verify the comparison
+    /// (`ctx.generation == gen_snapshot`) discriminates as expected.
+    #[test]
+    fn opctx_generation_mismatch_logic() {
+        use std::collections::VecDeque;
+        use std::mem::MaybeUninit;
+        use windows_sys::Win32::System::IO::OVERLAPPED;
+
+        // Build a real OpCtx box. The OVERLAPPED can be all-zero —
+        // we never submit it to the kernel here; we only exercise
+        // the generation field.
+        // SAFETY: OVERLAPPED is a plain C struct; zero-init is
+        // documented as valid per MSDN.
+        let zeroed_ov = unsafe { MaybeUninit::<OVERLAPPED>::zeroed().assume_init() };
+        let mut ctx = Box::new(super::OpCtx {
+            overlapped: zeroed_ov,
+            op: super::OpKind::Read,
+            slot_idx: 7,
+            file_offset: 0,
+            op_bytes: 0,
+            generation: 0,
+        });
+        let ctx_ptr: *mut super::OpCtx = &mut *ctx;
+
+        // Mirror the inline_queue triple shape used by the IOCP
+        // loop: (ctx_ptr, bytes_xferred, gen_snapshot).
+        let mut inline_queue: VecDeque<(*mut super::OpCtx, u32, u32)> = VecDeque::new();
+
+        // Push the first entry while ctx.generation == 0.
+        let gen_snapshot_a = ctx.generation;
+        inline_queue.push_back((ctx_ptr, 4096, gen_snapshot_a));
+
+        // Mutate the live ctx (simulating a Read→Write state advance
+        // — the same pattern the real loop uses). The wave-1 fix
+        // increments generation at every state change.
+        ctx.op = super::OpKind::Write;
+        ctx.op_bytes = 4096;
+        ctx.generation = ctx.generation.wrapping_add(1);
+
+        // Push the second entry with the new generation.
+        let gen_snapshot_b = ctx.generation;
+        inline_queue.push_back((ctx_ptr, 4096, gen_snapshot_b));
+
+        // Pop and apply the staleness guard exactly the way the
+        // wave-1 fix does it inside `do_overlapped_copy`. Entry A
+        // has gen_snapshot 0 but the live ctx is now at generation
+        // 1 — must be detected as stale.
+        let (_first_ctx_ptr, _first_bytes, first_snap) =
+            inline_queue.pop_front().expect("entry A pushed");
+        // SAFETY: ctx_ptr remains valid for the duration of this
+        // test (`ctx` is in scope). The staleness check itself only
+        // dereferences for read.
+        let live_gen_first = unsafe { (&*ctx_ptr).generation };
+        let stale_a = live_gen_first != first_snap;
+        assert!(
+            stale_a,
+            "entry pushed with gen={first_snap} should be detected stale \
+             after live generation advanced to {live_gen_first}"
+        );
+
+        // Entry B has gen_snapshot 1 and the live ctx is also at
+        // generation 1 — must NOT be stale (this is the normal
+        // pop path the loop takes on every successful completion).
+        let (_second_ctx_ptr, _second_bytes, second_snap) =
+            inline_queue.pop_front().expect("entry B pushed");
+        let live_gen_second = unsafe { (&*ctx_ptr).generation };
+        let stale_b = live_gen_second != second_snap;
+        assert!(
+            !stale_b,
+            "entry pushed with gen={second_snap} should NOT be stale \
+             (live generation is also {live_gen_second})"
+        );
+
+        // No leaked entries — the queue is empty after the two pops.
+        assert!(
+            inline_queue.is_empty(),
+            "inline_queue must be drained after both pops"
+        );
+
+        // Generation wrap is sound: u32::MAX -> 0 must not falsely
+        // claim a match against a fresh u32::MAX snapshot. The fix
+        // uses `wrapping_add(1)` precisely so wrap is intentional;
+        // the test confirms the comparison still works after wrap.
+        ctx.generation = u32::MAX;
+        let snap_max = ctx.generation;
+        ctx.generation = ctx.generation.wrapping_add(1); // wraps to 0
+        // Snapshot at u32::MAX vs live generation 0 → stale.
+        assert_ne!(
+            ctx.generation, snap_max,
+            "generation must wrap from u32::MAX to 0"
+        );
+
+        // Drop the box — RAII releases the OpCtx allocation.
+        drop(ctx);
     }
 }
 

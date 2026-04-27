@@ -22,20 +22,20 @@
 //! 1. **Reflink** (`reflink-copy` crate). Instant on Btrfs, XFS with
 //!    `reflink=1`, ZFS, bcachefs (Linux); APFS (macOS); ReFS / Dev
 //!    Drive (Windows). Returns
-//!    [`ChosenStrategy::Reflink`](crate::ChosenStrategy::Reflink) on
+//!    [`ChosenStrategy::Reflink`] on
 //!    success; falls through on `NotSupported`.
 //! 2. **OS-native accelerated path:**
 //!    - Linux: `copy_file_range(2)` in a loop; sendfile fallback for
 //!      files <2 GiB; otherwise fall through. Reports
-//!      [`ChosenStrategy::CopyFileRange`](crate::ChosenStrategy::CopyFileRange)
-//!      or [`ChosenStrategy::Sendfile`](crate::ChosenStrategy::Sendfile).
+//!      [`ChosenStrategy::CopyFileRange`]
+//!      or [`ChosenStrategy::Sendfile`].
 //!    - macOS: `copyfile(3)` with `COPYFILE_ALL`. Reports
-//!      [`ChosenStrategy::Copyfile`](crate::ChosenStrategy::Copyfile).
+//!      [`ChosenStrategy::Copyfile`].
 //!    - Windows: `CopyFileExW` with progress callback; uses
 //!      `COPY_FILE_NO_BUFFERING` for files ≥256 MiB. Reports
-//!      [`ChosenStrategy::CopyFileExW`](crate::ChosenStrategy::CopyFileExW).
+//!      [`ChosenStrategy::CopyFileExW`].
 //! 3. **Async fallback** — delegate to [`copythat_core::copy_file`].
-//!    Reports [`ChosenStrategy::AsyncFallback`](crate::ChosenStrategy::AsyncFallback).
+//!    Reports [`ChosenStrategy::AsyncFallback`].
 //!
 //! Each fast path emits the same `Started` / `Progress` / `Completed`
 //! events as the Phase 1 engine so a UI sees one timeline regardless
@@ -68,17 +68,27 @@
 //! ```
 
 #![allow(unsafe_code)] // Justified per-module: every fast path is a raw FFI call.
+// Phase 42 doc audit: warn-only on missing public-API docs so future
+// additions are flagged without breaking the build on the historic
+// undocumented FFI surface (raw struct fields, syscall constants).
+#![warn(missing_docs)]
 
+pub mod attrs;
+#[cfg(feature = "compio-experimental")]
+pub mod compio_overlapped;
 pub mod dedup;
 mod dispatcher;
+pub mod hardlink_set;
 mod helpers;
 mod hook;
 pub mod meta;
 mod native;
+pub mod os;
 mod outcome;
 pub mod presence;
 mod reflink_path;
 pub mod sparse;
+pub mod topology;
 pub mod wake_lock;
 
 pub use dedup::{DedupMode, DedupOptions, DedupOutcome, DedupStrategy, HardlinkPolicy, try_dedup};

@@ -72,7 +72,8 @@ impl ScanRegistry {
 /// Start a scan under a fresh id. Returns the hyphenated UUID so
 /// the frontend can correlate subsequent progress events. The
 /// scanner runs on a background tokio task; events are forwarded to
-/// the Tauri event bus via [`forward_scan_events`].
+/// the Tauri event bus via the private `forward_scan_events` helper
+/// in this module.
 #[tauri::command]
 pub async fn scan_start(
     src: String,

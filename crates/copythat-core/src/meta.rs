@@ -51,7 +51,9 @@ use std::sync::Arc;
 /// double-write the bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NtfsStream {
+    /// Stream name, no leading `:` and no trailing `:$DATA`.
     pub name: String,
+    /// Raw bytes of the stream.
     pub data: Vec<u8>,
 }
 
@@ -62,7 +64,9 @@ pub struct NtfsStream {
 /// does not strip namespaces.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XattrEntry {
+    /// Full namespaced xattr key (`user.foo`, `security.selinux`, ...).
     pub name: String,
+    /// Raw xattr value bytes.
     pub value: Vec<u8>,
 }
 
@@ -76,7 +80,9 @@ pub struct XattrEntry {
 /// ACL at all.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PosixAclBlob {
+    /// Raw `system.posix_acl_access` payload, when present.
     pub access_acl: Option<Vec<u8>>,
+    /// Raw `system.posix_acl_default` payload, when present.
     pub default_acl: Option<Vec<u8>>,
 }
 
@@ -85,6 +91,7 @@ pub struct PosixAclBlob {
 /// (`unconfined_u:object_r:user_home_t:s0`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SeLinuxContext {
+    /// The verbatim `security.selinux` xattr string.
     pub context: String,
 }
 
@@ -93,6 +100,7 @@ pub struct SeLinuxContext {
 /// version; the apply side just writes the bytes back.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileCaps {
+    /// Raw `security.capability` payload, opaque to the engine.
     pub raw: Vec<u8>,
 }
 
@@ -101,6 +109,7 @@ pub struct FileCaps {
 /// forks are largely a Carbon-era artifact).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceForkBlob {
+    /// Raw bytes of `<file>/..namedfork/rsrc`.
     pub data: Vec<u8>,
 }
 
@@ -110,6 +119,7 @@ pub struct ResourceForkBlob {
 /// xattr surfaces present it as a variable-length blob.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FinderInfoBlob {
+    /// Fixed 32-byte FinderInfo payload.
     pub data: [u8; 32],
 }
 
@@ -123,12 +133,19 @@ pub struct FinderInfoBlob {
 /// with a single `Zone.Identifier` entry and leaves the rest empty.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MetaSnapshot {
+    /// Windows NTFS Alternate Data Streams attached to the file.
     pub ads: Vec<NtfsStream>,
+    /// All extended attributes (Linux/macOS) the engine could read.
     pub xattrs: Vec<XattrEntry>,
+    /// Structured POSIX ACL payload, when present.
     pub posix_acl: Option<PosixAclBlob>,
+    /// Structured SELinux context, when present.
     pub selinux: Option<SeLinuxContext>,
+    /// Raw Linux file caps (`security.capability`), when present.
     pub linux_caps: Option<FileCaps>,
+    /// macOS resource fork bytes, when present.
     pub mac_resource_fork: Option<ResourceForkBlob>,
+    /// macOS Finder info, when present.
     pub mac_finder_info: Option<FinderInfoBlob>,
 }
 
@@ -166,10 +183,15 @@ impl MetaSnapshot {
 /// UI carries an explicit warning tooltip on that one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MetaPolicy {
+    /// Keep the Windows `Zone.Identifier` ADS (Mark-of-the-Web).
     pub preserve_motw: bool,
+    /// Keep `user.*` / `com.apple.*` xattrs.
     pub preserve_xattrs: bool,
+    /// Keep POSIX ACL payloads.
     pub preserve_posix_acls: bool,
+    /// Keep SELinux contexts.
     pub preserve_selinux: bool,
+    /// Keep macOS resource forks + Finder info.
     pub preserve_resource_forks: bool,
     /// On a cross-FS copy where the destination filesystem can't hold
     /// the foreign metadata (e.g. SMB / FAT / exFAT / ext4 receiving a
@@ -242,6 +264,8 @@ impl MetaPolicy {
 /// in that case so the UI can render an info badge on the row.
 #[derive(Debug, Clone, Default)]
 pub struct MetaApplyOutcome {
+    /// `true` when the engine fell through to an `._<filename>`
+    /// AppleDouble sidecar instead of writing native streams.
     pub translated_to_appledouble: bool,
     /// Stable wire string for the AppleDouble translation event:
     /// the source file's extension (lowercase, no leading dot —
@@ -312,12 +336,28 @@ impl MetaOps for NoopMetaOps {
 /// Convenience: capture + apply via an arc'd hook in one shot. Used
 /// by the engine after the byte copy finishes; saves the per-call site
 /// from juggling two spawn_blocking shells.
+///
+/// Fast-path: when every per-family policy bit is off the capture call
+/// would walk the source filesystem only to throw the result away on
+/// the next line. Bail before we even spawn the blocking worker so
+/// vanilla copies skip the syscall surface entirely.
 pub async fn transfer(
     ops: Arc<dyn MetaOps>,
     src: std::path::PathBuf,
     dst: std::path::PathBuf,
     policy: MetaPolicy,
 ) -> std::io::Result<MetaApplyOutcome> {
+    if !policy.preserve_motw
+        && !policy.preserve_xattrs
+        && !policy.preserve_posix_acls
+        && !policy.preserve_selinux
+        && !policy.preserve_resource_forks
+    {
+        // Every individual gate is off — capture would be wasted.
+        // Caller still gets the default outcome so existing
+        // signatures keep round-tripping.
+        return Ok(MetaApplyOutcome::default());
+    }
     tokio::task::spawn_blocking(move || {
         let mut snap = ops.capture(&src)?;
         if snap.is_empty() {
@@ -470,5 +510,58 @@ mod tests {
         .unwrap();
         assert!(!outcome.translated_to_appledouble);
         assert!(outcome.partial_failures.is_empty());
+    }
+
+    #[tokio::test]
+    async fn transfer_short_circuits_when_every_toggle_off() {
+        // Spy MetaOps that increments a counter on capture. When every
+        // policy bit is off the fast-path must skip the capture call
+        // entirely.
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        #[derive(Debug, Default)]
+        struct CountingOps {
+            captures: AtomicUsize,
+        }
+
+        impl MetaOps for CountingOps {
+            fn capture(&self, _path: &Path) -> std::io::Result<MetaSnapshot> {
+                self.captures.fetch_add(1, Ordering::SeqCst);
+                Ok(MetaSnapshot::default())
+            }
+            fn apply(
+                &self,
+                _path: &Path,
+                _snapshot: &MetaSnapshot,
+                _policy: &MetaPolicy,
+            ) -> std::io::Result<MetaApplyOutcome> {
+                Ok(MetaApplyOutcome::default())
+            }
+        }
+
+        let counting = Arc::new(CountingOps::default());
+        let ops: Arc<dyn MetaOps> = counting.clone();
+        let policy = MetaPolicy {
+            preserve_motw: false,
+            preserve_xattrs: false,
+            preserve_posix_acls: false,
+            preserve_selinux: false,
+            preserve_resource_forks: false,
+            appledouble_fallback: false,
+        };
+        let outcome = transfer(
+            ops,
+            std::path::PathBuf::from("/tmp/src"),
+            std::path::PathBuf::from("/tmp/dst"),
+            policy,
+        )
+        .await
+        .unwrap();
+        assert!(!outcome.translated_to_appledouble);
+        assert_eq!(
+            counting.captures.load(Ordering::SeqCst),
+            0,
+            "capture must be skipped when every individual toggle is off"
+        );
     }
 }

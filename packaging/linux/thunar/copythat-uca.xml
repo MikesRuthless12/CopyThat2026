@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Thunar Custom Actions (UCA) fragment for Copy That v1.25.0.
+  Thunar Custom Actions (UCA) fragment for Copy That v1.0.0.
 
   Installation: merged into ~/.config/Thunar/uca.xml on first run by
   the packaging install-shell-integration helper. Thunar does not
@@ -35,7 +35,7 @@
     <name xml:lang="uk">Копіювати через Copy That</name>
     <unique-id>copythat-2026-copy</unique-id>
     <command>copythat --enqueue copy %F</command>
-    <description>Queue a copy job with Copy That v1.25.0</description>
+    <description>Queue a copy job with Copy That v1.0.0</description>
     <range></range>
     <patterns>*</patterns>
     <startup-notify/>
@@ -68,7 +68,7 @@
     <name xml:lang="uk">Перемістити через Copy That</name>
     <unique-id>copythat-2026-move</unique-id>
     <command>copythat --enqueue move %F</command>
-    <description>Queue a move job with Copy That v1.25.0</description>
+    <description>Queue a move job with Copy That v1.0.0</description>
     <range></range>
     <patterns>*</patterns>
     <startup-notify/>

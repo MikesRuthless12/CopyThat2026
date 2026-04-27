@@ -6,9 +6,9 @@
 //! they land identical jobs in the queue — same ids, same progress
 //! events, same terminal states.
 //!
-//! [`dispatch_cli_action`] is the entry point [`crate::lib::run`] and
+//! [`dispatch_cli_action`] is the entry point [`crate::run`] and
 //! the single-instance plugin callback both use to route an already-
-//! parsed [`cli::CliAction`] into the running app.
+//! parsed [`crate::cli::CliAction`] into the running app.
 
 use std::path::{Path, PathBuf};
 
@@ -211,10 +211,12 @@ fn dispatch_enqueue(app: &AppHandle, args: EnqueueArgs) {
         // the async-fallback Rust loop. On Windows 11 NVMe the
         // unhooked path runs at ~600 MiB/s; the hook unlocks the
         // 2400+ MiB/s `CopyFileExW` ceiling we measured headlessly.
-        let mut copy_opts = CopyOptions::default();
-        copy_opts.fast_copy_hook = Some(std::sync::Arc::new(
-            copythat_platform::PlatformFastCopyHook,
-        ));
+        let copy_opts = CopyOptions {
+            fast_copy_hook: Some(std::sync::Arc::new(
+                copythat_platform::PlatformFastCopyHook,
+            )),
+            ..CopyOptions::default()
+        };
         let _ = enqueue_jobs(
             app,
             &state,

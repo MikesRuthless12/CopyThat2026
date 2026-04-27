@@ -1,6 +1,6 @@
-app-name = Copy That v1.25.0
+app-name = Copy That v1.0.0
 # MT
-window-title = Copy That v1.25.0
+window-title = Copy That v1.0.0
 # MT
 shred-ssd-advisory = 警告: この対象は SSD 上にあります。ウェアレベリングとオーバープロビジョニングにより論理ブロックアドレスの下からデータが移動されるため、多重上書きはフラッシュメモリを確実にサニタイズできません。ソリッドステートメディアには、ATA SECURE ERASE、NVMe Format（セキュア消去付き）、または鍵を破棄したフルディスク暗号化を優先してください。
 
@@ -1172,3 +1172,9 @@ dedup-badge-reflinked = ⚡ Reflinked  # MT
 dedup-badge-hardlinked = 🔗 Hardlinked  # MT
 dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
 dedup-badge-copied = 📋 Copied  # MT
+phase42-paranoid-verify-label = パラノイド検証
+phase42-paranoid-verify-hint = 宛先のキャッシュページを破棄し、ディスクから再読み込みして書き込みキャッシュの虚偽報告やサイレントな破損を検出します。標準の検証より約50%遅くなります。既定ではオフです。
+phase42-sharing-violation-retries-label = ロックされたソースファイルへの再試行回数
+phase42-sharing-violation-retries-hint = 他のプロセスがソースファイルを排他ロックで開いているときに再試行する回数です。待機時間は試行ごとに倍になります (既定で 50 ms / 100 ms / 200 ms)。既定値は 3 で、Robocopy /R:3 と同じです。
+phase42-cloud-placeholder-warning = { $name } はクラウドのみの OneDrive ファイルです。コピーするとダウンロードが発生し、ネットワーク接続経由で最大 { $size } が転送されます。
+phase42-defender-exclusion-hint = コピーのスループットを最大にするには、一括転送の前に宛先フォルダーを Microsoft Defender の除外項目に追加してください。docs/PERFORMANCE_TUNING.md を参照してください。

@@ -1,6 +1,6 @@
 [package]
 name = "copythat-secure-delete"
-description = "Multi-pass secure deletion (DoD, Gutmann, Schneier, NIST 800-88) for Copy That v1.25.0."
+description = "Multi-pass secure deletion (DoD, Gutmann, Schneier, NIST 800-88) for Copy That v1.0.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

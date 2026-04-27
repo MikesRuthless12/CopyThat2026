@@ -17,7 +17,7 @@ use tokio::sync::mpsc;
 
 use crate::control::CopyControl;
 use crate::error::CopyError;
-use crate::event::{CopyEvent, CopyReport};
+use crate::event::{CopyEvent, CopyReport, ResumeAbortReason};
 use crate::options::{
     CopyOptions, CopyStrategy, FastCopyHookOutcome, LockedFilePolicy, ResumePlan, SnapshotLease,
 };
@@ -135,47 +135,61 @@ pub async fn copy_file(
                     )
                 })?;
 
-        if let Ok(extents) = extents_result {
-            let allocated = crate::sparse::allocated_bytes(&extents);
-            let is_sparse = allocated < total_len && !extents.is_empty()
-                || (total_len > 0 && extents.is_empty());
-            if is_sparse {
-                // Probe the *destination parent* for FS support — the
-                // dst doesn't exist yet so `supports_sparse(dst)` would
-                // walk up to the parent anyway.
-                let dst_probe = dst_path.parent().unwrap_or(&dst_path).to_path_buf();
-                let probe_ops = sparse_ops.clone();
-                let dst_supports =
-                    tokio::task::spawn_blocking(move || probe_ops.supports_sparse(&dst_probe))
-                        .await
-                        .unwrap_or(false);
+        match extents_result {
+            Ok(extents) => {
+                let allocated = crate::sparse::allocated_bytes(&extents);
+                let is_sparse = allocated < total_len && !extents.is_empty()
+                    || (total_len > 0 && extents.is_empty());
+                if is_sparse {
+                    // Probe the *destination parent* for FS support — the
+                    // dst doesn't exist yet so `supports_sparse(dst)` would
+                    // walk up to the parent anyway.
+                    let dst_probe = dst_path.parent().unwrap_or(&dst_path).to_path_buf();
+                    let probe_ops = sparse_ops.clone();
+                    let dst_supports =
+                        tokio::task::spawn_blocking(move || probe_ops.supports_sparse(&dst_probe))
+                            .await
+                            .unwrap_or(false);
 
-                if !dst_supports {
-                    let _ = events
-                        .send(CopyEvent::SparsenessNotSupported {
-                            dst_fs: detect_dst_fs_label(&dst_path),
-                        })
+                    if !dst_supports {
+                        let _ = events
+                            .send(CopyEvent::SparsenessNotSupported {
+                                dst_fs: detect_dst_fs_label(&dst_path),
+                            })
+                            .await;
+                        // Fall through to the classic dense path below.
+                    } else {
+                        return copy_file_sparse_aware(
+                            src_path,
+                            dst_path,
+                            opts,
+                            ctrl,
+                            events,
+                            src_metadata,
+                            total_len,
+                            extents,
+                            sparse_ops,
+                        )
                         .await;
-                    // Fall through to the classic dense path below.
-                } else {
-                    return copy_file_sparse_aware(
-                        src_path,
-                        dst_path,
-                        opts,
-                        ctrl,
-                        events,
-                        src_metadata,
-                        total_len,
-                        extents,
-                        sparse_ops,
-                    )
-                    .await;
+                    }
                 }
             }
+            Err(detect_err) => {
+                // `detect_extents` errored — fall through to the dense
+                // path. The extent hook is an optimisation; a failure
+                // shouldn't abort the copy. Emit one stderr line so a
+                // user wondering "why didn't sparseness apply on this
+                // run?" sees the underlying reason. Tracing isn't wired
+                // workspace-wide yet (Phase 38 audit), so this is the
+                // pragmatic surface — replace with `tracing::warn!`
+                // when the tracing dep lands.
+                eprintln!(
+                    "copythat-core: sparse extent detection failed for {}: {detect_err}; \
+                     continuing as dense copy",
+                    src_path.display()
+                );
+            }
         }
-        // `detect_extents` errored — fall through to the dense path.
-        // The extent hook is an optimisation; a failure shouldn't
-        // abort the copy.
     }
 
     // Phase 6: consult the fast-copy hook before opening files for the
@@ -237,11 +251,20 @@ pub async fn copy_file(
     // destination of its own.
     let resume_decision = decide_resume(&dst_path, total, &opts, &events).await?;
 
-    if matches!(resume_decision, ResumeDecision::AlreadyComplete) {
+    if let ResumeDecision::AlreadyComplete { final_hash } = resume_decision {
         // dst already matches the journal's final hash — emit the
         // lifecycle events the caller expects, mark the journal
         // file as finished (idempotent), and return without
-        // re-opening any handles.
+        // re-opening any handles. Calling `finish_file` here is
+        // load-bearing: a prior run that crashed between the last
+        // `checkpoint` and `finish_file` leaves the row with
+        // `final_hash=None`, which would make the *next* resume
+        // probe miss the AlreadyComplete fast-path and re-hash the
+        // whole dst again. Re-finalising on this branch closes
+        // that loop.
+        if let Some(journal) = opts.journal.as_ref() {
+            journal.finish_file(opts.journal_file_idx, final_hash);
+        }
         let _ = events
             .send(CopyEvent::Started {
                 src: src_path.clone(),
@@ -272,10 +295,13 @@ pub async fn copy_file(
 
     // Phase 19b — open the source, falling through to a snapshot if
     // the sharing-violation / busy retry is exhausted and the caller
-    // opted into `LockedFilePolicy::Snapshot`. `_snapshot_lease` is
-    // held across the whole copy so the RAII guard only runs once the
-    // file finishes (success or failure).
-    let (mut src_file, _snapshot_lease) =
+    // opted into `LockedFilePolicy::Snapshot`. `snapshot_lease` is
+    // held across the whole copy *and* the post-copy metadata apply,
+    // since some backends (VSS especially) need the snapshot mount
+    // alive while we re-read source xattrs / ACLs in
+    // `preserve_metadata_with_events`. The explicit `drop(...)`
+    // below is what releases the underlying snapshot.
+    let (mut src_file, snapshot_lease) =
         open_src_with_snapshot_fallback(&src_path, &dst_path, &opts, &events).await?;
 
     let mut open = OpenOptions::new();
@@ -303,20 +329,23 @@ pub async fn copy_file(
     // link targets — `/etc/shadow`, `C:\Windows\System32\drivers\etc\hosts`
     // — clobbering files the engine had no business writing. The
     // src-side flag is set inside `open_src_with_retry`; this is
-    // the dst-side parity. The flag is omitted entirely on resume
-    // because a legitimate resume opens an existing regular file
-    // the engine itself created on the prior run.
-    if matches!(resume_decision, ResumeDecision::FreshStart) {
-        let no_follow = crate::safety::no_follow_open_flags();
-        if no_follow != 0 {
-            // tokio::fs::OpenOptions exposes `custom_flags` as an
-            // inherent method on Unix (i32) and Windows (u32); no
-            // OpenOptionsExt import needed.
-            #[cfg(unix)]
-            open.custom_flags(no_follow as i32);
-            #[cfg(windows)]
-            open.custom_flags(no_follow);
-        }
+    // the dst-side parity.
+    //
+    // Resume hardening: the flag is *also* applied on resume re-opens.
+    // A resumed copy expects to find the regular file the engine
+    // itself created on the prior run; if a symlink has appeared at
+    // `dst` between `decide_resume`'s metadata stat and this open,
+    // that's an attack (or at minimum a stale-state race), not a
+    // legitimate scenario the engine should silently follow.
+    let no_follow = crate::safety::no_follow_open_flags();
+    if no_follow != 0 {
+        // tokio::fs::OpenOptions exposes `custom_flags` as an
+        // inherent method on Unix (i32) and Windows (u32); no
+        // OpenOptionsExt import needed.
+        #[cfg(unix)]
+        open.custom_flags(no_follow as i32);
+        #[cfg(windows)]
+        open.custom_flags(no_follow);
     }
     let mut dst_file = open
         .open(&dst_path)
@@ -549,6 +578,13 @@ pub async fn copy_file(
             {
                 return finalize_error(&opts, &events, e, &dst_path).await;
             }
+            // Snapshot lease can drop here — every metadata read
+            // that needed the snapshot mount has now finished. We
+            // release explicitly (rather than letting the function
+            // exit drop it) so a future refactor that splits the
+            // success path cannot accidentally release the lease
+            // before the metadata reads finish.
+            drop(snapshot_lease);
 
             let elapsed = started_at.elapsed();
             let rate = rate_bps(copied, elapsed);
@@ -630,6 +666,44 @@ async fn run_verify_pass(
             total_bytes: total,
         })
         .await;
+
+    // Phase 42 — paranoid verify mode: drop the destination's
+    // page-cache pages before the re-read so we measure what
+    // actually landed on disk, not what's still parked in RAM.
+    // This catches:
+    //   1. Drives that ack writes before flush (write-cache lying).
+    //   2. Silent destination bit-flips (the cached read sees the
+    //      original buffer, not the on-disk bytes).
+    //   3. Rare FS / driver bugs in the write path.
+    // The pre-verify `fsync_before_verify` already forces the
+    // kernel to drain dirty pages; here we additionally hint the
+    // page cache to evict, so the next read is a real disk read.
+    if opts.paranoid_verify {
+        #[cfg(target_os = "linux")]
+        {
+            // POSIX_FADV_DONTNEED — best-effort cache hint.
+            use std::ffi::CString;
+            use std::os::unix::ffi::OsStrExt;
+            if let Ok(c) = CString::new(dst_path.as_os_str().as_bytes()) {
+                // SAFETY: c is NUL-terminated; libc::open + fadvise +
+                // close are standard FFI.
+                unsafe {
+                    let fd = libc::open(c.as_ptr(), libc::O_RDONLY);
+                    if fd >= 0 {
+                        libc::posix_fadvise(fd, 0, 0, libc::POSIX_FADV_DONTNEED);
+                        libc::close(fd);
+                    }
+                }
+            }
+        }
+        // On Windows the kernel's cache manager already returns to
+        // disk after `FlushFileBuffers` (issued by the prior
+        // fsync_before_verify pass). The full NO_BUFFERING re-read
+        // path is tracked as a Phase 43 follow-up because it
+        // requires sector-aligned buffer setup throughout the verify
+        // pipeline; the fsync alone catches the dominant write-cache
+        // failure mode.
+    }
 
     let dst_file = File::open(dst_path)
         .await
@@ -934,7 +1008,9 @@ async fn copy_file_sparse_aware(
         .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
 
     // Source open with the same snapshot fallback the dense path uses.
-    let (mut src_file, _snapshot_lease) =
+    // `snapshot_lease` is held across the metadata apply below — see
+    // the matching block in the dense path for the rationale.
+    let (mut src_file, snapshot_lease) =
         open_src_with_snapshot_fallback(&src_path, &dst_path, &opts, &events).await?;
 
     let _ = events
@@ -1061,6 +1137,10 @@ async fn copy_file_sparse_aware(
         Some(&events),
     )
     .await?;
+    // Snapshot lease drops here, after the metadata apply has
+    // finished re-reading source xattrs / ACLs — see the dense
+    // path's matching drop for the rationale.
+    drop(snapshot_lease);
 
     // Verify pass — full-file byte-for-byte hash. Holes read back as
     // zeros on both sides, so a successful hash compare confirms the
@@ -1454,8 +1534,15 @@ enum ResumeDecision {
     },
     /// Journal said `AlreadyComplete` *and* the destination's full-
     /// file hash matched. Skip the copy loop; the caller short-
-    /// circuits to a synthetic `Completed` event.
-    AlreadyComplete,
+    /// circuits to a synthetic `Completed` event. `final_hash` is
+    /// the journal's recorded final BLAKE3 — kept so the engine can
+    /// re-call `finish_file` on the early-return path (idempotent
+    /// for already-finalised rows; fixes a row stuck with
+    /// `final_hash=None` if the prior run never hit the success
+    /// path).
+    AlreadyComplete {
+        final_hash: [u8; 32],
+    },
 }
 
 /// Probe the journal + the existing destination and decide whether
@@ -1490,7 +1577,7 @@ async fn decide_resume(
             if dst_len != expected_total {
                 let _ = events
                     .send(CopyEvent::ResumeAborted {
-                        reason: "dst-length-mismatch",
+                        reason: ResumeAbortReason::DstLengthMismatch,
                         offset: 0,
                     })
                     .await;
@@ -1501,7 +1588,7 @@ async fn decide_resume(
                 Err(_) => {
                     let _ = events
                         .send(CopyEvent::ResumeAborted {
-                            reason: "dst-read-failed",
+                            reason: ResumeAbortReason::DstReadFailed,
                             offset: 0,
                         })
                         .await;
@@ -1509,11 +1596,11 @@ async fn decide_resume(
                 }
             };
             if computed == final_hash {
-                Ok(ResumeDecision::AlreadyComplete)
+                Ok(ResumeDecision::AlreadyComplete { final_hash })
             } else {
                 let _ = events
                     .send(CopyEvent::ResumeAborted {
-                        reason: "complete-hash-mismatch",
+                        reason: ResumeAbortReason::CompleteHashMismatch,
                         offset: 0,
                     })
                     .await;
@@ -1532,7 +1619,7 @@ async fn decide_resume(
             if opts.verify.is_some() {
                 let _ = events
                     .send(CopyEvent::ResumeAborted {
-                        reason: "verify-incompatible",
+                        reason: ResumeAbortReason::VerifyIncompatible,
                         offset,
                     })
                     .await;
@@ -1545,7 +1632,7 @@ async fn decide_resume(
                 // isn't there.
                 let _ = events
                     .send(CopyEvent::ResumeAborted {
-                        reason: "dst-shrunk",
+                        reason: ResumeAbortReason::DstShrunk,
                         offset,
                     })
                     .await;
@@ -1556,7 +1643,7 @@ async fn decide_resume(
                 Err(_) => {
                     let _ = events
                         .send(CopyEvent::ResumeAborted {
-                            reason: "dst-read-failed",
+                            reason: ResumeAbortReason::DstReadFailed,
                             offset,
                         })
                         .await;
@@ -1571,7 +1658,7 @@ async fn decide_resume(
             } else {
                 let _ = events
                     .send(CopyEvent::ResumeAborted {
-                        reason: "prefix-hash-mismatch",
+                        reason: ResumeAbortReason::PrefixHashMismatch,
                         offset,
                     })
                     .await;
@@ -1632,17 +1719,25 @@ async fn prime_blake3_from_dst_prefix(
 /// Best-effort sync-failure logger. Kept as a thin wrapper so the
 /// tracing dep stays internal — the engine itself does not panic
 /// or surface the error; it's informational.
-fn tracing_log_sync_failure(_dst: &Path, _err: &std::io::Error) {
-    // Intentionally a no-op until structured logging is wired
-    // workspace-wide. Keeping the call site so the future logger
-    // lands here without engine churn.
+fn tracing_log_sync_failure(dst: &Path, err: &std::io::Error) {
+    tracing::warn!(
+        dst = %dst.display(),
+        code = err.raw_os_error(),
+        error = %err,
+        "post-copy fsync failed (non-fatal)",
+    );
 }
 
 /// Best-effort meta-apply failure logger. Phase 24's apply pass is
 /// strictly post-byte-copy — losing xattrs / ADS / ACLs should not
 /// abort the operation that already succeeded.
-fn tracing_log_meta_failure(_dst: &Path, _err: &std::io::Error) {
-    // Same intentional no-op as `tracing_log_sync_failure`.
+fn tracing_log_meta_failure(dst: &Path, err: &std::io::Error) {
+    tracing::warn!(
+        dst = %dst.display(),
+        code = err.raw_os_error(),
+        error = %err,
+        "post-copy meta-apply failed (non-fatal)",
+    );
 }
 
 /// Phase 19b — open the source, then fall through to a snapshot if
@@ -1657,7 +1752,14 @@ async fn open_src_with_snapshot_fallback(
     opts: &CopyOptions,
     events: &mpsc::Sender<CopyEvent>,
 ) -> Result<(File, Option<SnapshotLease>), CopyError> {
-    match open_src_with_retry(src, opts.follow_symlinks).await {
+    match open_src_with_retry(
+        src,
+        opts.follow_symlinks,
+        opts.sharing_violation_retries,
+        opts.sharing_violation_base_delay_ms,
+    )
+    .await
+    {
         Ok(f) => Ok((f, None)),
         Err(e) if is_sharing_violation(&e) => {
             match opts.on_locked {
@@ -1674,7 +1776,14 @@ async fn open_src_with_snapshot_fallback(
                         })
                         .await;
                     let translated = lease.translated.clone();
-                    match open_src_with_retry(&translated, opts.follow_symlinks).await {
+                    match open_src_with_retry(
+                        &translated,
+                        opts.follow_symlinks,
+                        opts.sharing_violation_retries,
+                        opts.sharing_violation_base_delay_ms,
+                    )
+                    .await
+                    {
                         Ok(f) => Ok((f, Some(lease))),
                         Err(open_err) => Err(CopyError::from_io(src, dst, open_err)),
                     }
@@ -1736,7 +1845,12 @@ fn libc_ebusy() -> i32 {
 /// otherwise an absolute symlink at `src` (the common case for
 /// `follow_symlinks=true`) would fail with `ELOOP`/`ERROR_*` and
 /// break the default copy path.
-async fn open_src_with_retry(src: &Path, follow_symlinks: bool) -> std::io::Result<File> {
+async fn open_src_with_retry(
+    src: &Path,
+    follow_symlinks: bool,
+    retries: u32,
+    base_delay_ms: u64,
+) -> std::io::Result<File> {
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
@@ -1757,8 +1871,19 @@ async fn open_src_with_retry(src: &Path, follow_symlinks: bool) -> std::io::Resu
         } else {
             crate::safety::no_follow_open_flags()
         };
-        let mut last_err: Option<std::io::Error> = None;
-        for attempt in 0..3u32 {
+        // Phase 42 — guard against zero-retry config: at least one
+        // attempt is always made. `last_err` is non-Option and
+        // initialised to a `WouldBlock` sentinel; every retry
+        // overwrites it with the real OS error so the
+        // snapshot-fallback path can still detect
+        // `ERROR_SHARING_VIOLATION (32)` / `ERROR_LOCK_VIOLATION (33)`
+        // via `is_sharing_violation` even when retries exhaust.
+        let total_attempts = retries.max(1);
+        let mut last_err: std::io::Error = std::io::Error::new(
+            std::io::ErrorKind::WouldBlock,
+            "sharing-violation-retries-exhausted",
+        );
+        for attempt in 0..total_attempts {
             let mut opts = std::fs::OpenOptions::new();
             opts.read(true)
                 .share_mode(SHARE_ALL)
@@ -1770,13 +1895,16 @@ async fn open_src_with_retry(src: &Path, follow_symlinks: bool) -> std::io::Resu
             match res {
                 Ok(Ok(std_file)) => return Ok(File::from_std(std_file)),
                 Ok(Err(e)) => {
-                    // ERROR_SHARING_VIOLATION = 32. Retry with
-                    // exponential backoff; most short-lived locks
-                    // clear within a few hundred ms.
-                    if e.raw_os_error() == Some(32) {
-                        let ms = 50u64 << attempt; // 50, 100, 200
+                    // ERROR_SHARING_VIOLATION = 32 / ERROR_LOCK_VIOLATION = 33.
+                    // Retry with caller-tuned exponential backoff
+                    // (Phase 42 — was hard-coded to 50 ms × 3).
+                    if matches!(e.raw_os_error(), Some(32) | Some(33))
+                        && attempt + 1 < total_attempts
+                    {
+                        // Exponential backoff: base × 2^attempt, saturating.
+                        let ms = base_delay_ms.saturating_mul(1u64.checked_shl(attempt).unwrap_or(u64::MAX));
+                        last_err = e;
                         tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
-                        last_err = Some(e);
                         continue;
                     }
                     return Err(e);
@@ -1784,12 +1912,7 @@ async fn open_src_with_retry(src: &Path, follow_symlinks: bool) -> std::io::Resu
                 Err(join_err) => return Err(std::io::Error::other(format!("join: {join_err}"))),
             }
         }
-        Err(last_err.unwrap_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::WouldBlock,
-                "sharing-violation-retries-exhausted",
-            )
-        }))
+        Err(last_err)
     }
     #[cfg(unix)]
     {

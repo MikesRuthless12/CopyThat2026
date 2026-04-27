@@ -110,6 +110,10 @@
 //! ```
 
 #![forbid(unsafe_code)]
+// Phase 42 doc audit: warn-only on missing public-API docs so future
+// additions are flagged without breaking the build on the historic
+// undocumented surface (control flag accessors, error variants, etc.).
+#![warn(missing_docs)]
 
 pub mod collision;
 mod control;
@@ -131,7 +135,10 @@ pub use collision::CollisionPolicy;
 pub use control::CopyControl;
 pub use engine::copy_file;
 pub use error::{CopyError, CopyErrorKind};
-pub use event::{Collision, CollisionResolution, CopyEvent, CopyReport, ErrorPrompt, TreeReport};
+pub use event::{
+    Collision, CollisionResolution, CopyEvent, CopyReport, ErrorPrompt, ResumeAbortReason,
+    TreeReport,
+};
 pub use filter::{CompiledFilters, FilterError, FilterSet};
 pub use meta::{
     FileCaps, FinderInfoBlob, MetaApplyOutcome, MetaOps, MetaPolicy, MetaSnapshot, NoopMetaOps,

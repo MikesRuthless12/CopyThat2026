@@ -249,9 +249,10 @@ pub struct GeneralSettings {
     pub clipboard_watcher_enabled: bool,
     /// Phase 20 — when `true`, the resume modal is skipped and any
     /// unfinished jobs detected at startup are silently re-enqueued.
-    /// Default `false`: the first launch with unfinished work shows
-    /// the prompt; the user's choice on the prompt can flip this on
-    /// per-volume in a follow-up phase. For now it's a global flag.
+    /// Phase 42 follow-up: default flipped to `true` per user
+    /// directive. Most users want crash-resume to "just work"; the
+    /// modal-on-first-launch added friction without payoff. Users
+    /// who prefer a prompt can flip it back via Settings -> General.
     pub auto_resume_interrupted: bool,
     /// Phase 37 follow-up #2 — has the user dismissed the
     /// first-launch "install the Copy That mobile companion PWA"
@@ -274,7 +275,10 @@ impl Default for GeneralSettings {
             paste_shortcut_enabled: true,
             paste_shortcut: defaults::DEFAULT_PASTE_SHORTCUT.to_string(),
             clipboard_watcher_enabled: false,
-            auto_resume_interrupted: false,
+            // Phase 42 - default flipped to true per user directive
+            // so fresh installs auto-resume any unfinished journal
+            // jobs at startup without prompting.
+            auto_resume_interrupted: true,
             mobile_onboarding_dismissed: false,
         }
     }
@@ -415,6 +419,41 @@ pub struct TransferSettings {
     /// `false` because hashing two trees adds I/O the user hasn't
     /// asked for unless they want it.
     pub dedup_prescan: bool,
+    /// Phase 42 — opt-in paranoid post-write verification.
+    ///
+    /// When `true`, the engine re-hashes the destination after the
+    /// byte copy completes (in addition to the streaming
+    /// [`verify`](Self::verify) checksum captured during read) so a
+    /// silent disk corruption between write + close is caught before
+    /// the job is marked successful. Defaults to `false` because the
+    /// extra read pass roughly doubles destination I/O and the
+    /// in-stream verify already covers the common-case "bytes left
+    /// the source intact" check.
+    ///
+    /// Mirrors the `paranoid_verify` field on
+    /// `copythat_core::CopyOptions` (Phase 42 engine knob); the
+    /// settings → engine bridge in the Tauri runner reads this flag
+    /// when constructing the per-job `CopyOptions`.
+    #[serde(default)]
+    pub paranoid_verify: bool,
+    /// Phase 42 — number of times the engine retries opening a
+    /// source file that returns a sharing-violation
+    /// (Windows `ERROR_SHARING_VIOLATION` / Linux `EBUSY`) before
+    /// surfacing the error to the [`on_locked`](Self::on_locked)
+    /// policy. Mirrors the `sharing_violation_retries` field on
+    /// `copythat_core::CopyOptions`. Default `3` matches the engine's
+    /// historical short-loop behaviour.
+    #[serde(default = "defaults::default_sharing_violation_retries")]
+    pub sharing_violation_retries: u32,
+    /// Phase 42 — base delay (milliseconds) for the exponential
+    /// backoff between sharing-violation retries. The engine doubles
+    /// this on each subsequent attempt up to
+    /// [`sharing_violation_retries`](Self::sharing_violation_retries)
+    /// total tries. Mirrors `sharing_violation_base_delay_ms` on
+    /// `copythat_core::CopyOptions`. Default `50` ms matches the
+    /// engine's historical timing.
+    #[serde(default = "defaults::default_sharing_violation_base_delay_ms")]
+    pub sharing_violation_base_delay_ms: u64,
 }
 
 impl Default for TransferSettings {
@@ -440,6 +479,9 @@ impl Default for TransferSettings {
             dedup_mode: "off".into(),
             dedup_hardlink_policy: "read-only-only".into(),
             dedup_prescan: false,
+            paranoid_verify: false,
+            sharing_violation_retries: defaults::default_sharing_violation_retries(),
+            sharing_violation_base_delay_ms: defaults::default_sharing_violation_base_delay_ms(),
         }
     }
 }
@@ -454,7 +496,7 @@ impl Default for TransferSettings {
 pub enum LockedFilePolicyChoice {
     /// Ask the user the first time per volume. Remembered choice
     /// (Skip / Retry / Snapshot) stored under
-    /// [`TransferSettings::volume_snapshot_prefs`] (added in the
+    /// `TransferSettings::volume_snapshot_prefs` (added in the
     /// per-volume remember follow-up).
     #[default]
     Ask,
@@ -507,9 +549,26 @@ impl TransferSettings {
 /// Verify algorithm selection. Mirrors `copythat_hash::HashAlgorithm`
 /// plus an explicit `Off` variant. We keep a separate enum here so
 /// this crate doesn't depend on `copythat-hash`.
+///
+/// **Default UX note**: this enum defaults to [`Off`](Self::Off) while
+/// [`LockedFilePolicyChoice`] defaults to
+/// [`Ask`](LockedFilePolicyChoice::Ask). The asymmetry is intentional —
+/// see the doc comment on [`Off`](Self::Off) for the reasoning. Don't
+/// "fix" it without re-reading that note first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum VerifyChoice {
+    /// `Off` is the intentional default; verification is opt-in
+    /// because it doubles destination I/O (the engine has to re-read
+    /// every byte it just wrote to compute the post-write hash).
+    /// Users who care about silent-corruption resilience can flip
+    /// this to a hash family of their choice; everyone else gets the
+    /// fast path. This is the opposite stance from
+    /// [`LockedFilePolicyChoice`], which defaults to
+    /// [`Ask`](LockedFilePolicyChoice::Ask) — locked files are an
+    /// uncommon-but-correctness-critical event the user should
+    /// always be aware of, while verification is a cost-benefit
+    /// trade-off the user is best placed to make per-job.
     #[default]
     Off,
     Crc32,
@@ -642,9 +701,19 @@ pub struct AdvancedSettings {
     #[serde(skip_deserializing)]
     pub telemetry: bool,
     pub error_policy: ErrorPolicyChoice,
-    /// Days of history retained before auto-purge. `0` = never purge.
-    /// The `history_purge` IPC call honours the existing 30-day
-    /// default when the user hasn't customised this.
+    /// Days of history retained before auto-purge.
+    ///
+    /// Stored value `0` means "the user has not customised this
+    /// setting" — it is **not** "never purge". The `history_purge`
+    /// IPC call interprets `0` by falling back to its built-in
+    /// 30-day default, so a fresh install with a default-constructed
+    /// `Settings` still gets the 30-day rolling retention window the
+    /// rest of the product assumes. To opt out of auto-purge entirely
+    /// the user has to set an explicit large value (e.g. `36500` for
+    /// "100 years"). The `0`-as-sentinel scheme is what keeps the
+    /// settings TOML's "default-shaped" rows from accidentally
+    /// pinning retention to something other than 30 days when the
+    /// IPC call's default ever evolves.
     pub history_retention_days: u32,
     /// Override the SQLite database location. `None` = use
     /// `copythat_history::History::default_path()` (OS data dir).
@@ -731,6 +800,14 @@ impl FilterSettings {
     /// True when there is nothing the engine needs to do — either
     /// the master switch is off or every field is at its default.
     /// The Tauri bridge skips compile/attach when this holds.
+    ///
+    /// Note on the "enabled-but-no-patterns" case: this method also
+    /// returns `true` when `enabled == true` but every other field is
+    /// at its default. The reasoning is that "filter on, no
+    /// predicates configured" can never reject a file — the filter
+    /// would accept everything, which is the same observable behaviour
+    /// as the disabled state. Skipping compile/attach in that case
+    /// avoids walking the filter pipeline for zero benefit.
     pub fn is_effectively_empty(&self) -> bool {
         !self.enabled
             || (self.include_globs.is_empty()
@@ -1098,7 +1175,7 @@ pub struct ChunkStoreSettings {
     /// pay the disk cost of a chunk store they might not need.
     pub enabled: bool,
     /// Absolute path to the chunk-store root. Empty string = "use
-    /// [`copythat_chunk::default_chunk_store_path`] at runtime", which
+    /// `copythat_chunk::default_chunk_store_path` at runtime", which
     /// resolves to `<data-dir>/chunks/` under the Copy That project
     /// dir.
     pub location_override: String,
@@ -1784,6 +1861,11 @@ pub struct FtpBackendConfig {
     pub port: u16,
     pub username: String,
     pub root: String,
+    /// Phase 42 — optional path to a PEM-encoded CA bundle the
+    /// FTPS handshake should consult. Best-effort hook;
+    /// `copythat_cloud::FtpConfig::ca_bundle_path` doc-comment
+    /// explains the rustls-feature-flag caveats.
+    pub ca_bundle_path: Option<std::path::PathBuf>,
 }
 
 impl Default for FtpBackendConfig {
@@ -1793,6 +1875,7 @@ impl Default for FtpBackendConfig {
             port: 21,
             username: String::new(),
             root: String::new(),
+            ca_bundle_path: None,
         }
     }
 }
@@ -1825,18 +1908,18 @@ pub struct MountSettings {
 // ---------------------------------------------------------------------
 
 /// Enterprise-grade audit-log preferences. Off by default. When on,
-/// the Tauri runner opens a [`copythat_audit::AuditSink`] at startup
+/// the Tauri runner opens a `copythat_audit::AuditSink` at startup
 /// (or on the first `update_settings` flip) and records the
-/// brief's eight [`copythat_audit::AuditEvent`] variants.
+/// brief's eight `copythat_audit::AuditEvent` variants.
 ///
 /// `format` persists the kebab-case
-/// [`copythat_audit::AuditFormat`] identifier (`csv`, `json-lines`,
+/// `copythat_audit::AuditFormat` identifier (`csv`, `json-lines`,
 /// `syslog`, `cef`, `leef`) — the audit crate's enum is mirrored as a
 /// string here so [`Settings`] can round-trip without taking a hard
 /// dep on `copythat-audit` (keeps the settings crate a pure preference
 /// layer, consistent with the Phase 9 / 27 pattern).
 ///
-/// `worm` stores the kebab-case [`copythat_audit::WormMode`]
+/// `worm` stores the kebab-case `copythat_audit::WormMode`
 /// identifier (`off` / `on`) for the same reason.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
@@ -1881,7 +1964,7 @@ impl Default for AuditSettings {
 // ---------------------------------------------------------------------
 
 /// Persisted encryption + compression preferences. The live
-/// [`copythat_crypt::EncryptionPolicy`] / `CompressionPolicy` are
+/// `copythat_crypt::EncryptionPolicy` / `CompressionPolicy` are
 /// built from these strings at copy time by the Tauri runner.
 ///
 /// The enum-shaped fields (`encryption_mode`, `compression_mode`)

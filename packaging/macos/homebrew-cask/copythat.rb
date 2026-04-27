@@ -1,4 +1,4 @@
-# Homebrew cask for Copy That v1.25.0.
+# Homebrew cask for Copy That v1.0.0.
 #
 # Lives in a dedicated `copythat-homebrew` tap (free to create and
 # host on GitHub). Users install with:
@@ -10,7 +10,7 @@
 # without the "unidentified developer" warning. `sha256` is filled
 # in at publish time by the release helper.
 cask "copythat" do
-  version "1.25.0"
+  version "1.0.0"
   sha256 arm:   "0000000000000000000000000000000000000000000000000000000000000000",
          intel: "0000000000000000000000000000000000000000000000000000000000000000"
 
@@ -21,7 +21,7 @@ cask "copythat" do
     url "https://github.com/MikesRuthless12/CopyThat2026/releases/download/v#{version}/CopyThat_#{version}_x64.dmg"
   end
 
-  name "Copy That v1.25.0"
+  name "Copy That v1.0.0"
   desc "Byte-exact cross-platform file copier (Rust + Tauri 2)"
   homepage "https://github.com/MikesRuthless12/CopyThat2026"
 
@@ -32,7 +32,7 @@ cask "copythat" do
 
   depends_on macos: ">= :monterey"
 
-  app "Copy That v1.25.0.app"
+  app "Copy That v1.0.0.app"
 
   zap trash: [
     "~/Library/Application Support/CopyThat2026",

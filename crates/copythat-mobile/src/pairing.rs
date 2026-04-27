@@ -133,42 +133,54 @@ impl PairingToken {
             return Err(PairingError::MissingPeerId);
         }
 
+        // Phase 38 hardening — count *every* key, not just the
+        // ones we care about, and reject the URL the moment any key
+        // appears more than once. The previous shape kept counters
+        // for `sas` / `dpk` only, so a crafted QR like
+        // `?sas=A&sas=B&dpk=X` was caught but `?evil=1&evil=2&sas=…`
+        // sailed through. The grammar for `cthat-pair://` is fully
+        // closed: every legitimate token has exactly one `sas=` and
+        // exactly one `dpk=` and nothing else, so any duplicate is
+        // hostile-payload territory.
         let mut sas_b32: Option<&str> = None;
         let mut dpk_b32: Option<&str> = None;
-        let mut seen_sas = 0u32;
-        let mut seen_dpk = 0u32;
+        let mut seen: Vec<&str> = Vec::new();
         for kv in query.split('&') {
             let Some((k, v)) = kv.split_once('=') else {
+                // Bare `&` or `key` without `=` — treat the whole URL
+                // as malformed rather than silently skipping. Any
+                // legitimate `to_url` output contains exactly two
+                // well-formed `key=value` pairs.
+                if !kv.is_empty() {
+                    return Err(PairingError::BadFieldLength {
+                        field: "query",
+                        actual: 0,
+                        expected: 1,
+                    });
+                }
                 continue;
             };
+            if seen.contains(&k) {
+                // Any duplicate key — known or unknown — is a
+                // structural smell. Refuse so a malicious QR cannot
+                // sneak a second copy of `sas` / `dpk` past us via
+                // `to_ascii_lowercase` games or unknown-key padding.
+                return Err(PairingError::BadFieldLength {
+                    field: match k {
+                        "sas" => "sas",
+                        "dpk" => "dpk",
+                        _ => "query",
+                    },
+                    actual: 2,
+                    expected: 1,
+                });
+            }
+            seen.push(k);
             if k == "sas" {
-                seen_sas = seen_sas.saturating_add(1);
                 sas_b32 = Some(v);
             } else if k == "dpk" {
-                seen_dpk = seen_dpk.saturating_add(1);
                 dpk_b32 = Some(v);
             }
-        }
-        // Reject pairing URLs with more than one `sas=` parameter.
-        // The previous shape silently kept the *last* value, so a
-        // crafted URL like `?sas=<honest>&sas=<attacker>` would
-        // pair against the attacker's seed — and since
-        // `mobile_pair_commit` historically did not enforce SAS
-        // confirmation either, the attacker-supplied SAS could
-        // smuggle the user past the visual emoji check.
-        if seen_sas > 1 {
-            return Err(PairingError::BadFieldLength {
-                field: "sas",
-                actual: seen_sas as usize,
-                expected: 1,
-            });
-        }
-        if seen_dpk > 1 {
-            return Err(PairingError::BadFieldLength {
-                field: "dpk",
-                actual: seen_dpk as usize,
-                expected: 1,
-            });
         }
         let sas_b32 = sas_b32.ok_or(PairingError::MissingQueryParam("sas"))?;
         let dpk_b32 = dpk_b32.ok_or(PairingError::MissingQueryParam("dpk"))?;
@@ -205,7 +217,7 @@ impl PairingToken {
 }
 
 /// 4-emoji short-authentication string. `[u8; SAS_EMOJI_SLOTS]`
-/// where each byte indexes into [`SAS_EMOJI_TABLE`] modulo 32.
+/// where each byte indexes into the private `SAS_EMOJI_TABLE` modulo 32.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SasFingerprint(pub [u8; SAS_EMOJI_SLOTS]);
 
@@ -445,6 +457,66 @@ mod tests {
         let err = PairingToken::parse("cthat-pair://desktop?other=val").unwrap_err();
         assert!(
             matches!(err, PairingError::MissingQueryParam("sas")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_duplicate_sas() {
+        let token = PairingToken::new("desk", [4u8; 32]).expect("mint");
+        let url = token.to_url();
+        // Append another `sas=…` after the legitimate one.
+        let extra_sas = base32::encode(Alphabet::Crockford, &[0xCC; PAIRING_SAS_SEED_BYTES]);
+        let crafted = format!("{url}&sas={extra_sas}");
+        let err = PairingToken::parse(&crafted).expect_err("should reject duplicate sas");
+        assert!(
+            matches!(
+                err,
+                PairingError::BadFieldLength {
+                    field: "sas",
+                    actual: 2,
+                    expected: 1
+                }
+            ),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_duplicate_dpk() {
+        let token = PairingToken::new("desk", [4u8; 32]).expect("mint");
+        let url = token.to_url();
+        let extra_dpk = base32::encode(Alphabet::Crockford, &[0xDD; 32]);
+        let crafted = format!("{url}&dpk={extra_dpk}");
+        let err = PairingToken::parse(&crafted).expect_err("should reject duplicate dpk");
+        assert!(
+            matches!(
+                err,
+                PairingError::BadFieldLength {
+                    field: "dpk",
+                    actual: 2,
+                    expected: 1
+                }
+            ),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_duplicate_unknown_param() {
+        let token = PairingToken::new("desk", [4u8; 32]).expect("mint");
+        let url = token.to_url();
+        let crafted = format!("{url}&xx=1&xx=2");
+        let err = PairingToken::parse(&crafted).expect_err("should reject duplicate unknown param");
+        assert!(
+            matches!(
+                err,
+                PairingError::BadFieldLength {
+                    field: "query",
+                    actual: 2,
+                    expected: 1
+                }
+            ),
             "{err:?}"
         );
     }

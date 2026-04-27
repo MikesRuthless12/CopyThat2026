@@ -13,8 +13,11 @@ use crate::event::{CopyEvent, CopyReport};
 use crate::filter::FilterSet;
 use crate::verify::Verifier;
 
+/// Default per-file copy buffer size. 1 MiB.
 pub const DEFAULT_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
+/// Minimum buffer size accepted by the engine. 64 KiB.
 pub const MIN_BUFFER_SIZE: usize = 64 * 1024; // 64 KiB
+/// Maximum buffer size accepted by the engine. 16 MiB.
 pub const MAX_BUFFER_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
 
 /// What the engine should do when a file can't be opened for read
@@ -39,7 +42,7 @@ pub enum LockedFilePolicy {
     /// After retry exhausts, ask
     /// [`CopyOptions::snapshot_hook`](super::CopyOptions::snapshot_hook)
     /// for a snapshot-side path and reopen the read against it. On
-    /// success, [`CopyEvent::SnapshotCreated`](super::CopyEvent::SnapshotCreated)
+    /// success, [`CopyEvent::SnapshotCreated`]
     /// is emitted so the UI can render a "📷 Reading from VSS
     /// snapshot of C:" badge. On failure falls through to a typed
     /// error (respecting the tree-level `on_error` policy).
@@ -97,10 +100,13 @@ pub enum ResumePlan {
     /// Re-hash the destination's first `offset` bytes via BLAKE3
     /// and compare against `src_hash_at_offset`. On match, seek both
     /// files to `offset` and continue. On mismatch, the engine emits
-    /// [`CopyEvent::ResumeAborted`](super::CopyEvent::ResumeAborted)
+    /// [`CopyEvent::ResumeAborted`]
     /// and falls back to a full restart.
     Resume {
+        /// Bytes the engine had already streamed when the previous
+        /// run was interrupted.
         offset: u64,
+        /// BLAKE3 of the first `offset` source bytes from the prior run.
         src_hash_at_offset: [u8; 32],
     },
     /// Nothing reusable — start over from byte 0.
@@ -108,7 +114,10 @@ pub enum ResumePlan {
     /// The destination is already the right size and the
     /// checkpoint's `final_hash` matches a re-hash of the existing
     /// destination. Skip the copy entirely.
-    AlreadyComplete { final_hash: [u8; 32] },
+    AlreadyComplete {
+        /// BLAKE3 of the source recorded by the prior run.
+        final_hash: [u8; 32],
+    },
 }
 
 /// Bridge contract for the durable resume journal.
@@ -145,11 +154,12 @@ pub trait JournalSink: Send + Sync + std::fmt::Debug {
     /// the first byte is written.
     fn resume_plan(&self, file_idx: u64) -> ResumePlan;
 
-    /// Job-level terminators. Exactly one of the three fires per
-    /// job lifecycle; the runner picks based on the engine's
-    /// outcome.
+    /// Job-level terminator: succeeded — exactly one of the three
+    /// `finish_job_*` methods fires per job lifecycle.
     fn finish_job_succeeded(&self);
+    /// Job-level terminator: failed.
     fn finish_job_failed(&self);
+    /// Job-level terminator: cancelled by the user.
     fn finish_job_cancelled(&self);
 }
 
@@ -160,8 +170,8 @@ pub trait JournalSink: Send + Sync + std::fmt::Debug {
 /// dependency cycle between `copythat-core` and `copythat-snapshot`.
 ///
 /// The hook is consulted exactly once per locked source file, after
-/// [`open_src_with_retry`]'s own sharing-violation backoff has
-/// exhausted. If the hook returns `Err`, the engine surfaces the
+/// the engine's own sharing-violation backoff (`open_src_with_retry`)
+/// has exhausted. If the hook returns `Err`, the engine surfaces the
 /// error (as configured by the tree-level `on_error` policy). If the
 /// hook returns `Ok(lease)`, the engine opens `lease.translated` for
 /// read and carries on with the normal copy loop.
@@ -208,8 +218,8 @@ pub trait ShapeSink: Send + Sync + std::fmt::Debug {
 /// destination path and returns a [`TransformOutcome`] summarising
 /// the bytes that flowed through the pipeline.
 ///
-/// When a hook is installed and the sink returns
-/// [`TransformOutcome::Transformed`], the engine:
+/// When a hook is installed and the sink returns a
+/// [`TransformOutcome`] (i.e. the transform actually ran), the engine:
 ///
 /// - Skips [`fast_copy_hook`](CopyOptions::fast_copy_hook) (fast
 ///   paths are byte-identical copies; they can't handle a
@@ -386,6 +396,61 @@ pub struct CopyOptions {
     /// to the dense path — there is no way to honour the request
     /// without a hook.
     pub preserve_sparseness: bool,
+    /// Phase 42 — paranoid verify mode.
+    ///
+    /// When `true` (and [`verify`](Self::verify) is also set), the
+    /// engine forces a full filesystem flush (`FlushFileBuffers` on
+    /// Windows, `fsync` on Unix) before the verify pass and asks the
+    /// kernel to drop the destination's page-cache pages
+    /// (`posix_fadvise(POSIX_FADV_DONTNEED)` on Linux; the `fsync`
+    /// alone covers the Windows case via the cache manager's
+    /// write-through behaviour). This catches three failure modes
+    /// the default verify cannot:
+    ///   1. Write-cache lying — drives that ack a write before
+    ///      persistence (FUA ignored, volatile DRAM cache).
+    ///   2. Silent destination bit-flips on platter / NAND.
+    ///   3. Filesystem / driver bugs in the write path.
+    ///
+    /// Cost: ~50 % throughput reduction on the verify pass (the
+    /// re-read is now uncached). Off by default; opt-in per-job.
+    pub paranoid_verify: bool,
+    /// Phase 42 — number of retries on `ERROR_SHARING_VIOLATION` /
+    /// `ERROR_LOCK_VIOLATION` (Windows) when opening a source file
+    /// that's transiently locked by another process.
+    ///
+    /// Default `3` matches Robocopy `/R:3`. Backoff is exponential:
+    /// `sharing_violation_base_delay_ms << attempt`.
+    pub sharing_violation_retries: u32,
+    /// Phase 42 — base delay (in milliseconds) for the
+    /// sharing-violation retry exponential backoff. Each retry
+    /// doubles. Default `50` (50 ms / 100 ms / 200 ms — covers most
+    /// short-lived AV / indexer locks).
+    pub sharing_violation_base_delay_ms: u64,
+    /// Phase 43 — opt out of the per-chunk progress callback in the
+    /// platform fast paths.
+    ///
+    /// `CopyFileExW` and `CopyFile2` invoke their progress callback
+    /// from the kernel worker thread driving the I/O; every callback
+    /// is a thread-boundary crossing. For long-running copies that's
+    /// negligible (~ns per call), but on bench harnesses + headless
+    /// CLI runs that don't render progress, the callback is pure
+    /// overhead. When `true`, the platform layer passes `NULL` /
+    /// `nullptr` for the callback and the polling task that emits
+    /// `CopyEvent::Progress` is suppressed (the engine still emits
+    /// `Started` + `Completed`, so listeners get the bookends).
+    ///
+    /// **Cancellation caveat**: the progress callback is the only
+    /// in-flight cancel hook for `CopyFileExW`/`CopyFile2`. When this
+    /// flag is `true`, calling [`CopyControl::cancel`] mid-copy will
+    /// not interrupt the in-flight syscall — the engine only honours
+    /// cancellation between files in a tree, not during the copy of
+    /// a single file. The CLI tolerates this because Ctrl-C kills
+    /// the whole process anyway; GUI callers that need
+    /// mid-file cancel must leave this `false`.
+    ///
+    /// Default: `false` (callback installed — keeps GUI behaviour
+    /// untouched). The CLI flips it on for `--quiet` runs.
+    pub disable_progress_callback: bool,
     /// Phase 23 — extent-introspection bridge.
     ///
     /// Implemented by `copythat_platform::PlatformSparseOps`.
@@ -653,6 +718,10 @@ impl Default for CopyOptions {
             journal_file_idx: 0,
             shape: None,
             preserve_sparseness: true,
+            paranoid_verify: false,
+            sharing_violation_retries: 3,
+            sharing_violation_base_delay_ms: 50,
+            disable_progress_callback: false,
             sparse_ops: None,
             preserve_security_metadata: true,
             meta_policy: crate::meta::MetaPolicy::default(),
@@ -666,6 +735,8 @@ impl Default for CopyOptions {
 }
 
 impl CopyOptions {
+    /// Return [`CopyOptions::buffer_size`] clamped to the engine's
+    /// [`MIN_BUFFER_SIZE`] / [`MAX_BUFFER_SIZE`] window.
     pub fn clamped_buffer_size(&self) -> usize {
         self.buffer_size.clamp(MIN_BUFFER_SIZE, MAX_BUFFER_SIZE)
     }

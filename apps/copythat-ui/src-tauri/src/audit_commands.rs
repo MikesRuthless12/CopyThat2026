@@ -69,6 +69,18 @@ impl AuditRegistry {
             eprintln!("[audit] record {} failed: {e}", event.signature());
         }
     }
+
+    /// Drain any in-flight `record(...)` and flush the active sink.
+    /// Used by `update_settings` before swapping the sink so the
+    /// chain hash never races across the swap. No-op when no sink
+    /// is installed.
+    pub fn flush(&self) {
+        if let Some(sink) = self.snapshot()
+            && let Err(e) = sink.flush()
+        {
+            eprintln!("[audit] flush failed: {e}");
+        }
+    }
 }
 
 /// Derive the user-facing display value. Falls back to the OS user
@@ -475,5 +487,34 @@ mod tests {
         a.audit.enabled = true;
         let fb = settings_fingerprint(&a);
         assert_ne!(fa, fb);
+    }
+
+    #[test]
+    fn flush_drains_pending_writes_before_swap() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("audit.log");
+        let cfg = AuditSettings {
+            enabled: true,
+            file_path: path.to_string_lossy().into_owned(),
+            format: "json-lines".into(),
+            ..AuditSettings::default()
+        };
+        let sink = build_sink(&cfg)
+            .expect("enabled build_sink")
+            .expect("sink");
+        let registry = AuditRegistry::new();
+        registry.set(Some(sink));
+        record_login(&registry);
+        // flush() must not panic and must leave content visible
+        // before subsequent set() drops the prior Arc.
+        registry.flush();
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert!(contents.contains("login-event"));
+        // Replacing the sink after flush() never observes the swap
+        // racing with an in-flight record() — the mutex re-acquire
+        // inside flush() is the synchronization barrier.
+        registry.set(None);
+        registry.flush(); // no-op when no sink installed
+        assert!(!registry.is_active());
     }
 }

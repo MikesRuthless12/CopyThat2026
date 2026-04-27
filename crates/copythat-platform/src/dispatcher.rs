@@ -65,18 +65,67 @@ pub async fn fast_copy(
     // costs a file-open / probe cycle. Skip it when we can cheaply
     // prove src and dst live on different volumes; fall through to
     // the OS-native accelerated path directly.
-    let same_volume = match (crate::helpers::volume_id(&src_owned), {
-        // For the destination, probe the parent dir — the file itself
-        // doesn't exist yet so we can't stat it.
-        let dst_probe = dst_owned.parent().unwrap_or(&dst_owned);
-        crate::helpers::volume_id(dst_probe)
-    }) {
+    //
+    // Phase 43 — probe destination filesystem once up front so we can
+    // both decide reflink eligibility AND cache the answer for the
+    // CopyFileExW dispatch. Pure-NTFS destinations have no reflink
+    // syscall to attempt (NTFS predates `FSCTL_DUPLICATE_EXTENTS_TO_FILE`
+    // and the Win11 24H2 ReFS work doesn't apply); skipping the probe
+    // saves a CreateFile + IOCTL round trip per copy.
+    let dst_probe_path = dst_owned.parent().unwrap_or(&dst_owned).to_path_buf();
+    let src_volume_id = crate::helpers::volume_id(&src_owned);
+    let dst_volume_id = crate::helpers::volume_id(&dst_probe_path);
+    let same_volume = match (src_volume_id, dst_volume_id) {
         (Some(a), Some(b)) => a == b,
         // One or both probes failed — conservatively assume "maybe
         // same" so we don't mask reflink on unusual filesystems.
         _ => true,
     };
-    if same_volume && matches!(opts.strategy, CopyStrategy::Auto | CopyStrategy::AlwaysFast) {
+    let dst_fs_name: Option<String> = {
+        #[cfg(windows)]
+        {
+            crate::helpers::filesystem_name(&dst_owned)
+        }
+        #[cfg(not(windows))]
+        {
+            None
+        }
+    };
+    let dst_is_ntfs = dst_fs_name
+        .as_deref()
+        .map(|s| s.eq_ignore_ascii_case("ntfs"))
+        .unwrap_or(false);
+    // Phase 42 — on Win11 24H2+ with a ReFS / Dev Drive destination,
+    // `CopyFileExW` itself fires `FSCTL_DUPLICATE_EXTENTS_TO_FILE`
+    // natively (KB5034848+). Stage-1 reflink would do the same syscall;
+    // skipping it saves one extra `CreateFile` probe per copy. The
+    // CopyFileExW path always runs after — if its native block clone
+    // fails for any reason, no behaviour change.
+    let skip_explicit_reflink_for_24h2_refs = {
+        #[cfg(windows)]
+        {
+            crate::os::is_win11_24h2_plus()
+                && dst_fs_name
+                    .as_deref()
+                    .map(|s| s.eq_ignore_ascii_case("refs"))
+                    .unwrap_or(false)
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
+    };
+
+    // Phase 43 — NTFS has no reflink syscall to attempt. Skip the
+    // explicit `try_reflink` probe; CopyFileExW is the only realistic
+    // accelerator on this filesystem and it runs unconditionally below.
+    let skip_explicit_reflink_for_ntfs = dst_is_ntfs;
+
+    if same_volume
+        && !skip_explicit_reflink_for_24h2_refs
+        && !skip_explicit_reflink_for_ntfs
+        && matches!(opts.strategy, CopyStrategy::Auto | CopyStrategy::AlwaysFast)
+    {
         match reflink_path::try_reflink(src_owned.clone(), dst_owned.clone()).await {
             ReflinkOutcome::Cloned => {
                 let elapsed = started.elapsed();
@@ -117,12 +166,16 @@ pub async fn fast_copy(
     // ---------- 2. OS-native accelerated path ----------
     if !matches!(opts.strategy, CopyStrategy::AlwaysAsync) {
         let started_native = Instant::now();
+        // Phase 43 — propagate the no-progress-callback hint through to
+        // `CopyFileExW` / `CopyFile2`. The CLI sets this on `--quiet`;
+        // GUI callers leave it `false` so their progress bars stay live.
         match native::try_native_copy(
             src_owned.clone(),
             dst_owned.clone(),
             total,
             ctrl.clone(),
             events.clone(),
+            opts.disable_progress_callback,
         )
         .await
         {

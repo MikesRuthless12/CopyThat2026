@@ -275,6 +275,18 @@ mod fuse_body {
             reply.ok();
         }
 
+        // TODO Phase 33e — explicit EROFS replies for the
+        // write/mkdir/unlink/setattr/create/rename/symlink/link/rmdir
+        // callback families. Today the kernel refuses writes early
+        // because the mount is opened with `MountOption::RO`, so a
+        // misbehaving caller never reaches our code and the default
+        // `Filesystem` trait impls return ENOSYS. Adding the explicit
+        // EROFS shortcuts here would shave a kernel round-trip on
+        // hosts where someone mounts the FUSE FS via a wrapper that
+        // strips the RO flag, but it's a defense-in-depth fix not a
+        // correctness fix — deferred to the Phase 33e validated-
+        // wiring branch where the chunk-store reads also land.
+
         fn read(
             &mut self,
             _req: &Request<'_>,

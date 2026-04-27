@@ -1,6 +1,6 @@
-app-name = Copy That v1.25.0
+app-name = Copy That v1.0.0
 # MT
-window-title = Copy That v1.25.0
+window-title = Copy That v1.0.0
 # MT
 shred-ssd-advisory = 警告：此目标位于固态硬盘（SSD）上。由于磨损均衡和预留空间会将数据移出逻辑块地址，多次覆写无法可靠地清除闪存数据。对于固态介质，请优先使用 ATA SECURE ERASE、NVMe 安全擦除格式化，或使用已丢弃密钥的全盘加密。
 
@@ -1172,3 +1172,9 @@ dedup-badge-reflinked = ⚡ Reflinked  # MT
 dedup-badge-hardlinked = 🔗 Hardlinked  # MT
 dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
 dedup-badge-copied = 📋 Copied  # MT
+phase42-paranoid-verify-label = 偏执校验
+phase42-paranoid-verify-hint = 丢弃目标的缓存页并从磁盘重新读取,以发现写入缓存的虚报和静默损坏。比默认校验慢约 50%;默认关闭。
+phase42-sharing-violation-retries-label = 锁定源文件的重试次数
+phase42-sharing-violation-retries-hint = 当其他进程以独占锁打开源文件时的重试次数。每次重试的等待时间翻倍(默认 50 毫秒 / 100 毫秒 / 200 毫秒)。默认值为 3,与 Robocopy /R:3 相同。
+phase42-cloud-placeholder-warning = { $name } 是仅在云端的 OneDrive 文件。复制它将触发下载——通过您的网络连接最多 { $size }。
+phase42-defender-exclusion-hint = 为了获得最大复制吞吐量,请在批量传输之前将目标文件夹添加到 Microsoft Defender 的排除项中。请参阅 docs/PERFORMANCE_TUNING.md。

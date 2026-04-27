@@ -105,9 +105,40 @@ When the overlapped path is engaged, control whether
 ### `COPYTHAT_NO_BUFFERING_THRESHOLD_MB=<N>`
 
 For the **default** `CopyFileExW` path, override the file-size
-threshold for setting `COPY_FILE_NO_BUFFERING`. Default 256 MiB —
-files smaller than this use the buffered path (cache hits dominate),
-files at-or-above use unbuffered.
+threshold for setting `COPY_FILE_NO_BUFFERING`.
+
+**Phase 43 default**: `max(free_phys_ram, 16 GiB)`. Files smaller
+than the threshold use the kernel write-back cache (matches
+Explorer / `cmd` / RoboCopy semantics + bench numbers); files at-
+or-above stream directly to disk because the page cache cannot
+coalesce a copy that's larger than free RAM anyway. Phase 13b
+shipped a 256 MiB threshold; Phase 42 added a 1 GiB adaptive cap;
+Phase 43 raised the floor to 16 GiB so the 1–16 GiB band — i.e.
+the dominant single-file workload — stays cache-friendly and
+matches competitor wall-clock numbers.
+
+**Trade-off**: in the 1–16 GiB band, `CopyFileExW` returns when
+bytes are queued in the kernel write-back cache, **not** when
+they're physically on disk. If durability matters more than wall
+time (e.g. you're scripting a backup pipeline), set
+`fsync_on_close = true` in your settings or pass `--verify <algo>`
+to force a post-copy hash that flushes first. Set this env var to
+a small number (e.g. `512`) to recover the Phase 13b "always
+durable above 512 MiB" behaviour.
+
+### Phase 43 — `--quiet` performance mode
+
+When you don't need a progress bar (CI scripts, headless backups,
+the bench harness), passing `--quiet` to the `copythat` CLI flips
+`CopyOptions::disable_progress_callback` to `true`. The platform
+layer then passes `NULL` for `CopyFileExW`'s `lpProgressRoutine`
+(and the equivalent for `CopyFile2`), eliminating the
+per-kernel-chunk thread-boundary crossing — measurable on
+multi-GiB copies. **Caveat**: the progress callback is the only
+in-flight cancel hook for `CopyFileExW` / `CopyFile2`; calling
+`CopyControl::cancel` mid-copy in `--quiet` mode will only
+interrupt between files in a tree, not during a single-file copy.
+Ctrl-C still kills the process — it just leaves a partial dst.
 
 ### `COPYTHAT_SKIP_ZERO_FILL=<bool>`
 
@@ -144,6 +175,23 @@ Override the total memory budget for the parallel-chunk path. The
 per-chunk buffer is `budget / num_chunks`, floored at 64 KiB. Used
 mainly for A/B testing buffer sizes against fixed memory.
 
+### `COPYTHAT_SUPPRESS_ZFS_WARNING=<bool>`
+
+Silences the one-shot ZFS-version warning that the reflink path
+emits when the destination filesystem is ZFS but the host may be
+running a pre-OpenZFS-2.2 release without `clone_range` support.
+The warning is informational — copies still succeed by falling back
+to byte-copy — but it can become repetitive in scripted workflows
+that already know the dataset version.
+
+- `1` — suppress the warning (silent)
+- everything else (default) — emit the warning at most once per
+  process to stderr
+
+Useful for CI runners and automated test harnesses where the noise
+buries real diagnostic output. Doesn't affect any other warning
+surface.
+
 ## Verifying the path you're on
 
 `xtask bench-vs` reports the chosen strategy in its output line:
@@ -174,3 +222,88 @@ queue-depth tuning + zero-fill skipping; everything else
 (scatter/gather, memory-mapped, IoRing, DirectStorage,
 kernel-mode drivers) is either marginal, the wrong tool, or not
 viable for an indie distribution.
+
+## Microsoft Defender / antivirus exclusions (Phase 42)
+
+**Defender real-time scanning double-scans every byte of every
+copy** (once on read, once on write). On bulk copy workloads this is
+frequently the dominant slowdown — sometimes more than the disk
+itself. The Phase 42 swarm research traced ~30-50 % throughput
+recovery on large workloads after adding the destination tree as a
+Defender path exclusion.
+
+**Copy That will never disable AV silently.** This is a manual,
+opt-in tuning step for users who have explicitly decided the
+workload is from a trusted source.
+
+### How to add a path exclusion (Windows 11)
+
+1. Open **Windows Security** (Start → "Windows Security").
+2. Go to **Virus & threat protection** → **Manage settings**.
+3. Scroll to **Exclusions** → **Add or remove exclusions**.
+4. Click **Add an exclusion** → **Folder**, then pick the
+   destination folder for the copy (e.g. your `D:\Backups\`).
+5. The exclusion is effective immediately.
+
+Or via PowerShell (admin):
+```powershell
+Add-MpPreference -ExclusionPath "D:\Backups"
+```
+
+To remove it after the copy:
+```powershell
+Remove-MpPreference -ExclusionPath "D:\Backups"
+```
+
+### When to use this
+
+- ✅ Bulk copying media archives, build outputs, VM disks, or
+  backups from a local source you trust.
+- ✅ Restoring from a known-good local backup.
+- ❌ Copying anything you downloaded today.
+- ❌ Copying from a network share whose contents you didn't put
+  there.
+
+For temporary exclusions you can wrap a single copy session, the
+PowerShell add/remove pair above is the right tool. Don't leave
+permanent exclusions on directories where untrusted files might
+land.
+
+### Other AV products
+
+The same principle applies to ESET, Bitdefender, Norton, Sophos,
+McAfee, Kaspersky, etc. — every behaviour-monitoring AV does
+on-access scans. Add the destination directory to the product's
+"trusted folders" / "scan exclusions" list before bulk copies, and
+remove the exclusion afterward.
+
+## Phase 42 — Win11+ baseline
+
+CopyThat 1.0.0 onward targets **Windows 11+ only** (build 22000+).
+Win10 was end-of-life October 2025. Several runtime-detected paths
+ride on the new floor:
+
+- **`COPY_FILE_REQUEST_COMPRESSED_TRAFFIC`** — engaged automatically
+  when the destination is a UNC path (`\\server\share`). Free win
+  on slow remote links via SMB v3.1.1 traffic compression.
+- **Win11 24H2 native block cloning inside `CopyFileExW`** —
+  on same-volume ReFS / Dev Drive copies, the OS itself fires
+  `FSCTL_DUPLICATE_EXTENTS_TO_FILE` and the copy becomes a
+  metadata-only operation (~94 % time savings on 1 GB files per
+  Microsoft's own benchmarks).
+- **`COPY_FILE_NO_BUFFERING` threshold** — Phase 43 raised the
+  floor from 256 MiB / 1 GiB-cap (Phase 42) to
+  `max(free_phys_ram, 16 GiB)`. The previous adaptive scheme made
+  CopyThat correctly waiting-for-durability look ~30 % slower than
+  `cmd copy` on the head-to-head bench (cmd's buffered writes
+  return before bytes hit platter). Phase 43 chose to match the
+  competitor wall-clock and document the durability trade-off
+  (override per-job via `fsync_on_close = true` / `--verify`).
+- **Storage topology probe** — `IOCTL_STORAGE_QUERY_PROPERTY` is
+  used at copy start to detect bus type (NVMe / SATA / USB / RAID
+  / iSCSI / VHDX) and seek penalty (HDD vs SSD), with results
+  cached per-volume.
+
+See [`docs/RESEARCH_PHASE_42.md`](RESEARCH_PHASE_42.md) for the
+full research deep-dive (~270 sources across 10 specialist
+research agents) and the gap-list audit.

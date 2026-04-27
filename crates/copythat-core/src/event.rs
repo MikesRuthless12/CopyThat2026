@@ -25,47 +25,80 @@ use crate::options::ErrorAction;
 #[non_exhaustive]
 pub enum CopyEvent {
     // ---------- single file (Phase 1) ----------
+    /// Per-file copy has started. Fires once per file before any
+    /// `Progress` events.
     Started {
+        /// Source path the engine is copying from.
         src: PathBuf,
+        /// Destination path the engine is writing to.
         dst: PathBuf,
+        /// Source size in bytes (denominator for `Progress`).
         total_bytes: u64,
     },
+    /// Streaming per-file progress. Throttled to ~50 ms so the UI
+    /// has time to render between updates.
     Progress {
+        /// Bytes copied to date.
         bytes: u64,
+        /// Total bytes the engine plans to copy (== source size).
         total: u64,
+        /// Instantaneous throughput in bytes per second.
         rate_bps: u64,
     },
+    /// The active [`crate::CopyControl::pause`] request was honoured.
     Paused,
+    /// The active [`crate::CopyControl::resume`] request was honoured.
     Resumed,
+    /// Per-file copy succeeded.
     Completed {
+        /// Total bytes copied (== source size on success).
         bytes: u64,
+        /// Wall-clock duration end-to-end including verify (if any).
         duration: Duration,
+        /// Average throughput across the entire copy, bytes per second.
         rate_bps: u64,
     },
+    /// Per-file copy terminated with an error.
     Failed {
+        /// Typed error detail; see [`CopyError`].
         err: CopyError,
     },
     // ---------- verify pipeline (Phase 3) ----------
+    /// Post-copy verify pass started.
     VerifyStarted {
         /// Algorithm short name (e.g. `sha256`, `blake3`).
         algorithm: &'static str,
         /// Destination total byte count the verify pass will re-read.
         total_bytes: u64,
     },
+    /// Streaming verify-pass progress.
     VerifyProgress {
+        /// Bytes hashed to date.
         bytes: u64,
+        /// Total bytes to hash (== destination size).
         total: u64,
+        /// Instantaneous hash throughput in bytes per second.
         rate_bps: u64,
     },
+    /// Verify pass completed. The two hex strings are identical for
+    /// the byte-exact path; differing strings imply mismatch.
     VerifyCompleted {
+        /// Algorithm short name (e.g. `sha256`, `blake3`).
         algorithm: &'static str,
+        /// Source hash, hex-encoded.
         src_hex: String,
+        /// Destination hash, hex-encoded.
         dst_hex: String,
+        /// Wall-clock duration of the verify pass.
         duration: Duration,
     },
+    /// Verify pass detected a mismatch.
     VerifyFailed {
+        /// Algorithm short name (e.g. `sha256`, `blake3`).
         algorithm: &'static str,
+        /// Source hash, hex-encoded.
         src_hex: String,
+        /// Destination hash that didn't match, hex-encoded.
         dst_hex: String,
     },
     // ---------- tree-level aggregates (Phase 2) ----------
@@ -75,30 +108,51 @@ pub enum CopyEvent {
     // totals so a whole-drive enumeration shows live progress
     // instead of a silent several-minute wait. `TreeStarted` still
     // fires afterwards with the final counts.
+    /// Streaming counts emitted while the source tree is being walked.
     TreeEnumerating {
+        /// Files visited so far during the walk.
         files_so_far: u64,
+        /// Bytes summed so far during the walk.
         bytes_so_far: u64,
     },
+    /// Tree walk finished; final counts are now known.
     TreeStarted {
+        /// Source tree root.
         root_src: PathBuf,
+        /// Destination tree root.
         root_dst: PathBuf,
+        /// Total files the engine plans to copy.
         total_files: u64,
+        /// Total bytes the engine plans to copy.
         total_bytes: u64,
     },
+    /// Streaming tree-level aggregate progress (sum across all files).
     TreeProgress {
+        /// Files completed (success or skipped).
         files_done: u64,
+        /// Total files the engine plans to copy.
         files_total: u64,
+        /// Bytes copied to date across all files.
         bytes_done: u64,
+        /// Total bytes the engine plans to copy.
         bytes_total: u64,
+        /// Instantaneous throughput in bytes per second.
         rate_bps: u64,
     },
+    /// Tree-level copy succeeded.
     TreeCompleted {
+        /// Total files copied.
         files: u64,
+        /// Total bytes copied.
         bytes: u64,
+        /// Wall-clock duration of the whole tree copy.
         duration: Duration,
+        /// Average throughput across the whole tree, bytes per second.
         rate_bps: u64,
     },
     // ---------- collision (Phase 2) ----------
+    /// Destination already exists; engine is asking the caller how to
+    /// resolve. The engine will park until `oneshot` resolves.
     Collision(Collision),
     // ---------- error UX (Phase 8) ----------
     /// A non-fatal per-file error inside a tree copy. Emitted when
@@ -106,6 +160,7 @@ pub enum CopyEvent {
     /// its attempts; the tree continues. The `errored` counter on
     /// `TreeReport` ticks for each of these.
     FileError {
+        /// Typed error detail for the failed file.
         err: CopyError,
     },
     /// Interactive error prompt. Emitted when `TreeOptions::on_error`
@@ -117,8 +172,8 @@ pub enum CopyEvent {
     /// Phase 19b — the engine hit an `ERROR_SHARING_VIOLATION` /
     /// `EBUSY` / `NSFileLockingError` reading `original`, the
     /// `on_locked` policy was `Snapshot`, and the hook minted a
-    /// filesystem snapshot. The UI renders a "📷 Reading from <kind>
-    /// snapshot of <original_root>" badge on the active row until
+    /// filesystem snapshot. The UI renders a "📷 Reading from `<kind>`
+    /// snapshot of `<original_root>`" badge on the active row until
     /// the file finishes.
     SnapshotCreated {
         /// Wire string: `"vss"` / `"zfs"` / `"btrfs"` / `"apfs"`.
@@ -138,11 +193,13 @@ pub enum CopyEvent {
     /// byte 0); the UI surfaces the reason in a row toast so the
     /// user knows why a "resumable" copy went all the way back.
     ResumeAborted {
-        /// Stable wire string: `"prefix-hash-mismatch"` /
-        /// `"dst-shrunk"` / `"checkpoint-corrupt"`. New variants
-        /// land here as additional resume paths discover their own
-        /// abort modes.
-        reason: &'static str,
+        /// Typed reason — see [`ResumeAbortReason`]. Use
+        /// `reason.as_str()` to recover the stable wire string the
+        /// pre-Phase-38 shape exposed (`"prefix-hash-mismatch"` /
+        /// `"verify-incompatible"` / etc.); the typed enum lets a
+        /// UI render an explanatory string per variant without a
+        /// stringly-typed `match`.
+        reason: ResumeAbortReason,
         /// Best-effort offset where the mismatch was first observed.
         /// `0` if the mismatch was outside a per-byte compare (e.g.
         /// the dst length was already shorter than the journal
@@ -157,6 +214,8 @@ pub enum CopyEvent {
     /// `"HFS+"`, `"unknown"`). The UI surfaces a one-shot toast so
     /// the user knows the destination will be larger than the source.
     SparsenessNotSupported {
+        /// Short filesystem name (`"exFAT"`, `"FAT32"`, `"HFS+"`,
+        /// `"unknown"`).
         dst_fs: &'static str,
     },
     /// Phase 24 — the destination filesystem couldn't accept some of
@@ -169,6 +228,8 @@ pub enum CopyEvent {
     /// (lowercase, no leading dot — `"docx"`, `"jpg"`) so the UI
     /// can render a per-row info badge.
     MetaTranslatedToAppleDouble {
+        /// Source file extension, lowercase, no leading dot
+        /// (e.g. `"docx"`, `"jpg"`).
         ext: String,
     },
     /// Phase 27 — content-defined chunk store reported dedup savings
@@ -180,6 +241,7 @@ pub enum CopyEvent {
     /// same job or from a prior job). The UI / history sums these
     /// into the "Saved N.NN GiB via chunk dedup" badge.
     ChunkStoreSavings {
+        /// Bytes deduplicated against chunks already in the store.
         savings_bytes: u64,
     },
     /// Phase 30 — the cross-platform path translator applied Unicode
@@ -191,7 +253,10 @@ pub enum CopyEvent {
     /// understands why a round-trip re-copy may show a different
     /// byte sequence.
     UnicodeRenormalized {
+        /// Pre-normalization source path (as an absolute path with
+        /// the source root intact).
         from: PathBuf,
+        /// Post-normalization destination path.
         to: PathBuf,
     },
     /// Phase 35 — the on-the-fly compression stage reported how many
@@ -204,9 +269,67 @@ pub enum CopyEvent {
     /// `input_bytes.saturating_sub(output_bytes)`. The UI sums these
     /// into the footer "💾 256 MiB → 84 MiB (67% saved)" badge.
     CompressionSavings {
+        /// `output_bytes / input_bytes` (lower = better; typical
+        /// text workloads land at 0.1–0.3).
         ratio: f64,
+        /// `input_bytes.saturating_sub(output_bytes)`.
         bytes_saved: u64,
     },
+}
+
+/// Why the engine refused to resume a partial copy and fell back to
+/// a fresh-start truncate+rewrite. Carried by
+/// [`CopyEvent::ResumeAborted`]. Each variant has a stable
+/// wire-string surface via [`Self::as_str`] — older log scrapers
+/// that compared the previous `&'static str` field continue to work
+/// on the string the variant returns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ResumeAbortReason {
+    /// Journal said `AlreadyComplete` but `dst.len()` no longer
+    /// matched the recorded total. Wire string:
+    /// `"dst-length-mismatch"`.
+    DstLengthMismatch,
+    /// Read-back of the existing destination prefix failed at the
+    /// OS level (permission, sharing violation, transient EIO).
+    /// Wire string: `"dst-read-failed"`.
+    DstReadFailed,
+    /// Journal said `AlreadyComplete` *and* dst.len() matched, but
+    /// the full-file re-hash did not match the recorded final
+    /// digest. Wire string: `"complete-hash-mismatch"`.
+    CompleteHashMismatch,
+    /// Journal said `Resume { offset, .. }` but the on-disk
+    /// destination was shorter than the journal believed.
+    /// Wire string: `"dst-shrunk"`.
+    DstShrunk,
+    /// Journal said `Resume { offset, src_hash_at_offset }` but the
+    /// re-hash of the existing destination's first `offset` bytes
+    /// did not match. Wire string: `"prefix-hash-mismatch"`.
+    PrefixHashMismatch,
+    /// The user asked for post-copy verify with a non-BLAKE3
+    /// algorithm; the partial source-side hasher state would not
+    /// match the journal's BLAKE3 prefix. Wire string:
+    /// `"verify-incompatible"`. The UI explanation: "the active
+    /// verify algorithm cannot resume from the journal — the partial
+    /// transfer was discarded and the file is being re-copied from
+    /// the start".
+    VerifyIncompatible,
+}
+
+impl ResumeAbortReason {
+    /// Stable wire string, matching the strings the pre-Phase-38
+    /// `&'static str` shape returned. Useful for log lines, JSON
+    /// emit, and UI fluent keys.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            ResumeAbortReason::DstLengthMismatch => "dst-length-mismatch",
+            ResumeAbortReason::DstReadFailed => "dst-read-failed",
+            ResumeAbortReason::CompleteHashMismatch => "complete-hash-mismatch",
+            ResumeAbortReason::DstShrunk => "dst-shrunk",
+            ResumeAbortReason::PrefixHashMismatch => "prefix-hash-mismatch",
+            ResumeAbortReason::VerifyIncompatible => "verify-incompatible",
+        }
+    }
 }
 
 impl Clone for CopyEvent {
@@ -339,7 +462,7 @@ impl Clone for CopyEvent {
                 snap_mount: snap_mount.clone(),
             },
             CopyEvent::ResumeAborted { reason, offset } => CopyEvent::ResumeAborted {
-                reason,
+                reason: *reason,
                 offset: *offset,
             },
             CopyEvent::SparsenessNotSupported { dst_fs } => {
@@ -366,21 +489,32 @@ impl Clone for CopyEvent {
 /// Final success record returned by `copy_file` and `move_file`.
 #[derive(Debug, Clone)]
 pub struct CopyReport {
+    /// Source path that was copied.
     pub src: PathBuf,
+    /// Destination path the bytes landed at.
     pub dst: PathBuf,
+    /// Total bytes copied (== source size on success).
     pub bytes: u64,
+    /// Wall-clock duration end-to-end including verify (if any).
     pub duration: Duration,
+    /// Average throughput across the copy, bytes per second.
     pub rate_bps: u64,
 }
 
 /// Final success record returned by `copy_tree` and `move_tree`.
 #[derive(Debug, Clone)]
 pub struct TreeReport {
+    /// Source tree root.
     pub root_src: PathBuf,
+    /// Destination tree root.
     pub root_dst: PathBuf,
+    /// Total files successfully copied.
     pub files: u64,
+    /// Total bytes copied across all files.
     pub bytes: u64,
+    /// Wall-clock duration of the whole tree copy.
     pub duration: Duration,
+    /// Average throughput across the whole tree, bytes per second.
     pub rate_bps: u64,
     /// Files the caller asked us to skip (via collision policy).
     pub skipped: u64,
@@ -396,7 +530,9 @@ pub struct TreeReport {
 /// engine treats the collision as a Skip.
 #[derive(Debug)]
 pub struct Collision {
+    /// Source path the engine was about to copy.
     pub src: PathBuf,
+    /// Destination path that already exists.
     pub dst: PathBuf,
     /// Reply channel. `None` only on cloned placeholders — cloned
     /// events can't drive the engine forward, so a subscriber that
@@ -438,7 +574,9 @@ impl Collision {
 /// Decision returned by the collision prompter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CollisionResolution {
+    /// Skip this file; the rest of the tree continues.
     Skip,
+    /// Overwrite the existing destination with the source bytes.
     Overwrite,
     /// Use this final filename instead (no directory component; stays
     /// in the same parent as the original destination).
@@ -453,6 +591,7 @@ pub enum CollisionResolution {
 /// a reply is equivalent to `ErrorAction::Skip`.
 #[derive(Debug)]
 pub struct ErrorPrompt {
+    /// Typed detail for the file the engine just failed on.
     pub err: CopyError,
     /// Reply channel. `None` only on cloned placeholders — broadcast
     /// subscribers can't drive the engine forward.

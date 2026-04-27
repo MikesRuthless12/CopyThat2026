@@ -6,15 +6,17 @@
 //! (Svelte + the `peerjs` npm package). When a paired phone sends a
 //! `RemoteCommand` over the data channel, the JS adapter passes the
 //! decoded JSON into `mobile_handle_remote_command`, which deserializes
-//! into the typed enum, dispatches through [`AppStateRemoteControl`]
-//! (which talks to the live `AppState`), and serializes the
+//! into the typed enum, dispatches through the private
+//! `AppStateRemoteControl` (which talks to the live `AppState`),
+//! and serializes the
 //! [`RemoteResponse`] back to the JS side for the data channel
 //! reply.
 //!
 //! The pairing handshake itself is handled in JS — the Svelte
 //! `MobilePanel.svelte` mints a fresh [`PairingToken`] via
 //! `mobile_pair_qr`, displays the QR, and writes the resulting
-//! [`MobilePairingEntry`] back through `mobile_pair_commit`.
+//! `copythat_settings::MobilePairingEntry` back through
+//! `mobile_pair_commit`.
 
 use std::sync::{Arc, RwLock};
 
@@ -389,6 +391,22 @@ pub async fn mobile_handle_remote_command(
 ) -> Result<String, String> {
     let cmd: RemoteCommand =
         serde_json::from_str(&command_json).map_err(|e| format!("decode command: {e}"))?;
+
+    // Pre-emptive IPC path-validation gate. Even though the four
+    // path-bearing variants (`SecureDelete`, `StartCopy`,
+    // `RerunHistory`, `RecentHistory`) currently have stub
+    // implementations on the desktop adapter, the wire surface is
+    // already exposed to the phone — and once the engine wiring
+    // lands, paths arriving from a paired phone would otherwise
+    // bypass the same `validate_ipc_path` lexical bar that every
+    // desktop-originating command routes through. Reject `..` /
+    // NUL / U+FFFD payloads at the dispatch boundary so the engine
+    // never sees a shaped-bad path regardless of who originated it.
+    if let Err(resp) = preflight_validate_command_paths(&cmd) {
+        return serde_json::to_string(&resp)
+            .map_err(|e| format!("encode response: {e}"));
+    }
+
     let ctl = AppStateRemoteControl {
         state: AppStateProxy {
             globals: state.globals.clone(),
@@ -420,6 +438,65 @@ pub async fn mobile_handle_remote_command(
     }
     let resp = dispatch_with_auth(cmd, &ctl, &mut auth).await;
     serde_json::to_string(&resp).map_err(|e| format!("encode response: {e}"))
+}
+
+/// Pre-emptive IPC path-validation for every `RemoteCommand` variant
+/// that carries a path-typed argument. Returns `Err(RemoteResponse)`
+/// the caller can serialise straight back to the data channel when
+/// any path fails the lexical bar (`..` segment / NUL byte / U+FFFD
+/// replacement char). Variants without path arguments are a no-op
+/// pass-through so the dispatcher receives them untouched.
+///
+/// This is a compile-time-checked match over `RemoteCommand` — adding
+/// a new variant that carries a path will surface as an unhandled-arm
+/// warning rather than silently bypassing the gate.
+fn preflight_validate_command_paths(
+    cmd: &RemoteCommand,
+) -> Result<(), RemoteResponse> {
+    let invalid = || RemoteResponse::Error {
+        message: "err-invalid-path".to_string(),
+    };
+    match cmd {
+        RemoteCommand::SecureDelete { paths, .. } => {
+            for p in paths {
+                if crate::ipc_safety::validate_ipc_path(p).is_err() {
+                    return Err(invalid());
+                }
+            }
+            Ok(())
+        }
+        RemoteCommand::StartCopy {
+            sources,
+            destination,
+            ..
+        } => {
+            for s in sources {
+                if crate::ipc_safety::validate_ipc_path(s).is_err() {
+                    return Err(invalid());
+                }
+            }
+            if crate::ipc_safety::validate_ipc_path(destination).is_err() {
+                return Err(invalid());
+            }
+            Ok(())
+        }
+        // Variants without path arguments — pass through.
+        RemoteCommand::Hello { .. }
+        | RemoteCommand::ListJobs
+        | RemoteCommand::PauseJob { .. }
+        | RemoteCommand::ResumeJob { .. }
+        | RemoteCommand::CancelJob { .. }
+        | RemoteCommand::ResolveCollision { .. }
+        | RemoteCommand::Globals
+        | RemoteCommand::RecentHistory { .. }
+        | RemoteCommand::RerunHistory { .. }
+        | RemoteCommand::Goodbye
+        | RemoteCommand::SetKeepAwake { .. }
+        | RemoteCommand::GetLocale
+        // Phase 42 — agent #7 challenge-response handshake; carries
+        // an HMAC-hex string + counter, no paths to validate.
+        | RemoteCommand::ChallengeResponse { .. } => Ok(()),
+    }
 }
 
 /// Fire a test notification at a paired device.
@@ -609,21 +686,30 @@ impl copythat_mobile::server::RemoteControl for AppStateRemoteControl {
 
     async fn recent_history(&self, _limit: u32) -> Result<Vec<HistoryRow>, String> {
         // History rows surface through `copythat_history::History`
-        // which lives behind an `Option<History>` on AppState. We
-        // don't carry the handle on AppStateProxy yet so the PWA's
-        // history panel stays empty for now; the wire surface is
-        // exercised end-to-end by the smoke. Real plumbing lands
-        // in a tiny follow-up that adds `history: Option<History>`
-        // to AppStateProxy alongside this method.
-        Ok(Vec::new())
+        // which lives behind an `Option<History>` on AppState. The
+        // handle isn't threaded onto AppStateProxy yet, so until
+        // the follow-up that wires `history: Option<History>` lands,
+        // surface a real error to the PWA instead of silently
+        // returning an empty list. Returning `Ok(Vec::new())` here
+        // looked indistinguishable from "you have no history",
+        // which masked the missing wiring during integration tests
+        // and confused users when the panel was permanently empty.
+        Err("err-mobile-feature-not-ready".into())
     }
 
     async fn rerun_history(&self, _row_id: i64) -> Result<(), String> {
-        Ok(())
+        // Same shape as `recent_history` — the desktop side hasn't
+        // wired the rerun pipeline yet. Bubble a real error out so
+        // the PWA can surface a user-facing toast instead of the
+        // command appearing to succeed but doing nothing.
+        Err("err-mobile-feature-not-ready".into())
     }
 
     async fn secure_delete(&self, _paths: Vec<String>, _method: &str) -> Result<(), String> {
-        Ok(())
+        // Wire-stub until secure-delete plumbing lands on the
+        // mobile path. Surface a typed error so the PWA can render
+        // a toast instead of showing a hollow success state.
+        Err("err-mobile-feature-not-ready".into())
     }
 
     async fn start_copy(
@@ -632,7 +718,11 @@ impl copythat_mobile::server::RemoteControl for AppStateRemoteControl {
         _destination: String,
         _verify: Option<String>,
     ) -> Result<(), String> {
-        Ok(())
+        // Wire-stub until start-copy is wired into the engine
+        // bridge. Surface a typed error so the PWA can render a
+        // toast — silent `Ok(())` here looked like "copy started"
+        // even though nothing happened on the desktop side.
+        Err("err-mobile-feature-not-ready".into())
     }
 
     async fn is_paired_phone(&self, phone_pubkey_hex: &str) -> bool {

@@ -10,8 +10,9 @@
 //!
 //! Persistence lives outside: `copythat-settings`'
 //! `RemoteSettings::backends` is the disk-backed mirror of this
-//! registry. [`BackendRegistry::snapshot`] and [`from_snapshot`] move
-//! a plain `Vec<Backend>` between the two.
+//! registry. [`BackendRegistry::snapshot`] and
+//! [`BackendRegistry::from_snapshot`] move a plain `Vec<Backend>` between
+//! the two.
 
 use std::sync::RwLock;
 

@@ -1,6 +1,6 @@
-app-name = Copy That v1.25.0
+app-name = Copy That v1.0.0
 # MT
-window-title = Copy That v1.25.0
+window-title = Copy That v1.0.0
 # MT
 shred-ssd-advisory = Cảnh báo: mục tiêu này nằm trên một ổ SSD. Ghi đè nhiều lần không thể làm sạch bộ nhớ flash một cách đáng tin cậy vì kỹ thuật cân bằng hao mòn (wear-leveling) và không gian dự phòng (overprovisioning) sẽ di chuyển dữ liệu ra khỏi địa chỉ khối logic. Đối với thiết bị trạng thái rắn, hãy ưu tiên ATA SECURE ERASE, NVMe Format kèm Secure Erase, hoặc mã hóa toàn ổ đĩa rồi hủy khóa.
 
@@ -1172,3 +1172,9 @@ dedup-badge-reflinked = ⚡ Reflinked  # MT
 dedup-badge-hardlinked = 🔗 Hardlinked  # MT
 dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
 dedup-badge-copied = 📋 Copied  # MT
+phase42-paranoid-verify-label = Xác minh hoang tưởng
+phase42-paranoid-verify-hint = Loại bỏ các trang đã lưu vào bộ đệm của đích và đọc lại từ đĩa để phát hiện các lời nói dối của bộ đệm ghi và sự hỏng dữ liệu ngầm. Chậm hơn khoảng 50% so với xác minh mặc định; tắt theo mặc định.
+phase42-sharing-violation-retries-label = Số lần thử lại trên các tệp nguồn bị khóa
+phase42-sharing-violation-retries-hint = Số lần thử lại khi một tiến trình khác đang giữ tệp nguồn mở với khóa độc quyền. Thời gian chờ tăng gấp đôi sau mỗi lần thử (mặc định 50 ms / 100 ms / 200 ms). Mặc định: 3, giống với Robocopy /R:3.
+phase42-cloud-placeholder-warning = { $name } là tệp OneDrive chỉ có trên đám mây. Sao chép tệp sẽ kích hoạt tải xuống — lên đến { $size } qua kết nối mạng của bạn.
+phase42-defender-exclusion-hint = Để đạt thông lượng sao chép tối đa, hãy thêm thư mục đích vào danh sách loại trừ của Microsoft Defender trước khi truyền hàng loạt. Xem docs/PERFORMANCE_TUNING.md.

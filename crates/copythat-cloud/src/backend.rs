@@ -229,6 +229,49 @@ fn default_sftp_port() -> u16 {
     22
 }
 
+/// FTP backend config.
+///
+/// **Phase 32h security limitation — system trust only.** OpenDAL
+/// 0.54's `services-ftp` driver does not yet expose a TLS hook
+/// for pinning server trust against a custom CA bundle, so the
+/// FTPS handshake [`make_operator`] builds always relies on the
+/// OS root certificate store. On corporate networks where IT has
+/// pushed an MITM root certificate, the handshake will succeed
+/// against the on-path inspector and the user's FTP password is
+/// captured in cleartext from the inspector's perspective. Phase
+/// 32i is tracked to either:
+///
+/// - Bypass OpenDAL's FTP driver with a custom `CopyTarget` impl
+///   (mirroring the SFTP-via-russh approach in
+///   [`crate::SftpTarget`]) that wires a `rustls::ClientConfig`
+///   built from a user-supplied `RootCertStore`, OR
+/// - Contribute an upstream `tls_config` hook to the
+///   `services-ftp` builder.
+///
+/// Until that lands, deployments where corporate-MITM is a
+/// concern should use SFTP (which already pins via
+/// [`SftpConfig::known_hosts_path`]) or one of the S3-class
+/// backends (which use `reqwest` + `rustls` directly and are not
+/// affected). The IPC `cloud_commands::add_backend` surface
+/// exposes this limitation in the FTP wizard's UI string.
+///
+/// # Phase 42 follow-up — `ca_bundle_path`
+///
+/// The [`ca_bundle_path`](Self::ca_bundle_path) field is plumbed
+/// through the wizard / TOML / wire format so the persisted
+/// config is forward-compatible: a future Phase 32i (either a
+/// custom FTPS target mirroring [`crate::SftpTarget`] or an
+/// upstream OpenDAL `tls_config` hook) can consume the path
+/// without forcing a settings-file migration.
+///
+/// As of Phase 42 the field is **validated but not yet
+/// honoured** by [`make_operator`]: rustls (which `suppaftp`
+/// uses) does not consult `SSL_CERT_FILE`, and mutating process
+/// env mid-flight requires `unsafe` under Rust 2024 — this
+/// crate is `forbid(unsafe_code)` by policy. The validation
+/// (file-exists pre-check) keeps the user from persisting a
+/// dangling path that silently no-ops; the actual trust override
+/// lands with Phase 32i.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FtpConfig {
     pub host: String,
@@ -237,6 +280,12 @@ pub struct FtpConfig {
     pub username: String,
     #[serde(default)]
     pub root: String,
+    /// Phase 42 — optional path to a PEM-encoded CA bundle the
+    /// FTPS handshake should use *in addition to* the system
+    /// trust store. Best-effort hook — see the type's doc-comment
+    /// for the full caveat list.
+    #[serde(default)]
+    pub ca_bundle_path: Option<std::path::PathBuf>,
 }
 
 fn default_ftp_port() -> u16 {
@@ -427,8 +476,35 @@ pub fn make_operator(
                         .into(),
                 ));
             }
+            // Phase 32h — security limitation tracked on the
+            // `FtpConfig` doc-comment: OpenDAL 0.54's services-ftp
+            // driver does not expose a hook for pinning server
+            // trust against a custom CA bundle, so the FTPS
+            // handshake always rides the OS root store. When the
+            // host is on a corporate-MITM network this is
+            // captureable; document the limitation here and on
+            // the public type rather than silently presenting an
+            // unsafe primitive.
+            //
+            // Phase 42 — `cfg.ca_bundle_path` is plumbed through
+            // the persisted config so a future Phase 32i (custom
+            // FTP target / upstream OpenDAL TLS hook) can consume
+            // it without a settings-file migration. We deliberately
+            // do NOT export `SSL_CERT_FILE` here: `rustls` (used
+            // by `suppaftp`) does not consult that variable, and
+            // mutating process env mid-flight requires `unsafe`
+            // under Rust 2024 — this crate is `forbid(unsafe_code)`
+            // by policy. Revisit once OpenDAL exposes a TLS hook.
             let port = if cfg.port == 0 { 21 } else { cfg.port };
             let endpoint = format!("ftps://{}:{port}", cfg.host);
+            if let Some(bundle) = cfg.ca_bundle_path.as_deref()
+                && !bundle.is_file()
+            {
+                return Err(BackendError::InvalidConfig(format!(
+                    "ftp ca_bundle_path does not point at a readable file: {}",
+                    bundle.display()
+                )));
+            }
             let mut builder = opendal::services::Ftp::default().endpoint(&endpoint);
             if !cfg.username.is_empty() {
                 builder = builder.user(&cfg.username);

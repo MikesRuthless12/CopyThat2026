@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn json_mode_round_trips_version_event() {
         let event = JsonEventKind::Version {
-            version: "1.25.0".into(),
+            version: "1.0.0".into(),
             crate_name: "copythat-cli".into(),
             rustc_known_at_compile: true,
         };
@@ -217,7 +217,7 @@ mod tests {
                 crate_name,
                 ..
             } => {
-                assert_eq!(version, "1.25.0");
+                assert_eq!(version, "1.0.0");
                 assert_eq!(crate_name, "copythat-cli");
             }
             _ => panic!("unexpected variant"),

@@ -1,6 +1,6 @@
-app-name = Copy That v1.25.0
+app-name = Copy That v1.0.0
 # MT
-window-title = Copy That v1.25.0
+window-title = Copy That v1.0.0
 # MT
 shred-ssd-advisory = Peringatan: target ini berada pada SSD. Penimpaan berkali-kali tidak dapat membersihkan memori flash secara andal karena wear-leveling dan overprovisioning memindahkan data keluar dari alamat blok logis. Untuk media solid-state, lebih baik gunakan ATA SECURE ERASE, NVMe Format dengan Secure Erase, atau enkripsi disk penuh dengan kunci yang kemudian dibuang.
 
@@ -1172,3 +1172,9 @@ dedup-badge-reflinked = ⚡ Reflinked  # MT
 dedup-badge-hardlinked = 🔗 Hardlinked  # MT
 dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
 dedup-badge-copied = 📋 Copied  # MT
+phase42-paranoid-verify-label = Verifikasi paranoid
+phase42-paranoid-verify-hint = Membuang halaman cache tujuan dan membaca ulang dari disk untuk menangkap kebohongan cache tulis dan korupsi diam-diam. Sekitar 50% lebih lambat daripada verifikasi default; nonaktif secara default.
+phase42-sharing-violation-retries-label = Upaya percobaan ulang pada file sumber yang terkunci
+phase42-sharing-violation-retries-hint = Berapa kali mencoba ulang ketika proses lain menahan file sumber terbuka dengan kunci eksklusif. Jeda berlipat ganda pada setiap percobaan (50 md / 100 md / 200 md secara default). Default: 3, sesuai Robocopy /R:3.
+phase42-cloud-placeholder-warning = { $name } adalah berkas OneDrive yang hanya tersedia di cloud. Menyalinnya akan memicu unduhan — hingga { $size } melalui koneksi jaringan Anda.
+phase42-defender-exclusion-hint = Untuk throughput penyalinan maksimum, tambahkan folder tujuan ke pengecualian Microsoft Defender sebelum transfer massal. Lihat docs/PERFORMANCE_TUNING.md.

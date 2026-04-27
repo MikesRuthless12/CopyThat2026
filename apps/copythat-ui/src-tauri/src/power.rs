@@ -168,6 +168,13 @@ pub fn spawn_power_subscriber(state: AppState, app: AppHandle) -> PowerSubscribe
     // attach to. From the setup-hook path the call site is OUTSIDE
     // any tokio context, so a bare `tokio::spawn` here would panic
     // with "no reactor running". See shell.rs:89.
+    //
+    // `clippy::async_yields_async`: yielding the `JoinHandle` is the
+    // entire point — we store it in `PowerSubscriberHandle.join` so
+    // the caller can `.abort()` or `.await` on shutdown. Awaiting it
+    // here would block `block_on` until the subscriber loop exits,
+    // which never happens during normal app run.
+    #[allow(clippy::async_yields_async)]
     let join = tauri::async_runtime::block_on(async {
         tokio::spawn(async move {
             let power_state = Arc::new(Mutex::new(PowerState::default()));

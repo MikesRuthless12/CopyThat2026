@@ -298,16 +298,13 @@ fn walk_and_scan(dir: &Path, out: &mut BTreeSet<String>) -> std::io::Result<()> 
         if ft.is_dir() {
             let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
             // Skip vendored / generated trees that balloon the scan.
+            // (`pnpm-lock.yaml` is intentionally absent here — it's a
+            // file, not a directory; the file-side filter falls
+            // through naturally because `is_scannable` only accepts
+            // .svelte/.ts/.tsx/.js/.rs extensions.)
             if matches!(
                 name,
-                "target"
-                    | "node_modules"
-                    | "dist"
-                    | "build"
-                    | ".git"
-                    | ".svelte-kit"
-                    | "gen"
-                    | "pnpm-lock.yaml"
+                "target" | "node_modules" | "dist" | "build" | ".git" | ".svelte-kit" | "gen"
             ) {
                 continue;
             }
@@ -445,7 +442,7 @@ mod tests {
 
     #[test]
     fn parses_simple_messages() {
-        let src = "app-name = Copy That v1.25.0\n# a comment\nfoo-bar = hi\n";
+        let src = "app-name = Copy That v1.0.0\n# a comment\nfoo-bar = hi\n";
         let keys = parse_ftl_keys_unique(src).unwrap();
         assert!(keys.contains("app-name"));
         assert!(keys.contains("foo-bar"));

@@ -1,5 +1,5 @@
-app-name = Copy That v1.25.0
-window-title = Copy That v1.25.0
+app-name = Copy That v1.0.0
+window-title = Copy That v1.0.0
 shred-ssd-advisory = Warning: this target lives on an SSD. Multi-pass overwrites do not reliably sanitize flash memory because wear-leveling and over-provisioning move data out from under the logical block address. For solid-state media, prefer ATA SECURE ERASE, NVMe Format with Secure Erase, or full-disk encryption with a discarded key.
 
 # Global aggregate states (header pill)
@@ -911,3 +911,9 @@ dedup-badge-reflinked = ⚡ Reflinked
 dedup-badge-hardlinked = 🔗 Hardlinked
 dedup-badge-chunk-shared = 🧩 Chunk-shared
 dedup-badge-copied = 📋 Copied
+phase42-paranoid-verify-label = Paranoid verify
+phase42-paranoid-verify-hint = Drops the destination's cached pages and re-reads from disk to catch write-cache lies and silent corruption. About 50% slower than the default verify; off by default.
+phase42-sharing-violation-retries-label = Retry attempts on locked source files
+phase42-sharing-violation-retries-hint = How many times to retry when another process is holding the source file open with an exclusive lock. Backoff doubles each attempt (50 ms / 100 ms / 200 ms by default). Default 3, matching Robocopy /R:3.
+phase42-cloud-placeholder-warning = { $name } is a cloud-only OneDrive file. Copying it will trigger a download — up to { $size } over your network connection.
+phase42-defender-exclusion-hint = For maximum copy throughput, add the destination folder to Microsoft Defender exclusions before bulk transfers. See docs/PERFORMANCE_TUNING.md.

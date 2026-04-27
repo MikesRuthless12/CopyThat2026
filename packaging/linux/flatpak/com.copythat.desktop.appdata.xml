@@ -6,11 +6,11 @@
   <id>com.copythat.desktop</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>LicenseRef-AllRightsReserved</project_license>
-  <name>Copy That v1.25.0</name>
+  <name>Copy That v1.0.0</name>
   <summary>Byte-exact cross-platform file copier</summary>
   <description>
     <p>
-      Copy That v1.25.0 is a lightweight, cross-platform, async, byte-exact
+      Copy That v1.0.0 is a lightweight, cross-platform, async, byte-exact
       file and folder copier. Matches every TeraCopy feature while staying
       as fast as — or faster than — Explorer, Finder, cp, and rsync for
       typical desktop workloads.
@@ -34,7 +34,7 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
-    <release version="1.25.0" date="2026-04-22">
+    <release version="1.0.0" date="2026-04-22">
       <description>
         <p>Initial public preview. See the GitHub release notes for details.</p>
       </description>

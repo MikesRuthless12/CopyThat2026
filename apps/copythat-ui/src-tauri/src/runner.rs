@@ -96,12 +96,12 @@ pub(crate) async fn run_job(job: RunJob) {
         tree_concurrency,
         filters,
     } = job;
-    eprintln!(
-        "[run_job] id={} kind={:?} src={} dst={:?}",
-        id.as_u64(),
-        kind,
-        src.display(),
-        dst.as_ref().map(|p| p.display().to_string())
+    tracing::info!(
+        id = id.as_u64(),
+        ?kind,
+        src = %src.display(),
+        dst = ?dst.as_ref().map(|p| p.display().to_string()),
+        "run_job starting",
     );
     state.queue.start(id);
     let _ = app.emit(EVENT_JOB_STARTED, JobIdDto { id: id.as_u64() });
@@ -175,7 +175,7 @@ pub(crate) async fn run_job(job: RunJob) {
         match j.begin_job(rec) {
             Ok(row) => Some(row),
             Err(e) => {
-                eprintln!("[run_job] journal begin_job failed: {e}");
+                tracing::warn!(error = %e, "run_job journal begin_job failed");
                 None
             }
         }
@@ -221,7 +221,7 @@ pub(crate) async fn run_job(job: RunJob) {
             }
             Ok(None) => {}
             Err(e) => {
-                eprintln!("[crypt] hook build failed, falling back to plain copy: {e}");
+                tracing::warn!(error = %e, "crypt hook build failed; falling back to plain copy");
             }
         }
     }
@@ -248,14 +248,10 @@ pub(crate) async fn run_job(job: RunJob) {
                 .await
                 .map(|m| m.is_dir())
                 .unwrap_or(false);
-            eprintln!(
-                "[run_job] source_is_dir={} — about to call {}",
+            tracing::debug!(
                 source_is_dir,
-                if source_is_dir {
-                    "copy_tree"
-                } else {
-                    "copy_file"
-                }
+                op = if source_is_dir { "copy_tree" } else { "copy_file" },
+                "run_job dispatching copy",
             );
             if source_is_dir {
                 let tree_opts = TreeOptions {
@@ -269,9 +265,10 @@ pub(crate) async fn run_job(job: RunJob) {
                 let out = copy_tree(&src, &dst_path, tree_opts, ctrl, tx.clone())
                     .await
                     .map(|_| ());
-                eprintln!(
-                    "[run_job] copy_tree returned: {:?}",
-                    out.as_ref().map(|_| "ok").map_err(|e| &e.message)
+                tracing::debug!(
+                    ok = out.is_ok(),
+                    error = out.as_ref().err().map(|e| e.message.as_str()),
+                    "run_job copy_tree returned",
                 );
                 out
             } else {
@@ -1088,18 +1085,25 @@ fn emit_progress(
     rate_bps: u64,
 ) {
     let eta = eta_seconds(bytes_done, bytes_total, rate_bps);
-    let _ = app.emit(
-        EVENT_JOB_PROGRESS,
-        JobProgressDto {
-            id: id.as_u64(),
-            bytes_done,
-            bytes_total,
-            files_done,
-            files_total,
-            rate_bps,
-            eta_seconds: eta,
-        },
-    );
+    let dto = JobProgressDto {
+        id: id.as_u64(),
+        bytes_done,
+        bytes_total,
+        files_done,
+        files_total,
+        rate_bps,
+        eta_seconds: eta,
+    };
+    // Legacy event-bus emit. Every existing `listen('job:progress',
+    // …)` surface keeps working off this; Phase 42 / Gap #14
+    // introduced a parallel `Channel<T>` path below for opt-in
+    // hot-path subscribers without breaking the listeners.
+    let _ = app.emit(EVENT_JOB_PROGRESS, dto.clone());
+    // Phase 42 / Gap #14 — best-effort dual-emit into the per-job
+    // `tauri::ipc::Channel<JobProgressDto>` if the frontend has
+    // opted in via `register_progress_channel`. Silent no-op when
+    // no channel is registered (the steady state until UI migrates).
+    let _ = state.progress_channels.try_send(id, dto);
     emit_globals(app, state);
 }
 

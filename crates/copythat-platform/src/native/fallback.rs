@@ -18,6 +18,7 @@ pub(crate) async fn try_native_copy(
     _total: u64,
     _ctrl: CopyControl,
     _events: mpsc::Sender<CopyEvent>,
+    _disable_callback: bool,
 ) -> NativeOutcome {
     NativeOutcome::Unsupported
 }

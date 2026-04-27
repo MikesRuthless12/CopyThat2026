@@ -149,13 +149,13 @@ pub fn all_registration_keys(scope: InstallScope, dll_path: &str) -> Vec<(String
     out.extend(class_registration_keys(
         scope,
         CLSID_COPY_STR,
-        "Copy That v1.25.0 — Copy command",
+        "Copy That v1.0.0 — Copy command",
         dll_path,
     ));
     out.extend(class_registration_keys(
         scope,
         CLSID_MOVE_STR,
-        "Copy That v1.25.0 — Move command",
+        "Copy That v1.0.0 — Move command",
         dll_path,
     ));
     out.extend(verb_registration_keys(

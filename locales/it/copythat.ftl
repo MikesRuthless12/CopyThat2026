@@ -1,6 +1,6 @@
-app-name = Copy That v1.25.0
+app-name = Copy That v1.0.0
 # MT
-window-title = Copy That v1.25.0
+window-title = Copy That v1.0.0
 # MT
 shred-ssd-advisory = Avviso: questo bersaglio si trova su un SSD. Le riscritture multiple non sanificano in modo affidabile la memoria flash perché il wear-leveling e l'over-provisioning spostano i dati fuori dall'indirizzo logico del blocco. Per i supporti a stato solido, preferire ATA SECURE ERASE, NVMe Format con Secure Erase o la crittografia dell'intero disco con successiva distruzione della chiave.
 
@@ -1172,3 +1172,9 @@ dedup-badge-reflinked = ⚡ Reflinked  # MT
 dedup-badge-hardlinked = 🔗 Hardlinked  # MT
 dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
 dedup-badge-copied = 📋 Copied  # MT
+phase42-paranoid-verify-label = Verifica paranoica
+phase42-paranoid-verify-hint = Scarta le pagine in cache della destinazione e rilegge dal disco per intercettare bugie della cache di scrittura e corruzione silenziosa. Circa il 50 % più lenta della verifica predefinita; disattivata per impostazione predefinita.
+phase42-sharing-violation-retries-label = Tentativi di ripetizione sui file di origine bloccati
+phase42-sharing-violation-retries-hint = Quante volte riprovare quando un altro processo mantiene aperto il file di origine con un blocco esclusivo. L'attesa raddoppia a ogni tentativo (50 ms / 100 ms / 200 ms per impostazione predefinita). Predefinito: 3, come Robocopy /R:3.
+phase42-cloud-placeholder-warning = { $name } è un file solo cloud di OneDrive. Copiarlo attiverà un download — fino a { $size } sulla tua connessione di rete.
+phase42-defender-exclusion-hint = Per la massima velocità di copia, aggiungi la cartella di destinazione alle esclusioni di Microsoft Defender prima dei trasferimenti in blocco. Vedi docs/PERFORMANCE_TUNING.md.

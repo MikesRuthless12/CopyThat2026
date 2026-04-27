@@ -1,6 +1,6 @@
-app-name = Copy That v1.25.0
+app-name = Copy That v1.0.0
 # MT
-window-title = Copy That v1.25.0
+window-title = Copy That v1.0.0
 # MT
 shred-ssd-advisory = चेतावनी: यह लक्ष्य SSD पर है। वियर-लेवलिंग और ओवर-प्रोविजनिंग लॉजिकल ब्लॉक पते के नीचे से डेटा हटा देते हैं, इसलिए बहु-पास ओवरराइट फ्लैश मेमोरी को विश्वसनीय रूप से साफ नहीं करते। सॉलिड-स्टेट मीडिया के लिए ATA SECURE ERASE, NVMe फॉर्मैट विद सिक्योर इरेज़, या त्यागी गई कुंजी वाले फुल-डिस्क एन्क्रिप्शन को प्राथमिकता दें।
 
@@ -1172,3 +1172,9 @@ dedup-badge-reflinked = ⚡ Reflinked  # MT
 dedup-badge-hardlinked = 🔗 Hardlinked  # MT
 dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
 dedup-badge-copied = 📋 Copied  # MT
+phase42-paranoid-verify-label = व्यामोही सत्यापन
+phase42-paranoid-verify-hint = गंतव्य के कैश्ड पृष्ठ हटाता है और राइट-कैश की झूठी पुष्टि और मूक भ्रष्टाचार को पकड़ने के लिए डिस्क से दोबारा पढ़ता है। डिफ़ॉल्ट सत्यापन से लगभग 50% धीमा; डिफ़ॉल्ट रूप से बंद।
+phase42-sharing-violation-retries-label = लॉक की गई स्रोत फ़ाइलों पर पुनः प्रयास
+phase42-sharing-violation-retries-hint = जब कोई अन्य प्रक्रिया स्रोत फ़ाइल को विशेष लॉक के साथ खुला रखती है, तो कितनी बार पुनः प्रयास करना है। हर प्रयास पर प्रतीक्षा अवधि दोगुनी होती है (डिफ़ॉल्ट 50 ms / 100 ms / 200 ms)। डिफ़ॉल्ट: 3, Robocopy /R:3 के समान।
+phase42-cloud-placeholder-warning = { $name } केवल-क्लाउड OneDrive फ़ाइल है। इसे कॉपी करने पर डाउनलोड शुरू हो जाएगा — आपके नेटवर्क कनेक्शन पर { $size } तक।
+phase42-defender-exclusion-hint = अधिकतम कॉपी थ्रूपुट के लिए, बल्क ट्रांसफ़र से पहले गंतव्य फ़ोल्डर को Microsoft Defender बहिष्करण में जोड़ें। देखें docs/PERFORMANCE_TUNING.md.

@@ -1,6 +1,6 @@
-app-name = Copy That v1.25.0
+app-name = Copy That v1.0.0
 # MT
-window-title = Copy That v1.25.0
+window-title = Copy That v1.0.0
 # MT
 shred-ssd-advisory = Warnung: Das Ziel liegt auf einer SSD. Mehrfaches Überschreiben bereinigt den Flash-Speicher nicht zuverlässig, da Wear-Leveling und Overprovisioning die Daten aus der logischen Blockadresse herausschieben. Für Solid-State-Medien sind ATA SECURE ERASE, NVMe Format mit Secure Erase oder eine vollverschlüsselte Festplatte mit anschließend verworfenem Schlüssel vorzuziehen.
 
@@ -1172,3 +1172,9 @@ dedup-badge-reflinked = ⚡ Reflinked  # MT
 dedup-badge-hardlinked = 🔗 Hardlinked  # MT
 dedup-badge-chunk-shared = 🧩 Chunk-shared  # MT
 dedup-badge-copied = 📋 Copied  # MT
+phase42-paranoid-verify-label = Paranoide Prüfung
+phase42-paranoid-verify-hint = Verwirft die zwischengespeicherten Seiten des Ziels und liest erneut vom Datenträger, um falsche Schreibcache-Bestätigungen und stille Datenkorruption zu erkennen. Etwa 50 % langsamer als die Standardprüfung; standardmäßig deaktiviert.
+phase42-sharing-violation-retries-label = Wiederholungsversuche bei gesperrten Quelldateien
+phase42-sharing-violation-retries-hint = Wie oft erneut versucht werden soll, wenn ein anderer Prozess die Quelldatei mit einer exklusiven Sperre geöffnet hält. Die Wartezeit verdoppelt sich bei jedem Versuch (standardmäßig 50 ms / 100 ms / 200 ms). Standard: 3, entspricht Robocopy /R:3.
+phase42-cloud-placeholder-warning = { $name } ist eine reine Cloud-Datei aus OneDrive. Beim Kopieren wird ein Download ausgelöst — bis zu { $size } über Ihre Netzwerkverbindung.
+phase42-defender-exclusion-hint = Für maximalen Kopierdurchsatz fügen Sie den Zielordner vor Massenübertragungen zu den Microsoft Defender-Ausschlüssen hinzu. Siehe docs/PERFORMANCE_TUNING.md.

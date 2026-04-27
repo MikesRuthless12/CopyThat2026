@@ -12,9 +12,13 @@ use crate::safety::PathSafetyError;
 /// wrapped `io::Error` on the `source` field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CopyErrorKind {
+    /// Source file does not exist (or destination parent dir is missing).
     NotFound,
+    /// OS denied access to source or destination.
     PermissionDenied,
+    /// Destination volume ran out of free space mid-copy.
     DiskFull,
+    /// Engine I/O loop was interrupted (e.g. cancellation racing a syscall).
     Interrupted,
     /// Post-copy verification detected a hash mismatch between source
     /// and destination. The partial destination is removed unless
@@ -32,6 +36,9 @@ pub enum CopyErrorKind {
     /// is available via `CopyError::sparseness_mismatch()` on the
     /// returned error — the kind itself is the stable classifier.
     SparsenessMismatch,
+    /// Catch-all for I/O failures that don't map to a more specific
+    /// variant above. The wrapped `io::Error` source carries platform
+    /// detail.
     IoOther,
 }
 
@@ -90,10 +97,15 @@ fn is_disk_full(kind: io::ErrorKind, raw_os: Option<i32>) -> bool {
 /// them through separately.
 #[derive(Debug, Error, Clone)]
 pub struct CopyError {
+    /// Stable classifier the UI / retry logic branch on.
     pub kind: CopyErrorKind,
+    /// Source path the engine was operating on when the error fired.
     pub src: PathBuf,
+    /// Destination path the engine was writing to when the error fired.
     pub dst: PathBuf,
+    /// Raw OS errno / Win32 last-error value when available.
     pub raw_os_error: Option<i32>,
+    /// Human-readable message, useful for log output and the error drawer.
     pub message: String,
 }
 
@@ -192,10 +204,14 @@ impl CopyError {
         }
     }
 
+    /// `true` when the engine returned because the caller called
+    /// [`crate::CopyControl::cancel`] (vs an OS-side interrupt).
     pub fn is_cancelled(&self) -> bool {
         self.kind == CopyErrorKind::Interrupted && self.raw_os_error.is_none()
     }
 
+    /// `true` when the post-copy hash verify (or sparseness extent
+    /// re-scan) caught a mismatch.
     pub fn is_verify_failed(&self) -> bool {
         self.kind == CopyErrorKind::VerifyFailed
     }

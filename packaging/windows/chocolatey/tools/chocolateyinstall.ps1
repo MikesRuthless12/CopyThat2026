@@ -4,7 +4,7 @@
 # SHA-256 of the MSI it just built.
 $ErrorActionPreference = 'Stop'
 $packageName = 'copythat'
-$version$version     = '1.25.0'
+$version$version     = '1.0.0'
 $url64       = "https://github.com/MikesRuthless12/CopyThat2026/releases/download/v$version/CopyThat_${version}_x64_en-US.msi"
 $checksum64  = '0000000000000000000000000000000000000000000000000000000000000000'
 

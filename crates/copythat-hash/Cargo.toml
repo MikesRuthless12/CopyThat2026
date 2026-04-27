@@ -1,6 +1,6 @@
 [package]
 name = "copythat-hash"
-description = "Verification hashes (CRC32 / MD5 / SHA-1 / SHA-256 / SHA-512 / xxHash3 / BLAKE3) for Copy That v1.25.0."
+description = "Verification hashes (CRC32 / MD5 / SHA-1 / SHA-256 / SHA-512 / xxHash3 / BLAKE3) for Copy That v1.0.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

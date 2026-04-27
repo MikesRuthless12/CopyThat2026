@@ -35,6 +35,7 @@ use crate::error::CopyError;
 pub struct JobId(u64);
 
 impl JobId {
+    /// Return the inner `u64` value (e.g. for IPC serialisation).
     pub fn as_u64(self) -> u64 {
         self.0
     }
@@ -50,21 +51,32 @@ impl std::fmt::Display for JobId {
 /// in later phases (Verify = Phase 3, SecureDelete = Phase 4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobKind {
+    /// File / tree copy.
     Copy,
+    /// File / tree move (copy + remove source).
     Move,
+    /// Plain delete (single recycle-bin trip).
     Delete,
+    /// Multi-pass shred via `copythat-secure-delete`.
     SecureDelete,
+    /// Re-hash an existing destination against a recorded sidecar.
     Verify,
 }
 
 /// Lifecycle state of a single job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobState {
+    /// Queued, not yet started.
     Pending,
+    /// Engine task is currently running this job.
     Running,
+    /// User requested pause; engine is parked at a buffer boundary.
     Paused,
+    /// User cancelled; terminal.
     Cancelled,
+    /// Completed without error; terminal.
     Succeeded,
+    /// Completed with error; terminal.
     Failed,
 }
 
@@ -73,17 +85,29 @@ pub enum JobState {
 /// time `Queue::snapshot` or `Queue::get` is called.
 #[derive(Debug, Clone)]
 pub struct Job {
+    /// Process-unique identifier for this job.
     pub id: JobId,
+    /// What kind of work the engine plans to do.
     pub kind: JobKind,
+    /// Source root the engine reads from.
     pub src: PathBuf,
+    /// Destination root the engine writes to. `None` for delete jobs.
     pub dst: Option<PathBuf>,
+    /// Lifecycle state at the time the snapshot was taken.
     pub state: JobState,
+    /// Bytes copied so far.
     pub bytes_done: u64,
+    /// Total bytes the engine plans to copy (or 0 before walk completes).
     pub bytes_total: u64,
+    /// Files completed (success + skip + error).
     pub files_done: u64,
+    /// Files in the planned set.
     pub files_total: u64,
+    /// Wall-clock instant the job entered `Running`.
     pub started_at: Option<Instant>,
+    /// Wall-clock instant the job entered a terminal state.
     pub finished_at: Option<Instant>,
+    /// Most recent typed error, when the job is in `Failed`.
     pub last_error: Option<CopyError>,
 }
 
@@ -94,27 +118,46 @@ pub struct Job {
 /// the new index.
 #[derive(Debug, Clone)]
 pub enum QueueEvent {
+    /// A new job has been added to the queue.
     JobAdded(JobId),
+    /// A pending job entered the `Running` state.
     JobStarted(JobId),
+    /// Streaming progress for a running job.
     JobProgress {
+        /// Identifies which job this event belongs to.
         id: JobId,
+        /// Bytes copied so far.
         bytes_done: u64,
+        /// Total bytes the engine plans to copy.
         bytes_total: u64,
+        /// Files completed.
         files_done: u64,
+        /// Files in the planned set.
         files_total: u64,
     },
+    /// A running job entered `Paused`.
     JobPaused(JobId),
+    /// A paused job re-entered `Running`.
     JobResumed(JobId),
+    /// A job entered the terminal `Cancelled` state.
     JobCancelled(JobId),
+    /// A job entered the terminal `Succeeded` state.
     JobCompleted(JobId),
+    /// A job entered the terminal `Failed` state.
     JobFailed {
+        /// Identifies which job failed.
         id: JobId,
+        /// Typed error detail.
         err: CopyError,
     },
+    /// A job was moved to a new index in the queue.
     JobReordered {
+        /// Identifies which job moved.
         id: JobId,
+        /// 0-based index after the reorder.
         new_index: usize,
     },
+    /// A job was removed from the queue.
     JobRemoved(JobId),
 }
 
@@ -162,6 +205,7 @@ impl std::fmt::Debug for Queue {
 }
 
 impl Queue {
+    /// Build an empty queue with the default broadcast channel capacity.
     pub fn new() -> Self {
         Self::with_capacity(DEFAULT_BROADCAST_CAPACITY)
     }
@@ -218,11 +262,14 @@ impl Queue {
         self.tx.subscribe()
     }
 
+    /// Snapshot every queued job. Cloned data — modifications by the
+    /// caller don't reach back into the queue.
     pub fn snapshot(&self) -> Vec<Job> {
         let guard = self.inner.lock().expect("queue mutex poisoned");
         guard.entries.iter().map(|e| e.job.clone()).collect()
     }
 
+    /// Look up a single queued job by id.
     pub fn get(&self, id: JobId) -> Option<Job> {
         let guard = self.inner.lock().expect("queue mutex poisoned");
         guard
@@ -232,6 +279,8 @@ impl Queue {
             .map(|e| e.job.clone())
     }
 
+    /// Return a clone of the [`CopyControl`] handle the engine task
+    /// is steering through.
     pub fn control(&self, id: JobId) -> Option<CopyControl> {
         let guard = self.inner.lock().expect("queue mutex poisoned");
         guard
@@ -261,6 +310,7 @@ impl Queue {
         }
     }
 
+    /// Resume a paused job. No-op for jobs in any other state.
     pub fn resume_job(&self, id: JobId) {
         let control = {
             let mut guard = self.inner.lock().expect("queue mutex poisoned");
@@ -284,6 +334,7 @@ impl Queue {
         }
     }
 
+    /// Cancel the job. Terminal — `cancel` wins over `resume`.
     pub fn cancel_job(&self, id: JobId) {
         let control = {
             let mut guard = self.inner.lock().expect("queue mutex poisoned");
@@ -401,6 +452,7 @@ impl Queue {
         });
     }
 
+    /// Move the job to terminal `Succeeded`. Idempotent.
     pub fn mark_completed(&self, id: JobId) {
         let changed = {
             let mut guard = self.inner.lock().expect("queue mutex poisoned");
@@ -423,6 +475,8 @@ impl Queue {
         }
     }
 
+    /// Move the job to terminal `Failed`. Idempotent — only the first
+    /// call records the error; subsequent calls are no-ops.
     pub fn mark_failed(&self, id: JobId, err: CopyError) {
         let emit = {
             let mut guard = self.inner.lock().expect("queue mutex poisoned");
@@ -461,6 +515,7 @@ impl Queue {
             .len()
     }
 
+    /// `true` when the queue holds no jobs.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }

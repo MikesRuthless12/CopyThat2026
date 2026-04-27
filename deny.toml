@@ -83,27 +83,52 @@ allow-git        = []
 
 # ----- Advisories -------------------------------------------------------------
 #
-# All entries below are "unmaintained" advisories (NOT vulnerabilities),
+# Most entries below are "unmaintained" advisories (NOT vulnerabilities),
 # inherited transitively from Tauri 2.x's Linux toolchain. We do not import
 # any of these crates directly and cannot evict them from the tree until the
 # upstream maintainer migrates. Re-audit at every Tauri minor bump and remove
 # entries whose root crate has been replaced. New unmaintained advisories
 # encountered later get added here with the same one-line provenance comment.
+# Phase 42 audit-pass disposition is recorded in
+# `docs/SECURITY_BACKLOG.md` § "Phase 42 advisory triage".
 #
 # Phase 36 also adds a single *vulnerability* exception for
 # RUSTSEC-2023-0071 (Marvin Attack on the `rsa` crate, no constant-time
-# upstream patch yet). Inherited transitively from `age` (Phase 35
-# destination encryption — RSA only when the user picks an RSA SSH key
-# recipient) and `reqsign` (Phase 32 cloud sign — only used for OAuth
-# token signatures). The Marvin Attack requires the attacker to observe
-# RSA operation timing across many requests over the network. CopyThat
-# is a local file-copying tool: it does not expose RSA timing to a
-# remote attacker, and the operations that do touch RSA (decrypting an
-# age payload with a user-supplied SSH key; signing a cloud-OAuth
-# request) run on the user's own machine. The official `rsa` crate
+# upstream patch yet). Inherited transitively from three call sites:
+#   - `age 0.11` (Phase 35 destination encryption — `rsa 0.9.10` is only
+#     reached when the user picks an RSA SSH key recipient; ed25519 / age
+#     X25519 recipients never hit `rsa`).
+#   - `reqsign 0.16.5` via `opendal 0.54` (Phase 32 cloud sign — `rsa 0.9.10`
+#     used to mint the GCS service-account JWT and S3-presigned-URL
+#     signatures; signing happens locally before the request leaves the
+#     machine).
+#   - `russh 0.60` via `internal-russh-forked-ssh-key` (Phase 32f SFTP —
+#     `rsa 0.10.0-rc.17` is only reached when a user supplies an RSA-format
+#     OpenSSH private key for SFTP authentication; the actual SSH crypto
+#     runs through `aws-lc-rs` which is not the vulnerable code path).
+#   - `copythat-mobile` dev-dependencies (test-only RSA keypair generation
+#     for the FCM RS256 signer round-trip; never shipped in release builds).
+#
+# Phase 42 added cloud (rustls TLS) + mobile (rustls TLS via reqwest) +
+# age-recipient encryption to the surface. None of these change the
+# Marvin Attack threat model:
+#   - rustls TLS uses `ring` / `aws-lc-rs`, NEVER the `rsa` crate.
+#   - `jsonwebtoken` (FCM RS256, used by mobile push) uses `ring`,
+#     NEVER the `rsa` crate.
+#   - russh SSH transport uses `aws-lc-rs`, NEVER the `rsa` crate.
+# The `rsa` crate is only reached for *local* signing/decryption with
+# user-supplied keys (age recipient decrypt, GCS service-account JWT
+# mint, SFTP RSA-key authentication). The Marvin Attack requires the
+# attacker to time many RSA operations over the network — CopyThat
+# does not expose RSA timing to a remote attacker, the operations
+# happen on the user's own machine, and the JWT / authentication
+# response that ships afterwards reveals only that the signing
+# completed (not its internal timing). The official `rsa` crate
 # advisory text states the same: "local use on a non-compromised
 # computer is fine". Re-audit and remove this entry the moment the
-# `rsa` crate ships a constant-time release.
+# `rsa` crate ships a constant-time release. See
+# `docs/SECURITY_BACKLOG.md` § "Phase 42 advisory triage" for the
+# detailed disposition.
 [advisories]
 version = 2
 yanked  = "deny"
@@ -126,23 +151,16 @@ ignore = [
     # `windows-registry` is the proposed replacement; tracked for the
     # winfsp_wrs maintainer.
     "RUSTSEC-2025-0026",
-    # Phase 33 — `fuser 0.15` uninitialized-memory read in
-    # `request::header_unchecked`. Inherited transitively from the
-    # FUSE mount-as-filesystem path on Linux. Not exploitable in our
-    # threat model: the read is from kernel-supplied bytes inside the
-    # FUSE message header, which the kernel zero-fills before delivery
-    # — the unsoundness materializes only in narrow handcrafted-syscall
-    # edge cases. Re-audit when fuser ships 0.16+.
-    "RUSTSEC-2021-0154",
     # Phase 31 — `mach 0.3.2` archived. Inherited transitively through
     # `battery 0.7` on macOS for IOPMPowerSource lookups. No
     # vulnerability; maintenance signal only. Replacement candidate is
     # `mach2`, blocked on a `battery` crate upstream bump.
     "RUSTSEC-2020-0168",
-    # Phase 33 — `async-std` discontinued. Inherited transitively
-    # through `fuser`'s default-feature stack on Linux. No
-    # vulnerability; the runtime swap to `tokio` requires a fuser
-    # upstream change.
+    # Phase 33 — `async-std` discontinued. Originally inherited
+    # through `fuser 0.15` on Linux; after the Phase 42 fuser 0.15→0.17
+    # bump (which migrated to smol/tokio), the residual import comes
+    # from `suppaftp 6.3` via `opendal 0.54`'s `services-ftp`. No
+    # vulnerability; runtime swap is gated on suppaftp upstream.
     "RUSTSEC-2025-0052",
     # gtk-rs GTK3 binding family — Tauri 2.x Linux WebView (atk, gdk, gdk-sys,
     # gdkx11, gdkx11-sys, gdk-pixbuf, gdk-pixbuf-sys, gdkwayland-sys, gtk,

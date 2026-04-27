@@ -31,7 +31,7 @@
 //!
 //! # Engine wiring
 //!
-//! [`Journal::sink`] returns an `Arc<dyn JournalSink>` from
+//! [`CopyThatJournalSink`] is an `Arc<dyn JournalSink>` from
 //! `copythat-core` that the engine drops into
 //! `CopyOptions::journal`. The engine then calls
 //! `JournalSink::checkpoint` every `PROGRESS_MIN_INTERVAL` (50 ms),
