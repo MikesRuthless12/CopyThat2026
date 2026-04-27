@@ -961,4 +961,439 @@ mod tests {
         let got = xattr::get(tmp_dst.path(), xattr_name).ok().flatten();
         assert_eq!(got.as_deref(), Some(&value[..]));
     }
+
+    // ============================================================
+    // Wave-2 adversarial-input regressions for the wave-1 hardening
+    // (AppleDouble offset overflow, ADS embedded colon, FinderInfo
+    // classifier name+length, foreign-xattr policy AND→OR routing,
+    // FNV-1a collision linear probe).
+    // ============================================================
+
+    /// Reference FNV-1a 32-bit implementation. Kept in lock-step with
+    /// the production hash inside `synth_entry_id` so the collision
+    /// search below is meaningful.
+    fn fnv1a_32(name: &str) -> u32 {
+        let mut h: u32 = 0x811c_9dc5;
+        for b in name.bytes() {
+            h ^= b as u32;
+            h = h.wrapping_mul(0x0100_0193);
+        }
+        if h < 16 { h.wrapping_add(16) } else { h }
+    }
+
+    #[test]
+    fn appledouble_payload_under_4gib_round_trips() {
+        // The wave-1 fix narrowed offset/length arithmetic from
+        // unchecked `as u32` (silent truncation on overflow) to
+        // `u64 + u32::try_from`. Verify the success path still
+        // round-trips for normal payloads well below the 4 GiB
+        // boundary (the common case).
+        let tmp = tempfile::tempdir().unwrap();
+        let dst = tmp.path().join("file.bin");
+        std::fs::write(&dst, b"primary").unwrap();
+        let foreign = vec![ForeignStream {
+            name: "user.smallish".to_string(),
+            // 1 KiB payload — well under the u32 ceiling.
+            payload: vec![0x42; 1024],
+        }];
+        write_appledouble_sidecar(&dst, &foreign).expect("small payload should round-trip");
+        let sidecar = tmp.path().join("._file.bin");
+        let bytes = std::fs::read(&sidecar).unwrap();
+        // entry_count == 1
+        assert_eq!(&bytes[24..26], &1u16.to_be_bytes());
+        // entry length field == 1024
+        assert_eq!(&bytes[34..38], &1024u32.to_be_bytes());
+    }
+
+    #[test]
+    fn appledouble_payload_over_4gib_returns_err() {
+        // Wave-1 changed `s.payload.len() as u32` (silent truncation)
+        // to `u32::try_from(s.payload.len() as u64)?`. Triggering the
+        // overflow path needs a Vec that *reports* `len > u32::MAX`.
+        // We can't physically allocate 4 GiB and Rust's `Vec::set_len`
+        // enforces `new_len <= capacity()` in debug builds, so we
+        // build an unowned Vec via `Vec::from_raw_parts` whose
+        // capacity is also spoofed to `u32::MAX + 1`. The Vec is
+        // never dropped (`mem::forget` after the call) so the
+        // allocator never sees the lie.
+        //
+        // The function under test only reads `s.payload.len()` and
+        // returns Err on `u32::try_from` *before* it dereferences any
+        // bytes through `extend_from_slice`, so no code touches the
+        // spoofed pointer range.
+        //
+        // On 32-bit targets `u32::MAX + 1` overflows `usize`, so
+        // bail.
+        if usize::BITS < 64 {
+            return;
+        }
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dst = tmp.path().join("file.bin");
+        std::fs::write(&dst, b"primary").unwrap();
+
+        // 16 bytes of legitimately-allocated buffer to back the Vec
+        // pointer, in case any miri/sanitizer path probes the first
+        // bytes. We never read them; they're just so the pointer is
+        // a valid object.
+        let real_buf: Box<[u8; 16]> = Box::new([0u8; 16]);
+        let real_ptr = Box::into_raw(real_buf) as *mut u8;
+
+        // SAFETY: we synthesise a `Vec<u8>` that *claims* a
+        // length/capacity beyond `u32::MAX`. The wave-1 code path
+        // checks `u32::try_from(s.payload.len())?` and returns Err
+        // *before* doing anything that reads the pointer's data.
+        // The Vec is `mem::forget`-ed below so its `Drop` never runs,
+        // meaning the allocator never tries to free a buffer that
+        // doesn't really span the spoofed capacity. We separately
+        // free the underlying 16 bytes by reconstituting an honest
+        // `Box` over `real_ptr`.
+        let huge: usize = u32::MAX as usize + 1;
+        let lying_payload: Vec<u8> =
+            unsafe { Vec::from_raw_parts(real_ptr, huge, huge) };
+        let lying_stream = ForeignStream {
+            name: "user.huge".to_string(),
+            payload: lying_payload,
+        };
+        let foreign = vec![lying_stream];
+
+        let result = write_appledouble_sidecar(&dst, &foreign);
+
+        // SAFETY: we MUST avoid dropping the lying Vec because its
+        // (ptr, len=huge, cap=huge) tuple would cause the allocator
+        // to deallocate a layout it never allocated. Decompose
+        // `foreign` and `mem::forget` the lying Vec, then free the
+        // real 16-byte buffer through an honest Box.
+        let mut foreign = foreign;
+        let lying_stream = foreign.pop().unwrap();
+        let lying_vec = lying_stream.payload;
+        std::mem::forget(lying_vec);
+        // SAFETY: real_ptr was the result of `Box::into_raw` over a
+        // Box<[u8; 16]>; reconstituting the same `Box<[u8; 16]>`
+        // here lets the allocator free exactly the layout it
+        // originally received.
+        unsafe {
+            let _real_box: Box<[u8; 16]> = Box::from_raw(real_ptr as *mut [u8; 16]);
+        }
+
+        assert!(
+            result.is_err(),
+            "payload >4 GiB must surface an error rather than silently truncate"
+        );
+        let err_str = format!("{}", result.unwrap_err());
+        assert!(
+            err_str.contains("4 GiB") || err_str.contains("appledouble"),
+            "error message should mention the AppleDouble overflow ceiling, got: {err_str}"
+        );
+        // The sidecar must NOT have been written.
+        assert!(!tmp.path().join("._file.bin").exists());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn parse_ads_name_rejects_embedded_colon_inside_name() {
+        // Wave-1 swapped `rfind(':')` for `strip_suffix(":$DATA")` and
+        // added an explicit reject on embedded colons. Cover the
+        // hostile inputs that the old `rfind` parser would have
+        // accepted (and mis-parsed).
+
+        // A stream name containing internal colons after the leading
+        // ':' marker. Old rfind code would have returned
+        // "file.txt:my:weird:name" by stripping at the wrong colon;
+        // wave-1 rejects it because the post-suffix-strip name still
+        // contains ':'.
+        assert!(parse_ads_name(":file.txt:my:weird:name:$DATA").is_none());
+
+        // Empty stream name between two colons (`":file.txt::$DATA"`):
+        // after stripping the leading ':' we get "file.txt::$DATA";
+        // strip_suffix ":$DATA" yields "file.txt:" which still
+        // contains ':' → rejected.
+        assert!(parse_ads_name(":file.txt::$DATA").is_none());
+
+        // Default unnamed stream — empty name after suffix strip.
+        assert!(parse_ads_name("::$DATA").is_none());
+
+        // No colon at all — strip_prefix(':') fails first.
+        assert!(parse_ads_name("file.txt").is_none());
+
+        // Has a colon but no ":$DATA" suffix — strip_suffix fails.
+        assert!(parse_ads_name(":file.txt:stream").is_none());
+
+        // Missing leading colon — strip_prefix fails before we even
+        // see the suffix.
+        assert!(parse_ads_name("file.txt:stream:$DATA").is_none());
+        assert!(parse_ads_name("file.txt:$DATA").is_none());
+
+        // Sanity: a well-formed valid name still parses. The leading
+        // ':' is the WIN32_FIND_STREAM_DATA tag; "file.txt" here is
+        // the stream-name slot (the field always has the form
+        // `:<name>:$DATA`), so this is a synthetic case where the
+        // stream name happens to look like a filename — accepted.
+        assert_eq!(
+            parse_ads_name(":file.txt:$DATA").as_deref(),
+            Some("file.txt")
+        );
+
+        // The canonical Mark-of-the-Web stream still parses.
+        assert_eq!(
+            parse_ads_name(":Zone.Identifier:$DATA").as_deref(),
+            Some("Zone.Identifier")
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn decompose_mac_xattrs_classifier_name_and_length() {
+        // Wave-1 verified the AND check (`name == "com.apple.FinderInfo"
+        // && len == 32`) was already correct. Lock that in: a 32-byte
+        // *non-FinderInfo* xattr must NOT be classified, and a
+        // *wrong-length* FinderInfo entry must NOT be classified.
+
+        // (a) user.foo of length 32 — wrong NAME, must NOT classify.
+        let entries = vec![XattrEntry {
+            name: "user.foo".to_string(),
+            value: vec![0xCC; 32],
+        }];
+        let mut snap = MetaSnapshot::default();
+        decompose_mac_xattrs(entries, &mut snap);
+        assert!(
+            snap.mac_finder_info.is_none(),
+            "user.foo of length 32 must not be classified as FinderInfo"
+        );
+        // The entry survives in the foreign_xattrs path.
+        assert_eq!(snap.xattrs.len(), 1);
+
+        // (b) com.apple.FinderInfo of length 16 — wrong LENGTH, must
+        // NOT classify.
+        let entries = vec![XattrEntry {
+            name: "com.apple.FinderInfo".to_string(),
+            value: vec![0xDD; 16],
+        }];
+        let mut snap = MetaSnapshot::default();
+        decompose_mac_xattrs(entries, &mut snap);
+        assert!(
+            snap.mac_finder_info.is_none(),
+            "com.apple.FinderInfo of length 16 must not be classified as FinderInfo"
+        );
+        assert_eq!(snap.xattrs.len(), 1);
+
+        // (c) com.apple.FinderInfo of length 32 — correct, MUST
+        // classify into the structured slot.
+        let entries = vec![XattrEntry {
+            name: "com.apple.FinderInfo".to_string(),
+            value: vec![0xEE; 32],
+        }];
+        let mut snap = MetaSnapshot::default();
+        decompose_mac_xattrs(entries, &mut snap);
+        let fi = snap
+            .mac_finder_info
+            .as_ref()
+            .expect("32-byte FinderInfo must be classified");
+        assert_eq!(fi.data, [0xEE; 32]);
+        // The raw entry is also retained in `xattrs` so the apply
+        // side can replay the binary form unchanged.
+        assert_eq!(snap.xattrs.len(), 1);
+    }
+
+    #[test]
+    fn foreign_xattr_permitted_routes_per_toggle_and_not_per_and() {
+        // Wave-1 swapped the old AND expression
+        //   `policy.preserve_xattrs && !is_structured_xattr(name)`
+        // for a per-toggle gate (`foreign_xattr_permitted`). The
+        // regression here: with `preserve_xattrs == false` and
+        // `preserve_selinux == true`, a `security.selinux` xattr MUST
+        // still be routed through the AppleDouble fallback. And vice
+        // versa — disabling `preserve_selinux` while keeping
+        // `preserve_xattrs == true` MUST drop SELinux.
+
+        // (a) Generic xattrs off, SELinux on → SELinux still routed.
+        let policy = MetaPolicy {
+            preserve_motw: false,
+            preserve_xattrs: false,
+            preserve_posix_acls: false,
+            preserve_selinux: true,
+            preserve_resource_forks: false,
+            appledouble_fallback: true,
+        };
+        assert!(
+            foreign_xattr_permitted("security.selinux", &policy),
+            "selinux must pass through when preserve_selinux is on, even with preserve_xattrs off"
+        );
+        // A regular user.* xattr is dropped under that policy.
+        assert!(!foreign_xattr_permitted("user.metadata", &policy));
+
+        // (b) Generic xattrs on, SELinux off → SELinux dropped.
+        let policy = MetaPolicy {
+            preserve_motw: false,
+            preserve_xattrs: true,
+            preserve_posix_acls: false,
+            preserve_selinux: false,
+            preserve_resource_forks: false,
+            appledouble_fallback: true,
+        };
+        assert!(
+            !foreign_xattr_permitted("security.selinux", &policy),
+            "selinux must drop when preserve_selinux is off, even with preserve_xattrs on"
+        );
+        // user.* still flows because preserve_xattrs is on.
+        assert!(foreign_xattr_permitted("user.metadata", &policy));
+
+        // (c) POSIX ACLs gate independently of preserve_xattrs.
+        let policy = MetaPolicy {
+            preserve_motw: false,
+            preserve_xattrs: false,
+            preserve_posix_acls: true,
+            preserve_selinux: false,
+            preserve_resource_forks: false,
+            appledouble_fallback: true,
+        };
+        assert!(foreign_xattr_permitted("system.posix_acl_access", &policy));
+        assert!(foreign_xattr_permitted("system.posix_acl_default", &policy));
+
+        // (d) Resource forks gate the FinderInfo / ResourceFork
+        // routes independently of preserve_xattrs.
+        let policy = MetaPolicy {
+            preserve_motw: false,
+            preserve_xattrs: false,
+            preserve_posix_acls: false,
+            preserve_selinux: false,
+            preserve_resource_forks: true,
+            appledouble_fallback: true,
+        };
+        assert!(foreign_xattr_permitted("com.apple.ResourceFork", &policy));
+        assert!(foreign_xattr_permitted("com.apple.FinderInfo", &policy));
+
+        // (e) MOTW gates the Zone.Identifier route independently.
+        let policy = MetaPolicy {
+            preserve_motw: true,
+            preserve_xattrs: false,
+            preserve_posix_acls: false,
+            preserve_selinux: false,
+            preserve_resource_forks: false,
+            appledouble_fallback: true,
+        };
+        assert!(foreign_xattr_permitted("Zone.Identifier", &policy));
+        assert!(foreign_xattr_permitted("user.Zone.Identifier", &policy));
+    }
+
+    #[test]
+    fn synth_entry_id_distinct_for_two_fnv_colliding_names() {
+        // The wave-1 fix added `next_free_entry_id` linear probing so
+        // two distinct names whose FNV-1a 32 hashes happen to alias
+        // get distinct entry IDs (rather than the second silently
+        // overwriting the first). Find a real collision via a short
+        // brute-force search over 2-character ASCII strings, then
+        // assert the probe.
+        let chars: Vec<u8> = (b'a'..=b'z').chain(b'0'..=b'9').collect();
+        let mut seen: std::collections::HashMap<u32, String> =
+            std::collections::HashMap::new();
+        let mut pair: Option<(String, String, u32)> = None;
+        'outer: for length in [2usize, 3, 4] {
+            seen.clear();
+            // Iterate length-N tuples over the alphabet.
+            let n = chars.len();
+            let total = n.pow(length as u32);
+            for i in 0..total {
+                let mut s = Vec::with_capacity(length);
+                let mut idx = i;
+                for _ in 0..length {
+                    s.push(chars[idx % n]);
+                    idx /= n;
+                }
+                let s = String::from_utf8(s).unwrap();
+                let h = fnv1a_32(&s);
+                if let Some(other) = seen.get(&h) {
+                    if other != &s {
+                        pair = Some((other.clone(), s.clone(), h));
+                        break 'outer;
+                    }
+                } else {
+                    seen.insert(h, s);
+                }
+            }
+        }
+        let (a, b, h) = pair.expect(
+            "expected to find an FNV-1a collision among short alphanumeric strings",
+        );
+        // Confirm the collision really is one — distinct names, same
+        // hash.
+        assert_ne!(a, b, "collision pair must be distinct strings");
+        assert_eq!(fnv1a_32(&a), fnv1a_32(&b));
+        assert_eq!(fnv1a_32(&a), h);
+
+        // Now drive synth_entry_id and verify the second mints a
+        // different ID via the linear probe.
+        let mut used = std::collections::HashSet::new();
+        let id_a = synth_entry_id(&a, &mut used);
+        let id_b = synth_entry_id(&b, &mut used);
+        assert_ne!(
+            id_a, id_b,
+            "two FNV-colliding names ({a:?}, {b:?}) must mint distinct IDs after linear probing"
+        );
+        // Both should be in the canonical-safe range.
+        assert!(id_a >= 16);
+        assert!(id_b >= 16);
+    }
+
+    #[test]
+    fn appledouble_table_has_distinct_ids_for_fnv_colliding_names() {
+        // End-to-end: write a sidecar with two FNV-colliding stream
+        // names and verify the 12-byte entry-descriptor table at
+        // offset 26 carries two distinct IDs.
+        let chars: Vec<u8> = (b'a'..=b'z').chain(b'0'..=b'9').collect();
+        let mut seen: std::collections::HashMap<u32, String> =
+            std::collections::HashMap::new();
+        let mut pair: Option<(String, String)> = None;
+        'outer: for length in [2usize, 3, 4] {
+            seen.clear();
+            let n = chars.len();
+            let total = n.pow(length as u32);
+            for i in 0..total {
+                let mut s = Vec::with_capacity(length);
+                let mut idx = i;
+                for _ in 0..length {
+                    s.push(chars[idx % n]);
+                    idx /= n;
+                }
+                let s = String::from_utf8(s).unwrap();
+                let h = fnv1a_32(&s);
+                if let Some(other) = seen.get(&h) {
+                    if other != &s {
+                        pair = Some((other.clone(), s));
+                        break 'outer;
+                    }
+                } else {
+                    seen.insert(h, s);
+                }
+            }
+        }
+        let (a, b) =
+            pair.expect("expected to find an FNV-1a collision pair for the round-trip test");
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dst = tmp.path().join("file.bin");
+        std::fs::write(&dst, b"primary").unwrap();
+        let foreign = vec![
+            ForeignStream {
+                name: a.clone(),
+                payload: vec![0xAA; 4],
+            },
+            ForeignStream {
+                name: b.clone(),
+                payload: vec![0xBB; 4],
+            },
+        ];
+        write_appledouble_sidecar(&dst, &foreign).unwrap();
+
+        let bytes = std::fs::read(tmp.path().join("._file.bin")).unwrap();
+        // Header = 4+4+16+2 = 26 bytes, then entry descriptors of 12
+        // bytes each. The first descriptor's ID is at [26..30], the
+        // second at [38..42].
+        let id1 = u32::from_be_bytes(bytes[26..30].try_into().unwrap());
+        let id2 = u32::from_be_bytes(bytes[38..42].try_into().unwrap());
+        assert_ne!(
+            id1, id2,
+            "FNV-colliding names ({a:?}, {b:?}) must land in distinct AppleDouble entry IDs"
+        );
+    }
 }
