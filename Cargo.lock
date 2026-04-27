@@ -1535,6 +1535,7 @@ version = "1.25.0"
 dependencies = [
  "blake3",
  "copythat-core",
+ "copythat-hash",
  "core-foundation-sys 0.8.7",
  "libc",
  "reflink-copy",
