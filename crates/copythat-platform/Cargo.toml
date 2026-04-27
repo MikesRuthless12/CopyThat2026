@@ -105,6 +105,10 @@ zbus = { version = "5", default-features = false, features = ["tokio", "blocking
 blake3 = "1"
 tempfile = "3"
 serde_json = "1"
+# Phase 42 — integration smoke needs the streaming verifier factory
+# (`HashAlgorithm::XxHash3_128.verifier()`) for scenario 4. dev-only so
+# the platform crate's runtime dep graph stays untouched.
+copythat-hash = { path = "../copythat-hash", version = "1" }
 tokio = { version = "1", features = [
     "fs",
     "io-util",
@@ -144,3 +148,12 @@ path = "../../tests/smoke/phase_38_dedup.rs"
 [[test]]
 name = "phase_13c_parallel"
 path = "../../tests/smoke/phase_13c_parallel.rs"
+
+# Phase 42 — combined-paths integration smoke: sparse + CopyFile2,
+# UNC dest, cross-volume auto-overlapped, paranoid verify, and
+# sharing-violation retry under a simulated lock. Each scenario
+# skips with a `println!` when its prerequisites aren't met so the
+# suite stays runnable on any host.
+[[test]]
+name = "phase_42_integration"
+path = "../../tests/smoke/phase_42_integration.rs"

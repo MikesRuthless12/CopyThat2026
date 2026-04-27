@@ -1743,6 +1743,7 @@ dependencies = [
  "blake3",
  "compio",
  "copythat-core",
+ "copythat-hash",
  "core-foundation-sys 0.8.7",
  "libc",
  "reflink-copy",
