@@ -32,6 +32,64 @@ use copythat_settings::{
 };
 use tempfile::tempdir;
 
+/// Build a `Settings` with every group hand-customised so the
+/// round-trip test below exercises every named field, but using the
+/// `..Default::default()` shorthand for fields that aren't
+/// behaviourally interesting to this assertion. Centralising the
+/// fixture here means adding a field to a settings group only
+/// requires updating its `Default` impl — the test stays compiling.
+fn make_phase_12_fixture() -> Settings {
+    Settings {
+        general: copythat_settings::GeneralSettings {
+            language: "fr".into(),
+            theme: ThemePreference::Dark,
+            start_with_os: true,
+            single_instance: false,
+            minimize_to_tray: true,
+            error_display_mode: ErrorDisplayMode::Drawer,
+            paste_shortcut_enabled: false,
+            paste_shortcut: "Alt+Shift+V".into(),
+            clipboard_watcher_enabled: true,
+            auto_resume_interrupted: true,
+            mobile_onboarding_dismissed: true,
+        },
+        transfer: copythat_settings::TransferSettings {
+            buffer_size_bytes: 4 * 1024 * 1024,
+            verify: VerifyChoice::Sha256,
+            concurrency: ConcurrencyChoice::Manual(4),
+            reflink: ReflinkPreference::Avoid,
+            fsync_on_close: true,
+            preserve_permissions: false,
+            preserve_acls: true,
+            on_locked: copythat_settings::LockedFilePolicyChoice::Snapshot,
+            dedup_mode: "auto-ladder".into(),
+            dedup_hardlink_policy: "always".into(),
+            dedup_prescan: true,
+            ..Default::default()
+        },
+        shell: copythat_settings::ShellSettings {
+            context_menu_enabled: false,
+            intercept_default_copy: true,
+            notify_on_completion: false,
+        },
+        secure_delete: copythat_settings::SecureDeleteSettings {
+            method: ShredMethodChoice::DoD7Pass,
+            confirm_twice: false,
+        },
+        advanced: copythat_settings::AdvancedSettings {
+            log_level: LogLevel::Debug,
+            error_policy: ErrorPolicyChoice::RetryN {
+                max_attempts: 5,
+                backoff_ms: 500,
+            },
+            history_retention_days: 90,
+            database_path: Some(std::path::PathBuf::from("/custom/path/copythat.db")),
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
 #[test]
 fn phase_12_close_and_relaunch_persists_all_fields() {
     // Simulate "close + relaunch": write a full-custom Settings to
@@ -41,157 +99,16 @@ fn phase_12_close_and_relaunch_persists_all_fields() {
     let d = tempdir().unwrap();
     let path = d.path().join("settings.toml");
 
-    let before = Settings {
-        general: copythat_settings::GeneralSettings {
-            language: "fr".into(),
-            theme: ThemePreference::Dark,
-            start_with_os: true,
-            single_instance: false,
-            minimize_to_tray: true,
-            error_display_mode: ErrorDisplayMode::Drawer,
-            paste_shortcut_enabled: false,
-            paste_shortcut: "Alt+Shift+V".into(),
-            clipboard_watcher_enabled: true,
-            auto_resume_interrupted: true,
-            mobile_onboarding_dismissed: true,
-        },
-        transfer: copythat_settings::TransferSettings {
-            buffer_size_bytes: 4 * 1024 * 1024,
-            verify: VerifyChoice::Sha256,
-            concurrency: ConcurrencyChoice::Manual(4),
-            reflink: ReflinkPreference::Avoid,
-            fsync_on_close: true,
-            preserve_timestamps: true,
-            preserve_permissions: false,
-            preserve_acls: true,
-            reserve_free_space_bytes: 0,
-            on_locked: copythat_settings::LockedFilePolicyChoice::Snapshot,
-            preserve_sparseness: true,
-            preserve_security_metadata: true,
-            preserve_motw: true,
-            preserve_posix_acls: true,
-            preserve_selinux_contexts: true,
-            preserve_resource_forks: true,
-            appledouble_fallback: true,
-            dedup_mode: "auto-ladder".into(),
-            dedup_hardlink_policy: "always".into(),
-            dedup_prescan: true,
-        },
-        shell: copythat_settings::ShellSettings {
-            context_menu_enabled: false,
-            intercept_default_copy: true,
-            notify_on_completion: false,
-        },
-        secure_delete: copythat_settings::SecureDeleteSettings {
-            method: ShredMethodChoice::DoD7Pass,
-            confirm_twice: false,
-        },
-        advanced: copythat_settings::AdvancedSettings {
-            log_level: LogLevel::Debug,
-            telemetry: false,
-            error_policy: ErrorPolicyChoice::RetryN {
-                max_attempts: 5,
-                backoff_ms: 500,
-            },
-            history_retention_days: 90,
-            database_path: Some(std::path::PathBuf::from("/custom/path/copythat.db")),
-        },
-        filters: copythat_settings::FilterSettings::default(),
-        updater: copythat_settings::UpdaterSettings::default(),
-        scan: copythat_settings::ScanSettings::default(),
-        network: copythat_settings::NetworkSettings::default(),
-        conflict_profiles: copythat_settings::ConflictProfileSettings::default(),
-        sync: copythat_settings::SyncSettings::default(),
-        chunk_store: copythat_settings::ChunkStoreSettings::default(),
-        drop_stack: copythat_settings::DropStackSettings::default(),
-        dnd: copythat_settings::DndSettings::default(),
-        path_translation: copythat_settings::PathTranslationSettings::default(),
-        power: copythat_settings::PowerPoliciesSettings::default(),
-        remotes: copythat_settings::RemoteSettings::default(),
-        mount: copythat_settings::MountSettings::default(),
-        audit: copythat_settings::AuditSettings::default(),
-        crypt: copythat_settings::CryptSettings::default(),
-        mobile: copythat_settings::MobileSettings::default(),
-    };
+    let before = make_phase_12_fixture();
 
     before.save_to(&path).expect("save_to");
     drop(before);
 
     let after = Settings::load_from(&path).expect("load_from");
-    // Rebuild the expected value; the types derive `PartialEq` so
-    // any drift in any nested group surfaces here.
-    let expected = Settings {
-        general: copythat_settings::GeneralSettings {
-            language: "fr".into(),
-            theme: ThemePreference::Dark,
-            start_with_os: true,
-            single_instance: false,
-            minimize_to_tray: true,
-            error_display_mode: ErrorDisplayMode::Drawer,
-            paste_shortcut_enabled: false,
-            paste_shortcut: "Alt+Shift+V".into(),
-            clipboard_watcher_enabled: true,
-            auto_resume_interrupted: true,
-            mobile_onboarding_dismissed: true,
-        },
-        transfer: copythat_settings::TransferSettings {
-            buffer_size_bytes: 4 * 1024 * 1024,
-            verify: VerifyChoice::Sha256,
-            concurrency: ConcurrencyChoice::Manual(4),
-            reflink: ReflinkPreference::Avoid,
-            fsync_on_close: true,
-            preserve_timestamps: true,
-            preserve_permissions: false,
-            preserve_acls: true,
-            reserve_free_space_bytes: 0,
-            on_locked: copythat_settings::LockedFilePolicyChoice::Snapshot,
-            preserve_sparseness: true,
-            preserve_security_metadata: true,
-            preserve_motw: true,
-            preserve_posix_acls: true,
-            preserve_selinux_contexts: true,
-            preserve_resource_forks: true,
-            appledouble_fallback: true,
-            dedup_mode: "auto-ladder".into(),
-            dedup_hardlink_policy: "always".into(),
-            dedup_prescan: true,
-        },
-        shell: copythat_settings::ShellSettings {
-            context_menu_enabled: false,
-            intercept_default_copy: true,
-            notify_on_completion: false,
-        },
-        secure_delete: copythat_settings::SecureDeleteSettings {
-            method: ShredMethodChoice::DoD7Pass,
-            confirm_twice: false,
-        },
-        advanced: copythat_settings::AdvancedSettings {
-            log_level: LogLevel::Debug,
-            telemetry: false,
-            error_policy: ErrorPolicyChoice::RetryN {
-                max_attempts: 5,
-                backoff_ms: 500,
-            },
-            history_retention_days: 90,
-            database_path: Some(std::path::PathBuf::from("/custom/path/copythat.db")),
-        },
-        filters: copythat_settings::FilterSettings::default(),
-        updater: copythat_settings::UpdaterSettings::default(),
-        scan: copythat_settings::ScanSettings::default(),
-        network: copythat_settings::NetworkSettings::default(),
-        conflict_profiles: copythat_settings::ConflictProfileSettings::default(),
-        sync: copythat_settings::SyncSettings::default(),
-        chunk_store: copythat_settings::ChunkStoreSettings::default(),
-        drop_stack: copythat_settings::DropStackSettings::default(),
-        dnd: copythat_settings::DndSettings::default(),
-        path_translation: copythat_settings::PathTranslationSettings::default(),
-        power: copythat_settings::PowerPoliciesSettings::default(),
-        remotes: copythat_settings::RemoteSettings::default(),
-        mount: copythat_settings::MountSettings::default(),
-        audit: copythat_settings::AuditSettings::default(),
-        crypt: copythat_settings::CryptSettings::default(),
-        mobile: copythat_settings::MobileSettings::default(),
-    };
+    // Rebuild the expected value via the same fixture builder; the
+    // types derive `PartialEq` so any drift in any nested group
+    // surfaces here.
+    let expected = make_phase_12_fixture();
     assert_eq!(after, expected);
 }
 

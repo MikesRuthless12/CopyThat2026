@@ -229,6 +229,31 @@ fn default_sftp_port() -> u16 {
     22
 }
 
+/// FTP backend config.
+///
+/// **Phase 32h security limitation — system trust only.** OpenDAL
+/// 0.54's `services-ftp` driver does not yet expose a TLS hook
+/// for pinning server trust against a custom CA bundle, so the
+/// FTPS handshake [`make_operator`] builds always relies on the
+/// OS root certificate store. On corporate networks where IT has
+/// pushed an MITM root certificate, the handshake will succeed
+/// against the on-path inspector and the user's FTP password is
+/// captured in cleartext from the inspector's perspective. Phase
+/// 32i is tracked to either:
+///
+/// - Bypass OpenDAL's FTP driver with a custom `CopyTarget` impl
+///   (mirroring the SFTP-via-russh approach in
+///   [`crate::SftpTarget`]) that wires a `rustls::ClientConfig`
+///   built from a user-supplied `RootCertStore`, OR
+/// - Contribute an upstream `tls_config` hook to the
+///   `services-ftp` builder.
+///
+/// Until that lands, deployments where corporate-MITM is a
+/// concern should use SFTP (which already pins via
+/// [`SftpConfig::known_hosts_path`]) or one of the S3-class
+/// backends (which use `reqwest` + `rustls` directly and are not
+/// affected). The IPC `cloud_commands::add_backend` surface
+/// exposes this limitation in the FTP wizard's UI string.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FtpConfig {
     pub host: String,
@@ -427,6 +452,15 @@ pub fn make_operator(
                         .into(),
                 ));
             }
+            // Phase 32h — security limitation tracked on the
+            // `FtpConfig` doc-comment: OpenDAL 0.54's services-ftp
+            // driver does not expose a hook for pinning server
+            // trust against a custom CA bundle, so the FTPS
+            // handshake always rides the OS root store. When the
+            // host is on a corporate-MITM network this is
+            // captureable; document the limitation here and on
+            // the public type rather than silently presenting an
+            // unsafe primitive.
             let port = if cfg.port == 0 { 21 } else { cfg.port };
             let endpoint = format!("ftps://{}:{port}", cfg.host);
             let mut builder = opendal::services::Ftp::default().endpoint(&endpoint);

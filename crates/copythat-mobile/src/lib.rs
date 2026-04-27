@@ -50,13 +50,36 @@
 //!   resume / cancel, collision resolution, globals, history
 //!   browse + rerun, secure delete, and start-copy.
 //!
-//! # What's still open
+//! # Phase 38 hardening — pairing replay + identity-swap defences
 //!
-//! - Phone-side authentication beyond DTLS — currently the
-//!   `Hello` handshake only checks the device's long-term X25519
-//!   public key against `MobileSettings::pairings`. A signed
-//!   nonce challenge lands in a follow-up if the threat model
-//!   tightens (rogue browser tab on the same WebRTC connection).
+//! The Phase 37 handshake stopped at "looked up the device's
+//! pubkey in `MobileSettings::pairings`" and trusted DTLS for the
+//! rest. Phase 38 closes three holes the cloud/mobile/sync
+//! security review flagged:
+//!
+//! 1. *Replay protection.* Every paired `Hello` now lands in a
+//!    challenge-response handshake — the desktop sends a fresh
+//!    32-byte nonce as
+//!    [`server::RemoteResponse::Challenge`], the phone signs
+//!    `phone_pub || nonce || counter_le` with HMAC-SHA-256 keyed
+//!    by the X25519 ECDH shared secret, and the desktop verifies
+//!    the MAC in constant time before unlocking any privileged
+//!    command. The first counter the phone supplies installs the
+//!    high-water mark; subsequent privileged commands advance it
+//!    monotonically and any out-of-order arrival is dropped at
+//!    the dispatcher.
+//! 2. *Identity-swap invalidation.* A mid-session `Hello` that
+//!    presents a *different* pubkey wipes the entire
+//!    [`server::SessionAuth`] before the new key gets a fresh
+//!    challenge — so a rogue browser tab piggy-backed on the
+//!    same WebRTC connection can't hijack the active phone's
+//!    privileges.
+//! 3. *Keep-awake rate limit + audit.* `SetKeepAwake` toggles are
+//!    capped at one per
+//!    [`server::KEEP_AWAKE_RATE_LIMIT_SECS`] seconds per
+//!    session, and every honoured / rejected toggle calls into
+//!    [`server::RemoteControl::audit_command`] so the audit-log
+//!    sink (when wired) records the activity.
 
 #![forbid(unsafe_code)]
 
@@ -76,7 +99,8 @@ pub use pairing::{
     sas_fingerprint, sas_fingerprint_to_emoji,
 };
 pub use server::{
-    CollisionAction, HistoryRow, JobSummary, RemoteCommand, RemoteControl, RemoteResponse,
-    SessionAuth, dispatch, dispatch_with_auth,
+    CollisionAction, HistoryRow, JobSummary, KEEP_AWAKE_RATE_LIMIT_SECS, RemoteCommand,
+    RemoteControl, RemoteResponse, SESSION_MAC_BYTES, SESSION_NONCE_BYTES, SessionAuth,
+    compute_challenge_mac, dispatch, dispatch_with_auth,
 };
 pub use settings::{MobileSettings, validate_peerjs_broker};

@@ -25,10 +25,14 @@ pub enum CryptError {
     InvalidIdentity(String),
 
     /// `age::Encryptor::wrap_output` or the finishing `finish()` on
-    /// the writer returned an error. age's own errors are generic
-    /// `io::Error`s at this layer.
+    /// the writer returned an error. The bounded variant carries the
+    /// kind only — never the wrapped `io::Error`'s `Display` payload,
+    /// which on some platforms / pipeline configurations would
+    /// include adapter-side buffers (e.g. zstd's residual frame) that
+    /// could leak ciphertext-adjacent bytes if surfaced verbatim into
+    /// telemetry.
     #[error("age encryption failed: {0}")]
-    AgeEncrypt(String),
+    AgeEncrypt(CryptFinishError),
 
     /// `age::Decryptor::new` or the underlying read returned an
     /// error. Wrong passphrase / mismatched recipient surfaces here
@@ -54,6 +58,35 @@ pub enum CryptError {
     /// passphrase — age refuses to decrypt until the UI prompts.
     #[error("identity requires passphrase to unlock")]
     IdentityLocked,
+}
+
+/// Bounded reason for an age-side encryption failure. Each variant is
+/// a finite shape — by construction the `Display` impl can never
+/// echo bytes from the in-flight plaintext or its surrounding paths.
+/// The pipeline's age adapter raised IO errors verbatim before this
+/// type existed; surfacing those `io::Error::Display` strings risked
+/// leaking adapter-side buffer contents (zstd's residual frame, the
+/// inner writer's path-aware error message) into telemetry / audit
+/// trails. The variants below carry only enum tags + an `io::ErrorKind`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum CryptFinishError {
+    /// `age::stream::StreamWriter::wrap_output` failed — the recipient
+    /// chain rejected the build before any plaintext flowed.
+    #[error("wrap-output rejected the recipient chain")]
+    WrapOutput,
+    /// The age stream's finalising `finish()` (which writes the MAC)
+    /// returned an error. The contained `io::ErrorKind` is the only
+    /// information we propagate — never the inner `io::Error::Display`
+    /// string, which can include adapter-side payload buffers.
+    #[error("MAC finalisation failed (io kind: {0:?})")]
+    Finalise(io::ErrorKind),
+    /// The sink was dropped without a successful explicit `.finish()`.
+    /// Surfaced when an outer pipeline forced an early drop without
+    /// ever calling `finish()`; in well-formed code this never
+    /// reaches a caller because [`crate::encrypt::EncryptionSink`]'s
+    /// Drop panics first.
+    #[error("encryption sink dropped without explicit finish")]
+    DropWithoutFinish,
 }
 
 pub type Result<T> = std::result::Result<T, CryptError>;

@@ -144,17 +144,24 @@ workloads.
 
 - **`PlatformFastCopyHook` everywhere** — every entry point (CLI, UI start_copy, UI rerun, CLI shell-extension enqueue) attaches the hook so reflink + `CopyFileExW` + the Phase 38 dedup ladder are the default fast paths.
 - **Phase 40 named-pipe broker** — `copythat-ui --enqueue` invocations forward argv to the running first instance via named pipe in **110 ms** instead of booting a fresh ~5 second Tauri runtime per call.
-- **Phase 41 cross-volume auto-engage** — `is_cross_volume(src, dst)` automatically routes large cross-volume copies through the overlapped-IOCP pipeline with 8 in-flight × 4 MiB buffers + cached I/O (matches Robocopy's USB tuning).
+- **Phase 41 cross-volume auto-engage** — `is_cross_volume(src, dst)` automatically routes large cross-volume copies through the overlapped-IOCP pipeline (Phase 42 made this **topology-aware** via `IOCTL_STORAGE_QUERY_PROPERTY`: NVMe / SATA SSD destinations get `NO_BUFFERING` on; HDD / USB / SMB stay cached).
+- **Phase 42 attribute probe + sparse-aware CopyFile2** — every copy starts with a `GetFileAttributesExW` snapshot. Sparse sources on Win11 22H2+ route through a new `CopyFile2` path that engages `COPY_FILE_ENABLE_SPARSE_COPY` so unallocated zero ranges are preserved natively. OneDrive cloud-only files (`RECALL_ON_DATA_ACCESS`), reparse points, and EFS-encrypted files are surfaced for downstream policy.
+- **Phase 42 adaptive `NO_BUFFERING` threshold** — was a static 256 MiB; now `max(256 MiB, min(2 GiB, free_phys_ram / 4))` via `GlobalMemoryStatusEx`. RAM-constrained hosts cut over earlier (avoids SuperFetch standby-list pollution); RAM-rich hosts cap at 2 GiB. Env override (`COPYTHAT_NO_BUFFERING_THRESHOLD_MB`) unchanged.
+- **Phase 42 SMB compressed-traffic flag** — `COPY_FILE_REQUEST_COMPRESSED_TRAFFIC` auto-OR'd onto UNC-path destinations. Free win on slow remote links via SMB v3.1.1 traffic compression negotiation.
+- **Phase 42 paranoid verify mode** — `CopyOptions::paranoid_verify` (off by default) drops the destination's page-cache pages before re-reading for hash compare. The only verify mode that catches write-cache lying / silent disk corruption / FS-driver write-path bugs.
+- **Phase 42 configurable retry knobs** — `sharing_violation_retries` and `sharing_violation_base_delay_ms` (defaults `3` / `50` ms) match Robocopy `/R:n /W:s` parity. Was a hard-coded 3 × 50 ms.
+- **Phase 42 hardlink scaffolding** — `HardlinkSet` data structure + native `CreateHardLinkW` / `std::fs::hard_link` plumbing. Library consumers can preserve hardlink sets today; engine tree-walk integration is Phase 43.
+- **Phase 42 OpenZFS 2.2.x corruption warning** — one-shot stderr warning if the host runs OpenZFS 2.2.0-2.2.6 with `zfs_bclone_enabled=1` (openzfs/zfs#15526 data-corruption bug). Reflink path stays active; users decide whether to upgrade or set `zfs_bclone_enabled=0`.
 - **1 MiB** is the measured optimum buffer size on the default `CopyFileExW` path; all other sizes regressed in the Phase 13b sweep — see [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 - **Head-to-head methodology + per-scenario numbers** live in [`COMPETITOR-TEST.md`](COMPETITOR-TEST.md) at the repo root (256 MiB + 10 GiB workloads across same-volume, cross-NTFS, external-SSD destinations).
-- **Cross-volume reflink guard** avoids a pointless syscall on copies that can't possibly reflink (different volume IDs).
+- **Cross-volume reflink guard** avoids a pointless syscall on copies that can't possibly reflink (different volume IDs). Phase 42 added the `Win11 24H2 + ReFS` skip — on those targets `CopyFileExW` itself fires the block-clone IOCTL natively.
 - **Criterion benches** live at `crates/copythat-core/benches/copy_bench.rs`: `single_huge_file`, `buffer_size_sweep`, `many_small_files` (10 KiB / 100 KiB / 1 MiB / 10 MiB mix), `mixed_tree` (10 KiB → 250 MiB).
 - **Power-user env-var tunables** documented in [`docs/PERFORMANCE_TUNING.md`](docs/PERFORMANCE_TUNING.md): `COPYTHAT_PARALLEL_CHUNKS`, `COPYTHAT_OVERLAPPED_IO`, `COPYTHAT_OVERLAPPED_BUFFER_KB`, `COPYTHAT_OVERLAPPED_SLOTS`, `COPYTHAT_OVERLAPPED_NO_BUFFERING`, `COPYTHAT_NO_BUFFERING_THRESHOLD_MB`, `COPYTHAT_SKIP_ZERO_FILL` (admin-only), `COPYTHAT_DISABLE_AUTO_OVERLAPPED`.
-- **Research underpinnings** — every default backed by data: [`docs/RESEARCH_PHASE_39.md`](docs/RESEARCH_PHASE_39.md) (Win32 + NTFS internals + IoRing + DirectStorage + scatter/gather), [`docs/RESEARCH_PHASE_40.md`](docs/RESEARCH_PHASE_40.md) (UI-bypass + Win32-skip evaluation, hard-cap analysis).
+- **Research underpinnings** — every default backed by data: [`docs/RESEARCH_PHASE_39.md`](docs/RESEARCH_PHASE_39.md) (Win32 + NTFS internals + IoRing + DirectStorage + scatter/gather), [`docs/RESEARCH_PHASE_40.md`](docs/RESEARCH_PHASE_40.md) (UI-bypass + Win32-skip evaluation), [`docs/RESEARCH_PHASE_42.md`](docs/RESEARCH_PHASE_42.md) (270-source swarm deep dive + 21-item gap audit; the basis for the Phase 42 work above).
 
 ## Targets
 
-- Windows 10+
+- Windows 11+ (build 22000+; Win10 dropped from support matrix in Phase 42 — Microsoft EOL October 2025)
 - macOS 12+ (Monterey and later)
 - Linux (Ubuntu 22.04+, Fedora 38+, Arch, …)
 

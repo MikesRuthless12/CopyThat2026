@@ -47,6 +47,9 @@ tracing-subscriber = { version = "0.3", features = [
 # Hostname discovery for Syslog RFC 5424 + LoginEvent records.
 # BSD-3-Clause — already in the permissive allowlist.
 gethostname = "1"
+# Constant-time byte-string comparison for chain-hash verification.
+# BSD-3-Clause; already in the workspace via age + dalek.
+subtle = { version = "2", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
