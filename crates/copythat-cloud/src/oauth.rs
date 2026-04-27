@@ -259,10 +259,17 @@ pub async fn poll_device_code_flow(
         .send()
         .await?;
     let status = resp.status();
+    // Sanitised: `reqwest::Error::Display` from a failed `.json()`
+    // decode on a malformed-but-200 token response can echo
+    // excerpts of the surrounding bytes (and thus token characters)
+    // into the propagated error string. Drop the underlying
+    // message and surface only a fixed, body-free label so the
+    // renderer log can never carry secret-bearing bytes from a
+    // misbehaving / spoofed token endpoint.
     let body: serde_json::Value = resp
         .json()
         .await
-        .map_err(|e| OAuthError::Parse(format!("token body: {e}")))?;
+        .map_err(|_| OAuthError::Parse("token-response body decode failed".into()))?;
 
     if status.is_success() {
         // Suppress serde_json's input-bearing Display message — on
@@ -385,10 +392,19 @@ pub async fn run_device_code_flow(
     // "ms-cxh-full://...arg"` or `"javascript:..."` which on
     // Windows surface as a `ShellExecuteW` against the registered
     // protocol handler — RCE on the unprivileged user.
-    if let Ok(parsed) = url::Url::parse(&flow.verification_uri) {
-        if parsed.scheme() == "https" {
-            let _ = webbrowser::open(&flow.verification_uri);
-        }
+    //
+    // Additionally reject URLs that smuggle a different authority
+    // via userinfo (RFC 3986 §3.2.1). A URL like
+    // `https://login.microsoftonline.com@attacker.com/...` parses
+    // as authority `attacker.com` with userinfo
+    // `login.microsoftonline.com` — visually the user thinks
+    // they're going to Microsoft, but the browser opens
+    // attacker.com. Drop any URL whose `username()` is non-empty
+    // OR whose `password()` is set OR whose `host_str()` is
+    // missing (relative URLs would slip through with scheme=https
+    // but no authority).
+    if is_safe_https_for_browser(&flow.verification_uri) {
+        let _ = webbrowser::open(&flow.verification_uri);
     }
 
     let mut interval = flow.interval.max(1);
@@ -413,9 +429,85 @@ pub async fn run_device_code_flow(
     }
 }
 
+/// Phase 32h — gate `webbrowser::open` against authority-
+/// obfuscation. Returns `true` only when:
+///
+/// 1. The URL parses cleanly via `url::Url`,
+/// 2. its scheme is exactly `https`,
+/// 3. it carries no userinfo (`username()` empty + `password()`
+///    is `None`), so the visible authority cannot be misread, and
+/// 4. the host is present (rejects scheme-only relative URLs).
+///
+/// Used by both [`run_device_code_flow`] and the PKCE flow before
+/// handing a provider-supplied URL to the OS shell. An attacker
+/// who can MITM the provider's device-code endpoint (rogue
+/// corporate CA, etc.) might return a `verification_uri` that
+/// passes the cheap scheme check but redirects the user via
+/// `https://login.microsoftonline.com@attacker.com/...`; without
+/// the userinfo guard `webbrowser::open` would dispatch the user
+/// to attacker.com.
+pub(crate) fn is_safe_https_for_browser(raw: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(raw) else {
+        return false;
+    };
+    if parsed.scheme() != "https" {
+        return false;
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return false;
+    }
+    if parsed.host_str().is_none_or(|h| h.is_empty()) {
+        return false;
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn safe_https_accepts_clean_https_url() {
+        assert!(is_safe_https_for_browser(
+            "https://login.microsoftonline.com/devicecode"
+        ));
+        assert!(is_safe_https_for_browser("https://accounts.google.com/o/auth"));
+    }
+
+    #[test]
+    fn safe_https_rejects_non_https_scheme() {
+        assert!(!is_safe_https_for_browser("http://login.example/dc"));
+        assert!(!is_safe_https_for_browser("javascript:alert(1)"));
+        assert!(!is_safe_https_for_browser("ms-cxh-full://x"));
+        assert!(!is_safe_https_for_browser("file:///etc/passwd"));
+    }
+
+    #[test]
+    fn safe_https_rejects_authority_obfuscation_via_userinfo() {
+        // The whole point of the fix — user thinks they're going
+        // to login.microsoftonline.com but the browser opens
+        // attacker.com because the userinfo half is just visual.
+        assert!(!is_safe_https_for_browser(
+            "https://login.microsoftonline.com@attacker.com/path"
+        ));
+        assert!(!is_safe_https_for_browser(
+            "https://user:pass@evil.example/devicecode"
+        ));
+        assert!(!is_safe_https_for_browser(
+            "https://:secret@evil.example/dc"
+        ));
+    }
+
+    #[test]
+    fn safe_https_rejects_missing_host() {
+        // url::Url won't parse `https:///` cleanly on most
+        // versions, but the `host_str().is_none()` guard handles
+        // any pathological input that does make it through with a
+        // null host.
+        assert!(!is_safe_https_for_browser("https:"));
+        // Malformed input that would otherwise look "https-ish".
+        assert!(!is_safe_https_for_browser("not a url"));
+    }
 
     #[test]
     fn endpoints_are_configured_per_provider() {

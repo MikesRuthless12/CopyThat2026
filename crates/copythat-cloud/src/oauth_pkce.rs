@@ -276,10 +276,11 @@ pub async fn run_pkce_flow(
     let (flow, listener) = begin_pkce_flow(provider, client_id, scope_override, None)?;
     // Same scheme allow-list as the device-code flow — refuse
     // anything other than https:// before handing to the OS shell.
-    if let Ok(parsed) = url::Url::parse(&flow.authorize_url) {
-        if parsed.scheme() == "https" {
-            let _ = webbrowser::open(&flow.authorize_url);
-        }
+    // Also reject authority-obfuscation via userinfo (e.g.,
+    // `https://www.dropbox.com@attacker.com/...`) — see
+    // `oauth::is_safe_https_for_browser` for the threat model.
+    if crate::oauth::is_safe_https_for_browser(&flow.authorize_url) {
+        let _ = webbrowser::open(&flow.authorize_url);
     }
     // Accept the redirect on the calling thread — the dedicated
     // tokio runtime in `CopyThatCloudSink::run_on_dedicated_thread`
