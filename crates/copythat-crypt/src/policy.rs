@@ -54,16 +54,34 @@ pub struct EncryptionPolicy {
     /// disable the guard and pass through whatever's in
     /// `recipients`.
     pub require_recipient_count: usize,
+    /// Allow zstd compression to run *inside* the encryption
+    /// boundary (`src → compress → encrypt → file`). Default `true`
+    /// for backward compatibility; security-sensitive deployments
+    /// where the plaintext is partially attacker-influenced (HTTP
+    /// cookies, structured records with both attacker- and secret-
+    /// supplied fragments) should set this to `false` to avoid the
+    /// CRIME-style compression side-channel: compressing-before-
+    /// encrypting leaks information about plaintext repetition
+    /// through ciphertext length even though the ciphertext bytes
+    /// themselves remain confidential. When `false`, the pipeline
+    /// short-circuits compression even if the active
+    /// [`CompressionPolicy`] would normally enable it. See the crate
+    /// module-level doc for the full discussion.
+    pub allow_compression_before_encrypt: bool,
 }
 
 impl EncryptionPolicy {
     /// Build with every recipient required (strict policy; the
     /// encoder will fail fast if the caller attempts to drop one).
+    /// Compression-before-encryption is allowed (the historical
+    /// default); flip [`Self::allow_compression_before_encrypt`] off
+    /// after construction for the CRIME-aware mode.
     pub fn strict(recipients: Vec<Recipient>) -> Self {
         let n = recipients.len();
         Self {
             recipients,
             require_recipient_count: n,
+            allow_compression_before_encrypt: true,
         }
     }
 

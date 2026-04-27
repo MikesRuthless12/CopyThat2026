@@ -22,6 +22,31 @@
 //! encrypted / compressed file, chain-hashed into the existing
 //! progress + journal callbacks.
 //!
+//! # CRIME side-channel — compress-before-encrypt
+//!
+//! When both stages run, the pipeline order is
+//! `src → compress → encrypt → file`. zstd compression therefore
+//! happens *inside* the age encryption boundary. This is the same
+//! arrangement TLS used until 2012, and it inherits the same risk:
+//! when the plaintext is partially attacker-influenced (HTTP
+//! cookies, structured records mixing user input with secrets),
+//! observed ciphertext length leaks information about plaintext
+//! repetition even though the bytes themselves stay confidential.
+//! The [original CRIME paper](https://en.wikipedia.org/wiki/CRIME)
+//! describes the technique in detail.
+//!
+//! Most Copy That deployments are not vulnerable — the plaintext is
+//! a whole file the user owns end-to-end, not a mix of attacker-
+//! supplied and secret bytes. We keep `compress-then-encrypt` as
+//! the default for the compression-effectiveness win on backups +
+//! archive workloads. Security-sensitive deployments that *do*
+//! handle partially-attacker-influenced plaintext should set
+//! [`EncryptionPolicy::allow_compression_before_encrypt`] to
+//! `false`, which forces the pipeline to skip compression for any
+//! file whose destination is encrypted (regardless of what the
+//! [`CompressionPolicy`] asks for). The default stays `true` to
+//! preserve historical behaviour.
+//!
 //! # Wire compatibility
 //!
 //! The on-disk format written by [`encrypt::encrypted_writer`] is

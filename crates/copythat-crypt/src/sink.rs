@@ -188,7 +188,18 @@ fn run_blocking_transform(
     let dst_file = std::fs::File::create(dst).map_err(|e| TransformError::io(src, dst, e))?;
 
     let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("");
-    let comp_level = should_compress(compression, ext);
+    let mut comp_level = should_compress(compression, ext);
+    // CRIME side-channel guard: when encryption is active and the
+    // policy explicitly disallows compression-before-encryption,
+    // strip the compression stage even if the CompressionPolicy
+    // wanted to run. Default policy keeps compression enabled for
+    // backward compat; the security-sensitive opt-out lives on
+    // EncryptionPolicy::allow_compression_before_encrypt.
+    if let Some(enc) = encryption.as_ref()
+        && !enc.allow_compression_before_encrypt
+    {
+        comp_level = None;
+    }
 
     // Track the post-encrypt (= on-disk) byte count separately from
     // the compression-stage output so metrics reported in
@@ -203,27 +214,28 @@ fn run_blocking_transform(
 
     match (comp_level, encryption.as_ref()) {
         (Some(level), Some(policy)) => {
-            // Compress + encrypt.
+            // Compress + encrypt. We explicitly finish() each layer
+            // in reverse-pipeline order so a failure to flush either
+            // the zstd epilogue or the age MAC surfaces as a real
+            // error rather than a silent truncation. EncryptionSink
+            // panics if its Drop runs without finish() — that's the
+            // contract; honour it by walking back up the chain.
             let encrypt_sink: EncryptionSink<std::fs::File> = encrypted_writer(dst_file, policy)
                 .map_err(|e| TransformError::crypt(src, dst, e))?;
             let metrics = CompressionMetrics::new();
-            let compress_sink: CompressionSink<EncryptionSink<std::fs::File>> =
+            let mut compress_sink: CompressionSink<EncryptionSink<std::fs::File>> =
                 compressed_writer(encrypt_sink, level, metrics.clone())
                     .map_err(|e| TransformError::crypt(src, dst, e))?;
-            let copied_in = io_copy(&mut reader, &mut BridgeWriter::new(compress_sink))
+            let copied_in = io_copy(&mut reader, &mut compress_sink)
                 .map_err(|e| TransformError::io(src, dst, e))?;
-            let (enc_sink, _m) =
-                BridgeWriter::<CompressionSink<EncryptionSink<std::fs::File>>>::into_inner_or_none(
-                );
-            let _ = enc_sink;
-            // Flush happens on Drop for both layers — the reverse
-            // order means zstd finalises first, then age writes
-            // its MAC. We explicitly drop through the chain by
-            // taking the finish path from compress:
-            // (We can't reuse the `enc_sink` above because
-            // `into_inner_or_none()` is a placeholder for the
-            // non-capturing BridgeWriter pattern; the real sink
-            // drops when the local goes out of scope.)
+            // Finalise zstd (writes the epilogue), recover the inner
+            // EncryptionSink, then finalise age (writes the MAC).
+            let (encrypt_sink_recovered, _) = compress_sink
+                .finish()
+                .map_err(|e| TransformError::crypt(src, dst, e))?;
+            let _file: std::fs::File = encrypt_sink_recovered
+                .finish()
+                .map_err(|e| TransformError::crypt(src, dst, e))?;
             input_bytes = copied_in;
             output_bytes = metrics.output_bytes();
             compression_ratio = if input_bytes == 0 {
@@ -235,10 +247,15 @@ fn run_blocking_transform(
         (Some(level), None) => {
             // Compress only.
             let metrics = CompressionMetrics::new();
-            let compress_sink = compressed_writer(dst_file, level, metrics.clone())
+            let mut compress_sink = compressed_writer(dst_file, level, metrics.clone())
                 .map_err(|e| TransformError::crypt(src, dst, e))?;
-            let copied_in = io_copy(&mut reader, &mut BridgeWriter::new(compress_sink))
+            let copied_in = io_copy(&mut reader, &mut compress_sink)
                 .map_err(|e| TransformError::io(src, dst, e))?;
+            // Explicit finish — surfaces a zstd epilogue write
+            // failure instead of silently relying on Drop.
+            let (_inner, _m) = compress_sink
+                .finish()
+                .map_err(|e| TransformError::crypt(src, dst, e))?;
             input_bytes = copied_in;
             output_bytes = metrics.output_bytes();
             compression_ratio = if input_bytes == 0 {
@@ -285,38 +302,6 @@ fn run_blocking_transform(
         compression_ratio,
         encrypted: encryption.is_some(),
     })
-}
-
-/// Thin adapter turning a chain of `Write` impls into something
-/// `io::copy` can hand bytes to. Drops-through to the inner writer
-/// on every call — exists only so we can reach in after the copy
-/// to pull the metrics back out.
-struct BridgeWriter<W: std::io::Write> {
-    inner: W,
-}
-
-impl<W: std::io::Write> BridgeWriter<W> {
-    fn new(inner: W) -> Self {
-        Self { inner }
-    }
-
-    /// Placeholder — the current wiring takes the compression
-    /// metrics via a separate `Arc` handle, so this accessor isn't
-    /// strictly needed. Retained so a future refactor that wants to
-    /// unwrap the chain in reverse has a clear hook.
-    fn into_inner_or_none() -> (Option<W>, ()) {
-        (None, ())
-    }
-}
-
-impl<W: std::io::Write> std::io::Write for BridgeWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.inner.write(buf)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
-    }
 }
 
 /// Convenience — if `dst` is an `.age` file, emit a warning in the

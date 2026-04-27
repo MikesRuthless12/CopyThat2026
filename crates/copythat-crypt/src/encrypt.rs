@@ -22,7 +22,7 @@ use std::str::FromStr;
 
 use secrecy::ExposeSecret;
 
-use crate::error::{CryptError, Result};
+use crate::error::{CryptError, CryptFinishError, Result};
 use crate::policy::{EncryptionPolicy, Recipient};
 
 /// Does `path` already look like an age-encrypted file? True when
@@ -38,8 +38,12 @@ pub fn is_age_path(path: &Path) -> bool {
 
 /// Build an age-encrypting writer over `inner` with the policy's
 /// recipients. The returned writer **must** be explicitly
-/// [`EncryptionSink::finish`]-ed (or dropped) before the inner
-/// writer's bytes are complete — age writes a final MAC on close.
+/// [`EncryptionSink::finish`]-ed before the inner writer's bytes are
+/// complete — age writes a final MAC on close. Dropping a sink
+/// without calling [`EncryptionSink::finish`] (after any successful
+/// write) panics: the on-disk ciphertext would be a truncated /
+/// unauthenticated age stream and any verify-then-delete-source
+/// workflow would silently delete the only intact copy.
 pub fn encrypted_writer<W>(inner: W, policy: &EncryptionPolicy) -> Result<EncryptionSink<W>>
 where
     W: Write,
@@ -69,45 +73,48 @@ where
         .map_err(|e| CryptError::InvalidRecipient(e.to_string()))?;
     let writer = encryptor
         .wrap_output(inner)
-        .map_err(|e| CryptError::AgeEncrypt(e.to_string()))?;
+        .map_err(|_| CryptError::AgeEncrypt(CryptFinishError::WrapOutput))?;
 
     Ok(EncryptionSink {
         inner: Some(writer),
-        finish_error: None,
     })
 }
 
-/// Owns the age `StreamWriter` and flushes the MAC on drop.
+/// Owns the age `StreamWriter` and writes the MAC when explicitly
+/// finished. The sink intentionally does **not** swallow errors on
+/// drop — its [`Drop`] impl panics when the sink is dropped without
+/// a successful [`EncryptionSink::finish`]. Earlier revisions
+/// stashed the drop-time finalise error in an `Option<io::Error>`
+/// the caller had to poll, but `?`-using call sites silently treated
+/// a missing MAC as success — a verify-then-delete-source workflow
+/// could then erase the source while the ciphertext on disk was
+/// half-written. The explicit-finish contract makes that bug a
+/// compile-time / panic-time signal.
 pub struct EncryptionSink<W: Write> {
     inner: Option<age::stream::StreamWriter<W>>,
-    /// Set when the implicit `Drop` path's `finish()` returned an
-    /// error. Callers that prefer the implicit-close shape can
-    /// inspect this *before* the sink drops to surface a truncated
-    /// MAC — without it the engine would believe the copy succeeded
-    /// while the file on disk has a half-written authentication
-    /// tag, breaking any verify-then-delete-source workflow.
-    finish_error: Option<String>,
 }
 
 impl<W: Write> EncryptionSink<W> {
     /// Explicit finish — closes the age stream (writing the MAC) and
-    /// returns the inner sink. Use this when the caller needs the
-    /// inner writer back (e.g. to flush a file handle or chain into
-    /// the next stage).
+    /// returns the inner sink. **Must** be called on every sink
+    /// before it goes out of scope; dropping without a successful
+    /// finish panics in [`Drop`]. Returns the inner writer so the
+    /// caller can chain into the next pipeline stage (e.g. flush a
+    /// file handle, hand it back to the runner for the next file).
     pub fn finish(mut self) -> Result<W> {
-        let writer = self.inner.take().expect("encryption sink already finished");
+        let writer = self
+            .inner
+            .take()
+            .expect("encryption sink already finished");
+        // Translate the age `io::Error` to our bounded enum: only the
+        // `ErrorKind` propagates — never the verbatim `Display` of
+        // the inner error, which on some pipeline configurations can
+        // include adapter-side buffers (zstd residual frame, inner
+        // writer path-aware messages) that risk leaking
+        // ciphertext-adjacent bytes into telemetry.
         writer
             .finish()
-            .map_err(|e| CryptError::AgeEncrypt(e.to_string()))
-    }
-
-    /// Did the implicit `Drop` path's `finish()` return an error?
-    /// Always `None` when the caller used [`EncryptionSink::finish`]
-    /// explicitly. Callers that wrap the sink in higher-level
-    /// pipelines should check this before claiming the encrypted
-    /// stream is durable.
-    pub fn drop_error(&self) -> Option<&str> {
-        self.finish_error.as_deref()
+            .map_err(|e| CryptError::AgeEncrypt(CryptFinishError::Finalise(e.kind())))
     }
 }
 
@@ -129,19 +136,28 @@ impl<W: Write> Write for EncryptionSink<W> {
 
 impl<W: Write> Drop for EncryptionSink<W> {
     fn drop(&mut self) {
-        // Drop without `finish()` — write the MAC anyway so the
-        // inner bytes form a valid age file. Drop can't return a
-        // Result, but a `finish()` failure here means the on-disk
-        // ciphertext has a truncated / unwritten authentication tag
-        // — every subsequent decrypt will fail with `AgeDecrypt`,
-        // and a "verify-then-delete-source" workflow would silently
-        // delete the only intact copy. Stash the error string so
-        // the caller can poll `drop_error()` before treating the
-        // copy as successful.
-        if let Some(writer) = self.inner.take() {
-            if let Err(e) = writer.finish() {
-                self.finish_error = Some(e.to_string());
+        // The contract is: every `EncryptionSink` must be consumed
+        // by `finish()` before going out of scope. If `inner` is
+        // still `Some` here, the caller forgot — the on-disk
+        // ciphertext would be a truncated / unauthenticated age
+        // stream, and any verify-then-delete-source workflow would
+        // silently delete the only intact copy. Panic loudly so the
+        // bug is caught in dev / CI rather than at restore time.
+        if self.inner.is_some() {
+            // During a panic unwind we can be the second panic if
+            // the caller dropped us *because* of an earlier panic.
+            // Suppress the secondary panic — leaving the file
+            // truncated in that case is the lesser evil; the
+            // primary panic surfaces the original failure.
+            if std::thread::panicking() {
+                return;
             }
+            panic!(
+                "EncryptionSink dropped without calling .finish() — \
+                 the age MAC was never written and the on-disk \
+                 ciphertext is truncated. Call EncryptionSink::finish() \
+                 before letting the sink go out of scope."
+            );
         }
     }
 }
@@ -193,6 +209,7 @@ mod tests {
         let policy = EncryptionPolicy {
             recipients: vec![],
             require_recipient_count: 0,
+            allow_compression_before_encrypt: true,
         };
         let mut sink: Vec<u8> = Vec::new();
         let result = encrypted_writer(&mut sink, &policy);
@@ -201,6 +218,53 @@ mod tests {
             Err(other) => panic!("expected NoRecipients, got {other:?}"),
             Ok(_) => panic!("expected NoRecipients, got Ok"),
         }
+    }
+
+    #[test]
+    fn explicit_finish_returns_writer() {
+        let pw = SecretString::from("finish-test".to_string());
+        let policy = EncryptionPolicy::passphrase(pw);
+        let mut buf: Vec<u8> = Vec::new();
+        let mut sink = encrypted_writer(&mut buf, &policy).unwrap();
+        sink.write_all(b"payload").unwrap();
+        // finish() must consume the sink and return the inner writer
+        // without panicking on drop.
+        let _writer = sink.finish().expect("explicit finish");
+        // Buffer now holds a complete age stream.
+        assert!(!buf.is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "EncryptionSink dropped without calling .finish()")]
+    fn drop_without_finish_panics_to_signal_truncated_mac() {
+        // Build a sink, write a byte, then drop it without
+        // calling finish(). The new contract says this is a bug —
+        // the on-disk file would have a truncated age MAC and any
+        // verify-then-delete-source workflow would silently delete
+        // the only intact copy. Panic at drop-time so the bug is
+        // caught early.
+        let pw = SecretString::from("drop-test".to_string());
+        let policy = EncryptionPolicy::passphrase(pw);
+        let buf: Vec<u8> = Vec::new();
+        let mut sink = encrypted_writer(buf, &policy).unwrap();
+        sink.write_all(b"oops").unwrap();
+        // Sink dropped here at end of scope without finish() — must
+        // panic.
+        drop(sink);
+    }
+
+    #[test]
+    fn finish_error_carries_bounded_kind_only() {
+        // The CryptFinishError variants are a bounded shape — the
+        // Display impl must never include verbatim io::Error
+        // messages or path strings. Smoke-check the Display surface.
+        use crate::error::CryptFinishError;
+        let e = CryptFinishError::Finalise(io::ErrorKind::BrokenPipe);
+        let rendered = format!("{e}");
+        assert!(rendered.contains("BrokenPipe"));
+        assert!(!rendered.contains("/"));
+        let wrap = CryptFinishError::WrapOutput;
+        assert_eq!(format!("{wrap}"), "wrap-output rejected the recipient chain");
     }
 
     #[test]

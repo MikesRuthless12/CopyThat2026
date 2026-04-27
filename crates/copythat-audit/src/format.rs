@@ -89,14 +89,27 @@ fn format_csv(event: &AuditEvent, prev_hash_hex: &str) -> Result<String> {
             .has_headers(false)
             .terminator(csv::Terminator::Any(b'\n'))
             .from_writer(&mut buf);
+        // Sanitise every column whose first character could be
+        // interpreted as a formula by Excel / LibreOffice on
+        // download. The four leading bytes `=`, `+`, `@`, `-` are
+        // the canonical CSV-injection vectors; prefix them with a
+        // single quote so the spreadsheet treats the cell as text.
+        // Stable columns (signature, timestamp, severity token,
+        // hex chain hash) can never trip the rule, so leave those
+        // untouched to keep machine-parsable round-trips intact.
+        let detail = csv_detail(event);
+        let job_id = csv_sanitise_for_excel(event.job_id());
+        let user = csv_sanitise_for_excel(event.user());
+        let host = csv_sanitise_for_excel(host_field(event));
+        let detail = csv_sanitise_for_excel(&detail);
         wtr.write_record([
             event.signature(),
             &event.ts_iso8601(),
-            event.job_id(),
-            event.user(),
-            host_field(event),
+            &job_id,
+            &user,
+            &host,
             severity_token(event.severity()),
-            &csv_detail(event),
+            &detail,
             prev_hash_hex,
         ])
         .map_err(|e| AuditError::Format(format!("csv write: {e}")))?;
@@ -104,6 +117,29 @@ fn format_csv(event: &AuditEvent, prev_hash_hex: &str) -> Result<String> {
             .map_err(|e| AuditError::Format(format!("csv flush: {e}")))?;
     }
     String::from_utf8(buf).map_err(|e| AuditError::Format(format!("csv utf8: {e}")))
+}
+
+/// CSV-injection guard: when a cell's first byte is one of the four
+/// formula-trigger characters Excel / LibreOffice / Numbers
+/// auto-evaluate (`=`, `+`, `@`, `-`), prefix the cell with a
+/// literal single-quote so the spreadsheet engine treats it as text.
+/// The single quote is the canonical Excel "this is a string"
+/// escape; consumers that read the file with a real CSV parser
+/// (Python pandas, Rust csv, etc.) get the original bytes back
+/// because the quote is part of the cell value, not an opening
+/// delimiter. Tab / `\r` / newline payloads are already handled by
+/// the upstream `csv::Writer` quoting.
+pub fn csv_sanitise_for_excel(raw: &str) -> String {
+    if let Some(first) = raw.as_bytes().first()
+        && matches!(first, b'=' | b'+' | b'@' | b'-')
+    {
+        let mut out = String::with_capacity(raw.len() + 1);
+        out.push('\'');
+        out.push_str(raw);
+        out
+    } else {
+        raw.to_string()
+    }
 }
 
 /// Flatten the event-specific payload into a single column so the
@@ -730,5 +766,47 @@ mod tests {
         assert!(line.starts_with("LEEF:2.0|CopyThat|CopyThat|"));
         assert!(line.contains("\tjobId=job-7"));
         assert!(line.contains("\tsignature=JobStarted"));
+    }
+
+    #[test]
+    fn csv_sanitise_for_excel_prefixes_formula_triggers() {
+        // The four formula-trigger characters all auto-execute in
+        // Excel / LibreOffice when an unquoted cell starts with
+        // them. The sanitiser must single-quote the cell so the
+        // spreadsheet treats it as text, while leaving non-trigger
+        // cells unchanged.
+        for (input, expected) in [
+            ("=cmd|' /c calc'!A1", "'=cmd|' /c calc'!A1"),
+            ("+1+1", "'+1+1"),
+            ("@SUM(A1:A2)", "'@SUM(A1:A2)"),
+            ("-2+3", "'-2+3"),
+            ("HYPERLINK(\"x\")", "HYPERLINK(\"x\")"),
+            ("alice", "alice"),
+            ("", ""),
+        ] {
+            assert_eq!(csv_sanitise_for_excel(input), expected, "input {input:?}");
+        }
+    }
+
+    #[test]
+    fn csv_record_with_injection_payload_is_sanitised() {
+        // Build an event whose user field carries a formula
+        // payload — the kind of data an attacker can plant via a
+        // login attempt — and confirm the CSV row's third column
+        // has the leading quote prefix.
+        let mut evt = sample();
+        if let AuditEvent::JobStarted { user, .. } = &mut evt {
+            *user = "=cmd|' /c calc'".into();
+        }
+        let line = format_csv(&evt, &"00".repeat(32)).unwrap();
+        let rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(line.as_bytes());
+        let row = rdr.into_records().next().unwrap().unwrap();
+        let user_col = row.get(3).unwrap();
+        assert!(
+            user_col.starts_with('\''),
+            "user column must be quoted to defuse the formula, got: {user_col:?}",
+        );
     }
 }
