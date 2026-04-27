@@ -301,6 +301,12 @@ fn apply_options(
         preserve_times: settings.transfer.preserve_timestamps,
         preserve_permissions: settings.transfer.preserve_permissions,
         preserve_sparseness: settings.transfer.preserve_sparseness,
+        // Phase 42 — bridge the new transfer knobs into the engine.
+        // Defaults match `CopyOptions::default()`; users can change
+        // them via Settings.
+        paranoid_verify: settings.transfer.paranoid_verify,
+        sharing_violation_retries: settings.transfer.sharing_violation_retries,
+        sharing_violation_base_delay_ms: settings.transfer.sharing_violation_base_delay_ms,
         preserve_security_metadata: settings.transfer.preserve_security_metadata,
         meta_policy: copythat_core::MetaPolicy {
             preserve_motw: settings.transfer.preserve_motw,
