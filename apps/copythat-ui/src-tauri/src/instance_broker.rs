@@ -32,8 +32,16 @@
 //! Security note: the pipe DACL grants only the current user RW.
 //! No cross-user / cross-session traffic. Mutex + pipe both live
 //! in the `Local\` namespace so they're per-session, not global.
+//
+// `unsafe_code`: this module is pure Win32 FFI — every Pipe / Mutex /
+// File API the broker calls is `unsafe extern "system"`. Wrapping
+// each call in its own SAFETY-commented `unsafe` block (which we
+// already do, see below) is the contract; the workspace lint just
+// flags the *count* of unsafe blocks, not their soundness. Per-block
+// SAFETY comments document the invariants on each call site.
 
 #![cfg(windows)]
+#![allow(unsafe_code)]
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
@@ -279,40 +287,6 @@ fn pipe_server_loop(app: tauri::AppHandle) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Forward to a never-created pipe must return `Err` cleanly,
-    /// never panic. This is the safety net for "no first-instance
-    /// running" — `try_forward_argv` returns Err and the caller
-    /// falls through to the normal first-instance boot.
-    #[test]
-    fn forward_to_missing_pipe_errors_cleanly() {
-        let argv = vec!["copythat-ui.exe".to_string(), "--enqueue".to_string()];
-        let result = try_forward_argv(&argv);
-        // Any of the failure paths is acceptable; the only thing
-        // we MUST reject is the test panicking or hanging.
-        assert!(
-            result.is_err(),
-            "forward to missing pipe should error, got {:?}",
-            result
-        );
-    }
-
-    /// Mutex check returns `false` on first call within a process
-    /// (we just claimed ownership) and `true` on the second call
-    /// (the OS reports the name already exists). This is the only
-    /// behaviour the second-instance fast bail relies on.
-    #[test]
-    fn mutex_check_returns_false_then_true_within_process() {
-        let first = is_second_instance();
-        let second = is_second_instance();
-        assert!(!first, "first call should report first instance");
-        assert!(second, "second call within same process should report second instance");
-    }
-}
-
 fn handle_connection(pipe: HANDLE, app: &tauri::AppHandle) -> Result<(), String> {
     // Read until newline or EOF. The wire payload is one line of JSON.
     let mut buf = [0u8; 65536];
@@ -383,4 +357,38 @@ fn handle_connection(pipe: HANDLE, app: &tauri::AppHandle) -> Result<(), String>
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Forward to a never-created pipe must return `Err` cleanly,
+    /// never panic. This is the safety net for "no first-instance
+    /// running" — `try_forward_argv` returns Err and the caller
+    /// falls through to the normal first-instance boot.
+    #[test]
+    fn forward_to_missing_pipe_errors_cleanly() {
+        let argv = vec!["copythat-ui.exe".to_string(), "--enqueue".to_string()];
+        let result = try_forward_argv(&argv);
+        // Any of the failure paths is acceptable; the only thing
+        // we MUST reject is the test panicking or hanging.
+        assert!(
+            result.is_err(),
+            "forward to missing pipe should error, got {:?}",
+            result
+        );
+    }
+
+    /// Mutex check returns `false` on first call within a process
+    /// (we just claimed ownership) and `true` on the second call
+    /// (the OS reports the name already exists). This is the only
+    /// behaviour the second-instance fast bail relies on.
+    #[test]
+    fn mutex_check_returns_false_then_true_within_process() {
+        let first = is_second_instance();
+        let second = is_second_instance();
+        assert!(!first, "first call should report first instance");
+        assert!(second, "second call within same process should report second instance");
+    }
 }
