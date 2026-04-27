@@ -921,10 +921,12 @@ pub async fn history_rerun(
     // Phase 39 — rerun must attach the platform fast-copy hook too,
     // otherwise the engine falls through to the async-fallback Rust
     // loop and runs at ~600 MiB/s instead of CopyFileExW's 2400+.
-    let mut copy_opts = CopyOptions::default();
-    copy_opts.fast_copy_hook = Some(std::sync::Arc::new(
-        copythat_platform::PlatformFastCopyHook,
-    ));
+    let copy_opts = CopyOptions {
+        fast_copy_hook: Some(std::sync::Arc::new(
+            copythat_platform::PlatformFastCopyHook,
+        )),
+        ..CopyOptions::default()
+    };
     Ok(crate::shell::enqueue_jobs(
         &app,
         state.inner(),
