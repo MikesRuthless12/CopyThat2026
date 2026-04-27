@@ -645,6 +645,28 @@ impl AuditSink {
         AuditLayer::new(self)
     }
 
+    /// Drain any in-flight `record(...)` and flush the underlying
+    /// file handle. Acquiring the writer mutex blocks until the
+    /// most recent record's critical section has released it; the
+    /// follow-up `file.flush()` then guarantees buffered bytes are
+    /// on the kernel before the call returns.
+    ///
+    /// Used by the Tauri runner before swapping the sink in a
+    /// settings hot-reload — without this drain, a concurrent
+    /// `record()` racing with the swap could chain its hash off the
+    /// previous sink's tail and land in the new one, breaking the
+    /// chain for replay.
+    pub fn flush(&self) -> Result<()> {
+        let mut guard = self
+            .writer
+            .lock()
+            .expect("audit sink writer mutex poisoned");
+        guard.file.flush().map_err(|source| AuditError::Io {
+            path: self.path.clone(),
+            source,
+        })
+    }
+
     /// Snapshot the current chain hash — used by tests + the
     /// Phase 36 CLI verify subcommand fast-path check.
     pub fn current_chain_hash(&self) -> [u8; 32] {

@@ -545,6 +545,12 @@ fn dto_to_entry(dto: &BackendDto) -> Option<BackendConfigEntry> {
                 port: if c.port == 0 { 21 } else { c.port },
                 username: c.username.clone(),
                 root: c.root.clone(),
+                // The wizard DTO does not yet surface
+                // `ca_bundle_path`; persisted entries that the
+                // user hand-edits in TOML round-trip via the
+                // settings layer. A future Settings panel can
+                // wire this through the DTO.
+                ca_bundle_path: None,
             });
         }
     }
@@ -690,6 +696,7 @@ fn entry_to_cloud_backend(
                 port: c.port,
                 username: c.username,
                 root: c.root,
+                ca_bundle_path: c.ca_bundle_path.clone(),
             })
         }
     };

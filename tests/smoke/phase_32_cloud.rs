@@ -591,6 +591,7 @@ fn case9_phase_32b_drivers_build_operator() {
             port: 21,
             username: "anon".into(),
             root: String::new(),
+            ca_bundle_path: None,
         }),
     };
     assert!(make_operator(&ftp, None).is_ok());

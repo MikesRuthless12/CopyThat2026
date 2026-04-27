@@ -1159,14 +1159,13 @@ pub fn update_settings(
     // *new* event after the swap could race with the close on the
     // old handle and land in the new sink with a chained hash that
     // points at content from the previous file, breaking the chain
-    // for replay. Sleep a brief grace period so any in-flight
-    // `record(...)` clears the post-snapshot critical section before
-    // the swap. 50 ms covers the worst-case spinning-disk fsync
-    // observed on the audit smoke benchmarks; the user already
-    // accepted a write to disk + a settings reload, so a perceptible
-    // pause here is acceptable.
+    // for replay. `AuditRegistry::flush` re-acquires the sink's
+    // writer mutex (so it blocks until any in-flight `record()`
+    // clears the post-snapshot critical section) and then calls
+    // `file.flush()`. That is the correct synchronization primitive
+    // here — no wall-clock guess required.
     if prev_snapshot.audit != next.audit {
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        state.audit.flush();
         match crate::audit_commands::build_sink(&next.audit) {
             Ok(new_sink) => state.audit.set(new_sink),
             Err(e) => eprintln!("[audit] rebuild sink failed: {e}"),

@@ -1857,6 +1857,11 @@ pub struct FtpBackendConfig {
     pub port: u16,
     pub username: String,
     pub root: String,
+    /// Phase 42 — optional path to a PEM-encoded CA bundle the
+    /// FTPS handshake should consult. Best-effort hook;
+    /// `copythat_cloud::FtpConfig::ca_bundle_path` doc-comment
+    /// explains the rustls-feature-flag caveats.
+    pub ca_bundle_path: Option<std::path::PathBuf>,
 }
 
 impl Default for FtpBackendConfig {
@@ -1866,6 +1871,7 @@ impl Default for FtpBackendConfig {
             port: 21,
             username: String::new(),
             root: String::new(),
+            ca_bundle_path: None,
         }
     }
 }
