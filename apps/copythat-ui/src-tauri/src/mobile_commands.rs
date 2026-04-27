@@ -609,21 +609,30 @@ impl copythat_mobile::server::RemoteControl for AppStateRemoteControl {
 
     async fn recent_history(&self, _limit: u32) -> Result<Vec<HistoryRow>, String> {
         // History rows surface through `copythat_history::History`
-        // which lives behind an `Option<History>` on AppState. We
-        // don't carry the handle on AppStateProxy yet so the PWA's
-        // history panel stays empty for now; the wire surface is
-        // exercised end-to-end by the smoke. Real plumbing lands
-        // in a tiny follow-up that adds `history: Option<History>`
-        // to AppStateProxy alongside this method.
-        Ok(Vec::new())
+        // which lives behind an `Option<History>` on AppState. The
+        // handle isn't threaded onto AppStateProxy yet, so until
+        // the follow-up that wires `history: Option<History>` lands,
+        // surface a real error to the PWA instead of silently
+        // returning an empty list. Returning `Ok(Vec::new())` here
+        // looked indistinguishable from "you have no history",
+        // which masked the missing wiring during integration tests
+        // and confused users when the panel was permanently empty.
+        Err("err-mobile-feature-not-ready".into())
     }
 
     async fn rerun_history(&self, _row_id: i64) -> Result<(), String> {
-        Ok(())
+        // Same shape as `recent_history` — the desktop side hasn't
+        // wired the rerun pipeline yet. Bubble a real error out so
+        // the PWA can surface a user-facing toast instead of the
+        // command appearing to succeed but doing nothing.
+        Err("err-mobile-feature-not-ready".into())
     }
 
     async fn secure_delete(&self, _paths: Vec<String>, _method: &str) -> Result<(), String> {
-        Ok(())
+        // Wire-stub until secure-delete plumbing lands on the
+        // mobile path. Surface a typed error so the PWA can render
+        // a toast instead of showing a hollow success state.
+        Err("err-mobile-feature-not-ready".into())
     }
 
     async fn start_copy(
@@ -632,7 +641,11 @@ impl copythat_mobile::server::RemoteControl for AppStateRemoteControl {
         _destination: String,
         _verify: Option<String>,
     ) -> Result<(), String> {
-        Ok(())
+        // Wire-stub until start-copy is wired into the engine
+        // bridge. Surface a typed error so the PWA can render a
+        // toast — silent `Ok(())` here looked like "copy started"
+        // even though nothing happened on the desktop side.
+        Err("err-mobile-feature-not-ready".into())
     }
 
     async fn is_paired_phone(&self, phone_pubkey_hex: &str) -> bool {

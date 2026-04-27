@@ -1702,6 +1702,7 @@ dependencies = [
  "base32",
  "copythat-settings",
  "getrandom 0.3.4",
+ "hmac 0.12.1",
  "jsonwebtoken",
  "qrcodegen",
  "rand_core 0.6.4",
