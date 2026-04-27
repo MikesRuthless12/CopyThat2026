@@ -6,15 +6,17 @@
 //! (Svelte + the `peerjs` npm package). When a paired phone sends a
 //! `RemoteCommand` over the data channel, the JS adapter passes the
 //! decoded JSON into `mobile_handle_remote_command`, which deserializes
-//! into the typed enum, dispatches through [`AppStateRemoteControl`]
-//! (which talks to the live `AppState`), and serializes the
+//! into the typed enum, dispatches through the private
+//! `AppStateRemoteControl` (which talks to the live `AppState`),
+//! and serializes the
 //! [`RemoteResponse`] back to the JS side for the data channel
 //! reply.
 //!
 //! The pairing handshake itself is handled in JS — the Svelte
 //! `MobilePanel.svelte` mints a fresh [`PairingToken`] via
 //! `mobile_pair_qr`, displays the QR, and writes the resulting
-//! [`MobilePairingEntry`] back through `mobile_pair_commit`.
+//! `copythat_settings::MobilePairingEntry` back through
+//! `mobile_pair_commit`.
 
 use std::sync::{Arc, RwLock};
 

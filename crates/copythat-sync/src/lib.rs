@@ -49,7 +49,7 @@
 //!    and records the pair in the returned [`SyncReport`] so the UI
 //!    can surface a per-file resolution dialog.
 //!
-//! Pause / resume / cancel mirror the copythat-core [`CopyControl`]
+//! Pause / resume / cancel mirror the copythat-core `CopyControl`
 //! shape — see [`SyncControl`].
 //!
 //! # Why vector clocks?

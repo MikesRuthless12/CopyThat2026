@@ -1,4 +1,4 @@
-//! Bridge from [`ChunkStore`] to [`copythat_core::options::ChunkStoreSink`].
+//! Bridge from [`ChunkStore`] to [`copythat_core::ChunkStoreSink`].
 //!
 //! The core engine holds a `dyn ChunkStoreSink` on
 //! `CopyOptions::chunk_store` so it can consult the store without a

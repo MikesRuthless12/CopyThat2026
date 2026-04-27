@@ -13,8 +13,11 @@ use crate::event::{CopyEvent, CopyReport};
 use crate::filter::FilterSet;
 use crate::verify::Verifier;
 
+/// Default per-file copy buffer size. 1 MiB.
 pub const DEFAULT_BUFFER_SIZE: usize = 1024 * 1024; // 1 MiB
+/// Minimum buffer size accepted by the engine. 64 KiB.
 pub const MIN_BUFFER_SIZE: usize = 64 * 1024; // 64 KiB
+/// Maximum buffer size accepted by the engine. 16 MiB.
 pub const MAX_BUFFER_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
 
 /// What the engine should do when a file can't be opened for read
@@ -39,7 +42,7 @@ pub enum LockedFilePolicy {
     /// After retry exhausts, ask
     /// [`CopyOptions::snapshot_hook`](super::CopyOptions::snapshot_hook)
     /// for a snapshot-side path and reopen the read against it. On
-    /// success, [`CopyEvent::SnapshotCreated`](super::CopyEvent::SnapshotCreated)
+    /// success, [`CopyEvent::SnapshotCreated`]
     /// is emitted so the UI can render a "📷 Reading from VSS
     /// snapshot of C:" badge. On failure falls through to a typed
     /// error (respecting the tree-level `on_error` policy).
@@ -97,10 +100,13 @@ pub enum ResumePlan {
     /// Re-hash the destination's first `offset` bytes via BLAKE3
     /// and compare against `src_hash_at_offset`. On match, seek both
     /// files to `offset` and continue. On mismatch, the engine emits
-    /// [`CopyEvent::ResumeAborted`](super::CopyEvent::ResumeAborted)
+    /// [`CopyEvent::ResumeAborted`]
     /// and falls back to a full restart.
     Resume {
+        /// Bytes the engine had already streamed when the previous
+        /// run was interrupted.
         offset: u64,
+        /// BLAKE3 of the first `offset` source bytes from the prior run.
         src_hash_at_offset: [u8; 32],
     },
     /// Nothing reusable — start over from byte 0.
@@ -108,7 +114,10 @@ pub enum ResumePlan {
     /// The destination is already the right size and the
     /// checkpoint's `final_hash` matches a re-hash of the existing
     /// destination. Skip the copy entirely.
-    AlreadyComplete { final_hash: [u8; 32] },
+    AlreadyComplete {
+        /// BLAKE3 of the source recorded by the prior run.
+        final_hash: [u8; 32],
+    },
 }
 
 /// Bridge contract for the durable resume journal.
@@ -145,11 +154,12 @@ pub trait JournalSink: Send + Sync + std::fmt::Debug {
     /// the first byte is written.
     fn resume_plan(&self, file_idx: u64) -> ResumePlan;
 
-    /// Job-level terminators. Exactly one of the three fires per
-    /// job lifecycle; the runner picks based on the engine's
-    /// outcome.
+    /// Job-level terminator: succeeded — exactly one of the three
+    /// `finish_job_*` methods fires per job lifecycle.
     fn finish_job_succeeded(&self);
+    /// Job-level terminator: failed.
     fn finish_job_failed(&self);
+    /// Job-level terminator: cancelled by the user.
     fn finish_job_cancelled(&self);
 }
 
@@ -160,8 +170,8 @@ pub trait JournalSink: Send + Sync + std::fmt::Debug {
 /// dependency cycle between `copythat-core` and `copythat-snapshot`.
 ///
 /// The hook is consulted exactly once per locked source file, after
-/// [`open_src_with_retry`]'s own sharing-violation backoff has
-/// exhausted. If the hook returns `Err`, the engine surfaces the
+/// the engine's own sharing-violation backoff (`open_src_with_retry`)
+/// has exhausted. If the hook returns `Err`, the engine surfaces the
 /// error (as configured by the tree-level `on_error` policy). If the
 /// hook returns `Ok(lease)`, the engine opens `lease.translated` for
 /// read and carries on with the normal copy loop.
@@ -208,8 +218,8 @@ pub trait ShapeSink: Send + Sync + std::fmt::Debug {
 /// destination path and returns a [`TransformOutcome`] summarising
 /// the bytes that flowed through the pipeline.
 ///
-/// When a hook is installed and the sink returns
-/// [`TransformOutcome::Transformed`], the engine:
+/// When a hook is installed and the sink returns a
+/// [`TransformOutcome`] (i.e. the transform actually ran), the engine:
 ///
 /// - Skips [`fast_copy_hook`](CopyOptions::fast_copy_hook) (fast
 ///   paths are byte-identical copies; they can't handle a
@@ -699,6 +709,8 @@ impl Default for CopyOptions {
 }
 
 impl CopyOptions {
+    /// Return [`CopyOptions::buffer_size`] clamped to the engine's
+    /// [`MIN_BUFFER_SIZE`] / [`MAX_BUFFER_SIZE`] window.
     pub fn clamped_buffer_size(&self) -> usize {
         self.buffer_size.clamp(MIN_BUFFER_SIZE, MAX_BUFFER_SIZE)
     }

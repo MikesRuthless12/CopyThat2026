@@ -1,5 +1,5 @@
 //! Phase 35d — adapter implementing
-//! [`copythat_core::options::TransformSink`] over the crypt crate's
+//! [`copythat_core::TransformSink`] over the crypt crate's
 //! sync pipeline. The engine's `copy_file` short-circuits to this
 //! adapter when `CopyOptions::transform` is set: the sink owns the
 //! source-open + destination-open + compress + encrypt + write

@@ -20,7 +20,7 @@ pub enum Recipient {
     Passphrase(SecretString),
     /// An `age1…`-format X25519 recipient, encoded as the
     /// plain-text public-key string. Parsed by
-    /// [`age::x25519::Recipient::from_str`] at pipeline build time.
+    /// `age::x25519::Recipient::from_str` at pipeline build time.
     X25519(String),
     /// An SSH public key — `ssh-ed25519 AAAA…` or
     /// `ssh-rsa AAAA…`. age supports both natively via

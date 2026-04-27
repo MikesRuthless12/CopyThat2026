@@ -110,6 +110,10 @@
 //! ```
 
 #![forbid(unsafe_code)]
+// Phase 42 doc audit: warn-only on missing public-API docs so future
+// additions are flagged without breaking the build on the historic
+// undocumented surface (control flag accessors, error variants, etc.).
+#![warn(missing_docs)]
 
 pub mod collision;
 mod control;

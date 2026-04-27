@@ -566,7 +566,7 @@ fn now_ms_sync() -> i64 {
 }
 
 /// Resolve the default on-disk path. Exposed as a free function so
-/// the Tauri layer can show "database: <path>" in the About dialog
+/// the Tauri layer can show "database: `<path>`" in the About dialog
 /// without opening the DB.
 pub fn default_db_path() -> Result<PathBuf, HistoryError> {
     let dirs =

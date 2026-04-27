@@ -12,7 +12,8 @@
 use rusqlite::Connection;
 use thiserror::Error;
 
-/// Current on-disk schema version. Bump when appending to [`MIGRATIONS`].
+/// Current on-disk schema version. Bump when appending to the private
+/// `MIGRATIONS` table in this module.
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 
 const MIGRATIONS: &[(u32, u32, &str)] = &[(0, 1, V0_TO_V1)];
@@ -58,10 +59,14 @@ INSERT OR IGNORE INTO scan_progress (id, last_visited_path, files_visited, bytes
 VALUES (1, NULL, 0, 0);
 "#;
 
+/// Errors raised by the scan-DB schema migrator.
 #[derive(Debug, Error)]
 pub enum SchemaError {
+    /// Underlying SQLite failure.
     #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
+    /// The scan DB carries a newer schema than this build understands.
+    /// Tuple is `(db_version, build_version)`.
     #[error("scan schema newer than this build (db={0}, build={1})")]
     Unsupported(u32, u32),
 }

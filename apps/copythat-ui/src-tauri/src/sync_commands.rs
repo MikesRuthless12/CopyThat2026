@@ -29,7 +29,7 @@ use crate::state::AppState;
 
 /// One row in the sync registry. `ctrl` is cheap-cloneable; the
 /// other fields are informational so an in-progress stop by pair ID
-/// can log "was syncing <label>".
+/// can log "was syncing `<label>`".
 #[derive(Clone)]
 struct SyncHandle {
     ctrl: SyncControl,
