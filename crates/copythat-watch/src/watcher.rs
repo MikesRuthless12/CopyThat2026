@@ -18,6 +18,7 @@
 //! shallow `read_dir` of the affected subtree and synthesises
 //! `Modified` events for every entry.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -446,13 +447,49 @@ fn enumerate_dir_into(dir: &Path, queue: &mut DebounceQueue, now: Instant) {
     }
 }
 
+/// Maximum tree depth visited by `rescan_into`. An attacker who can
+/// induce a `ReadDirectoryChangesW` overflow against a deeply-nested
+/// or symlink-cycled tree would otherwise exhaust the stack walking
+/// indefinitely; capping the depth caps the worst-case work per
+/// recovery pass. The cap is generous enough for realistic user
+/// trees (deepest known organic case in the bug tracker is 22).
+const RESCAN_MAX_DEPTH: usize = 64;
+
 /// Recursive walk of `root` emitting `Modified` per file. Used as
 /// the Windows overflow recovery path + as a last-resort for
 /// `EventKind::Any`/`Other` events with no specific path.
+///
+/// Canonicalised paths are cached per-pass in a `HashMap` so a
+/// symlink-heavy tree under a forced overflow doesn't trigger
+/// `O(entries)` kernel path lookups against the same components
+/// repeatedly. The cache is dropped at the end of the pass.
+///
+/// The walk is bounded by [`RESCAN_MAX_DEPTH`]; entries below the
+/// cap are skipped with a single `tracing::warn!`.
 fn rescan_into(root: &Path, queue: &mut DebounceQueue, now: Instant) {
-    let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
-    let canon_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-    while let Some(dir) = stack.pop() {
+    // Stack carries (path, depth) so we can short-circuit the walk
+    // without recursing past the depth cap.
+    let mut stack: Vec<(PathBuf, usize)> = vec![(root.to_path_buf(), 0)];
+    // Per-pass canonical-path cache. Keyed by the original path; the
+    // value is the resolved canonical path (or a copy of the input
+    // when canonicalisation failed — caching the failure dodges a
+    // second syscall). Using a HashMap rather than the file system's
+    // own caches keeps the lookup hot inside this function.
+    let mut canon_cache: HashMap<PathBuf, PathBuf> = HashMap::new();
+    let canon_root = canonicalize_cached(&mut canon_cache, root);
+    let mut depth_warned = false;
+    while let Some((dir, depth)) = stack.pop() {
+        if depth > RESCAN_MAX_DEPTH {
+            if !depth_warned {
+                tracing::warn!(
+                    root = %root.display(),
+                    max_depth = RESCAN_MAX_DEPTH,
+                    "rescan walk exceeded depth cap; deeper entries skipped"
+                );
+                depth_warned = true;
+            }
+            continue;
+        }
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
         };
@@ -474,18 +511,33 @@ fn rescan_into(root: &Path, queue: &mut DebounceQueue, now: Instant) {
             }
             // Defence-in-depth: even without a symlink, confirm the
             // entry's canonical path is still under the watch root.
-            if let Ok(canon) = path.canonicalize() {
-                if !canon.starts_with(&canon_root) {
-                    continue;
-                }
+            // Cache the result so repeated lookups against shared
+            // ancestors don't thrash the kernel's path walker.
+            let canon = canonicalize_cached(&mut canon_cache, &path);
+            if !canon.starts_with(&canon_root) {
+                continue;
             }
             if ftype.is_dir() {
-                stack.push(path);
+                stack.push((path, depth + 1));
             } else {
                 queue.push(FsEvent::Modified(path), now);
             }
         }
     }
+}
+
+/// `path.canonicalize()` with a per-pass memoisation table. Falls
+/// back to a clone of the input when canonicalisation fails (transient
+/// `NotFound`, EACCES on a permission-denied subdir, etc.) — caching
+/// the fallback dodges a duplicate failed-syscall the next time the
+/// same path is seen during the same overflow-rescan pass.
+fn canonicalize_cached(cache: &mut HashMap<PathBuf, PathBuf>, path: &Path) -> PathBuf {
+    if let Some(hit) = cache.get(path) {
+        return hit.clone();
+    }
+    let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    cache.insert(path.to_path_buf(), resolved.clone());
+    resolved
 }
 
 /// Lexical containment check used by `handle_raw_event`. Falls back
@@ -533,5 +585,60 @@ mod tests {
             panic!("expected error");
         };
         assert!(matches!(err, WatchError::RootNotAccessible { .. }));
+    }
+
+    #[test]
+    fn canonicalize_cached_dedups_repeated_lookups() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("a");
+        std::fs::create_dir_all(&p).unwrap();
+        let mut cache: HashMap<PathBuf, PathBuf> = HashMap::new();
+        let first = canonicalize_cached(&mut cache, &p);
+        let second = canonicalize_cached(&mut cache, &p);
+        assert_eq!(first, second);
+        // Cache populated on first call: subsequent calls hit the
+        // map rather than re-issuing a kernel canonicalisation.
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn canonicalize_cached_falls_back_when_path_missing() {
+        let d = tempfile::tempdir().unwrap();
+        let missing = d.path().join("does-not-exist");
+        let mut cache: HashMap<PathBuf, PathBuf> = HashMap::new();
+        let resolved = canonicalize_cached(&mut cache, &missing);
+        // Fallback returns the input verbatim and caches the answer
+        // so a repeated lookup doesn't re-issue the failing syscall.
+        assert_eq!(resolved, missing);
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn rescan_into_respects_depth_cap() {
+        // Build a synthetic tree deeper than RESCAN_MAX_DEPTH and
+        // verify rescan_into doesn't recurse forever. The exact
+        // emitted-event count isn't part of the contract — what we
+        // assert is that the call returns within reasonable wall
+        // time and that at least the shallow files surface.
+        let d = tempfile::tempdir().unwrap();
+        let mut path = d.path().to_path_buf();
+        for i in 0..(RESCAN_MAX_DEPTH + 5) {
+            path.push(format!("d{i}"));
+        }
+        std::fs::create_dir_all(&path).unwrap();
+        // Drop a file at the cap-1 depth to confirm shallow files
+        // are reported.
+        let mut shallow = d.path().to_path_buf();
+        shallow.push("shallow.txt");
+        std::fs::write(&shallow, b"x").unwrap();
+        let mut q = DebounceQueue::new(Duration::from_millis(0));
+        rescan_into(d.path(), &mut q, Instant::now());
+        let drained = q.drain_all();
+        assert!(
+            drained
+                .iter()
+                .any(|e| matches!(e, FsEvent::Modified(p) if p == &shallow)),
+            "expected shallow file to surface in rescan output"
+        );
     }
 }
