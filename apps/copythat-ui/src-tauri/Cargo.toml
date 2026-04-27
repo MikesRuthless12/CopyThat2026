@@ -102,8 +102,10 @@ hex = "0.4"
 # Phase 34 — serialise the live settings to TOML before hashing
 # them so the fingerprint is deterministic across platforms. Only
 # direct dep add in the UI crate today; settings stores via the
-# crate's own TOML round-trip.
-toml = "0.8"
+# crate's own TOML round-trip. Phase 42 dep-audit bumped 0.8 → 0.9
+# to share `toml v0.9.x` with `copythat-settings`, eliminating the
+# duplicate `toml v0.8.2` resolution from the workspace lockfile.
+toml = "0.9"
 # Phase 25 — pair IDs are random v4 UUIDs generated on the Tauri
 # side at `add_sync_pair` time.
 uuid = { version = "1", features = ["v4"] }
