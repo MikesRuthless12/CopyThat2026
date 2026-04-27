@@ -68,7 +68,18 @@ impl HardlinkSet {
     /// Returns the destination already used for a previous member of
     /// the same hardlink set, if any.
     pub fn get(&self, ident: &LinkIdentity) -> Option<PathBuf> {
-        self.inner.lock().ok()?.get(ident).cloned()
+        // Recover from a poisoned mutex rather than silently bypassing
+        // the ledger: a single panic in `record` would otherwise
+        // force every subsequent member of every hardlink set to
+        // byte-copy, exactly the "store the bytes once" invariant we
+        // built this for.
+        let guard = self.inner.lock().unwrap_or_else(|e| {
+            eprintln!(
+                "copythat-platform::hardlink_set: recovering from poisoned ledger (get)"
+            );
+            e.into_inner()
+        });
+        guard.get(ident).cloned()
     }
 
     /// Record that `dst` is the canonical destination for the
@@ -76,9 +87,13 @@ impl HardlinkSet {
     /// calls will return `dst`. Idempotent — calling twice with the
     /// same `ident` overwrites with the latest `dst`.
     pub fn record(&self, ident: LinkIdentity, dst: PathBuf) {
-        if let Ok(mut g) = self.inner.lock() {
-            g.insert(ident, dst);
-        }
+        let mut g = self.inner.lock().unwrap_or_else(|e| {
+            eprintln!(
+                "copythat-platform::hardlink_set: recovering from poisoned ledger (record)"
+            );
+            e.into_inner()
+        });
+        g.insert(ident, dst);
     }
 
     /// Helper for tree-walk callers. If `src` is a member of an
@@ -97,6 +112,15 @@ impl HardlinkSet {
         let Some(prior_dst) = self.get(&ident) else {
             return Ok(false);
         };
+        // Explicit pre-check: if the recorded prior destination has been
+        // deleted between record() and dispatch() (e.g. user undid a
+        // previous copy), CreateHardLinkW would surface a clear error
+        // anyway, but signalling Ok(false) here lets the caller fall
+        // straight back to a fresh byte copy without an io::Error
+        // round-trip and keeps the intent obvious.
+        if !prior_dst.exists() {
+            return Ok(false);
+        }
         match create_hardlink(&prior_dst, dst) {
             Ok(()) => Ok(true),
             Err(e) if is_unsupported(&e) => Ok(false),

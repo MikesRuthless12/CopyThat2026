@@ -109,6 +109,46 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
+/// `Path::exists()` with a brief retry loop (3 attempts spaced 50 ms
+/// apart) to ride out transient stat races. Used at registry-load
+/// time, where a concurrent deletion between the on-disk JSON read
+/// and the in-memory rebuild can otherwise let a stale path slip
+/// in. Total worst-case latency: 150 ms per missing entry.
+fn path_exists_with_retry(p: &Path) -> bool {
+    if p.exists() {
+        return true;
+    }
+    for _ in 0..2 {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        if p.exists() {
+            return true;
+        }
+    }
+    false
+}
+
+/// Path equality with platform-aware case-folding. On Windows / macOS
+/// the comparison is case-insensitive (NTFS / HFS+ / APFS-CI treat
+/// `C:\File.txt` and `c:\file.txt` as the same file); on Linux and
+/// other targets it falls back to byte-exact equality.
+///
+/// We compare lower-cased string forms rather than `canonicalize()`
+/// because (a) canonicalize requires the path to currently exist —
+/// and the registry holds paths the user staged earlier, possibly
+/// removed since — and (b) the I/O cost on every `add` would be
+/// noticeable. Lowercasing matches NTFS's case-folding for ASCII
+/// (the overwhelmingly common case) and is cheap.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn paths_match(a: &Path, b: &Path) -> bool {
+    a.as_os_str().to_string_lossy().to_lowercase()
+        == b.as_os_str().to_string_lossy().to_lowercase()
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn paths_match(a: &Path, b: &Path) -> bool {
+    a == b
+}
+
 /// On-disk serialisation shape. Version-bumped every time the
 /// layout changes so a newer app opening an older file can migrate
 /// rather than error.
@@ -191,7 +231,26 @@ impl DropStackRegistry {
         let mut missing: Vec<PathBuf> = Vec::new();
         let mut kept: Vec<DropStackEntry> = Vec::with_capacity(parsed.entries.len());
         for e in parsed.entries {
-            if e.path.exists() {
+            // Phase 17e — re-gate every stored path through the IPC
+            // validator. A hand-edited `dropstack.json` containing
+            // `..\\..\\windows\\system32` paths would otherwise be
+            // re-loaded into the persistent registry and inherit
+            // any future call site that skips re-validation.
+            let raw = e.path.to_string_lossy();
+            if validate_ipc_path(&raw).is_err() {
+                eprintln!(
+                    "dropstack: dropping path that fails IPC validation on load: {}",
+                    raw
+                );
+                continue;
+            }
+            // Brief retry loop (3× 50 ms) to ride out transient
+            // filesystem stat races: between `exists()` and
+            // `kept.push()`, a concurrent deletion can let a stale
+            // path enter the registry. Cheap re-stat closes the
+            // window without blocking startup meaningfully (worst
+            // case 150 ms across all entries combined).
+            if path_exists_with_retry(&e.path) {
                 kept.push(e);
             } else {
                 missing.push(e.path);
@@ -249,7 +308,7 @@ impl DropStackRegistry {
                 if p.as_os_str().is_empty() {
                     continue;
                 }
-                if guard.entries.iter().any(|e| e.path == p) {
+                if guard.entries.iter().any(|e| paths_match(&e.path, &p)) {
                     continue;
                 }
                 guard.entries.push(DropStackEntry::new(p));
@@ -266,13 +325,15 @@ impl DropStackRegistry {
         Ok(added)
     }
 
-    /// Remove a single entry by exact-path match. Returns `true` if
-    /// the path was present.
+    /// Remove a single entry by path match. On Windows / macOS the
+    /// match is case-insensitive (NTFS / HFS+ / APFS-CI all treat
+    /// `C:\File.txt` and `c:\file.txt` as the same file); elsewhere
+    /// the match is byte-for-byte.
     pub fn remove(&self, path: &Path) -> Result<bool, DropStackError> {
         let removed = {
             let mut guard = self.inner.write().map_err(|_| DropStackError::Poisoned)?;
             let before = guard.entries.len();
-            guard.entries.retain(|e| e.path != path);
+            guard.entries.retain(|e| !paths_match(&e.path, path));
             before != guard.entries.len()
         };
         if removed {

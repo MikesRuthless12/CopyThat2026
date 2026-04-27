@@ -206,14 +206,30 @@ fn probe_impl(path: &Path) -> Option<VolumeTopology> {
     }
 
     let serial = crate::helpers::volume_id(path)?;
-    if let Ok(guard) = cache.lock() {
+    {
+        // Recover from a poisoned mutex rather than silently bypassing
+        // the cache: another thread panicking with the lock held would
+        // otherwise force every subsequent caller to re-probe the
+        // 2 ms IOCTL forever.
+        let guard = cache.lock().unwrap_or_else(|e| {
+            eprintln!(
+                "copythat-platform::topology: recovering from poisoned cache lock (read)"
+            );
+            e.into_inner()
+        });
         if let Some(t) = guard.get(&serial) {
             return Some(*t);
         }
     }
 
     let topo = win_probe(path).unwrap_or_else(VolumeTopology::conservative_default);
-    if let Ok(mut guard) = cache.lock() {
+    {
+        let mut guard = cache.lock().unwrap_or_else(|e| {
+            eprintln!(
+                "copythat-platform::topology: recovering from poisoned cache lock (write)"
+            );
+            e.into_inner()
+        });
         guard.insert(serial, topo);
     }
     Some(topo)
