@@ -389,6 +389,22 @@ pub async fn mobile_handle_remote_command(
 ) -> Result<String, String> {
     let cmd: RemoteCommand =
         serde_json::from_str(&command_json).map_err(|e| format!("decode command: {e}"))?;
+
+    // Pre-emptive IPC path-validation gate. Even though the four
+    // path-bearing variants (`SecureDelete`, `StartCopy`,
+    // `RerunHistory`, `RecentHistory`) currently have stub
+    // implementations on the desktop adapter, the wire surface is
+    // already exposed to the phone — and once the engine wiring
+    // lands, paths arriving from a paired phone would otherwise
+    // bypass the same `validate_ipc_path` lexical bar that every
+    // desktop-originating command routes through. Reject `..` /
+    // NUL / U+FFFD payloads at the dispatch boundary so the engine
+    // never sees a shaped-bad path regardless of who originated it.
+    if let Err(resp) = preflight_validate_command_paths(&cmd) {
+        return serde_json::to_string(&resp)
+            .map_err(|e| format!("encode response: {e}"));
+    }
+
     let ctl = AppStateRemoteControl {
         state: AppStateProxy {
             globals: state.globals.clone(),
@@ -420,6 +436,62 @@ pub async fn mobile_handle_remote_command(
     }
     let resp = dispatch_with_auth(cmd, &ctl, &mut auth).await;
     serde_json::to_string(&resp).map_err(|e| format!("encode response: {e}"))
+}
+
+/// Pre-emptive IPC path-validation for every `RemoteCommand` variant
+/// that carries a path-typed argument. Returns `Err(RemoteResponse)`
+/// the caller can serialise straight back to the data channel when
+/// any path fails the lexical bar (`..` segment / NUL byte / U+FFFD
+/// replacement char). Variants without path arguments are a no-op
+/// pass-through so the dispatcher receives them untouched.
+///
+/// This is a compile-time-checked match over `RemoteCommand` — adding
+/// a new variant that carries a path will surface as an unhandled-arm
+/// warning rather than silently bypassing the gate.
+fn preflight_validate_command_paths(
+    cmd: &RemoteCommand,
+) -> Result<(), RemoteResponse> {
+    let invalid = || RemoteResponse::Error {
+        message: "err-invalid-path".to_string(),
+    };
+    match cmd {
+        RemoteCommand::SecureDelete { paths, .. } => {
+            for p in paths {
+                if crate::ipc_safety::validate_ipc_path(p).is_err() {
+                    return Err(invalid());
+                }
+            }
+            Ok(())
+        }
+        RemoteCommand::StartCopy {
+            sources,
+            destination,
+            ..
+        } => {
+            for s in sources {
+                if crate::ipc_safety::validate_ipc_path(s).is_err() {
+                    return Err(invalid());
+                }
+            }
+            if crate::ipc_safety::validate_ipc_path(destination).is_err() {
+                return Err(invalid());
+            }
+            Ok(())
+        }
+        // Variants without path arguments — pass through.
+        RemoteCommand::Hello { .. }
+        | RemoteCommand::ListJobs
+        | RemoteCommand::PauseJob { .. }
+        | RemoteCommand::ResumeJob { .. }
+        | RemoteCommand::CancelJob { .. }
+        | RemoteCommand::ResolveCollision { .. }
+        | RemoteCommand::Globals
+        | RemoteCommand::RecentHistory { .. }
+        | RemoteCommand::RerunHistory { .. }
+        | RemoteCommand::Goodbye
+        | RemoteCommand::SetKeepAwake { .. }
+        | RemoteCommand::GetLocale => Ok(()),
+    }
 }
 
 /// Fire a test notification at a paired device.

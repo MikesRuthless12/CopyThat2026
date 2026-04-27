@@ -95,6 +95,18 @@ pub fn add_backend(
     if name_trim.is_empty() {
         return Err("backend name is required".into());
     }
+    // Reject `Some("")` at the IPC boundary. The caller is expected to
+    // pass `None` when the user has not supplied a secret; an explicit
+    // empty string is almost certainly a wizard bug (uninitialised
+    // form field) and would otherwise either get written to the
+    // keychain as a zero-length value (some OSes accept it) or be
+    // silently skipped further down (`if !s.is_empty()`), neither of
+    // which is what the user asked for.
+    if let Some(ref s) = secret
+        && s.is_empty()
+    {
+        return Err("err-empty-secret".into());
+    }
 
     let entry = dto_to_entry(&dto).ok_or_else(|| "invalid backend config".to_string())?;
     let backend = entry_to_cloud_backend(&entry).map_err(|e| e.to_string())?;
@@ -137,6 +149,16 @@ pub fn update_backend(
     secret: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<BackendDto, String> {
+    // Mirror `add_backend`: `Some("")` is a wizard bug, never the
+    // user's intent. `None` (don't rotate the keychain entry) is
+    // still the legitimate "edit config without changing the secret"
+    // path the doc-comment above describes.
+    if let Some(ref s) = secret
+        && s.is_empty()
+    {
+        return Err("err-empty-secret".into());
+    }
+
     let entry = dto_to_entry(&dto).ok_or_else(|| "invalid backend config".to_string())?;
     let backend = entry_to_cloud_backend(&entry).map_err(|e| e.to_string())?;
 

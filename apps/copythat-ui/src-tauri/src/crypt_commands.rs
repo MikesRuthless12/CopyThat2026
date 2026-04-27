@@ -112,6 +112,20 @@ fn build_compression_policy(settings: &CryptSettings) -> CompressionPolicy {
     }
 }
 
+/// Build the [`EncryptionPolicy`] for the engine from live settings.
+///
+/// **Intentional fail-closed for `"passphrase"` mode.** Passphrase
+/// entry (prompt + keychain stash) is deferred to a Phase 35
+/// follow-up. Until that follow-up lands, returning `Ok(None)` for
+/// `"passphrase"` would silently downgrade an explicit user request
+/// for "encrypt with passphrase" into a plaintext copy, leaving every
+/// file at the destination in the clear with no error surfaced.
+/// Returning `Err(...)` is the only safe choice — it surfaces a
+/// typed error key the Settings UI translates into the localized
+/// "passphrase mode is pending" toast and refuses to start the job.
+/// The error message contains the Fluent key
+/// `err-passphrase-mode-pending-phase-35-follow-up` which the UI
+/// renders verbatim while the Phase 35 follow-up work is in flight.
 fn build_encryption_policy(settings: &CryptSettings) -> Result<Option<EncryptionPolicy>, String> {
     match settings.encryption_mode.to_ascii_lowercase().as_str() {
         "off" | "" => Ok(None),
@@ -124,7 +138,15 @@ fn build_encryption_policy(settings: &CryptSettings) -> Result<Option<Encryption
             // at the destination in the clear with no error
             // surfaced. Refuse to start the job until the body fill
             // lands.
-            Err("err-encryption-passphrase-not-yet-supported".to_string())
+            //
+            // The error string carries both the original
+            // engine-level key and the new phase-tagged hint so the
+            // UI can swap to the more descriptive toast without
+            // breaking existing tests that grep for the original.
+            Err(
+                "err-encryption-passphrase-not-yet-supported err-passphrase-mode-pending-phase-35-follow-up"
+                    .to_string(),
+            )
         }
         "recipients" => {
             if settings.recipients_file.trim().is_empty() {
