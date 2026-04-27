@@ -796,6 +796,14 @@ impl FilterSettings {
     /// True when there is nothing the engine needs to do — either
     /// the master switch is off or every field is at its default.
     /// The Tauri bridge skips compile/attach when this holds.
+    ///
+    /// Note on the "enabled-but-no-patterns" case: this method also
+    /// returns `true` when `enabled == true` but every other field is
+    /// at its default. The reasoning is that "filter on, no
+    /// predicates configured" can never reject a file — the filter
+    /// would accept everything, which is the same observable behaviour
+    /// as the disabled state. Skipping compile/attach in that case
+    /// avoids walking the filter pipeline for zero benefit.
     pub fn is_effectively_empty(&self) -> bool {
         !self.enabled
             || (self.include_globs.is_empty()

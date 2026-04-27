@@ -127,11 +127,26 @@ mod zfs_version_warning {
     //! who haven't toggled the param are perfectly safe and the
     //! same code paths benefit other COW filesystems (Btrfs, XFS,
     //! bcachefs).
+    //!
+    //! Phase 42 follow-up: the warning is gated behind
+    //! `COPYTHAT_SUPPRESS_ZFS_WARNING=1` for scripted environments
+    //! and CI runners that already know their dataset version and
+    //! don't want repeated stderr noise across many per-file reflink
+    //! probes.
     use std::sync::OnceLock;
 
     pub fn check_once() {
         static CHECKED: OnceLock<()> = OnceLock::new();
         CHECKED.get_or_init(|| {
+            // Honor the suppression env var even when version
+            // detection succeeds — silent in scripted runs.
+            if std::env::var("COPYTHAT_SUPPRESS_ZFS_WARNING")
+                .ok()
+                .as_deref()
+                == Some("1")
+            {
+                return;
+            }
             if let Some((maj, min, patch)) = read_zfs_version() {
                 let bclone = read_zfs_bclone_enabled().unwrap_or(false);
                 if maj == 2 && min == 2 && patch <= 6 && bclone {
@@ -140,7 +155,8 @@ mod zfs_version_warning {
                          zfs_bclone_enabled=1 has a known data-corruption \
                          bug (openzfs/zfs#15526). Consider upgrading to \
                          2.3+ or setting zfs_bclone_enabled=0. Reflink \
-                         path remains active.",
+                         path remains active. Set \
+                         COPYTHAT_SUPPRESS_ZFS_WARNING=1 to silence.",
                         maj, min, patch
                     );
                 }

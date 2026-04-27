@@ -144,6 +144,23 @@ Override the total memory budget for the parallel-chunk path. The
 per-chunk buffer is `budget / num_chunks`, floored at 64 KiB. Used
 mainly for A/B testing buffer sizes against fixed memory.
 
+### `COPYTHAT_SUPPRESS_ZFS_WARNING=<bool>`
+
+Silences the one-shot ZFS-version warning that the reflink path
+emits when the destination filesystem is ZFS but the host may be
+running a pre-OpenZFS-2.2 release without `clone_range` support.
+The warning is informational — copies still succeed by falling back
+to byte-copy — but it can become repetitive in scripted workflows
+that already know the dataset version.
+
+- `1` — suppress the warning (silent)
+- everything else (default) — emit the warning at most once per
+  process to stderr
+
+Useful for CI runners and automated test harnesses where the noise
+buries real diagnostic output. Doesn't affect any other warning
+surface.
+
 ## Verifying the path you're on
 
 `xtask bench-vs` reports the chosen strategy in its output line:

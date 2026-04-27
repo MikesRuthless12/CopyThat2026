@@ -22,6 +22,14 @@
 /// the foreground process is in fullscreen Direct3D mode.
 /// `false` on any error (the Phase 31 policy machine treats
 /// "unknown" the same as "not presenting" — fail-safe).
+///
+/// **Best-effort snapshot.** Presence checks reflect the OS state at
+/// the moment of the syscall and the platform state can change
+/// between probe and decision (the user may exit fullscreen, dismiss
+/// a slideshow, or accept-notifications between this call returning
+/// and the caller acting on the result). Callers using this for
+/// routing should treat it as a hint, not a guarantee — schedule a
+/// re-probe before any policy action that could surprise the user.
 pub fn is_in_presentation_mode() -> bool {
     #[cfg(target_os = "windows")]
     {
@@ -45,6 +53,10 @@ pub fn is_in_presentation_mode() -> bool {
 /// Direct3D mode specifically. Subset of presentation mode; useful
 /// for the policy machine when the user's preference is "pause on
 /// fullscreen but not presentation".
+///
+/// Same best-effort caveat as [`is_in_presentation_mode`] — the
+/// foreground app can exit fullscreen between this probe and the
+/// caller's policy decision.
 pub fn is_in_fullscreen_mode() -> bool {
     #[cfg(target_os = "windows")]
     {
