@@ -17,6 +17,7 @@ use copythat_shape::Shape;
 use crate::clipboard_watcher::WatcherHandle;
 use crate::collisions::CollisionRegistry;
 use crate::errors::ErrorRegistry;
+use crate::progress_channel::ProgressChannelRegistry;
 use crate::scan_commands::ScanRegistry;
 
 /// Top-level shared state wired into Tauri.
@@ -134,6 +135,14 @@ pub struct AppState {
     /// drop / Goodbye / Exit so the screensaver isn't permanently
     /// suppressed.
     pub wake_lock: std::sync::Arc<Mutex<Option<copythat_platform::WakeLock>>>,
+    /// Phase 42 / Gap #14 — frontend-supplied per-job progress
+    /// channels. Empty by default; populated when the UI invokes
+    /// `register_progress_channel(jobId, channel)` after `start_copy`.
+    /// The runner dual-emits — the legacy `app.emit(EVENT_JOB_PROGRESS,
+    /// …)` keeps firing so existing `listen('job:progress', …)`
+    /// surfaces work unchanged. See `progress_channel.rs` for the
+    /// migration path forward.
+    pub progress_channels: ProgressChannelRegistry,
 }
 
 impl AppState {
@@ -208,6 +217,10 @@ impl AppState {
             // The PWA's "Keep desktop awake" toggle acquires it on
             // demand.
             wake_lock: Arc::new(Mutex::new(None)),
+            // Phase 42 / Gap #14 — empty channel registry; frontend
+            // opts in per-job via the `register_progress_channel`
+            // command (see `progress_channel.rs`).
+            progress_channels: ProgressChannelRegistry::new(),
         }
     }
 
