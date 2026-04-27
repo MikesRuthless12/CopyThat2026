@@ -76,7 +76,7 @@ async-trait = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
-toml = "0.8"
+toml = "0.9"
 serde_json = "1"
 # Phase 37 follow-up — generate test RSA key for the FCM signer
 # round-trip. Already in the dep tree transitively through `age`
