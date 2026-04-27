@@ -303,3 +303,118 @@ The outstanding strategic decision is whether to land Tier 1+2 items
 head-to-head benchmark — which would tighten the "we beat them all"
 claim to include hardlink/sparse/cloud/SMB-compression workloads, not
 just the four scenarios already measured.
+
+---
+
+## Deferred items — design notes for Phase 43
+
+### Item: HardlinkSet integration into `copy_tree`
+
+The Phase 42 work added `copythat_platform::hardlink_set::HardlinkSet`
+with:
+
+- `HardlinkSet::identify(src) -> Option<LinkIdentity>` — probes the
+  per-platform `(volume, file-id)` triple.
+- `HardlinkSet::dispatch(src, dst) -> io::Result<bool>` — looks up
+  the ledger and, on a hit, calls `CreateHardLinkW` / `link(2)` and
+  returns `Ok(true)`. On a miss, `Ok(false)` (caller byte-copies).
+- `HardlinkSet::record(ident, dst)` — caller invokes after a
+  successful byte copy to remember the canonical destination for
+  subsequent members of the set.
+
+The unit-tested helper is shippable. **What's missing is the wiring
+into `copy_tree_inner` at `crates/copythat-core/src/tree.rs:777`** —
+the per-file dispatch site that today goes straight to
+`attempt_copy_with_policy`.
+
+#### Why this is not a one-line insertion
+
+The blocker is a **dependency cycle**: `copythat-platform` already
+depends on `copythat-core`, so `core::tree` cannot directly call
+`platform::HardlinkSet` without inverting one of the two dep edges.
+Two viable architectures:
+
+##### Option A — Move `HardlinkSet` into `copythat-core`
+
+Pros: single crate, no trait indirection, `tree.rs` calls
+`HardlinkSet::dispatch` directly.
+
+Cons: the per-platform `identity_impl` (`#[cfg(target_os = "windows")]`
+NTFS file-index probe via `GetFileInformationByHandle` +
+`#[cfg(unix)]` `st_dev/st_ino` via `MetadataExt`) lives in `platform`
+today by design. Moving it to `core` adds the Win32 + libc edge
+that `core` currently avoids.
+
+##### Option B — Trait hook on `TreeOptions` (recommended)
+
+Add a trait that the runner — which has both `core` AND `platform`
+in scope — can implement against `platform::HardlinkSet`:
+
+```rust
+// in copythat-core/src/options.rs
+pub trait TreeFileHook: Send + Sync {
+    /// Called immediately before each per-file copy. Return:
+    /// - `Ok(HookOutcome::Skip)` — engine treats the file as
+    ///   already done (e.g. hardlink-set hit; `dst` is now linked
+    ///   to a prior member). Engine emits a `FileCopied` event
+    ///   with `bytes = 0`.
+    /// - `Ok(HookOutcome::Continue)` — engine performs the byte
+    ///   copy as usual.
+    /// - `Err(io::Error)` — surfaced as a `CopyError::IoOther`
+    ///   and routed through the `on_error` policy.
+    fn before_file(&self, src: &Path, dst: &Path) -> io::Result<HookOutcome>;
+
+    /// Called immediately after a successful byte copy. Lets the
+    /// hook record state (e.g. `HardlinkSet::record`) for
+    /// subsequent files. Errors here are logged but do NOT fail
+    /// the file — the bytes already landed; bookkeeping failures
+    /// just disable future hardlink hits.
+    fn after_copy(&self, src: &Path, dst: &Path);
+}
+
+pub enum HookOutcome {
+    Skip,
+    Continue,
+}
+
+// in TreeOptions
+pub file_hook: Option<Arc<dyn TreeFileHook>>,
+```
+
+Wiring in `tree.rs:777` becomes:
+
+```rust
+EntryKind::File => {
+    if let Some(hook) = &opts_file_hook {
+        match hook.before_file(&entry.src, &dst_final) {
+            Ok(HookOutcome::Skip) => Ok(FileOutcome::Done(0)),
+            Ok(HookOutcome::Continue) => attempt_copy_with_policy(...).await,
+            Err(e) => /* on_error_task routing */,
+        }
+    } else {
+        attempt_copy_with_policy(...).await
+    }
+}
+```
+
+The runner (apps/copythat-ui or `copythat-cloud-runner`) constructs
+an `Arc<HardlinkSetHook>` (a thin newtype around
+`platform::HardlinkSet` implementing `TreeFileHook`) per tree-copy
+job and threads it through `TreeOptions::file_hook`. This keeps
+`core` free of the `platform` dep edge and lets future hooks (e.g.
+"throttle on cloud-target backpressure", "consult dedup
+catalogue") plug in without further engine changes.
+
+#### Acceptance for Phase 43 landing
+
+1. `copythat-core` defines `TreeFileHook` + `HookOutcome` and adds
+   `file_hook: Option<Arc<dyn TreeFileHook>>` to `TreeOptions`.
+2. `tree.rs::copy_tree_inner` calls `hook.before_file` /
+   `hook.after_copy` at the dispatch site.
+3. `copythat-platform` adds an `impl TreeFileHook for HardlinkSet`
+   newtype (or directly on `HardlinkSet`).
+4. Tauri runner wires `TreeOptions::file_hook = Some(hook)` when
+   the user opts into hardlink preservation.
+5. New regression test in `crates/copythat-core/tests/` exercises
+   the hook (using a stub impl) so the trait + dispatch site stay
+   covered without pulling in `platform`.
