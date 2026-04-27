@@ -1499,7 +1499,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-audit"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "chrono",
@@ -1522,7 +1522,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-chunk"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "copythat-core",
@@ -1540,7 +1540,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-cli"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "assert_cmd",
  "chrono",
@@ -1563,7 +1563,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-cloud"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1595,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-core"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "copythat-settings",
@@ -1618,7 +1618,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-crypt"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "age",
  "copythat-core",
@@ -1632,7 +1632,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-hash"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "copythat-core",
@@ -1651,7 +1651,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-helper"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "copythat-core",
  "copythat-hash",
@@ -1666,7 +1666,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-history"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "directories",
  "rusqlite",
@@ -1677,11 +1677,11 @@ dependencies = [
 
 [[package]]
 name = "copythat-i18n"
-version = "1.25.0"
+version = "1.0.0"
 
 [[package]]
 name = "copythat-journal"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "copythat-core",
@@ -1697,7 +1697,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-mobile"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "base32",
@@ -1723,7 +1723,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-mount"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "copythat-chunk",
  "copythat-core",
@@ -1739,7 +1739,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-platform"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "compio",
@@ -1761,7 +1761,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-power"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "battery",
  "copythat-platform",
@@ -1777,7 +1777,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-secure-delete"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "copythat-core",
  "rand 0.9.4",
@@ -1789,7 +1789,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-settings"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "directories",
  "globset",
@@ -1802,7 +1802,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-shape"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "arc-swap",
  "blake3",
@@ -1818,7 +1818,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-shellext"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "tempfile",
  "windows 0.61.3",
@@ -1828,7 +1828,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-snapshot"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "copythat-core",
  "getrandom 0.3.4",
@@ -1847,7 +1847,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-sync"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "blake3",
  "chrono",
@@ -1864,7 +1864,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-ui"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "arboard",
  "async-trait",
@@ -1924,7 +1924,7 @@ dependencies = [
 
 [[package]]
 name = "copythat-watch"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "notify",
  "tempfile",
@@ -10781,7 +10781,7 @@ checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
 
 [[package]]
 name = "xtask"
-version = "1.25.0"
+version = "1.0.0"
 dependencies = [
  "copythat-core",
  "copythat-platform",

@@ -28,13 +28,15 @@
   let total = $derived(formatBytes(g.bytesTotal));
 
   // When-done action. Persisted to localStorage so it survives a
-  // full app restart; defaults to keep-open so nothing surprising
-  // fires unless the user opts in.
+  // full app restart. Phase 42 follow-up: default flipped from
+  // "keep-open" to "exit" per user directive — fresh installs close
+  // the app once all queued copies finish. Anything more invasive
+  // (shutdown / log-off / sleep) still requires explicit opt-in.
   const ACTION_KEY = "copythat-after-done";
   let afterDone: PostCompletionAction = $state(
     (typeof localStorage !== "undefined"
       ? (localStorage.getItem(ACTION_KEY) as PostCompletionAction | null)
-      : null) ?? "keep-open",
+      : null) ?? "exit",
   );
   // Track whether we've ever seen work, so a fresh launch with no
   // jobs doesn't immediately fire a "done" event.

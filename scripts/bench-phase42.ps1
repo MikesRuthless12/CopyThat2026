@@ -17,6 +17,14 @@
 #
 # Run: pwsh -File scripts/bench-phase42.ps1
 
+param(
+    # Optional tool filter -- restricts the bench to a subset of tools.
+    # Default: full bench (all 5 tools). Pass `-OnlyTools @('CopyThat')`
+    # for a CopyThat-only re-bench that keeps competitor data from the
+    # last full run intact (merged by `scripts/bench-merge.ps1`).
+    [string[]]$OnlyTools = @('CopyThat', 'RoboCopy', 'CmdCopy', 'TeraCopy', 'FastCopy')
+)
+
 $ErrorActionPreference = 'Stop'
 
 # ----- Config ----------------------------------------------------------
@@ -52,10 +60,14 @@ function Write-RandomFile {
     try {
         $buf = New-Object byte[] (1 * 1024 * 1024)  # 1 MiB chunks
         $rng = [System.Random]::new(0xC0FFEE)
-        $remaining = $Bytes
+        [long]$remaining = $Bytes
+        [long]$bufLen = $buf.Length
         while ($remaining -gt 0) {
             $rng.NextBytes($buf)
-            $n = [Math]::Min($buf.Length, $remaining)
+            # `[Math]::Min` picks the Int32 overload by default; for
+            # 10 GB workloads $remaining > Int32.MaxValue. Force the
+            # Int64 overload by casting both args to [long].
+            $n = [int][Math]::Min([long]$bufLen, [long]$remaining)
             $fs.Write($buf, 0, $n)
             $remaining -= $n
         }
@@ -243,7 +255,7 @@ function Bench-Single {
     Write-Host "================================================================"
 
     # Tools to bench in this run.
-    $Tools = @('CopyThat', 'RoboCopy', 'CmdCopy', 'TeraCopy', 'FastCopy')
+    $Tools = $script:OnlyTools
     $results = @{}
 
     foreach ($tool in $Tools) {
@@ -344,7 +356,7 @@ function Bench-Tree {
         ((Get-ChildItem $Dir -File -Recurse) | Measure-Object Length -Sum).Sum
     }
 
-    $Tools = @('CopyThat', 'RoboCopy', 'CmdCopy', 'TeraCopy', 'FastCopy')
+    $Tools = $script:OnlyTools
     $results = @{}
 
     foreach ($tool in $Tools) {
@@ -442,13 +454,106 @@ Write-Host "  [ok] TeraCopy = $TeraCopy"
 Write-Host "  [ok] FastCopy = $FastCopy"
 Write-Host "  [ok] RoboCopy / CmdCopy via PATH"
 
+# Collect hardware info up front so the JSON snapshot carries it.
+# Helps anyone reading COMPETITOR-TEST.md interpret throughput
+# numbers in context (especially cross-volume C:->D: / C:->E:
+# scenarios where the destination drive model dominates).
+function Get-HardwareInfo {
+    $info = @{
+        cpu = $null
+        ram_total_bytes = 0
+        ram_total_gb = 0
+        drives = @()
+    }
+    try {
+        $cpu = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($cpu) {
+            $info.cpu = ('{0} ({1}C/{2}T @ {3:N2} GHz)' -f $cpu.Name.Trim(), $cpu.NumberOfCores, $cpu.NumberOfLogicalProcessors, ($cpu.MaxClockSpeed / 1000.0))
+        }
+    } catch {}
+    try {
+        $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+        if ($cs) {
+            $info.ram_total_bytes = [long]$cs.TotalPhysicalMemory
+            $info.ram_total_gb = [Math]::Round($cs.TotalPhysicalMemory / 1GB, 1)
+        }
+    } catch {}
+    foreach ($letter in @('C', 'D', 'E')) {
+        $drive = @{
+            letter = $letter
+            model = $null
+            media_type = $null
+            bus_type = $null
+            size_gb = 0
+            free_gb = 0
+            filesystem = $null
+        }
+        try {
+            $part = Get-Partition -DriveLetter $letter -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($part) {
+                $disk = Get-Disk -Number $part.DiskNumber -ErrorAction SilentlyContinue
+                $physDisk = Get-PhysicalDisk -DeviceNumber $part.DiskNumber -ErrorAction SilentlyContinue
+                if ($physDisk) {
+                    $drive.model = $physDisk.FriendlyName
+                    $drive.media_type = $physDisk.MediaType.ToString()
+                    $drive.bus_type = $physDisk.BusType.ToString()
+                }
+                $vol = Get-Volume -DriveLetter $letter -ErrorAction SilentlyContinue
+                if ($vol) {
+                    $drive.size_gb = [Math]::Round($vol.Size / 1GB, 1)
+                    $drive.free_gb = [Math]::Round($vol.SizeRemaining / 1GB, 1)
+                    $drive.filesystem = $vol.FileSystemType.ToString()
+                }
+            }
+        } catch {}
+        if ($drive.model -or $drive.size_gb -gt 0) {
+            $info.drives += $drive
+        }
+    }
+    return $info
+}
+
+Write-Host ""
+Write-Host "Collecting hardware info..." -NoNewline
+$hardware = Get-HardwareInfo
+Write-Host " ok"
+Write-Host ('  cpu : {0}' -f $hardware.cpu)
+Write-Host ('  ram : {0} GB' -f $hardware.ram_total_gb)
+foreach ($d in $hardware.drives) {
+    Write-Host ('  {0}:  {1}  ({2}, {3}, {4} GB / {5} GB free, {6})' -f $d.letter, $d.model, $d.media_type, $d.bus_type, $d.size_gb, $d.free_gb, $d.filesystem)
+}
+
 $startMs = Now-Ms
 $workloads = @()
 
-$workloads += Bench-Single -Label '256MB' -Bytes (256 * 1MB)
-$workloads += Bench-Single -Label '512MB' -Bytes (512 * 1MB)
+# Incremental snapshot — written after every workload so a partial
+# run (10 GB OOMs / disk-full / power-cut) preserves the smaller
+# workloads' data. Renderer reads whichever workloads are present.
+function Save-Snapshot {
+    param($workloads, $startMs, $hardware)
+    $snap = @{
+        started_at_unix_ms = $startMs
+        finished_at_unix_ms = (Now-Ms)
+        duration_ms = (Now-Ms) - $startMs
+        host = $env:COMPUTERNAME
+        os = (Get-CimInstance Win32_OperatingSystem).Caption
+        hardware = $hardware
+        partial = $true
+        workloads = $workloads
+    }
+    New-Item -ItemType Directory -Path (Split-Path $ResultJson -Parent) -Force | Out-Null
+    $snap | ConvertTo-Json -Depth 10 | Set-Content -Path $ResultJson -Encoding UTF8
+    Write-Host ('  [snapshot] -> ' + $ResultJson)
+}
+
+$workloads += Bench-Single -Label '256MB' -Bytes ([long](256 * 1MB))
+Save-Snapshot $workloads $startMs $hardware
+$workloads += Bench-Single -Label '512MB' -Bytes ([long](512 * 1MB))
+Save-Snapshot $workloads $startMs $hardware
 $workloads += Bench-Tree
-$workloads += Bench-Single -Label '10GB'  -Bytes (10 * 1GB)
+Save-Snapshot $workloads $startMs $hardware
+$workloads += Bench-Single -Label '10GB'  -Bytes ([long](10 * 1GB))
+Save-Snapshot $workloads $startMs $hardware
 
 # Final cleanup (free disk)
 if (Test-Path $BenchDir) {
@@ -464,6 +569,7 @@ $report = @{
     duration_ms = (Now-Ms) - $startMs
     host = $env:COMPUTERNAME
     os = (Get-CimInstance Win32_OperatingSystem).Caption
+    hardware = $hardware
     workloads = $workloads
 }
 

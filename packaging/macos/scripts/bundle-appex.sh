@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build the Copy That v1.25.0 Finder Sync Extension (.appex) bundle.
+# Build the Copy That v1.0.0 Finder Sync Extension (.appex) bundle.
 #
 # Produces `packaging/macos/build/CopyThatFinderSync.appex/` with the
 # layout macOS expects:

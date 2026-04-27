@@ -426,6 +426,31 @@ pub struct CopyOptions {
     /// doubles. Default `50` (50 ms / 100 ms / 200 ms — covers most
     /// short-lived AV / indexer locks).
     pub sharing_violation_base_delay_ms: u64,
+    /// Phase 43 — opt out of the per-chunk progress callback in the
+    /// platform fast paths.
+    ///
+    /// `CopyFileExW` and `CopyFile2` invoke their progress callback
+    /// from the kernel worker thread driving the I/O; every callback
+    /// is a thread-boundary crossing. For long-running copies that's
+    /// negligible (~ns per call), but on bench harnesses + headless
+    /// CLI runs that don't render progress, the callback is pure
+    /// overhead. When `true`, the platform layer passes `NULL` /
+    /// `nullptr` for the callback and the polling task that emits
+    /// `CopyEvent::Progress` is suppressed (the engine still emits
+    /// `Started` + `Completed`, so listeners get the bookends).
+    ///
+    /// **Cancellation caveat**: the progress callback is the only
+    /// in-flight cancel hook for `CopyFileExW`/`CopyFile2`. When this
+    /// flag is `true`, calling [`CopyControl::cancel`] mid-copy will
+    /// not interrupt the in-flight syscall — the engine only honours
+    /// cancellation between files in a tree, not during the copy of
+    /// a single file. The CLI tolerates this because Ctrl-C kills
+    /// the whole process anyway; GUI callers that need
+    /// mid-file cancel must leave this `false`.
+    ///
+    /// Default: `false` (callback installed — keeps GUI behaviour
+    /// untouched). The CLI flips it on for `--quiet` runs.
+    pub disable_progress_callback: bool,
     /// Phase 23 — extent-introspection bridge.
     ///
     /// Implemented by `copythat_platform::PlatformSparseOps`.
@@ -696,6 +721,7 @@ impl Default for CopyOptions {
             paranoid_verify: false,
             sharing_violation_retries: 3,
             sharing_violation_base_delay_ms: 50,
+            disable_progress_callback: false,
             sparse_ops: None,
             preserve_security_metadata: true,
             meta_policy: crate::meta::MetaPolicy::default(),

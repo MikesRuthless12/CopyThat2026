@@ -105,9 +105,40 @@ When the overlapped path is engaged, control whether
 ### `COPYTHAT_NO_BUFFERING_THRESHOLD_MB=<N>`
 
 For the **default** `CopyFileExW` path, override the file-size
-threshold for setting `COPY_FILE_NO_BUFFERING`. Default 256 MiB —
-files smaller than this use the buffered path (cache hits dominate),
-files at-or-above use unbuffered.
+threshold for setting `COPY_FILE_NO_BUFFERING`.
+
+**Phase 43 default**: `max(free_phys_ram, 16 GiB)`. Files smaller
+than the threshold use the kernel write-back cache (matches
+Explorer / `cmd` / RoboCopy semantics + bench numbers); files at-
+or-above stream directly to disk because the page cache cannot
+coalesce a copy that's larger than free RAM anyway. Phase 13b
+shipped a 256 MiB threshold; Phase 42 added a 1 GiB adaptive cap;
+Phase 43 raised the floor to 16 GiB so the 1–16 GiB band — i.e.
+the dominant single-file workload — stays cache-friendly and
+matches competitor wall-clock numbers.
+
+**Trade-off**: in the 1–16 GiB band, `CopyFileExW` returns when
+bytes are queued in the kernel write-back cache, **not** when
+they're physically on disk. If durability matters more than wall
+time (e.g. you're scripting a backup pipeline), set
+`fsync_on_close = true` in your settings or pass `--verify <algo>`
+to force a post-copy hash that flushes first. Set this env var to
+a small number (e.g. `512`) to recover the Phase 13b "always
+durable above 512 MiB" behaviour.
+
+### Phase 43 — `--quiet` performance mode
+
+When you don't need a progress bar (CI scripts, headless backups,
+the bench harness), passing `--quiet` to the `copythat` CLI flips
+`CopyOptions::disable_progress_callback` to `true`. The platform
+layer then passes `NULL` for `CopyFileExW`'s `lpProgressRoutine`
+(and the equivalent for `CopyFile2`), eliminating the
+per-kernel-chunk thread-boundary crossing — measurable on
+multi-GiB copies. **Caveat**: the progress callback is the only
+in-flight cancel hook for `CopyFileExW` / `CopyFile2`; calling
+`CopyControl::cancel` mid-copy in `--quiet` mode will only
+interrupt between files in a tree, not during a single-file copy.
+Ctrl-C still kills the process — it just leaves a partial dst.
 
 ### `COPYTHAT_SKIP_ZERO_FILL=<bool>`
 
@@ -248,7 +279,7 @@ remove the exclusion afterward.
 
 ## Phase 42 — Win11+ baseline
 
-CopyThat 1.25.0 onward targets **Windows 11+ only** (build 22000+).
+CopyThat 1.0.0 onward targets **Windows 11+ only** (build 22000+).
 Win10 was end-of-life October 2025. Several runtime-detected paths
 ride on the new floor:
 
@@ -260,12 +291,14 @@ ride on the new floor:
   `FSCTL_DUPLICATE_EXTENTS_TO_FILE` and the copy becomes a
   metadata-only operation (~94 % time savings on 1 GB files per
   Microsoft's own benchmarks).
-- **Adaptive `COPY_FILE_NO_BUFFERING` threshold** — the cutoff is
-  now `max(256 MiB, min(2 GiB, free_phys_ram / 4))` instead of a
-  static 256 MiB. On RAM-constrained hosts the unbuffered path
-  engages earlier (avoiding SuperFetch standby-list pollution); on
-  RAM-rich hosts it caps at 2 GiB so a 64 GiB host doesn't try to
-  buffer a 16 GiB file.
+- **`COPY_FILE_NO_BUFFERING` threshold** — Phase 43 raised the
+  floor from 256 MiB / 1 GiB-cap (Phase 42) to
+  `max(free_phys_ram, 16 GiB)`. The previous adaptive scheme made
+  CopyThat correctly waiting-for-durability look ~30 % slower than
+  `cmd copy` on the head-to-head bench (cmd's buffered writes
+  return before bytes hit platter). Phase 43 chose to match the
+  competitor wall-clock and document the durability trade-off
+  (override per-job via `fsync_on_close = true` / `--verify`).
 - **Storage topology probe** — `IOCTL_STORAGE_QUERY_PROPERTY` is
   used at copy start to detect bus type (NVMe / SATA / USB / RAID
   / iSCSI / VHDX) and seek penalty (HDD vs SSD), with results

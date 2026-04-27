@@ -249,9 +249,10 @@ pub struct GeneralSettings {
     pub clipboard_watcher_enabled: bool,
     /// Phase 20 — when `true`, the resume modal is skipped and any
     /// unfinished jobs detected at startup are silently re-enqueued.
-    /// Default `false`: the first launch with unfinished work shows
-    /// the prompt; the user's choice on the prompt can flip this on
-    /// per-volume in a follow-up phase. For now it's a global flag.
+    /// Phase 42 follow-up: default flipped to `true` per user
+    /// directive. Most users want crash-resume to "just work"; the
+    /// modal-on-first-launch added friction without payoff. Users
+    /// who prefer a prompt can flip it back via Settings -> General.
     pub auto_resume_interrupted: bool,
     /// Phase 37 follow-up #2 — has the user dismissed the
     /// first-launch "install the Copy That mobile companion PWA"
@@ -274,7 +275,10 @@ impl Default for GeneralSettings {
             paste_shortcut_enabled: true,
             paste_shortcut: defaults::DEFAULT_PASTE_SHORTCUT.to_string(),
             clipboard_watcher_enabled: false,
-            auto_resume_interrupted: false,
+            // Phase 42 - default flipped to true per user directive
+            // so fresh installs auto-resume any unfinished journal
+            // jobs at startup without prompting.
+            auto_resume_interrupted: true,
             mobile_onboarding_dismissed: false,
         }
     }

@@ -126,6 +126,13 @@ pub(crate) async fn try_native_copy(
     total: u64,
     ctrl: CopyControl,
     events: mpsc::Sender<CopyEvent>,
+    // Phase 43 — accepted for API parity with the Windows path.
+    // The macOS `copyfile` callback already returns CONTINUE without
+    // crossing thread boundaries, so we accept-and-honour the flag
+    // by skipping the progress channel emission rather than the
+    // callback itself (the callback can't be skipped — `copyfile`
+    // requires a callback pointer to track progress).
+    _disable_callback: bool,
 ) -> NativeOutcome {
     super::emit_started(&src, &dst, total, &events).await;
 

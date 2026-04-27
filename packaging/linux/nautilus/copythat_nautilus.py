@@ -1,4 +1,4 @@
-# Copy That v1.25.0 — Nautilus extension.
+# Copy That v1.0.0 — Nautilus extension.
 #
 # Adds "Copy with Copy That" and "Move with Copy That" entries to the
 # right-click menu on selected files and folders in GNOME Files
@@ -70,14 +70,14 @@ class CopyThatMenuProvider(GObject.GObject, Nautilus.MenuProvider):
         copy_item = Nautilus.MenuItem(
             name="CopyThatMenuProvider::Copy",
             label="Copy with Copy That",
-            tip="Queue a copy job with Copy That v1.25.0",
+            tip="Queue a copy job with Copy That v1.0.0",
         )
         copy_item.connect("activate", self._on_copy, paths)
 
         move_item = Nautilus.MenuItem(
             name="CopyThatMenuProvider::Move",
             label="Move with Copy That",
-            tip="Queue a move job with Copy That v1.25.0",
+            tip="Queue a move job with Copy That v1.0.0",
         )
         move_item.connect("activate", self._on_move, paths)
 

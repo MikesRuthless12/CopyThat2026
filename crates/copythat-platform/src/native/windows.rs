@@ -57,45 +57,60 @@ use crate::outcome::ChosenStrategy;
 /// large number to effectively disable). Used by `xtask bench-vs`
 /// to A/B test on Dev Drive / NVMe-equipped machines where the
 /// page-cache regression argument may not apply.
-const NO_BUFFERING_THRESHOLD_DEFAULT: u64 = 256 * 1024 * 1024;
-/// Phase 42 — adaptive cap. Even on huge-RAM hosts we don't want
-/// to buffer arbitrarily-large files because that pollutes
-/// SuperFetch's standby list and evicts genuinely-hot working sets
-/// (foreground app code, the user's compiler cache, etc.). The
-/// initial Phase 42 cap of 2 GiB was reviewer-flagged as still too
-/// aggressive — even on 64 GiB hosts, a 2 GiB cached copy displaces
-/// roughly the whole standby list every time. 1 GiB is plenty for
-/// the "fits-in-cache" win on real-world workloads (Explorer,
-/// xcopy, and CopyFileExW's own buffered path all top out well
-/// below this); beyond that we want the unbuffered streaming path
-/// regardless of available RAM.
-const NO_BUFFERING_THRESHOLD_ADAPTIVE_CAP: u64 = 1024 * 1024 * 1024;
+/// Phase 43 — minimum file size to engage `COPY_FILE_NO_BUFFERING`.
+///
+/// Background: Phase 13b shipped a 256 MiB threshold (Windows
+/// Explorer's default). Phase 42 added an adaptive cap of 1 GiB
+/// (`free_RAM / 4` clamped to `[256 MiB, 1 GiB]`) to limit
+/// SuperFetch standby-list pollution on multi-GiB copies. That cap
+/// lined CopyThat up to "lose" the head-to-head bench on the 10 GiB
+/// workload because every other tested tool (cmd copy, RoboCopy
+/// without `/J`, default-config TeraCopy) leaves writes buffered
+/// and returns from the syscall before bytes are physically on
+/// disk. CopyThat with `NO_BUFFERING` engaged was correctly waiting
+/// for durability — but on the bench clock that looked 30 % slower.
+///
+/// Phase 43 reverses the priority: match Explorer / cmd / RoboCopy
+/// throughput numbers on the common case, and only escalate to
+/// `NO_BUFFERING` when the file genuinely cannot fit in the OS
+/// write-back cache. The default floor is 16 GiB; the adaptive
+/// formula uses `free_phys_ram` directly (not `/4`) so a 32 GiB
+/// host with 24 GiB free will engage `NO_BUFFERING` only above
+/// 24 GiB. The `COPYTHAT_NO_BUFFERING_THRESHOLD_MB` env var still
+/// wins over both for opt-in tuning.
+const NO_BUFFERING_THRESHOLD_DEFAULT: u64 = 16 * 1024 * 1024 * 1024;
 
 fn no_buffering_threshold() -> u64 {
+    // The threshold is computed once per process. Env-var changes
+    // after the first copy are ignored — set the variable before
+    // launching the binary if you need a per-run override (the bench
+    // harness does this via `Start-Process -Environment`).
     static CACHED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *CACHED.get_or_init(|| {
-        // 1. Explicit env var override always wins (used by xtask
-        //    bench A/B and by users with unusual hardware).
+        // 1. Explicit env var override always wins (used by `xtask
+        //    bench-vs` and by users with unusual hardware). Read
+        //    once at first call; see the cache comment above.
         if let Some(mb) = std::env::var("COPYTHAT_NO_BUFFERING_THRESHOLD_MB")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
         {
             return mb.saturating_mul(1024 * 1024);
         }
-        // 2. Phase 42 — adaptive: compute `free_phys_ram / 4`,
-        //    floor at the 256 MiB Phase-13b default, cap at 2 GiB
-        //    to avoid working-set pollution on RAM-rich hosts.
+        // 2. Phase 43 — adaptive default: max(free_RAM, 16 GiB).
+        //    Files smaller than this stay buffered (matches Explorer /
+        //    cmd / RoboCopy semantics + bench numbers); files at-or-
+        //    above engage `NO_BUFFERING` because the page cache cannot
+        //    coalesce a copy that's larger than free RAM anyway, and
+        //    streaming directly to disk avoids stalling on cache
+        //    eviction.
         let free = free_phys_ram_bytes().unwrap_or(0);
-        let adaptive = (free / 4)
-            .max(NO_BUFFERING_THRESHOLD_DEFAULT)
-            .min(NO_BUFFERING_THRESHOLD_ADAPTIVE_CAP);
-        adaptive
+        free.max(NO_BUFFERING_THRESHOLD_DEFAULT)
     })
 }
 
 /// Phase 42 — query free physical RAM via `GlobalMemoryStatusEx`.
 /// Returns `None` on probe failure (so the threshold falls back to
-/// the static 256 MiB default).
+/// the static 16 GiB default per Phase 43).
 fn free_phys_ram_bytes() -> Option<u64> {
     use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
     let mut info: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
@@ -207,6 +222,14 @@ pub(crate) async fn try_native_copy(
     total: u64,
     ctrl: CopyControl,
     events: mpsc::Sender<CopyEvent>,
+    // Phase 43 — when `true`, skip installing the per-chunk progress
+    // callback on `CopyFileExW` / `CopyFile2` and skip the polling
+    // task that drives `CopyEvent::Progress`. The CLI sets this on
+    // `--quiet` runs where no UI is consuming progress; the GUI
+    // leaves it `false` so the per-50 ms progress stream still drives
+    // its bar. Saves a kernel→user thread crossing per kernel chunk
+    // (~tens of thousands on multi-GB copies).
+    disable_callback: bool,
 ) -> NativeOutcome {
     // Phase 38 follow-up — opt-in Robocopy-style overlapped I/O
     // pipeline for large files. Gate behind
@@ -344,48 +367,57 @@ pub(crate) async fn try_native_copy(
     // callback path allocation-free and shaves real wall-clock
     // time off cached same-volume copies (where callback overhead
     // is a large fraction of the syscall time).
+    //
+    // Phase 43 — the polling task only runs when the caller wants
+    // progress events. CLI `--quiet` and bench harnesses pass
+    // `disable_callback = true`, in which case we skip both the
+    // task spawn AND the per-chunk callback installation below.
     let started = Instant::now();
-    let events_for_progress = events.clone();
-    let total_for_progress = total;
-    let ctx_for_poll = ctx.clone();
-    let progress_task = tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(PROGRESS_MIN_INTERVAL);
-        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        let mut last_emit_bytes: u64 = 0;
-        // First tick fires immediately — skip it so the very first
-        // progress event carries a real delta.
-        ticker.tick().await;
-        loop {
+    let progress_task: Option<tokio::task::JoinHandle<()>> = if disable_callback {
+        None
+    } else {
+        let events_for_progress = events.clone();
+        let total_for_progress = total;
+        let ctx_for_poll = ctx.clone();
+        Some(tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(PROGRESS_MIN_INTERVAL);
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            let mut last_emit_bytes: u64 = 0;
+            // First tick fires immediately — skip it so the very first
+            // progress event carries a real delta.
             ticker.tick().await;
-            let bytes = ctx_for_poll.bytes.load(Ordering::Relaxed);
-            if bytes == last_emit_bytes {
-                // Either the copy just started or it's already done
-                // and nobody has dropped the Arc yet. Either way no
-                // emission needed.
+            loop {
+                ticker.tick().await;
+                let bytes = ctx_for_poll.bytes.load(Ordering::Relaxed);
+                if bytes == last_emit_bytes {
+                    // Either the copy just started or it's already done
+                    // and nobody has dropped the Arc yet. Either way no
+                    // emission needed.
+                    if Arc::strong_count(&ctx_for_poll) == 1 {
+                        break;
+                    }
+                    continue;
+                }
+                if bytes.saturating_sub(last_emit_bytes) >= PROGRESS_MIN_BYTES {
+                    let elapsed = started.elapsed();
+                    let rate = super::fast_rate_bps(bytes, elapsed);
+                    let _ = events_for_progress
+                        .send(CopyEvent::Progress {
+                            bytes,
+                            total: total_for_progress,
+                            rate_bps: rate,
+                        })
+                        .await;
+                    last_emit_bytes = bytes;
+                }
                 if Arc::strong_count(&ctx_for_poll) == 1 {
+                    // CopyFileExW has returned — the dispatcher dropped
+                    // its ctx clone. Stop polling.
                     break;
                 }
-                continue;
             }
-            if bytes.saturating_sub(last_emit_bytes) >= PROGRESS_MIN_BYTES {
-                let elapsed = started.elapsed();
-                let rate = super::fast_rate_bps(bytes, elapsed);
-                let _ = events_for_progress
-                    .send(CopyEvent::Progress {
-                        bytes,
-                        total: total_for_progress,
-                        rate_bps: rate,
-                    })
-                    .await;
-                last_emit_bytes = bytes;
-            }
-            if Arc::strong_count(&ctx_for_poll) == 1 {
-                // CopyFileExW has returned — the dispatcher dropped
-                // its ctx clone. Stop polling.
-                break;
-            }
-        }
-    });
+        }))
+    };
 
     let src_w = wide(&src);
     let dst_w = wide(&dst);
@@ -435,11 +467,20 @@ pub(crate) async fn try_native_copy(
             events.clone(),
             flags,
             true, // enable_sparse_copy
+            disable_callback,
         )
         .await;
     }
 
     let ctx_for_block = ctx.clone();
+    // Phase 43 — when the caller opted out of progress events
+    // (e.g. CLI `--quiet`), pass NULL for the progress callback so
+    // CopyFileExW doesn't fire it per kernel chunk. Saves a thread
+    // crossing per chunk; on a 10 GiB copy that's tens of thousands
+    // of avoided crossings. The cancel-pending flag is unused in
+    // this path because a callback-less copy can't cooperatively
+    // cancel mid-stream — callers wanting cancel should leave the
+    // callback installed.
     let join = tokio::task::spawn_blocking(move || {
         let mut cancel_pending: BOOL = FALSE;
         // SAFETY: src_w and dst_w are NUL-terminated UTF-16 buffers
@@ -450,8 +491,16 @@ pub(crate) async fn try_native_copy(
             CopyFileExW(
                 src_w.as_ptr(),
                 dst_w.as_ptr(),
-                Some(progress_routine),
-                Arc::as_ptr(&ctx_for_block) as *const core::ffi::c_void,
+                if disable_callback {
+                    None
+                } else {
+                    Some(progress_routine)
+                },
+                if disable_callback {
+                    std::ptr::null()
+                } else {
+                    Arc::as_ptr(&ctx_for_block) as *const core::ffi::c_void
+                },
                 &mut cancel_pending as *mut BOOL,
                 flags,
             )
@@ -468,7 +517,9 @@ pub(crate) async fn try_native_copy(
     .await;
 
     drop(ctx); // close progress channel
-    let _ = progress_task.await;
+    if let Some(task) = progress_task {
+        let _ = task.await;
+    }
 
     match join {
         Ok(Ok(())) => {
@@ -668,6 +719,11 @@ async fn try_copy_file_2(
     events: mpsc::Sender<CopyEvent>,
     base_flags: u32,
     enable_sparse_copy: bool,
+    // Phase 43 — symmetric with `try_native_copy`. When `true`, skip
+    // both the polling task and the per-chunk `copyfile2_callback`
+    // installation; CopyFile2 runs without firing its progress
+    // callback per chunk.
+    disable_callback: bool,
 ) -> NativeOutcome {
     super::emit_started(&src, &dst, total, &events).await;
 
@@ -678,40 +734,44 @@ async fn try_copy_file_2(
     });
 
     let started = Instant::now();
-    let events_for_progress = events.clone();
-    let total_for_progress = total;
-    let ctx_for_poll = ctx.clone();
-    let progress_task = tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(PROGRESS_MIN_INTERVAL);
-        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        let mut last_emit_bytes: u64 = 0;
-        ticker.tick().await;
-        loop {
+    let progress_task: Option<tokio::task::JoinHandle<()>> = if disable_callback {
+        None
+    } else {
+        let events_for_progress = events.clone();
+        let total_for_progress = total;
+        let ctx_for_poll = ctx.clone();
+        Some(tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(PROGRESS_MIN_INTERVAL);
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            let mut last_emit_bytes: u64 = 0;
             ticker.tick().await;
-            let bytes = ctx_for_poll.bytes.load(Ordering::Relaxed);
-            if bytes == last_emit_bytes {
+            loop {
+                ticker.tick().await;
+                let bytes = ctx_for_poll.bytes.load(Ordering::Relaxed);
+                if bytes == last_emit_bytes {
+                    if Arc::strong_count(&ctx_for_poll) == 1 {
+                        break;
+                    }
+                    continue;
+                }
+                if bytes.saturating_sub(last_emit_bytes) >= PROGRESS_MIN_BYTES {
+                    let elapsed = started.elapsed();
+                    let rate = super::fast_rate_bps(bytes, elapsed);
+                    let _ = events_for_progress
+                        .send(CopyEvent::Progress {
+                            bytes,
+                            total: total_for_progress,
+                            rate_bps: rate,
+                        })
+                        .await;
+                    last_emit_bytes = bytes;
+                }
                 if Arc::strong_count(&ctx_for_poll) == 1 {
                     break;
                 }
-                continue;
             }
-            if bytes.saturating_sub(last_emit_bytes) >= PROGRESS_MIN_BYTES {
-                let elapsed = started.elapsed();
-                let rate = super::fast_rate_bps(bytes, elapsed);
-                let _ = events_for_progress
-                    .send(CopyEvent::Progress {
-                        bytes,
-                        total: total_for_progress,
-                        rate_bps: rate,
-                    })
-                    .await;
-                last_emit_bytes = bytes;
-            }
-            if Arc::strong_count(&ctx_for_poll) == 1 {
-                break;
-            }
-        }
-    });
+        }))
+    };
 
     let src_w = wide(&src);
     let dst_w = wide(&dst);
@@ -727,8 +787,16 @@ async fn try_copy_file_2(
             dwSize: std::mem::size_of::<CopyFile2ExtendedParameters>() as u32,
             dwCopyFlags: flags,
             pfCancel: &mut cancel as *mut BOOL,
-            pProgressRoutine: Some(copyfile2_callback),
-            pvCallbackContext: Arc::as_ptr(&ctx_for_block) as *mut core::ffi::c_void,
+            pProgressRoutine: if disable_callback {
+                None
+            } else {
+                Some(copyfile2_callback)
+            },
+            pvCallbackContext: if disable_callback {
+                std::ptr::null_mut()
+            } else {
+                Arc::as_ptr(&ctx_for_block) as *mut core::ffi::c_void
+            },
         };
         // SAFETY: src_w / dst_w are NUL-terminated UTF-16; params is a
         // properly-sized COPYFILE2_EXTENDED_PARAMETERS owned by this
@@ -743,7 +811,9 @@ async fn try_copy_file_2(
     .await;
 
     drop(ctx);
-    let _ = progress_task.await;
+    if let Some(task) = progress_task {
+        let _ = task.await;
+    }
 
     match join {
         Ok(Ok(())) => NativeOutcome::Done {
@@ -859,38 +929,81 @@ pub(crate) fn is_ssd(path: &Path) -> Option<bool> {
     }
 }
 
+/// Best-effort filesystem-name probe.
+///
+/// Phase 43 — replaces the previous `powershell.exe Get-Volume`
+/// shell-out (~100–300 ms per invocation, multi-second on tree copies)
+/// with a direct `GetVolumeInformationW` Win32 call (~1–2 µs). This is
+/// on the dispatcher's hot path: every fast-copy probes the destination
+/// FS to decide whether to engage the explicit reflink stage. The PS
+/// variant was correct but its cost dominated the dispatcher when the
+/// new NTFS-skip-reflink optimisation started calling it unconditionally.
+///
+/// Returns the lowercase filesystem token (`"ntfs"`, `"refs"`, `"exfat"`,
+/// `"fat32"`, etc.) or `None` if the probe fails (unknown path,
+/// unmounted volume, permission denied at the volume root).
 pub(crate) fn filesystem_name(path: &Path) -> Option<String> {
-    let probe_target = if path.exists() {
-        path.to_path_buf()
-    } else {
-        path.parent()?.to_path_buf()
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetVolumeInformationW, GetVolumePathNameW,
     };
-    let abs = std::fs::canonicalize(&probe_target).ok()?;
-    let abs_str = abs.to_string_lossy().into_owned();
-    let letter = abs_str
-        .chars()
-        .find(|c| c.is_ascii_alphabetic())
-        .map(|c| c.to_ascii_uppercase())?;
-    let script = format!(
-        "$ErrorActionPreference='SilentlyContinue'; \
-         (Get-Volume -DriveLetter '{letter}' | Select-Object -ExpandProperty FileSystem)"
-    );
-    let out = std::process::Command::new("powershell")
-        .arg("-NoProfile")
-        .arg("-NonInteractive")
-        .arg("-ExecutionPolicy")
-        .arg("Bypass")
-        .arg("-Command")
-        .arg(&script)
-        .output()
-        .ok()?;
-    if !out.status.success() {
+
+    // Files that don't yet exist (typical for the destination of an
+    // in-flight copy) get probed via their parent directory.
+    let probe_target: &Path = if path.is_file() {
+        path.parent()?
+    } else {
+        path
+    };
+    let mut wide: Vec<u16> = OsStr::new(probe_target).encode_wide().collect();
+    wide.push(0);
+
+    // Step 1 — resolve any subpath to its volume root (e.g.
+    // `C:\Users\miken\Desktop` → `C:\`). `GetVolumeInformationW`
+    // refuses anything other than a volume root.
+    let mut root_buf: [u16; 260] = [0; 260];
+    // SAFETY: `wide` is NUL-terminated; `root_buf` is a fixed-size
+    // buffer sized to `MAX_PATH + 1` per Win32 documented limit.
+    let path_ok = unsafe {
+        GetVolumePathNameW(wide.as_ptr(), root_buf.as_mut_ptr(), root_buf.len() as u32)
+    };
+    if path_ok == 0 {
         return None;
     }
-    let token = String::from_utf8_lossy(&out.stdout)
+
+    // Step 2 — ask the volume what filesystem it carries. We only
+    // care about the FS name string; the serial-number / max-component
+    // / flags out-parameters get NULL pointers.
+    let mut fs_name_buf: [u16; 64] = [0; 64];
+    // SAFETY: `root_buf` was NUL-terminated by GetVolumePathNameW;
+    // `fs_name_buf` is sized to fit every documented FS name string;
+    // the unused out-parameters take NULL per the Win32 contract.
+    let ok = unsafe {
+        GetVolumeInformationW(
+            root_buf.as_ptr(),
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            fs_name_buf.as_mut_ptr(),
+            fs_name_buf.len() as u32,
+        )
+    };
+    if ok == 0 {
+        return None;
+    }
+
+    // The buffer is NUL-terminated; trim before lossy-decoding.
+    let len = fs_name_buf.iter().position(|&c| c == 0).unwrap_or(0);
+    if len == 0 {
+        return None;
+    }
+    let s = String::from_utf16_lossy(&fs_name_buf[..len])
         .trim()
         .to_ascii_lowercase();
-    if token.is_empty() { None } else { Some(token) }
+    if s.is_empty() { None } else { Some(s) }
 }
 
 #[cfg(test)]
@@ -905,6 +1018,55 @@ mod tests {
         let body = &w[..w.len() - 1];
         let s = String::from_utf16(body).unwrap();
         assert_eq!(s, "C:/foo");
+    }
+
+    /// Phase 43 — `filesystem_name` should resolve C:\ to a known FS
+    /// without spawning a subprocess. The exact value depends on the
+    /// CI rig (NTFS / ReFS / Dev Drive), so we just assert it's one of
+    /// the documented Windows tokens. Negative test below covers the
+    /// failure mode.
+    #[test]
+    fn filesystem_name_returns_known_token_for_c_drive() {
+        let fs = filesystem_name(Path::new("C:\\"));
+        if let Some(name) = fs {
+            assert!(
+                matches!(name.as_str(), "ntfs" | "refs" | "exfat" | "fat32" | "fat"),
+                "C:\\ filesystem token `{name}` is not in the documented Windows set"
+            );
+        }
+        // None is acceptable on unusual rigs (e.g. CI containers
+        // without a mounted C: volume root).
+    }
+
+    /// Phase 43 — bogus path must return `None` rather than panicking
+    /// or shelling out. `\\?\Z:\\does\\not\\exist` resolves to a non-
+    /// existent volume root; the Win32 probe fails cleanly.
+    #[test]
+    fn filesystem_name_returns_none_on_unmounted_volume() {
+        let fs = filesystem_name(Path::new("\\\\?\\Z:\\does\\not\\exist"));
+        assert!(
+            fs.is_none(),
+            "filesystem_name on unmounted Z: should be None, got {fs:?}"
+        );
+    }
+
+    /// Phase 43 — the NO_BUFFERING threshold must default to at least
+    /// 16 GiB so files in the 1–16 GiB band stay buffered (matching
+    /// cmd / RoboCopy / Explorer semantics). The exact value is
+    /// `max(free_phys_ram, 16 GiB)`, so on a RAM-rich host it can be
+    /// higher; we assert the floor.
+    ///
+    /// `OnceLock`: this test reads the cached value, so it must run
+    /// in the same process as nothing that pre-sets the env var.
+    /// `cargo test` shares a process per test binary; the env var is
+    /// not set by the test harness.
+    #[test]
+    fn no_buffering_threshold_floor_is_16_gib() {
+        let threshold = no_buffering_threshold();
+        assert!(
+            threshold >= 16 * 1024 * 1024 * 1024,
+            "Phase 43 floor regressed: threshold={threshold}, expected >= 16 GiB"
+        );
     }
 
     /// Phase 42 wave-2 — a CopyFile2 HRESULT with facility ==

@@ -1,6 +1,6 @@
 # Security policy
 
-Copy That v1.25.0 is in early development (Phase 0 — scaffold). The rules below
+Copy That v1.0.0 is in early development (Phase 0 — scaffold). The rules below
 apply from day one even though the engine isn't implemented yet.
 
 ## Reporting a vulnerability

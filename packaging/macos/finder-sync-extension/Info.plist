@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Info.plist for the Copy That v1.25.0 Finder Sync Extension.
+  Info.plist for the Copy That v1.0.0 Finder Sync Extension.
 
   This file defines the .appex bundle that macOS Finder loads when
   the main app is installed. The principal class is resolved by
@@ -18,7 +18,7 @@
 
   The .appex sits inside the main app bundle:
 
-    Copy That v1.25.0.app/
+    Copy That v1.0.0.app/
       Contents/
         PlugIns/
           CopyThatFinderSync.appex/
@@ -48,7 +48,7 @@
     <string>XPC!</string>
 
     <key>CFBundleShortVersionString</key>
-    <string>1.25.0</string>
+    <string>1.0.0</string>
 
     <key>CFBundleVersion</key>
     <string>1</string>

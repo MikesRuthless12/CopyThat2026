@@ -1,6 +1,6 @@
 [package]
 name = "copythat-sync"
-description = "Two-way folder sync with vector-clock conflict detection for Copy That v1.25.0."
+description = "Two-way folder sync with vector-clock conflict detection for Copy That v1.0.0."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -19,7 +19,7 @@ use crate::cli::{CopyArgs, GlobalArgs};
 use crate::output::{JsonEventKind, OutputWriter};
 
 pub(crate) async fn run(
-    _global: &GlobalArgs,
+    global: &GlobalArgs,
     args: CopyArgs,
     writer: Arc<OutputWriter>,
     is_move: bool,
@@ -98,11 +98,18 @@ pub(crate) async fn run(
         // CLI/UI gap that Phase 39 set out to close.
         let fast_copy_hook: std::sync::Arc<dyn copythat_core::FastCopyHook> =
             std::sync::Arc::new(copythat_platform::PlatformFastCopyHook);
+        // Phase 43 — under `--quiet` nothing renders the per-chunk
+        // progress events, so we skip the platform progress callback
+        // entirely. Saves a kernel→userland thread crossing per
+        // CopyFileExW chunk and the 50 ms polling task. The engine
+        // still emits Started + Completed bookends so consumers that
+        // only care about the final report keep working.
         let mut copy_opts = CopyOptions {
             fail_if_exists: args.fail_if_exists,
             follow_symlinks: args.follow_symlinks,
             shape: shape_sink.clone(),
             fast_copy_hook: Some(fast_copy_hook),
+            disable_progress_callback: global.quiet,
             ..CopyOptions::default()
         };
 
