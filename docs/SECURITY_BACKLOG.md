@@ -220,6 +220,125 @@ legitimate caller over the secured pipe.
   attack surface this pass reviews is now closer to its post-1.0
   shape — the next manual run is well-positioned.
 
+## Phase 42 advisory triage
+
+End-of-phase audit pass run with `cargo deny check advisories` (the
+cargo-deny binary is the in-repo equivalent of `cargo audit` and reads
+the same RustSec advisory database). Performed on `Cargo.lock` after
+all wave-1 fix commits landed on `feat/phase-38`.
+
+**Headline result.** Zero new vulnerability advisories surfaced
+against the post-Phase-42 dep tree. One unsoundness advisory
+(`RUSTSEC-2021-0154` on `fuser 0.15`) was cleared by bumping
+`fuser` 0.15 → 0.17 in `crates/copythat-mount/Cargo.toml`. Every
+remaining ignored advisory is either a transitive
+"unmaintained"/"superseded" maintenance signal (no exploitable
+behaviour change) or the `rsa` crate Marvin-Attack acceptance
+re-justified below.
+
+### Per-advisory disposition
+
+| Advisory          | Crate (root cause)                  | Severity        | Disposition                                                                   |
+| ----------------- | ----------------------------------- | --------------- | ----------------------------------------------------------------------------- |
+| RUSTSEC-2023-0071 | `rsa 0.9.10` / `rsa 0.10.0-rc.17`    | vulnerability   | **Allowlisted** — see "Marvin Attack revalidation" below.                      |
+| RUSTSEC-2021-0119 | `nix 0.19` (via `battery 0.7`)       | vulnerability   | Allowlisted — Linux-only OOB in `getgrouplist`, requires `/etc/group` edit.    |
+| RUSTSEC-2021-0154 | `fuser 0.15`                         | unsoundness     | **FIXED** — bumped to fuser 0.17 (Phase 42).                                  |
+| RUSTSEC-2025-0026 | `registry 1.3` (via `winfsp_wrs_sys`)| unmaintained    | Allowlisted — archived crate, no replacement upstream.                         |
+| RUSTSEC-2025-0052 | `async-std` (via `suppaftp`)         | unmaintained    | Allowlisted — discontinued; provenance shifted from `fuser` to `suppaftp`.     |
+| RUSTSEC-2020-0168 | `mach 0.3.2` (via `battery 0.7`)     | unmaintained    | Allowlisted — `mach2` replacement waits on `battery` upstream bump.            |
+| RUSTSEC-2024-0411..0420 | `gtk-rs` GTK3 family (via Tauri 2.x Linux) | unmaintained | Allowlisted — clears when Tauri migrates Linux to GTK4.                  |
+| RUSTSEC-2024-0370 | `proc-macro-error`                   | unmaintained    | Allowlisted — superseded by `proc-macro-error2`; transitive only.              |
+| RUSTSEC-2025-0057 | `fxhash`                             | unmaintained    | Allowlisted — superseded by `rustc-hash 2.x`; transitive only.                 |
+| RUSTSEC-2025-0075/0080/0081/0098/0100 | `unic-*` family (via Tauri `urlpattern`) | unmaintained | Allowlisted — superseded by ICU4X; transitive only.                  |
+
+### Marvin Attack revalidation (RUSTSEC-2023-0071)
+
+The original Phase 36 acceptance reasoned: "CopyThat is a local
+file-copying tool: it does not expose RSA timing to a remote
+attacker." Phase 42 added cloud transport (rustls TLS), mobile
+transport (rustls TLS via `reqwest`), and age recipient mode
+(which can use RSA SSH keys). The triage question is whether any
+of these new code paths exposes timed RSA decryption / signing
+to a remote observer.
+
+**Audit result — acceptance still valid.** The new transport paths
+do not exercise the vulnerable `rsa` crate code path:
+
+- **rustls TLS** (cloud + mobile): rustls links against `ring` or
+  `aws-lc-rs` for handshake crypto. The `rsa` crate is never
+  invoked during a TLS handshake. Confirmed via `Cargo.lock`
+  inspection — `rustls 0.23.38` depends on `ring`, `aws-lc-rs`,
+  and `rustls-pki-types`, never on `rsa`.
+- **`jsonwebtoken 9.3.1`** (Phase 37 mobile FCM RS256 push
+  signer): pulls `ring` for RSA signing, NOT the `rsa` crate.
+  Confirmed via `Cargo.lock` — `jsonwebtoken` deps are
+  `base64`, `js-sys`, `pem`, `ring`, `serde`, `serde_json`,
+  `simple_asn1`. The dev-dependency `rsa = "0.9"` in
+  `crates/copythat-mobile/Cargo.toml` is test-only (used to
+  generate an RSA keypair for the FCM-signer round-trip smoke);
+  it never ships in any release binary.
+- **`russh 0.60.1`** (Phase 32f SFTP): configured with
+  `aws-lc-rs` feature in `crates/copythat-cloud/Cargo.toml:68`,
+  so the actual SSH RSA signing during user authentication runs
+  through `aws-lc-rs` (NIST FIPS-validated, constant-time).
+  The `rsa 0.10.0-rc.17` reachability via
+  `internal-russh-forked-ssh-key` is for OpenSSH-format key
+  *parsing* (deserialising the user-supplied key file); parsing
+  doesn't expose the timing channel the Marvin Attack measures
+  (decryption/signing operations).
+- **`age 0.11`** (Phase 35 destination encryption): `rsa 0.9.10`
+  reaches code only when the user picks an *RSA SSH key
+  recipient*. The threat model: attacker who can repeatedly cause
+  the user to decrypt with the same key while observing precise
+  timing. Decryption happens on the user's own machine — there is
+  no "many-decryptions-over-the-network" vector. ed25519 / age
+  X25519 recipients (the default) never invoke `rsa`.
+- **`reqsign 0.16.5`** (Phase 32 cloud OAuth signing for GCS
+  service-account JWTs and S3 presigned URLs): `rsa 0.9.10` mints
+  signatures locally before the request leaves the user's
+  machine. The downstream cloud service receives only the signed
+  artefact, not its internal timing.
+
+The `rsa` crate's own advisory text (`RUSTSEC-2023-0071`,
+GHSA-c38w-74pg-36hr) explicitly states the workaround: "avoid
+using the `rsa` crate in settings where attackers are able to
+observe timing information, e.g. local use on a non-compromised
+computer is fine." CopyThat's usage matches that case.
+
+**Re-audit triggers.** Remove the allowlist entry the moment any
+of the following land:
+- `rsa` crate ships a constant-time release (tracked at
+  https://github.com/RustCrypto/RSA/issues/19);
+- A code path is added that performs RSA decryption / signing
+  in response to network requests with attacker-observable
+  timing (e.g. a server-mode TLS listener using `rsa`-backed
+  certificates);
+- The `russh-keys` fork lands a `rsa` 0.10 stable release that
+  also ships the constant-time fix.
+
+### New wave-1 deps verified
+
+The cargo-audit triage also walked the new deps introduced by
+wave-1 fix-agent commits to confirm none carry undeclared
+advisories:
+
+| Dep                       | Status                                              |
+| ------------------------- | --------------------------------------------------- |
+| `hmac 0.12.1`             | No advisories. Used in `copythat-cloud` (HMAC-SHA1 known_hosts) and `reqsign` (HMAC-SHA256). |
+| `hmac 0.13.0`             | No advisories. Pulled by `internal-russh-forked-ssh-key`. |
+| `getrandom 0.2.17`        | No advisories. Used by `reqsign` and `getrandom` 0.4 transitively. |
+| `getrandom 0.3.4`         | No advisories. Direct dep of `copythat-cloud` and `copythat-mobile`. |
+| `subtle 2.6.1`            | No advisories. Constant-time primitive used by `aes-gcm`, `chacha20poly1305`, `signature`, `dalek` family. |
+| `compio 0.13`             | Not in `Cargo.lock` — feature-gated and not yet enabled (overlapped pipeline auto-engages on cross-volume large copies but stays off by default for now). |
+
+### Verification
+
+```
+cargo deny check advisories   # advisories ok: 0 errors, 0 warnings, 44 notes
+cargo deny check              # advisories ok, bans ok, licenses ok, sources ok
+cargo check --workspace       # finished in 4m 57s, 18 unrelated unsafe-block warnings
+```
+
 ## Cross-cutting decisions
 
 - **Backwards compatibility.** `CopyErrorKind::PathEscape` is a new

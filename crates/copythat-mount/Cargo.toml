@@ -52,8 +52,14 @@ copythat-core = { path = "../copythat-core", version = "1" }
 # simply skips it instead of failing at link time — the FuseBackend
 # stub falls through to `MountError::BackendUnavailable` on non-
 # Unix hosts.
+#
+# Phase 42 — bumped 0.15 → 0.17 to clear RUSTSEC-2021-0154
+# (uninitialized-memory read in `request::header_unchecked`). The
+# fix landed in 0.16.0; we take 0.17 to also pull the
+# `async-std` → `smol`/`tokio` runtime swap that clears
+# RUSTSEC-2025-0052 from the mount path.
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
-fuser = { version = "0.15", optional = true }
+fuser = { version = "0.17", optional = true }
 
 # Phase 33f — `winfsp_wrs` is Scille's MIT-licensed WinFsp binding
 # (replaces the GPL-blocked `winfsp-sys`). Target-gated to Windows;

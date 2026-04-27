@@ -3115,16 +3115,20 @@ dependencies = [
 
 [[package]]
 name = "fuser"
-version = "0.15.1"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53274f494609e77794b627b1a3cddfe45d675a6b2e9ba9c0fdc8d8eee2184369"
+checksum = "80a5eca878900c2e39e9e52fd797954b7fc39eeefc8558257114bfea6a698fcf"
 dependencies = [
+ "bitflags 2.11.1",
  "libc",
  "log",
  "memchr",
- "nix 0.29.0",
+ "nix 0.30.1",
+ "num_enum",
  "page_size",
+ "parking_lot",
  "pkg-config",
+ "ref-cast",
  "smallvec",
  "zerocopy",
 ]
@@ -5067,6 +5071,19 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+]
+
+[[package]]
+name = "nix"
+version = "0.30.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
+dependencies = [
+ "bitflags 2.11.1",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+ "memoffset",
 ]
 
 [[package]]
