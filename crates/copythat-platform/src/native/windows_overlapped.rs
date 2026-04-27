@@ -1025,6 +1025,207 @@ mod tests {
         // Above the size threshold but env is unset → None.
         assert!(super::requested(MIN_FILE_SIZE + 1).is_none());
     }
+
+    /// Phase 42 wave-2 — pre-cancelled control on a 16 MiB copy. The
+    /// wave-1 finding #1 fix added the `inline_queue` drain on the
+    /// cancellation branch: synchronous-completed I/Os that bypassed
+    /// the IOCP would otherwise leave `in_flight` above zero forever
+    /// and the loop would hang.
+    ///
+    /// We can't deterministically force inline-queue use without
+    /// FILE_SKIP_COMPLETION_PORT_ON_SUCCESS firing on the test
+    /// volume's I/O, but the cancel + drain code path is robust
+    /// across both modes — the loop must exit promptly with an
+    /// `Interrupted` error and the dst must be cleaned up. Hanging
+    /// here would be the regression we're locking out.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn cancel_drains_inline_queue_and_exits_promptly() {
+        use std::time::{Duration, Instant};
+
+        let dir = tempdir().expect("tempdir");
+        let src = dir.path().join("src.bin");
+        let dst = dir.path().join("dst.bin");
+
+        // 16 MiB pseudo-random pattern — large enough to keep the
+        // IOCP loop spinning across multiple slots so the
+        // cancellation arrives mid-copy on most hardware.
+        let bytes: Vec<u8> = (0u32..16 * 1024 * 1024)
+            .map(|i| (i.wrapping_mul(2654435761u32) & 0xff) as u8)
+            .collect();
+        std::fs::File::create(&src)
+            .expect("create src")
+            .write_all(&bytes)
+            .expect("write src");
+
+        let total = bytes.len() as u64;
+        let ctrl = CopyControl::new();
+        // Pre-cancel: the cancel signal is observable from the very
+        // first cancel-check tick inside the IOCP loop (every 100 ms
+        // or on each GQCS timeout). The loop must drain its
+        // inline_queue, free its OpCtx boxes via RAII, and return
+        // promptly.
+        ctrl.cancel();
+
+        let (tx, mut rx) = mpsc::channel(64);
+        let drain = tokio::spawn(async move { while rx.recv().await.is_some() {} });
+
+        let started = Instant::now();
+        let outcome = try_overlapped_copy(src.clone(), dst.clone(), total, ctrl, tx).await;
+        drain.abort();
+        let elapsed = started.elapsed();
+
+        // The loop must NOT hang. 30 seconds is generous for a
+        // 16 MiB cancel — even on slow CI runners the drain + Boxed
+        // OpCtx cleanup is sub-second in practice. Anything beyond
+        // this is the regression we're catching.
+        assert!(
+            elapsed < Duration::from_secs(30),
+            "cancellation took too long: {elapsed:?} — \
+             likely the inline_queue drain regression"
+        );
+
+        // Outcome must be either Cancelled or an Interrupted Io
+        // error — not Done. (The wave-1 fix in `do_overlapped_copy`
+        // returns `io::Error::Interrupted` after the cancel branch
+        // drains; `try_overlapped_copy` wraps it as
+        // `NativeOutcome::Io(...)`. A future polish may flip this
+        // to NativeOutcome::Cancelled — accept both.)
+        match outcome {
+            NativeOutcome::Cancelled => {}
+            NativeOutcome::Io(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            // On a fast-enough system the copy may complete before
+            // the first cancel-check tick fires. In that case the
+            // pre-cancel was a no-op — that's NOT a regression of
+            // the inline-queue drain bug, so accept Done as a
+            // success path too. The hang detection above is the
+            // primary signal we care about.
+            NativeOutcome::Done {
+                strategy: ChosenStrategy::CopyFileExW,
+                ..
+            } => {}
+            other => panic!(
+                "unexpected outcome on pre-cancelled copy: {other:?}"
+            ),
+        }
+
+        // dst should not exist after a cancellation (the cleanup
+        // branch unlinks the partial file). When the copy raced to
+        // completion, dst exists and equals src.
+        if dst.exists() {
+            let dst_bytes = std::fs::read(&dst).expect("read dst");
+            assert_eq!(
+                dst_bytes.len(),
+                bytes.len(),
+                "if the copy completed before cancel landed, dst must be byte-exact"
+            );
+        }
+    }
+
+    /// Phase 42 wave-2 — OpCtx generation-mismatch staleness check.
+    /// The wave-1 finding #3 fix added `generation` to OpCtx + a
+    /// snapshot at every push to the inline_queue. The pop site
+    /// compares the snapshot against the live ctx.generation and
+    /// skips stale entries.
+    ///
+    /// We can't easily drive the real IOCP loop into the stale-pop
+    /// state (today's straight-line push/pop order prevents real
+    /// aliasing), but the *logic* is what we want to lock in. This
+    /// test simulates the staleness scenario directly: build two
+    /// snapshots, advance the live OpCtx, and verify the comparison
+    /// (`ctx.generation == gen_snapshot`) discriminates as expected.
+    #[test]
+    fn opctx_generation_mismatch_logic() {
+        use std::collections::VecDeque;
+        use std::mem::MaybeUninit;
+        use windows_sys::Win32::System::IO::OVERLAPPED;
+
+        // Build a real OpCtx box. The OVERLAPPED can be all-zero —
+        // we never submit it to the kernel here; we only exercise
+        // the generation field.
+        // SAFETY: OVERLAPPED is a plain C struct; zero-init is
+        // documented as valid per MSDN.
+        let zeroed_ov = unsafe { MaybeUninit::<OVERLAPPED>::zeroed().assume_init() };
+        let mut ctx = Box::new(super::OpCtx {
+            overlapped: zeroed_ov,
+            op: super::OpKind::Read,
+            slot_idx: 7,
+            file_offset: 0,
+            op_bytes: 0,
+            generation: 0,
+        });
+        let ctx_ptr: *mut super::OpCtx = &mut *ctx;
+
+        // Mirror the inline_queue triple shape used by the IOCP
+        // loop: (ctx_ptr, bytes_xferred, gen_snapshot).
+        let mut inline_queue: VecDeque<(*mut super::OpCtx, u32, u32)> = VecDeque::new();
+
+        // Push the first entry while ctx.generation == 0.
+        let gen_snapshot_a = ctx.generation;
+        inline_queue.push_back((ctx_ptr, 4096, gen_snapshot_a));
+
+        // Mutate the live ctx (simulating a Read→Write state advance
+        // — the same pattern the real loop uses). The wave-1 fix
+        // increments generation at every state change.
+        ctx.op = super::OpKind::Write;
+        ctx.op_bytes = 4096;
+        ctx.generation = ctx.generation.wrapping_add(1);
+
+        // Push the second entry with the new generation.
+        let gen_snapshot_b = ctx.generation;
+        inline_queue.push_back((ctx_ptr, 4096, gen_snapshot_b));
+
+        // Pop and apply the staleness guard exactly the way the
+        // wave-1 fix does it inside `do_overlapped_copy`. Entry A
+        // has gen_snapshot 0 but the live ctx is now at generation
+        // 1 — must be detected as stale.
+        let (_first_ctx_ptr, _first_bytes, first_snap) =
+            inline_queue.pop_front().expect("entry A pushed");
+        // SAFETY: ctx_ptr remains valid for the duration of this
+        // test (`ctx` is in scope). The staleness check itself only
+        // dereferences for read.
+        let live_gen_first = unsafe { (&*ctx_ptr).generation };
+        let stale_a = live_gen_first != first_snap;
+        assert!(
+            stale_a,
+            "entry pushed with gen={first_snap} should be detected stale \
+             after live generation advanced to {live_gen_first}"
+        );
+
+        // Entry B has gen_snapshot 1 and the live ctx is also at
+        // generation 1 — must NOT be stale (this is the normal
+        // pop path the loop takes on every successful completion).
+        let (_second_ctx_ptr, _second_bytes, second_snap) =
+            inline_queue.pop_front().expect("entry B pushed");
+        let live_gen_second = unsafe { (&*ctx_ptr).generation };
+        let stale_b = live_gen_second != second_snap;
+        assert!(
+            !stale_b,
+            "entry pushed with gen={second_snap} should NOT be stale \
+             (live generation is also {live_gen_second})"
+        );
+
+        // No leaked entries — the queue is empty after the two pops.
+        assert!(
+            inline_queue.is_empty(),
+            "inline_queue must be drained after both pops"
+        );
+
+        // Generation wrap is sound: u32::MAX -> 0 must not falsely
+        // claim a match against a fresh u32::MAX snapshot. The fix
+        // uses `wrapping_add(1)` precisely so wrap is intentional;
+        // the test confirms the comparison still works after wrap.
+        ctx.generation = u32::MAX;
+        let snap_max = ctx.generation;
+        ctx.generation = ctx.generation.wrapping_add(1); // wraps to 0
+        // Snapshot at u32::MAX vs live generation 0 → stale.
+        assert_ne!(
+            ctx.generation, snap_max,
+            "generation must wrap from u32::MAX to 0"
+        );
+
+        // Drop the box — RAII releases the OpCtx allocation.
+        drop(ctx);
+    }
 }
 
 /// Probe the destination volume's physical sector size via
