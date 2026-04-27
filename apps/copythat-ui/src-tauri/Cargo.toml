@@ -186,6 +186,12 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Pipes",
     "Win32_System_Threading",
 ] }
+# Phase 42 — per-message HMAC-SHA256 authentication on the broker
+# pipe so a same-user hostile process can't forge `{argv: [...]}`
+# job-injection messages. `sha2` is already a top-level dep above
+# (Phase 34); `hmac` and `getrandom` come in here.
+hmac = "0.12"
+getrandom = "0.2"
 
 # macOS-only clipboard reader: NSPasteboard via the modern `objc2`
 # bindings. `objc2-foundation` covers NSArray / NSString / NSURL and

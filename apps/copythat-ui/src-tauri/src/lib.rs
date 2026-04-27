@@ -45,6 +45,8 @@ pub mod global_paste;
 pub mod i18n;
 pub mod icon;
 #[cfg(windows)]
+pub mod broker_auth;
+#[cfg(windows)]
 pub mod instance_broker;
 pub mod ipc;
 pub mod ipc_safety;
