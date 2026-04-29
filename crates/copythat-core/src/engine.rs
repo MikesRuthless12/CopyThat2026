@@ -87,6 +87,27 @@ pub async fn copy_file(
         return copy_symlink(&src_path, &dst_path, &opts, &events).await;
     }
 
+    // Phase 42 Part B + Phase 43 post-review hardening — pre-dispatch
+    // snapshot. The Phase-42 reviewer caught that the snapshot block
+    // sat inside the dense-path branch only (engine.rs:316-341), so
+    // every fast path (sparse-aware, fast_copy_hook, transform) and
+    // the cloud-sink branch silently bypassed the user's
+    // "Keep previous versions on overwrite" toggle. Lifting the call
+    // up here makes versioning fire on all local-dst paths.
+    //
+    // Skipped for cloud_sink (dst is a remote key, no local file to
+    // snapshot) and for `fail_if_exists` (the engine is about to
+    // fail with `AlreadyExists` and never overwrite — snapshotting
+    // would create a phantom version row without any matching copy).
+    if opts.cloud_sink.is_none() && !opts.fail_if_exists {
+        maybe_snapshot_before_overwrite(&dst_path, &opts).await;
+    }
+
+    // Phase 43 post-review — provenance forces the async source-read
+    // loop so the encoder sees every byte. Mirrors the existing
+    // `verify` gate that already forces fallthrough.
+    let force_async_loop = opts.verify.is_some() || opts.provenance.is_some();
+
     // Phase 32d — cloud-sink early branch. When the caller has wired
     // `CopyOptions::cloud_sink`, route the write path straight to the
     // remote backend instead of opening a local destination file.
@@ -94,6 +115,9 @@ pub async fn copy_file(
     // pathways by design: those all assume a local dst handle, and
     // porting them to a `CloudSink` is the Phase 32e follow-up.
     // Symlinks + sparsity + verify on remote destinations land there.
+    // Provenance is also bypassed (no local dst → manifest paths
+    // would point at non-existent local files; the verify command
+    // can't re-hash a remote object) — documented limitation.
     if let Some(sink) = opts.cloud_sink.clone() {
         return copy_file_to_cloud_sink(src_path, dst_path, opts, ctrl, events, src_metadata, sink)
             .await;
@@ -104,7 +128,9 @@ pub async fn copy_file(
     // write path end-to-end. Fast paths + verify + sparseness are
     // all bypassed by design (the destination bytes differ from
     // the source by construction; byte-exact verification would
-    // always fail).
+    // always fail). Provenance is bypassed too: the manifest would
+    // hash transformed (encrypted) bytes, not source bytes — that
+    // breaks the "verify rehashes against the source" contract.
     if let Some(sink) = opts.transform.clone() {
         return copy_file_to_transform(src_path, dst_path, opts, ctrl, events, src_metadata, sink)
             .await;
@@ -119,7 +145,16 @@ pub async fn copy_file(
     // `SparsenessNotSupported` once and fall through to the dense
     // path. Bypassing `fast_copy_hook` is intentional: the sparse
     // path owns its own read/write strategy.
-    if opts.preserve_sparseness
+    //
+    // Phase 43 post-review — also bypassed when `force_async_loop` is
+    // set (verify or provenance enabled). The sparse-aware path
+    // doesn't feed the verify hasher / provenance encoder; rather
+    // than thread that through here, fall through to the dense
+    // async loop where both already work. The cost is densification
+    // for sparse sources whose owner enabled verify+provenance —
+    // documented limitation, follow-up phase to feed encoders inline.
+    if !force_async_loop
+        && opts.preserve_sparseness
         && let Some(sparse_ops) = opts.sparse_ops.clone()
     {
         let total_len = src_metadata.len();
@@ -194,11 +229,11 @@ pub async fn copy_file(
     }
 
     // Phase 6: consult the fast-copy hook before opening files for the
-    // standard async loop. Bypassed entirely when verify is enabled —
-    // the verify pipeline relies on hashing source bytes during the
-    // write loop, which the hook can't do without a separate read pass
-    // that defeats the integration's perf win.
-    if opts.verify.is_none()
+    // standard async loop. Bypassed entirely when verify or
+    // provenance is enabled — both pipelines rely on hashing source
+    // bytes during the write loop, which the hook can't do without a
+    // separate read pass that defeats the integration's perf win.
+    if !force_async_loop
         && opts.strategy != CopyStrategy::AlwaysAsync
         && let Some(hook) = opts.fast_copy_hook.clone()
     {
@@ -305,40 +340,10 @@ pub async fn copy_file(
     let (mut src_file, snapshot_lease) =
         open_src_with_snapshot_fallback(&src_path, &dst_path, &opts, &events).await?;
 
-    // Phase 42 Part B — snapshot the about-to-be-overwritten
-    // destination before we open it with `truncate(true)`. Best-
-    // effort: snapshot failures are logged + swallowed so a sink
-    // outage cannot abort a copy. Fires only on `FreshStart`
-    // (resume reuses the existing prefix, so there's no overwrite-
-    // from-byte-0 to capture). The sink is responsible for the
-    // dst-exists check + chunk-store ingest + History row insert;
-    // the engine just hands it the path.
-    if matches!(resume_decision, ResumeDecision::FreshStart)
-        && opts.versioning.enabled
-        && let Some(sink) = opts.versioning_sink.as_ref()
-    {
-        // `tokio::fs::metadata` to confirm dst exists before
-        // bothering the sink — saves a round trip when the
-        // destination is brand-new.
-        if tokio::fs::metadata(&dst_path).await.is_ok() {
-            // Run the sink on `spawn_blocking` because typical
-            // implementations chunk-store-ingest, which is sync IO.
-            let sink = Arc::clone(sink);
-            let dst_for_sink = dst_path.clone();
-            let snapshot_outcome: Result<bool, String> = tokio::task::spawn_blocking(move || {
-                sink.snapshot_before_overwrite(&dst_for_sink, None)
-            })
-            .await
-            .unwrap_or_else(|join_err| Err(format!("versioning sink panicked: {join_err}")));
-            if let Err(e) = snapshot_outcome {
-                tracing::warn!(
-                    dst = %dst_path.display(),
-                    error = %e,
-                    "Phase 42 versioning snapshot failed; copy proceeds without snapshot",
-                );
-            }
-        }
-    }
+    // (Phase 42 Part B versioning snapshot was here in the original
+    // implementation; lifted to `maybe_snapshot_before_overwrite`
+    // pre-dispatch so it fires for every local-dst path, not just
+    // the dense one. See engine.rs:~88 for the new call site.)
 
     let mut open = OpenOptions::new();
     open.write(true);
@@ -463,6 +468,24 @@ pub async fn copy_file(
             .await
             .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
         let _ = prefix_bytes_hash; // currently unused; kept for asserts
+    }
+
+    // Phase 43 post-review — prime the provenance outboard encoder
+    // with the same prefix bytes. The /review pass caught that the
+    // encoder is created at file-open time but its `update` is only
+    // fed the post-resume tail; without this prime, a resumed copy
+    // produces a BLAKE3 root over `[resume_offset..end)` which does
+    // NOT match the source file's true root, invalidating the
+    // manifest. The cost — one extra sequential read of
+    // `resume_offset` bytes — already happens for `journal_hasher`
+    // on the same code path, so this adds no new I/O when both are
+    // configured.
+    if matches!(resume_decision, ResumeDecision::Resume { .. })
+        && let Some(enc) = provenance_encoder.as_mut()
+    {
+        prime_outboard_from_dst_prefix(enc, &dst_path, resume_offset)
+            .await
+            .map_err(|e| CopyError::from_io(&src_path, &dst_path, e))?;
     }
 
     let started_at = Instant::now();
@@ -1770,6 +1793,63 @@ async fn prime_blake3_from_dst_prefix(
         remaining -= read as u64;
     }
     Ok(())
+}
+
+/// Phase 43 post-review — prime the provenance encoder with the dst
+/// prefix bytes after a successful resume. Without this the encoder
+/// only sees the post-resume tail, producing a BLAKE3 root that
+/// diverges from the source file's true root and silently invalidating
+/// the manifest.
+async fn prime_outboard_from_dst_prefix(
+    encoder: &mut Box<dyn crate::OutboardEncoder>,
+    dst_path: &Path,
+    n: u64,
+) -> std::io::Result<()> {
+    let mut f = tokio::fs::File::open(dst_path).await?;
+    let mut remaining = n;
+    let mut buf = vec![0u8; 64 * 1024];
+    while remaining > 0 {
+        let to_read = std::cmp::min(buf.len() as u64, remaining) as usize;
+        let read = f.read(&mut buf[..to_read]).await?;
+        if read == 0 {
+            break;
+        }
+        encoder.update(&buf[..read]);
+        remaining -= read as u64;
+    }
+    Ok(())
+}
+
+/// Phase 42 Part B + Phase 43 post-review — pre-dispatch versioning
+/// snapshot helper. Best-effort: snapshot failures are logged via
+/// `tracing::warn!` and swallowed so a sink outage cannot abort a
+/// copy. The caller is responsible for the gate (skip on cloud_sink,
+/// skip on `fail_if_exists`); this helper just runs the sink.
+async fn maybe_snapshot_before_overwrite(dst_path: &Path, opts: &CopyOptions) {
+    if !opts.versioning.enabled {
+        return;
+    }
+    let Some(sink) = opts.versioning_sink.as_ref() else {
+        return;
+    };
+    // Confirm dst exists before bothering the sink — saves a round
+    // trip when the destination is brand-new.
+    if tokio::fs::metadata(dst_path).await.is_err() {
+        return;
+    }
+    let sink = Arc::clone(sink);
+    let dst_for_sink = dst_path.to_path_buf();
+    let snapshot_outcome: Result<bool, String> =
+        tokio::task::spawn_blocking(move || sink.snapshot_before_overwrite(&dst_for_sink, None))
+            .await
+            .unwrap_or_else(|join_err| Err(format!("versioning sink panicked: {join_err}")));
+    if let Err(e) = snapshot_outcome {
+        tracing::warn!(
+            dst = %dst_path.display(),
+            error = %e,
+            "Phase 42 versioning snapshot failed; copy proceeds without snapshot",
+        );
+    }
 }
 
 /// Best-effort sync-failure logger. Kept as a thin wrapper so the

@@ -167,6 +167,7 @@ async fn case04_end_to_end_lastn_retention_pass() {
         .map(|r| VersionEntry {
             row_id: r.row_id,
             ts_ms: r.ts_ms,
+            retained_until_ms: r.retained_until_ms,
         })
         .collect();
     let drop_ids = select_for_pruning(&entries, &RetentionPolicy::LastN(3), 10_000);

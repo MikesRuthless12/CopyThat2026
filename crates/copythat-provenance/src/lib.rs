@@ -91,7 +91,7 @@ pub use error::{ProvenanceError, ProvenanceErrorKind};
 pub use manifest::{
     DEFAULT_MANIFEST_FILENAME, FileRecord, ProvenanceManifest, Rfc3161Token, Signature,
     canonical_cbor_bytes, manifest_root_blake3, manifest_signing_bytes, parse_manifest_cbor,
-    write_manifest_cbor,
+    validate_rel_path, write_manifest_cbor,
 };
 pub use sign::{
     SigningKey, VerifyingKey, generate_signing_key, signing_key_from_pem, signing_key_to_pem,

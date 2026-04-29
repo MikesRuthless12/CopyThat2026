@@ -144,6 +144,12 @@ pub async fn select_versions_to_prune(
         .map(|r| VersionEntry {
             row_id: r.row_id,
             ts_ms: r.ts_ms,
+            // Phase 42 post-review (H1) — pass the compliance-hold
+            // floor through so `select_for_pruning` can refuse to
+            // drop rows whose `retained_until_ms` is in the future.
+            // Pre-fix, this field was dropped during projection and
+            // the pruner silently violated the documented contract.
+            retained_until_ms: r.retained_until_ms,
         })
         .collect();
     let policy: RetentionPolicy = policy.into();
@@ -173,6 +179,12 @@ pub async fn prune_versions(
         .map(|r| VersionEntry {
             row_id: r.row_id,
             ts_ms: r.ts_ms,
+            // Phase 42 post-review (H1) — pass the compliance-hold
+            // floor through so `select_for_pruning` can refuse to
+            // drop rows whose `retained_until_ms` is in the future.
+            // Pre-fix, this field was dropped during projection and
+            // the pruner silently violated the documented contract.
+            retained_until_ms: r.retained_until_ms,
         })
         .collect();
     let policy: RetentionPolicy = policy.into();

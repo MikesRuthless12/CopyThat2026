@@ -101,6 +101,29 @@ pub enum JsonEventKind {
         expected: Option<String>,
         actual: String,
     },
+    /// Phase 43 post-review — typed failure event for `copythat
+    /// provenance verify`. Pre-fix the verify command emitted its
+    /// failure summary as `Info` (free-text body), so JSON consumers
+    /// had to parse the message to learn that the manifest didn't
+    /// pass. With the typed kind, CI/CD pipelines can branch on
+    /// `kind == "provenance_verify_failed"` directly.
+    ProvenanceVerifyFailed {
+        manifest: String,
+        ok_count: u64,
+        tampered_count: u64,
+        missing_count: u64,
+        merkle_root_ok: bool,
+        /// `Some(true)`: signature present + valid.
+        /// `Some(false)`: signature present + invalid.
+        /// `None`: no signature attached to the manifest.
+        signature_ok: Option<bool>,
+        /// Same tri-state for RFC 3161 timestamps.
+        timestamp_ok: Option<bool>,
+        /// Up to 32 tampered paths (clamped so the JSON line stays
+        /// pipe-friendly on huge trees; the count above is the
+        /// authoritative total).
+        tampered_paths: Vec<String>,
+    },
     Info {
         message: String,
     },

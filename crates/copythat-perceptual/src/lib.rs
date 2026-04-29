@@ -116,14 +116,31 @@ fn image_hash(path: &Path) -> Result<u64, PerceptualError> {
         .hash_alg(image_hasher::HashAlg::DoubleGradient)
         .to_hasher();
     let hash = hasher.hash_image(&img);
-    Ok(fold_to_u64(hash.as_bytes()))
+    let bytes = hash.as_bytes();
+    // Phase 42 post-review (M1) — defend the discrimination floor.
+    // Pre-fix, `fold_to_u64` XOR-collapsed bytes 8..16 onto bytes
+    // 0..8 in the same byte lanes; for the default 8×8
+    // DoubleGradient config (8-byte output) this is fine, but a
+    // future `hash_size(16, 16)` bump would silently halve
+    // discriminating power without any compile-time signal. Assert
+    // the size at hash construction so a misconfig fails loudly at
+    // the caller's first hash, not silently in user data.
+    debug_assert_eq!(
+        bytes.len(),
+        8,
+        "copythat-perceptual: DoubleGradient at 8×8 should produce 8-byte hashes; \
+         a config change to hash_size(16,16) would require a real mix function in fold_to_u64"
+    );
+    Ok(fold_to_u64(bytes))
 }
 
-/// Fold the variable-length `ImageHash` byte buffer into a `u64`. The
-/// upstream `ImageHash` is byte-aligned; with the default `8x8` size
-/// it lands at exactly 8 bytes (= one `u64`). For larger configs the
-/// remaining bytes are XOR-folded so a hash never grows past 8 bytes
-/// in our wire format.
+/// Fold the `ImageHash` byte buffer into a `u64`. The upstream
+/// `ImageHash` for the default DoubleGradient `8×8` config lands at
+/// exactly 8 bytes (= one `u64`); the byte-aligned XOR fold below is
+/// loss-free in that case. For configs that exceed 8 bytes the fold
+/// is lossy by construction — see the `debug_assert_eq!` in
+/// `image_hash` above for the loud-failure signal a misconfigured
+/// hash size triggers in dev builds.
 fn fold_to_u64(bytes: &[u8]) -> u64 {
     let mut acc: u64 = 0;
     for (i, b) in bytes.iter().enumerate() {

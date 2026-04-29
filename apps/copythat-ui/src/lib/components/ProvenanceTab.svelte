@@ -29,20 +29,21 @@
   let publicKeyFingerprint = $state<string | null>(null);
 
   function onGenerateKey() {
-    // Phase 43 scaffolding — a follow-up commit wires
-    // `invoke("provenance_keygen")` here. For now we surface a toast
-    // so every locale's `provenance-settings-keys-generate` string
-    // is exercised at click time.
+    // Phase 43 post-review fix — toast was previously
+    // "provenance-job-completed-title" ("Provenance manifest saved")
+    // which lied about what just happened. Use the dedicated
+    // "staged for IPC follow-up" key so users get an honest message
+    // until the Tauri command bridge lands.
     publicKeyFingerprint = "ed25519:pending-tauri-wiring";
-    pushToast("info", "provenance-job-completed-title");
+    pushToast("info", "provenance-action-staged");
   }
 
   function onImportKey() {
-    pushToast("info", "provenance-settings-keys-import");
+    pushToast("info", "provenance-action-staged");
   }
 
   function onExportKey() {
-    pushToast("info", "provenance-settings-keys-export");
+    pushToast("info", "provenance-action-staged");
   }
 </script>
 
