@@ -88,6 +88,7 @@ pub mod os;
 mod outcome;
 pub mod presence;
 mod reflink_path;
+pub mod smb;
 pub mod sparse;
 pub mod topology;
 pub mod wake_lock;
@@ -101,5 +102,6 @@ pub use helpers::{
 pub use hook::PlatformFastCopyHook;
 pub use meta::PlatformMetaOps;
 pub use outcome::{ChosenStrategy, FastCopyOutcome};
+pub use smb::{SmbCompressionAlgo, SmbCompressionState, negotiate_smb_compression};
 pub use sparse::PlatformSparseOps;
 pub use wake_lock::{WakeLock, WakeLockError, acquire_keep_awake};

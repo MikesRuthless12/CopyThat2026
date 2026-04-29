@@ -275,6 +275,25 @@ pub enum CopyEvent {
         /// `input_bytes.saturating_sub(output_bytes)`.
         bytes_saved: u64,
     },
+    /// Phase 40 — the engine engaged SMB 3.1.1 traffic compression on
+    /// a UNC destination via `CopyFileExW`'s
+    /// `COPY_FILE_REQUEST_COMPRESSED_TRAFFIC` flag.
+    ///
+    /// Emitted once per file at the start of the per-file copy when
+    /// the destination is a UNC path on Windows. `algo` is the stable
+    /// wire string for the negotiated chained-compression algorithm
+    /// (`"xpress-lz77"` / `"xpress-huffman"` / `"lznt1"`), or
+    /// `"unknown"` when the kernel did not surface the negotiated
+    /// algorithm — Windows currently has no public user-mode API for
+    /// reading the negotiated algorithm back, so `"unknown"` is the
+    /// shipping value on every host today. The UI uses this event to
+    /// render the header badge "🗜 SMB compress: <algo>" while the
+    /// job runs.
+    SmbCompressionActive {
+        /// Stable wire string for the algorithm — see the variant
+        /// docstring.
+        algo: &'static str,
+    },
 }
 
 /// Why the engine refused to resume a partial copy and fell back to
@@ -482,6 +501,7 @@ impl Clone for CopyEvent {
                 ratio: *ratio,
                 bytes_saved: *bytes_saved,
             },
+            CopyEvent::SmbCompressionActive { algo } => CopyEvent::SmbCompressionActive { algo },
         }
     }
 }

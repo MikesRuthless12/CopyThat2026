@@ -930,3 +930,19 @@ settings-recovery-show-url = Show URL & token
 settings-recovery-rotate-token = Rotate token
 settings-recovery-allow-non-loopback = Allow non-loopback bind
 settings-recovery-non-loopback-warning = WARNING: enabling a non-loopback bind exposes the recovery UI to your local network. Anyone who learns the token can browse your file history and download files. Front it with TLS or a reverse proxy if the LAN is untrusted.
+
+# Phase 40 — SMB compression negotiation + cloud-VM offload helper.
+# 6 SMB keys (header badge + Settings prose) + 6 cloud-offload keys
+# (Remotes tab wizard for cross-cloud copy templates).
+smb-compress-badge = 🗜 SMB compress: { $algo }
+smb-compress-badge-tooltip = Network traffic to this destination is being compressed in transit (SMB 3.1.1).
+smb-compress-toast-saved = Saved { $bytes } over the network
+smb-compress-algo-unknown = unknown algorithm
+settings-smb-compress-heading = SMB network compression
+settings-smb-compress-hint = Automatically negotiate SMB 3.1.1 traffic compression on UNC destinations. Free win on slow links; ignored on local destinations.
+cloud-offload-heading = Cloud-VM offload helper
+cloud-offload-hint = When copying directly between two clouds, render a deployment template that runs the copy from a tiny ephemeral VM in the cloud — bytes never touch your laptop's network.
+cloud-offload-render-button = Render template
+cloud-offload-copy-clipboard = Copy to clipboard
+cloud-offload-template-format = Template format
+cloud-offload-self-destruct-warning = The VM auto-shuts down after { $minutes } minutes — confirm IAM role + region before deploying.
