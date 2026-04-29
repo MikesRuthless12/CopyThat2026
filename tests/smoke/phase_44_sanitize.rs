@@ -35,7 +35,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use copythat_core::CopyControl;
 use copythat_secure_delete::{
     NoopSanitizeHelper, SanitizeCapabilities, SanitizeHelper, ShredErrorKind, ShredEvent,
-    SsdSanitizeMode, free_space_trim, is_cow_filesystem, refuse_shred_on_cow,
+    SsdSanitizeMode, free_space_trim, is_cow_filesystem, opal_psid_revert, refuse_shred_on_cow,
     sanitize_capabilities, set_cow_probe, whole_drive_sanitize,
 };
 use tokio::sync::mpsc;
@@ -290,6 +290,73 @@ fn set_cow_probe_can_install_a_test_fixture() {
     let _non_cow = is_cow_filesystem(Path::new("/regular/file.txt"));
     // Don't assert specific values — OnceLock semantics mean any
     // probe installed earlier in this binary wins.
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn opal_psid_revert_through_noop_helper_returns_not_implemented() {
+    // Phase 44.2d — the Noop helper's default
+    // run_opal_psid_revert_blocking returns the trait's default
+    // NotImplemented error; the async wrapper surfaces it as
+    // ShredErrorKind::IoOther.
+    let helper: Arc<dyn SanitizeHelper> = Arc::new(NoopSanitizeHelper::new());
+    let (tx, mut rx) = mpsc::channel::<ShredEvent>(16);
+    let ctrl = CopyControl::new();
+    let err = opal_psid_revert(
+        helper,
+        Path::new("/dev/sda"),
+        "ABCDEF1234567890ABCDEF1234567890",
+        ctrl,
+        tx,
+    )
+    .await
+    .expect_err("noop helper should not implement OPAL");
+    assert_eq!(err.kind, ShredErrorKind::IoOther);
+    assert!(
+        err.message.contains("not implemented") || err.message.contains("OPAL"),
+        "expected NotImplemented hint in error message; got: {}",
+        err.message
+    );
+
+    // Started + Failed should fire on the events channel.
+    let mut started = false;
+    let mut failed = false;
+    while let Ok(evt) = rx.try_recv() {
+        match evt {
+            ShredEvent::SanitizeStarted { mode, .. } => {
+                if mode == SsdSanitizeMode::OpalCryptoErase {
+                    started = true;
+                }
+            }
+            ShredEvent::Failed { .. } => failed = true,
+            _ => {}
+        }
+    }
+    assert!(
+        started,
+        "expected SanitizeStarted with OpalCryptoErase mode"
+    );
+    assert!(failed, "expected Failed event after helper rejection");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn opal_psid_revert_pre_helper_cancel_short_circuits() {
+    // Phase 44.2d — the cancel-before-helper path mirrors
+    // whole_drive_sanitize: ctrl.cancel() before invocation
+    // returns Interrupted without ever spawning the helper.
+    let helper: Arc<dyn SanitizeHelper> = Arc::new(NoopSanitizeHelper::new());
+    let (tx, _rx) = mpsc::channel::<ShredEvent>(16);
+    let ctrl = CopyControl::new();
+    ctrl.cancel();
+    let err = opal_psid_revert(
+        helper,
+        Path::new("/dev/sda"),
+        "ABCDEF1234567890ABCDEF1234567890",
+        ctrl,
+        tx,
+    )
+    .await
+    .expect_err("cancel-before-helper should error");
+    assert_eq!(err.kind, ShredErrorKind::Interrupted);
 }
 
 #[test]

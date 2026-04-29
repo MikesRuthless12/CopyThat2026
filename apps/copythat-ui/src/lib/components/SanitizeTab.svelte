@@ -20,6 +20,9 @@
   to only modes the device reports.
 -->
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { onDestroy, onMount } from "svelte";
   import { t } from "../i18n";
   import { pushToast } from "../stores";
 
@@ -30,27 +33,53 @@
     | "ata-secure-erase"
     | "opal-crypto-erase";
 
+  type CapabilitiesDto = {
+    trim: boolean;
+    modes: Mode[];
+    bus: string;
+    model: string;
+    hasGuaranteedCryptoErase: boolean;
+  };
+
+  type ReportDto = {
+    device: string;
+    mode: string;
+    durationMs: number;
+  };
+
+  type ProgressEvt = {
+    device: string;
+    mode: string;
+    percent: number;
+  };
+
   let devicePath = $state("");
   let modelTyped = $state("");
-  let driveModel = $state("(unknown — capability probe pending IPC wiring)");
+  let driveModel = $state("(probe to populate)");
+  let availableDevices = $state<string[]>([]);
+  let availableModes = $state<Mode[]>([]);
+  let busLabel = $state<string>("");
   let mode = $state<Mode>("nvme-sanitize-crypto");
   let confirm1 = $state(false);
   let confirm2 = $state(false);
   let progressPercent = $state<number | null>(null);
   let running = $state(false);
 
-  // The third confirmation is "type the drive's model name to
-  // proceed." It's enabled only when both checkboxes are flipped
-  // AND the typed text matches the drive model the helper
-  // reported. Today drive model is a placeholder; once the
-  // capabilities IPC lands, this binds to live data.
+  // The third confirmation requires typing the drive's model name
+  // exactly. Defense in depth: the Tauri command also enforces this
+  // on the Rust side so a hostile frontend cannot bypass it.
   let modelMatches = $derived(
     modelTyped.trim().length > 0
-      && driveModel !== "(unknown — capability probe pending IPC wiring)"
+      && driveModel !== "(probe to populate)"
       && modelTyped.trim() === driveModel
   );
   let runReady = $derived(
-    confirm1 && confirm2 && modelMatches && devicePath.trim().length > 0 && !running
+    confirm1
+      && confirm2
+      && modelMatches
+      && devicePath.trim().length > 0
+      && !running
+      && availableModes.includes(mode)
   );
 
   const MODE_LABEL_KEYS: Record<Mode, string> = {
@@ -61,27 +90,101 @@
     "opal-crypto-erase": "sanitize-mode-opal-crypto-erase",
   };
 
-  function onProbeCapabilities() {
-    // Phase 44.1 — placeholder. Real impl invokes
-    // `invoke("sanitize_capabilities", { device: devicePath })`
-    // and binds `driveModel = result.model`.
-    pushToast("info", "sanitize-action-staged");
+  // Track active event listeners so we can clean up on unmount.
+  let unlistenProgress: UnlistenFn | null = null;
+  let unlistenCompleted: UnlistenFn | null = null;
+  let unlistenFailed: UnlistenFn | null = null;
+
+  onMount(async () => {
+    try {
+      availableDevices = await invoke<string[]>("sanitize_list_devices");
+    } catch (e) {
+      // Empty list is fine — the user types the path manually.
+      availableDevices = [];
+    }
+    // Phase 44.2 post-review (C1) — listener stale-event guard.
+    // SettingsModal mounts/unmounts SanitizeTab on tab switches; a
+    // sanitize that completes between unmount and re-mount can
+    // deliver its event to a fresh listener that has no in-flight
+    // run. Filter on `evt.payload.device === devicePath` AND
+    // `running` so stale-but-matching events from a prior run
+    // can't trigger a misleading toast.
+    unlistenProgress = await listen<ProgressEvt>("sanitize-progress", (evt) => {
+      if (running && evt.payload.device === devicePath.trim()) {
+        progressPercent = evt.payload.percent;
+      }
+    });
+    unlistenCompleted = await listen<ReportDto>("sanitize-completed", (evt) => {
+      if (running && evt.payload.device === devicePath.trim()) {
+        running = false;
+        progressPercent = 100;
+        pushToast("success", `sanitize completed (${evt.payload.mode})`);
+      }
+    });
+    unlistenFailed = await listen<string>("sanitize-failed", (evt) => {
+      if (running) {
+        running = false;
+        progressPercent = null;
+        pushToast("error", evt.payload || "sanitize failed");
+      }
+    });
+  });
+
+  onDestroy(() => {
+    unlistenProgress?.();
+    unlistenCompleted?.();
+    unlistenFailed?.();
+  });
+
+  async function onProbeCapabilities() {
+    if (!devicePath.trim()) return;
+    try {
+      const caps = await invoke<CapabilitiesDto>("sanitize_capabilities_cmd", {
+        device: devicePath.trim(),
+      });
+      driveModel = caps.model || "(unknown)";
+      availableModes = caps.modes;
+      busLabel = caps.bus;
+      // Snap mode to the first available if the current selection
+      // isn't supported.
+      if (!caps.modes.includes(mode) && caps.modes.length > 0) {
+        mode = caps.modes[0];
+      }
+    } catch (e) {
+      pushToast("error", String(e));
+    }
   }
 
-  function onRunSanitize() {
+  async function onRunSanitize() {
     if (!runReady) return;
-    // Phase 44.1 — placeholder. Real impl invokes
-    // `invoke("sanitize_run", { device: devicePath, mode })`
-    // and listens to "sanitize-progress" / "sanitize-completed"
-    // events to drive `progressPercent` + `running`.
     running = true;
     progressPercent = 0;
-    pushToast("info", "sanitize-action-staged");
-    // Auto-clear after 2s for the demo.
-    setTimeout(() => {
+    try {
+      await invoke<ReportDto>("sanitize_run", {
+        device: devicePath.trim(),
+        mode,
+        modelTyped: modelTyped.trim(),
+      });
+      // The "sanitize-completed" event listener flips `running` to
+      // false; the awaited `invoke` returning OK is the same signal.
+      running = false;
+    } catch (e) {
       running = false;
       progressPercent = null;
-    }, 2000);
+      pushToast("error", String(e));
+    }
+  }
+
+  async function onFreeSpaceTrim() {
+    if (!devicePath.trim()) return;
+    try {
+      await invoke<ReportDto>("sanitize_free_space_trim", {
+        device: devicePath.trim(),
+      });
+      pushToast("success", "sanitize-completed");
+    } catch (e) {
+      pushToast("error", String(e));
+    }
   }
 </script>
 
@@ -91,14 +194,26 @@
 
   <label class="field">
     <span>{t("sanitize-pick-device")}</span>
-    <input
-      type="text"
-      placeholder="/dev/nvme0   |   \\.\\PhysicalDrive2   |   /dev/disk2"
-      bind:value={devicePath}
-    />
+    {#if availableDevices.length > 0}
+      <select bind:value={devicePath}>
+        <option value="">— pick a device —</option>
+        {#each availableDevices as dev (dev)}
+          <option value={dev}>{dev}</option>
+        {/each}
+      </select>
+    {:else}
+      <input
+        type="text"
+        placeholder="/dev/nvme0   |   \\.\\PhysicalDrive2   |   /dev/disk2"
+        bind:value={devicePath}
+      />
+    {/if}
     <button type="button" class="secondary" onclick={onProbeCapabilities}>
       Probe capabilities
     </button>
+    {#if busLabel}
+      <small class="hint">Bus: {busLabel} · Model: {driveModel}</small>
+    {/if}
   </label>
 
   <label class="field">
@@ -158,6 +273,23 @@
       <small>{progressPercent}%</small>
     {/if}
   {/if}
+
+  <hr />
+
+  <h4>Free-space TRIM</h4>
+  <p class="hint">
+    macOS-only in this build. TRIMs the unallocated regions on a flash
+    drive without touching the live filesystem. Linux + Windows return
+    NotImplemented (see helper docstring).
+  </p>
+  <button
+    type="button"
+    class="secondary"
+    onclick={onFreeSpaceTrim}
+    disabled={!devicePath.trim() || running}
+  >
+    Run free-space TRIM
+  </button>
 </section>
 
 <style>

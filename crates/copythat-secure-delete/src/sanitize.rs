@@ -281,6 +281,36 @@ pub trait SanitizeHelper: Send + Sync + std::fmt::Debug {
                 .into(),
         )
     }
+
+    /// Phase 44.2d — TCG OPAL PSID-revert. Crypto-erases the drive
+    /// using the **PSID** (Physical Security ID) printed on the
+    /// drive's physical label. PSID-revert is the documented
+    /// "I forgot my admin password / want to nuke this drive"
+    /// path; it works on both initialized and uninitialized OPAL
+    /// drives without requiring any prior password setup.
+    ///
+    /// Distinct from [`SsdSanitizeMode::OpalCryptoErase`] (which
+    /// would expect the admin password) because the PSID flow has
+    /// a different UX contract: the user reads a 32-character
+    /// alphanumeric code off the drive's label and types it into
+    /// the helper. The PSID never leaves the user's machine; the
+    /// helper writes it to the drive via SCSI SECURITY PROTOCOL OUT
+    /// and the controller cycles its media-encryption key.
+    ///
+    /// Default impl returns `NotImplemented`. Linux helper
+    /// overrides via `sedutil-cli --PSIDrevert`. Windows + macOS
+    /// return `NotImplemented` (deferred to a hardware-validation
+    /// follow-up; on Windows the right path is
+    /// `DeviceIoControl(IOCTL_STORAGE_SECURITY_PROTOCOL_OUT)` with
+    /// the TCG OPAL command set bytes).
+    fn run_opal_psid_revert_blocking(&self, device: &Path, psid: &str) -> Result<(), String> {
+        let _ = (device, psid);
+        Err(
+            "TCG OPAL PSID-revert is not implemented for this platform; only Linux ships sedutil \
+             integration in Phase 44.2. Windows + macOS land in a hardware-validation follow-up."
+                .into(),
+        )
+    }
 }
 
 /// Test / fallback `SanitizeHelper` that always reports "no
@@ -585,6 +615,88 @@ pub async fn free_space_trim(
             raw_os_error: None,
             message: format!("free_space_trim helper failed: {msg}"),
         }),
+    }
+}
+
+/// Phase 44.2d — async wrapper around
+/// [`SanitizeHelper::run_opal_psid_revert_blocking`]. Runs the
+/// helper on `tokio::task::spawn_blocking` because OPAL commands
+/// are kernel-blocking; for a typical SED, `RevertSP` returns in
+/// O(seconds). Pre-helper cancel via `ctrl` is honoured;
+/// cancel-after-dispatch is unsupported (same caveat as
+/// [`whole_drive_sanitize`]).
+///
+/// **The PSID is sensitive.** Callers MUST NOT log the PSID, and
+/// the helper MUST pass it via process arguments only on a
+/// single-user system (a process listing exposes argv to other
+/// users on multi-user systems — that's a known limitation of
+/// every `sedutil` flow). The Tauri command bridge takes the PSID
+/// from the user's input field and passes it directly here without
+/// persisting it.
+pub async fn opal_psid_revert(
+    helper: Arc<dyn SanitizeHelper>,
+    device: &Path,
+    psid: &str,
+    ctrl: CopyControl,
+    events: mpsc::Sender<ShredEvent>,
+) -> Result<SanitizeReport, ShredError> {
+    if ctrl.is_cancelled() {
+        return Err(ShredError {
+            kind: ShredErrorKind::Interrupted,
+            path: device.to_path_buf(),
+            raw_os_error: None,
+            message: "opal_psid_revert cancelled before helper invocation".to_string(),
+        });
+    }
+
+    let _ = events
+        .send(ShredEvent::SanitizeStarted {
+            device: device.to_path_buf(),
+            mode: SsdSanitizeMode::OpalCryptoErase,
+        })
+        .await;
+
+    let started_at = std::time::Instant::now();
+    let device_owned = device.to_path_buf();
+    let psid_owned = psid.to_string();
+    let helper_clone = Arc::clone(&helper);
+    let outcome = tokio::task::spawn_blocking(move || {
+        helper_clone.run_opal_psid_revert_blocking(&device_owned, &psid_owned)
+    })
+    .await
+    .map_err(|e| ShredError {
+        kind: ShredErrorKind::IoOther,
+        path: device.to_path_buf(),
+        raw_os_error: None,
+        message: format!("opal helper join failed: {e}"),
+    })?;
+
+    match outcome {
+        Ok(()) => {
+            let report = SanitizeReport {
+                device: device.to_path_buf(),
+                mode: SsdSanitizeMode::OpalCryptoErase,
+                duration: started_at.elapsed(),
+            };
+            let _ = events
+                .send(ShredEvent::SanitizeCompleted {
+                    device: device.to_path_buf(),
+                    mode: SsdSanitizeMode::OpalCryptoErase,
+                    duration: report.duration,
+                })
+                .await;
+            Ok(report)
+        }
+        Err(msg) => {
+            let err = ShredError {
+                kind: ShredErrorKind::IoOther,
+                path: device.to_path_buf(),
+                raw_os_error: None,
+                message: format!("opal psid-revert helper failed: {msg}"),
+            };
+            let _ = events.send(ShredEvent::Failed { err: err.clone() }).await;
+            Err(err)
+        }
     }
 }
 

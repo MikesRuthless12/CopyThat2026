@@ -86,10 +86,96 @@ pub fn is_cow_filesystem(path: &Path) -> Option<bool> {
         // treat it as in-place so users on traditional XFS aren't
         // surprised by a refusal. The reflink-enabled XFS variant
         // does have CoW for cloned files; that's the rarer config.
-        "xfs" | "ntfs" | "ext2" | "ext3" | "ext4" | "fat" | "fat32" | "vfat" | "exfat"
-        | "msdos" | "hfs" | "hfs+" | "hfsplus" | "smbfs" | "cifs" | "nfs" | "nfs4" => Some(false),
+        //
+        // Phase 44.2c — Linux: when the FS name is one of the
+        // "could be on top of thin-LVM" candidates, check the
+        // device-mapper layer. Thin-provisioned LVM pools share
+        // blocks across volumes — a per-file overwrite on a thin
+        // volume doesn't reach the underlying physical blocks
+        // because the pool's metadata maps the new write to a
+        // fresh extent. Treat thin-LVM as CoW for the same reason
+        // we treat Btrfs that way.
+        "xfs" | "ext2" | "ext3" | "ext4" => {
+            #[cfg(target_os = "linux")]
+            {
+                if is_thin_lvm_linux(path).unwrap_or(false) {
+                    return Some(true);
+                }
+            }
+            Some(false)
+        }
+        "ntfs" | "fat" | "fat32" | "vfat" | "exfat" | "msdos" | "hfs" | "hfs+" | "hfsplus"
+        | "smbfs" | "cifs" | "nfs" | "nfs4" => Some(false),
         _ => None,
     }
+}
+
+/// Phase 44.2c — Linux thin-LVM detector. Reads
+/// `/proc/self/mountinfo` to find the mount that covers `path`,
+/// resolves the source device's `(major, minor)`, then checks
+/// `/sys/dev/block/<major>:<minor>/dm/uuid` for a `LVM-...thin-...`
+/// shape (the kernel's device-mapper UUID prefix encodes the
+/// target type — `thin-pool` for the pool itself, `thin` for an
+/// individual thin volume).
+///
+/// Returns `Some(true)` when the path's backing device is a DM
+/// thin volume; `Some(false)` for a non-DM device or a non-thin DM
+/// target (e.g. striped LVM, dm-crypt); `None` when the probe
+/// fails (read errors, unparseable mountinfo). Linux-only.
+#[cfg(target_os = "linux")]
+fn is_thin_lvm_linux(path: &Path) -> Option<bool> {
+    // `/proc/self/mountinfo` line shape (kernel-stable):
+    //   <id> <parent_id> <major>:<minor> <root> <mount_point> <opts> ...
+    // We want the line whose `mount_point` is the longest prefix
+    // of `path`.
+    let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").ok()?;
+    let target = path.canonicalize().ok()?;
+    let target_str = target.to_string_lossy();
+
+    let mut best: Option<(usize, u32, u32)> = None; // (mount_len, major, minor)
+    for line in mountinfo.lines() {
+        let mut fields = line.split_whitespace();
+        let _id = fields.next();
+        let _parent = fields.next();
+        let majmin = fields.next()?;
+        let _root = fields.next();
+        let mount_point = fields.next()?;
+        // Phase 44.2 post-review (H1) — require the next byte after
+        // `mount_point` to be either a path separator or end-of-
+        // string. Without this, `/var-temp/file` would falsely
+        // match a `/var` mount, picking the wrong device.
+        let target_bytes = target_str.as_bytes();
+        let mp_bytes = mount_point.as_bytes();
+        let prefix_match = target_bytes.starts_with(mp_bytes)
+            && (target_bytes.len() == mp_bytes.len()
+                || target_bytes.get(mp_bytes.len()) == Some(&b'/'));
+        if !prefix_match {
+            continue;
+        }
+        let mount_len = mount_point.len();
+        // Phase 44.2 post-review (H2) — `>=` (not `>`) so equal-
+        // length later mountinfo entries supersede earlier ones.
+        // `/proc/self/mountinfo` is iterated in mount order; the
+        // last mount on a given point is the one the kernel uses
+        // for path resolution.
+        if best.map(|(l, _, _)| mount_len >= l).unwrap_or(true) {
+            let (maj_s, min_s) = majmin.split_once(':')?;
+            let maj: u32 = maj_s.parse().ok()?;
+            let min: u32 = min_s.parse().ok()?;
+            best = Some((mount_len, maj, min));
+        }
+    }
+    let (_, major, minor) = best?;
+
+    let uuid_path = format!("/sys/dev/block/{major}:{minor}/dm/uuid");
+    let uuid = std::fs::read_to_string(&uuid_path).ok()?;
+    // DM-thin UUIDs look like `LVM-<vg-uuid>-<lv-uuid>` for a thin
+    // volume; the kernel's dm-thin module also emits
+    // `LVM-...-pool` for the pool's mapped device. Either form is
+    // CoW-equivalent for our purposes — the pool's metadata maps
+    // overlapping blocks to fresh extents, defeating per-file
+    // overwrite.
+    Some(uuid.starts_with("LVM-") && (uuid.contains("thin") || uuid.contains("pool")))
 }
 
 /// Phase 14 — return the number of bytes currently free on the

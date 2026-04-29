@@ -151,7 +151,27 @@ workloads.
   - **Grandfather-Father-Son (GFS)** — group versions into per-hour / per-day / per-week / per-month UTC buckets, keep the newest version in each of the most recent N buckets per tier, drop the rest. Buckets are unioned (a version that survives in any tier is retained), so a typical "24h hourly · 7 daily · 4 weekly · 12 monthly" config covers a year of history at a fraction of the disk cost of "keep everything."
 - **Engine integration is best-effort by contract**: the snapshot hook fires on a `tokio::task::spawn_blocking` worker so it doesn't stall the copy hot path; if the chunk store is unavailable, the snapshot fails, the engine logs a `tracing::warn!`, and the copy proceeds normally. A failing snapshot must NEVER abort a user copy.
 
-### SSD-honest secure delete (Phase 44 + 44.1)
+### SSD-honest secure delete (Phase 44 + 44.1 + 44.2)
+
+Phase 44.2 wired the Tauri IPC bridge on top of Phase 44.1's
+platform helpers: `sanitize_capabilities_cmd` / `sanitize_run` /
+`sanitize_free_space_trim` / `sanitize_list_devices` Tauri
+commands; `SanitizeTab.svelte` now binds live to those commands
+and listens for `sanitize-progress` / `-completed` / `-failed`
+events with a stale-event guard. The Tauri runner installs the
+platform `is_cow_filesystem` probe at app startup so the per-file
+shredder refuses honestly on Btrfs / ZFS / APFS / bcachefs / ReFS
+/ thin-LVM (44.2c added thin-LVM detection on Linux via
+`/proc/self/mountinfo` + `/sys/dev/block/M:m/dm/uuid`). New
+TCG OPAL PSID-revert path on Linux via `sedutil-cli` (44.2d). The
+defense-in-depth third-confirmation gate is enforced server-side
+in `sanitize_run` (model-name re-validation against live
+capability probe, ASCII-only to defeat Unicode-confusable
+bypass). Phase 44.2 review-pass closed 1 security MEDIUM (PSID
+argv leak on multi-user Linux — documented; Phase 44.3 piping-
+via-stdin mitigation), 2 Critical (listener leak; Unicode
+match), 2 High (mountinfo prefix + shadowing), 2 Medium (PSID
+length; macOS partition pollution).
 
 Phase 44.1 layered the platform helpers on top of the Phase 44
 trait surface — the `copythat-secure-delete` crate now ships
@@ -159,15 +179,12 @@ trait surface — the `copythat-secure-delete` crate now ships
 device paths + `--` end-of-options separator, hex/decimal SANICAP
 parse, 2s SPROG-poll timeout), `MacosSanitizeHelper` (diskutil for
 free-space TRIM), and a `WindowsSanitizeHelper` stub pending the
-Phase 44.2 DeviceIoControl wiring. The `is_cow_filesystem` probe
-in `copythat-platform` plugs into the per-file shredder via
-`set_cow_probe` so Btrfs / ZFS / APFS shred attempts now refuse
-honestly. New `free_space_trim` async API + `ShredEvent::SanitizeProgress`
-event + Settings → Drive sanitize tab with three-confirmation UX.
-Phase 44.1 review-pass closed a security MEDIUM
-(argument-injection via leading-dash device paths) plus three
-correctness items (hex SANICAP, SPROG timeout, blocking_send →
-try_send) before commit.
+Phase 44.3 DeviceIoControl wiring. New `free_space_trim` async
+API + `ShredEvent::SanitizeProgress` event + Settings → Drive
+sanitize tab with three-confirmation UX. Phase 44.1 review-pass
+closed a security MEDIUM (argument-injection via leading-dash
+device paths) plus three correctness items (hex SANICAP, SPROG
+timeout, blocking_send → try_send) before commit.
 
 
 

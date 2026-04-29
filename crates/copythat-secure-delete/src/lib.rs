@@ -95,8 +95,8 @@ pub use method::{CHUNK_SIZE, ShredMethod};
 pub use pattern::PassPattern;
 pub use sanitize::{
     CowProbe, FreeSpaceTrimReport, NoopSanitizeHelper, SanitizeCapabilities, SanitizeHelper,
-    SanitizeReport, SsdSanitizeMode, free_space_trim, is_cow_filesystem, refuse_shred_on_cow,
-    sanitize_capabilities, set_cow_probe, whole_drive_sanitize,
+    SanitizeReport, SsdSanitizeMode, free_space_trim, is_cow_filesystem, opal_psid_revert,
+    refuse_shred_on_cow, sanitize_capabilities, set_cow_probe, whole_drive_sanitize,
 };
 pub use ssd::is_ssd;
 pub use tree::shred_tree;
