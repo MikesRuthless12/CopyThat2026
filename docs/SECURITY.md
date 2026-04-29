@@ -381,6 +381,89 @@ sensitive flags survive a copy. The threat model:
   x25519-dalek, scrypt, sha2, hmac, hkdf) are all RustCrypto-
   ecosystem MIT/Apache-2.0.
 
+## Phase 40 — SMB compression negotiation + cloud-VM offload (Part A)
+
+Two new threat-surface increments. Part A (Rust scaffolding) shipped
+with this entry; Part B (UI wiring) is a follow-up.
+
+### `copythat-platform::smb` — SMB 3.1.1 traffic compression probe
+
+The probe itself is read-only metadata (UNC path classification) and
+does not change the threat model — the Phase 42 `CopyFileExW` flag
+that enables compression has been shipping unconditionally on UNC
+destinations since the v1.0.0 release. What's new is a typed user-
+mode surface for engine-side labelling and a `CopyEvent::SmbCompressionActive`
+event the UI consumes. Considerations:
+
+- **Per-share compression is server-decided.** SMB 3.1.1 negotiates
+  the chained-compression algorithm (`XPRESS_LZ77` / `XPRESS_HUFFMAN` /
+  `LZNT1`) inside the kernel handshake; CopyThat does not influence
+  this choice. If the server refuses compression entirely, the kernel
+  falls back to plain SMB transparently — the optimistic flag-pass
+  is always safe.
+- **Algorithm reporting is `"unknown"` today.** Windows does not
+  surface the negotiated algorithm to user mode, so the
+  `CopyEvent::SmbCompressionActive` event ships `algo: "unknown"`
+  on every host. The wire format reserves the algorithm string so
+  a future kernel-mode probe can fill it in without changing the
+  IPC shape.
+- **No new attack surface.** The probe is a string-prefix check on
+  the path; no syscalls, no network round-trips, no user input
+  beyond the path the engine was already going to copy to.
+
+### `copythat-cloud::offload` — deployment-template renderers
+
+The offload module is a *string renderer* — it never invokes cloud
+APIs, never opens a network socket, and never mutates filesystem
+state outside of the caller's `String` return value. The user pastes
+the rendered template into their cloud provider's console (or
+`terraform apply`) at a time of their choosing.
+
+- **No credentials embedded.** Templates assume the deployed VM has
+  IAM-role / managed-identity / service-account access to both
+  source and destination buckets. The `iam_role` field in
+  `OffloadOpts` is a label string (instance-profile name / managed-
+  identity resource ID / service-account email), not a secret. The
+  user provisions cloud access out-of-band; CopyThat just renders
+  the boilerplate.
+- **Defense-in-depth on user-supplied label strings.**
+  `sanitize_label` strips everything outside the
+  `[a-zA-Z0-9._/@:+-]` allowlist before substituting into shell
+  commands / Terraform string literals / YAML scalars / ARM JSON
+  string fields. The wizard already validates inputs on the way in;
+  the renderer is belt-and-suspenders. A `job_name` like
+  `"test; rm -rf /"` becomes `"test/"` after sanitisation, which
+  cannot break out of the enclosing context.
+- **Self-destruct watchdog clamped.** `OffloadOpts::self_destruct_minutes
+  = 0` is silently clamped to 1 minute so a misconfigured wizard
+  field cannot disable the watchdog and leave a long-running VM
+  accruing cost. The default is 60 minutes; the clamp covers the
+  pathological case where the user typed `0` literally.
+- **`copythat` release pinning.** Templates pull the binary from the
+  GitHub release URL `https://github.com/havoc-software/copythat/releases/download/<release>/copythat-x86_64-linux`.
+  The `<release>` tag is supplied by the user via `OffloadOpts::copythat_release`
+  and defaults to the workspace's compile-time version (so the
+  rendered template pulls the same release the local desktop app
+  shipped from). A future release-signature-verification pass
+  (Phase 17g hardening parity) belongs alongside the Tauri auto-
+  updater's signature check; tracked as a Part B follow-up.
+
+Out of scope for Phase 40 Part A (deferred to Part B):
+
+- Rendering credentials. The current templates do not even *contain*
+  a placeholder for an access key — they're built around the IAM-
+  role assumption. If a deployer needs to ship an access key into
+  the VM (e.g., a cross-account role they cannot federate), they
+  edit the rendered string by hand. CopyThat does not touch keys.
+- Fetching live `copythat` release signatures from
+  `releases.copythat.app` (matching the Tauri updater's signature-
+  bundle check). The cloud-init download is currently best-effort
+  HTTPS; a Phase 40 follow-up will gate the download on a SHA-256
+  pin baked into the rendered template.
+- Per-template input validation in a Tauri command. Today the wizard
+  must call into the Rust `render_*` functions; a future Tauri
+  command (`render_offload_template`) lands with Part B.
+
 ## Phase 39 — browser-accessible recovery UI
 
 `copythat-recovery` ships a loopback HTTP server that exposes the

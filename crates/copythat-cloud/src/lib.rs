@@ -34,6 +34,7 @@ pub mod credentials;
 pub mod error;
 pub mod oauth;
 pub mod oauth_pkce;
+pub mod offload;
 pub mod registry;
 pub mod sftp;
 pub mod sink;
@@ -54,6 +55,10 @@ pub use oauth::{
 pub use oauth_pkce::{
     PkceFlow, PkceProvider, begin_pkce_flow, exchange_pkce_code, run_pkce_flow,
     run_pkce_redirect_listener,
+};
+pub use offload::{
+    OffloadOpts, render_aws_terraform, render_az_arm, render_cloudinit_template,
+    render_gcp_deployment,
 };
 pub use registry::BackendRegistry;
 pub use sftp::SftpTarget;

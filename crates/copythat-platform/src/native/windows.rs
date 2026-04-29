@@ -446,8 +446,20 @@ pub(crate) async fn try_native_copy(
     // Phase 42 — opportunistic SMB traffic compression on UNC dests.
     // Always-satisfied on the Win11+ baseline (introduced in
     // Win10 1903); on local dests the kernel ignores the flag.
+    //
+    // Phase 40 — when the flag is engaged, fire a one-shot
+    // `SmbCompressionActive` event so the UI can render the header
+    // badge + post-completion "Saved over the network" toast. The
+    // negotiated chained-compression algorithm is server-decided in
+    // the SMB 3.1.1 handshake and is not surfaced through any public
+    // user-mode API today, so we report `"unknown"` as the wire
+    // string. A future kernel-mode probe can fill this in without
+    // breaking the wire format.
     if crate::topology::is_unc_path(&dst) {
         flags |= COPY_FILE_REQUEST_COMPRESSED_TRAFFIC;
+        let _ = events
+            .send(CopyEvent::SmbCompressionActive { algo: "unknown" })
+            .await;
     }
 
     // Phase 42 — sparse sources on Win11 22H2+ benefit from

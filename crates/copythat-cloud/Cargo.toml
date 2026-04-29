@@ -134,3 +134,7 @@ path = "../../tests/smoke/phase_32_cloud.rs"
 [[test]]
 name = "phase_32f_minio"
 path = "../../tests/smoke/phase_32f_minio.rs"
+
+[[test]]
+name = "phase_40_offload"
+path = "../../tests/smoke/phase_40_offload.rs"
