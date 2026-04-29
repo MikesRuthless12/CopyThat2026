@@ -552,6 +552,93 @@ export async function copyBackendToLocal(
 }
 
 // ---------------------------------------------------------------------
+// Phase 40 — SMB compression probe + cloud-VM offload-template wizard.
+// ---------------------------------------------------------------------
+
+/** Wire shape for `copythat_platform::smb::SmbCompressionState`.
+ *  `algorithm` is `null` on every host today; the field is plumbed
+ *  for forward compatibility once the kernel surfaces the negotiated
+ *  algorithm to user mode. */
+export type SmbCompressionStateDto = {
+  supported: boolean;
+  algorithm: string | null;
+};
+
+/** Probe a destination path. UNC dests on Windows return
+ *  `{ supported: true, algorithm: null }`; everything else returns
+ *  `{ supported: false, algorithm: null }`. Pure path-prefix check —
+ *  no syscalls. */
+export async function smbCompressionState(
+  dstPath: string,
+): Promise<SmbCompressionStateDto> {
+  return invoke<SmbCompressionStateDto>("smb_compression_state", { dstPath });
+}
+
+/** Knob set the wizard hands to `render_offload_template`.
+ *  Mirrors `copythat_cloud::offload::OffloadOpts`. */
+export type OffloadOptsDto = {
+  jobName: string;
+  copythatRelease: string;
+  instanceSize: string;
+  region: string;
+  iamRole: string;
+  selfDestructMinutes: number;
+};
+
+/** Default knob set so the wizard form is fully populated on first
+ *  render. Keeps the front-end source-of-truth in sync with the
+ *  Rust side's `OffloadOpts::default`. */
+export function defaultOffloadOpts(): OffloadOptsDto {
+  return {
+    jobName: "copythat-offload",
+    copythatRelease: "v1.0.0",
+    instanceSize: "t3.small",
+    region: "us-east-1",
+    iamRole: "copythat-offload-role",
+    selfDestructMinutes: 60,
+  };
+}
+
+/** Stable wire string for the four output formats. Matches the
+ *  Rust `OffloadTemplateFormat` enum's serde rename. */
+export type OffloadTemplateFormat =
+  | "cloud-init"
+  | "aws-terraform"
+  | "az-arm"
+  | "gcp-deployment";
+
+/** Render a single deployment template body. Pure function —
+ *  no side effects, no network. The returned string is what the
+ *  user pastes into their cloud's console / `terraform apply`. */
+export async function renderOffloadTemplate(
+  format: OffloadTemplateFormat,
+  src: BackendDto,
+  dst: BackendDto,
+  opts: OffloadOptsDto,
+): Promise<string> {
+  // Backend wire form is `Backend { name, kind, config }`. The
+  // `enabledInBuild` flag is UI-only and is dropped before invoke.
+  const stripFlag = (b: BackendDto) => ({
+    name: b.name,
+    kind: b.kind,
+    config: b.config,
+  });
+  return invoke<string>("render_offload_template", {
+    format,
+    src: stripFlag(src),
+    dst: stripFlag(dst),
+    opts: {
+      job_name: opts.jobName,
+      copythat_release: opts.copythatRelease,
+      instance_size: opts.instanceSize,
+      region: opts.region,
+      iam_role: opts.iamRole,
+      self_destruct_minutes: opts.selfDestructMinutes,
+    },
+  });
+}
+
+// ---------------------------------------------------------------------
 // Phase 33 — mount-as-filesystem.
 // ---------------------------------------------------------------------
 

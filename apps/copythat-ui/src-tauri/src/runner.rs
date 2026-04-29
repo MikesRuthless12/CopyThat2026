@@ -1065,6 +1065,22 @@ async fn forward_events(
                     },
                 );
             }
+            CopyEvent::SmbCompressionActive { algo } => {
+                // Phase 40 — surface the SMB-flag-pass to the UI so
+                // Header.svelte can render the
+                // "🗜 SMB compression requested" badge while the job
+                // is running. `algo` is a wire-stable algorithm name;
+                // today the value is the literal `"unknown"` because
+                // Windows does not expose the negotiated chained-
+                // compression algorithm to user mode.
+                let _ = app.emit(
+                    crate::ipc::EVENT_SMB_COMPRESSION_ACTIVE,
+                    crate::ipc::SmbCompressionActiveDto {
+                        job_id: id.as_u64(),
+                        algo: algo.to_string(),
+                    },
+                );
+            }
             // `CopyEvent` is `#[non_exhaustive]`; any future variant
             // is forwarded as a no-op so the runner never panics on
             // an unknown lifecycle event.

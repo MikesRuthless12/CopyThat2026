@@ -43,6 +43,18 @@
   // on mount; subsequent changes ride on the `shape-rate-changed`
   // event from the runner / Settings update / minute-tick poller.
   let shapeRate = $state<ShapeRateDto | null>(null);
+
+  // Phase 40 Part B — SMB compression badge. The runner fires
+  // `smb-compression-active` once per UNC-destination copy with the
+  // wire-stable algo string. Holds the most recently observed algo
+  // for as long as the global state isn't idle; resets to `null`
+  // when the state goes idle so the badge clears between runs.
+  let smbAlgo = $state<string | null>(null);
+  let smbAlgoLabel = $derived.by(() => {
+    if (!smbAlgo) return "";
+    if (smbAlgo === "unknown") return t("smb-compress-algo-unknown");
+    return smbAlgo.toUpperCase();
+  });
   let badgeLabel = $derived.by(() => {
     if (!shapeRate || shapeRate.bytesPerSecond === null) return "";
     if (shapeRate.bytesPerSecond === 0) return t("shape-badge-paused");
@@ -87,6 +99,39 @@
     return () => {
       if (unlistenFn) unlistenFn();
     };
+  });
+
+  // Phase 40 Part B — listen for `smb-compression-active`. Updates
+  // `smbAlgo` so the badge appears while a UNC-destination copy is
+  // running. The runner fires this event per-file at the start of
+  // the copy; we hold the value for the lifetime of the global run.
+  $effect(() => {
+    let unlistenFn: (() => void) | undefined;
+    void (async () => {
+      try {
+        unlistenFn = await onEvent<{ jobId: number; algo: string }>(
+          "smb-compression-active",
+          (payload) => {
+            smbAlgo = payload.algo;
+          },
+        );
+      } catch {
+        // Best-effort — same pattern as the shape-rate listener.
+      }
+    })();
+    return () => {
+      if (unlistenFn) unlistenFn();
+    };
+  });
+
+  // Reset the SMB badge when the global state returns to idle so
+  // the badge clears between runs. `g.state` updates whenever the
+  // runner emits a fresh `state` rollup; tracking it as a derived
+  // dependency keeps the reset event-driven (no polling).
+  $effect(() => {
+    if (g.state === "idle") {
+      smbAlgo = null;
+    }
   });
   // Only show a live ETA when there's real work in flight. When the
   // app is idle (no queued / running / paused job) we hide the ETA
@@ -147,6 +192,15 @@
               <span class="shape-source">· {badgeSourceLabel}</span>
             {/if}
           </button>
+        {/if}
+        {#if smbAlgoLabel}
+          <span
+            class="smb-badge"
+            title={t("smb-compress-badge-tooltip")}
+            aria-label={t("smb-compress-badge-tooltip")}
+          >
+            {t("smb-compress-badge", { algo: smbAlgoLabel })}
+          </span>
         {/if}
       </div>
     </div>
@@ -369,5 +423,22 @@
 
   .shape-badge:hover .shape-source {
     color: rgba(255, 255, 255, 0.85);
+  }
+
+  /* Phase 40 Part B — SMB compression badge. Mirrors the shape-badge
+     pill geometry but in a teal/cyan accent so the two badges read
+     as distinct categories (network shaping vs SMB transit). */
+  .smb-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: rgba(34, 158, 188, 0.14);
+    border: 1px solid #229ebc;
+    border-radius: 999px;
+    color: var(--fg, #1f1f1f);
+    font-size: 12px;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
   }
 </style>
