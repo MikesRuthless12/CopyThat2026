@@ -55,4 +55,11 @@ pub(crate) enum RouteError {
     /// (`/sessions`, `/metrics`).
     #[error("not implemented")]
     NotImplemented,
+    /// Phase 40 review-fix — the requested file's manifest exceeds the
+    /// `MAX_FILE_DOWNLOAD_BYTES` cap that bounds in-RAM buffering. The
+    /// caller can retry by configuring a follow-up streaming endpoint
+    /// once it lands; for now this surfaces as `413 Payload Too Large`
+    /// with the size + limit in the body.
+    #[error("payload too large: file is {size} bytes, max {limit}")]
+    PayloadTooLarge { size: u64, limit: u64 },
 }

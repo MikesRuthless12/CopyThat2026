@@ -178,9 +178,28 @@ pub fn try_dedup(src: &Path, dst: &Path, opts: &DedupOptions) -> io::Result<Dedu
             _ => false,
         };
         if allowed {
-            // Remove dst if it already exists; std::fs::hard_link
-            // refuses to overwrite.
-            let _ = fs::remove_file(dst);
+            // Phase 40 review-fix — discriminate the dst-removal
+            // failure modes. `std::fs::hard_link` refuses to overwrite
+            // so we must remove first, but a `NotFound` error is the
+            // expected case (dst hasn't been written yet). Any *other*
+            // error (PermissionDenied, IsADirectory, ReadOnlyFilesystem)
+            // is a real signal that the hardlink leg won't work; emit
+            // a tracing::warn so operators see why a hardlink fell
+            // through to the byte-copy fallback instead of the silent
+            // `let _ =`. Doesn't change the behaviour — we still
+            // attempt `hard_link` afterwards and let it fail naturally
+            // if the unlink left the slot occupied.
+            match fs::remove_file(dst) {
+                Ok(()) => {}
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                Err(e) => {
+                    tracing::warn!(
+                        dst = %dst.display(),
+                        error = %e,
+                        "dedup hardlink leg: unlink dst failed; fall-through likely",
+                    );
+                }
+            }
             if fs::hard_link(src, dst).is_ok() {
                 return Ok(DedupOutcome {
                     strategy: DedupStrategy::Hardlink,
@@ -215,7 +234,17 @@ pub fn try_dedup(src: &Path, dst: &Path, opts: &DedupOptions) -> io::Result<Dedu
 }
 
 fn volumes_match(src: &Path, dst: &Path) -> bool {
-    match (volume_id(src), dst.parent().and_then(volume_id)) {
+    // Phase 40 review-fix — fall back to `dst` itself when its parent
+    // is `None`. This handles root-of-volume destinations like
+    // `D:\file.bin` where `dst.parent()` is `Some("D:\\")` *and* the
+    // volume_id probe needs the actual volume root rather than an
+    // empty path; on Windows the kernel accepts both forms but the
+    // fallback also covers paths like `\\?\X:` whose `parent()` is
+    // sometimes `None` depending on `Path` internals. Returning
+    // `false` here would silently disable the reflink + hardlink legs
+    // for these destinations, which is the bug we're fixing.
+    let dst_probe: &Path = dst.parent().unwrap_or(dst);
+    match (volume_id(src), volume_id(dst_probe)) {
         (Some(a), Some(b)) => a == b,
         _ => false,
     }

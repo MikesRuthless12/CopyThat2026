@@ -50,6 +50,14 @@ pub struct RecoveryStatusDto {
 }
 
 /// `recovery_status` — read-only snapshot for the Settings panel.
+///
+/// Phase 40 review-fix: `server_active` reflects `JoinHandle::is_live`
+/// rather than just "we have a handle." A long-running shell can have
+/// a `JoinHandle` whose underlying axum task ended with an error
+/// (port reclaimed, listener died, runtime panic) — in that case the
+/// Settings panel needs to surface "stopped" rather than the stale
+/// URL. The `is_live` atomic is set false by the spawn task when it
+/// exits, so the read here is always current within one poll cycle.
 #[tauri::command]
 pub async fn recovery_status(
     state: tauri::State<'_, AppState>,
@@ -57,7 +65,7 @@ pub async fn recovery_status(
     let recovery = state.settings_snapshot().recovery.clone();
     let lock = state.recovery.inner.lock().await;
     let (server_active, url, bound_port) = match lock.as_ref() {
-        Some(handle) => {
+        Some(handle) if handle.is_live() => {
             let addr = handle.local_addr();
             (
                 true,
@@ -65,7 +73,7 @@ pub async fn recovery_status(
                 addr.port(),
             )
         }
-        None => (false, None, recovery.port),
+        _ => (false, None, recovery.port),
     };
     Ok(RecoveryStatusDto {
         server_active,
@@ -174,9 +182,16 @@ async fn apply_recovery_settings(state: &AppState) -> Result<RecoveryStatusDto, 
         .map_err(|e| format!("recovery serve: {e}"))?;
 
     let bound_port = handle.local_addr().port();
-    // Persist whatever port the OS handed us so subsequent boots
-    // stay on the same URL.
-    {
+    // Phase 40 review-fix — only persist the OS-assigned port back to
+    // settings when the user asked for `port = 0` (auto-pick). If the
+    // user explicitly set a fixed port, leave the persisted value
+    // alone so a transient port-in-use bind error on the next boot
+    // surfaces against the user's chosen port instead of being
+    // silently rewritten to whatever ephemeral port the OS happened
+    // to hand out the first time. The `recovery.port` snapshot here
+    // is the *requested* port (pre-bind); `bound_port` is what the
+    // OS actually gave us.
+    if recovery.port == 0 {
         let mut s = state
             .settings
             .write()

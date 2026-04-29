@@ -275,20 +275,26 @@ pub enum CopyEvent {
         /// `input_bytes.saturating_sub(output_bytes)`.
         bytes_saved: u64,
     },
-    /// Phase 40 — the engine engaged SMB 3.1.1 traffic compression on
-    /// a UNC destination via `CopyFileExW`'s
+    /// Phase 40 — the engine *requested* SMB 3.1.1 traffic compression
+    /// on a UNC destination via `CopyFileExW`'s
     /// `COPY_FILE_REQUEST_COMPRESSED_TRAFFIC` flag.
     ///
     /// Emitted once per file at the start of the per-file copy when
-    /// the destination is a UNC path on Windows. `algo` is the stable
-    /// wire string for the negotiated chained-compression algorithm
-    /// (`"xpress-lz77"` / `"xpress-huffman"` / `"lznt1"`), or
-    /// `"unknown"` when the kernel did not surface the negotiated
-    /// algorithm — Windows currently has no public user-mode API for
-    /// reading the negotiated algorithm back, so `"unknown"` is the
-    /// shipping value on every host today. The UI uses this event to
-    /// render the header badge "🗜 SMB compress: <algo>" while the
-    /// job runs.
+    /// the destination is a UNC path on Windows. **The flag is a
+    /// request, not a confirmation**: the SMB 3.1.1 server
+    /// independently decides per-share whether to compress the
+    /// session, and the kernel does not surface the negotiation
+    /// outcome to user mode. So this event indicates that the
+    /// optimistic flag-pass happened, not that the wire is actually
+    /// compressed. UIs should label the badge accordingly (e.g.
+    /// "🗜 SMB compression requested" — the localized
+    /// `smb-compress-badge` Fluent string captures this nuance).
+    ///
+    /// `algo` is the stable wire string for the negotiated chained-
+    /// compression algorithm (`"xpress-lz77"` / `"xpress-huffman"` /
+    /// `"lznt1"`), or `"unknown"` when the kernel did not surface
+    /// the negotiated algorithm — `"unknown"` is the shipping value
+    /// on every host today.
     SmbCompressionActive {
         /// Stable wire string for the algorithm — see the variant
         /// docstring.

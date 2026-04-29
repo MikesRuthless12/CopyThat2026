@@ -42,6 +42,7 @@
 //!   version baked at compile time
 //!   ([`OffloadOpts::default_release`]).
 
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 use crate::backend::{Backend, BackendConfig, BackendKind};
@@ -223,11 +224,14 @@ pub fn render_az_arm(src: &Backend, dst: &Backend, opts: &OffloadOpts) -> String
     let identity = sanitize_label(&opts.iam_role);
     let size = sanitize_label(&opts.instance_size);
     let cloudinit = render_cloudinit_template(src, dst, opts);
-    // ARM expects base64-encoded `customData`; we leave a placeholder
-    // and have the user `base64 < user-data.yaml | pbcopy` because
-    // base64 in pure Rust would pull a dep just for the wizard
-    // smoke. Documented inline.
-    let custom_data_placeholder = "<base64-encoded cloud-init goes here>";
+    // Phase 40 review-fix — ARM `customData` MUST be base64-encoded
+    // cloud-init. Earlier the field shipped as a literal placeholder
+    // string, so a user pasting the template into Azure Portal got a
+    // VM that booted with garbage in `/var/lib/cloud/instance/user-data.txt`
+    // and never ran the offload script. The `base64` crate is already
+    // a direct dependency of copythat-cloud (Phase 32h Azure ETag
+    // fast-path), so this fix uses what's already in the dep graph.
+    let custom_data_b64 = base64::engine::general_purpose::STANDARD.encode(cloudinit.as_bytes());
     format!(
         "{{
   \"$schema\": \"https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#\",
@@ -255,7 +259,7 @@ pub fn render_az_arm(src: &Backend, dst: &Backend, opts: &OffloadOpts) -> String
         \"osProfile\": {{
           \"computerName\": \"copythat-offload-{job}\",
           \"adminUsername\": \"copythat\",
-          \"customData\": \"{custom_data_placeholder}\"
+          \"customData\": \"{custom_data_b64}\"
         }},
         \"storageProfile\": {{
           \"imageReference\": {{
@@ -447,6 +451,36 @@ fn backend_uri(backend: &Backend) -> String {
 /// but the renderer is defense-in-depth: any character that could
 /// break out of a `'…'` shell quote, an HCL string literal, or a YAML
 /// scalar is dropped.
+///
+/// # SECURITY: shell-quote escape only — NOT a YAML / HCL / JSON
+/// safety guarantee
+///
+/// This allowlist is calibrated to defeat shell injection inside
+/// single-quoted contexts (where `'`, backtick, `$`, `(`, `)`, `\`,
+/// newline, etc. are dangerous) and to keep the renderer from
+/// emitting bytes that would prematurely close a JSON string literal
+/// or a YAML inline scalar. **It is not a full structural sanitiser.**
+/// The accepted set includes `:` (needed for Azure ARM resource IDs
+/// and GCP zone strings) and `/` (needed for resource paths) — both
+/// of which can produce surprising parses if substituted into a
+/// position the renderer didn't intend (e.g. `:` inside a YAML scalar
+/// at the wrong place can produce a key/value split rather than a
+/// single string). Every interpolation site in this module uses
+/// these characters in positions where they are syntactically
+/// expected (URL paths, Azure resource IDs, region names, GCP
+/// zones); changing the substitution layout means re-auditing this
+/// allowlist.
+///
+/// **Threat model**: inputs come from the Tauri wizard
+/// (`OffloadOpts`) which validates field shape on the way in. The
+/// renderer's defense-in-depth guarantee is that even if a future
+/// caller bypasses the wizard, the rendered template will not
+/// contain a shell metacharacter. It is NOT a guarantee that the
+/// rendered template parses identically to one where the user
+/// supplied a "clean" input — a malicious input might produce a
+/// syntactically-valid-but-semantically-wrong template that fails
+/// at deploy time rather than parse time. That's acceptable for a
+/// tool the user runs on their own templates.
 fn sanitize_label(input: &str) -> String {
     input
         .chars()

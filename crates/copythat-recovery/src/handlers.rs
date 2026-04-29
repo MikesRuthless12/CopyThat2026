@@ -84,6 +84,14 @@ pub(crate) async fn job_detail(
     })?)
 }
 
+/// Phase 40 review-fix — cap a single file download at 256 MiB. Above
+/// that, the response is `413 Payload Too Large`. Real streaming via
+/// `axum::body::Body::from_stream` is tracked as a Phase 49+ follow-up;
+/// today the handler buffers the whole file in RAM in
+/// `tokio::task::spawn_blocking`, so an unbounded cap would be a
+/// recipe for OOM on a multi-GiB historical download.
+const MAX_FILE_DOWNLOAD_BYTES: u64 = 256 * 1024 * 1024;
+
 /// `GET /jobs/:id/files/*path` — download a single file as it was at
 /// the time the original job ran. Pulls the manifest out of the
 /// chunk store and reassembles the bytes; absent manifest → 404.
@@ -105,6 +113,31 @@ pub(crate) async fn job_file_download(
         .decode_utf8_lossy()
         .into_owned();
 
+    // Phase 40 review-fix — defense-in-depth path-traversal reject.
+    // The chunk-store probe is a KV lookup (not a filesystem read), so
+    // `..` segments cannot escape a directory the way they would on
+    // disk — but the bearer-token holder already grants full read of
+    // every manifest in the store, and we don't want a malformed URL
+    // to surface a *different* job's manifest under this job's auth.
+    // Reject any decoded segment that resolves to `ParentDir` /
+    // `RootDir` / `Prefix` (the latter two would otherwise let
+    // `\\?\C:\…` style absolute paths bypass `dst_root`-prefix
+    // expectations on Windows). `CurDir` (`.`) is harmless and stays
+    // allowed.
+    {
+        use std::path::Component;
+        if std::path::Path::new(&decoded).components().any(|c| {
+            matches!(
+                c,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        }) {
+            return Err(RouteError::BadRequest(
+                "path component rejected: `..`, leading `/`, and absolute drive prefixes are not allowed".into(),
+            ));
+        }
+    }
+
     let chunk = state.chunk.clone();
     let dst_root = job.dst_root.clone();
     let bytes = tokio::task::spawn_blocking(move || -> Result<Option<Vec<u8>>, RouteError> {
@@ -117,6 +150,16 @@ pub(crate) async fn job_file_download(
                 None => return Ok(None),
             },
         };
+        // Phase 40 review-fix — bound the buffered-file size before the
+        // big allocation. See `MAX_FILE_DOWNLOAD_BYTES` for the
+        // rationale. The error variant is converted to 413 by
+        // `RouteError::PayloadTooLarge`.
+        if manifest.size > MAX_FILE_DOWNLOAD_BYTES {
+            return Err(RouteError::PayloadTooLarge {
+                size: manifest.size,
+                limit: MAX_FILE_DOWNLOAD_BYTES,
+            });
+        }
         let mut buf = Vec::with_capacity(manifest.size as usize);
         for c in &manifest.chunks {
             let bytes = chunk.get(&c.hash)?.ok_or_else(|| {
@@ -133,19 +176,23 @@ pub(crate) async fn job_file_download(
 
     match bytes {
         Some(bytes) => {
-            let suggested_name = std::path::Path::new(&rel)
+            let raw_name = std::path::Path::new(&rel)
                 .file_name()
                 .and_then(|n| n.to_str())
-                .unwrap_or("download.bin")
-                .to_string();
+                .unwrap_or("download.bin");
+            // Phase 40 review-fix — RFC 6266 Content-Disposition. The
+            // `filename=…` form is the legacy ASCII fallback; we strip
+            // CR/LF/quote/backslash and any non-ASCII byte from it so a
+            // crafted `rel` cannot break out of the header. The
+            // `filename*=UTF-8''…` form is RFC 5987 percent-encoded and
+            // carries the original UTF-8 name for clients that
+            // understand it (every modern browser does).
+            let header_value = build_content_disposition(raw_name);
             Ok((
                 StatusCode::OK,
                 [
                     (header::CONTENT_TYPE, "application/octet-stream".to_string()),
-                    (
-                        header::CONTENT_DISPOSITION,
-                        format!("attachment; filename=\"{suggested_name}\""),
-                    ),
+                    (header::CONTENT_DISPOSITION, header_value),
                 ],
                 bytes,
             )
@@ -153,6 +200,60 @@ pub(crate) async fn job_file_download(
         }
         None => Err(RouteError::NotFound),
     }
+}
+
+/// RFC 6266 / 5987 Content-Disposition value with both an ASCII
+/// fallback and a UTF-8-percent-encoded `filename*` so the header is
+/// safe against CR/LF/quote injection from the user-controlled path.
+///
+/// Stripped from the ASCII fallback: any byte outside the printable
+/// `[0x20, 0x7E]` range, plus `"`, `\`, and `;` (the latter two would
+/// confuse parameter parsing). The `filename*` form percent-encodes
+/// every byte that is not in RFC 5987's `attr-char` set.
+fn build_content_disposition(raw: &str) -> String {
+    let ascii_fallback: String = raw
+        .bytes()
+        .filter_map(|b| {
+            if (0x20..=0x7E).contains(&b) && b != b'"' && b != b'\\' && b != b';' {
+                Some(b as char)
+            } else {
+                None
+            }
+        })
+        .collect();
+    let ascii_fallback = if ascii_fallback.trim().is_empty() {
+        "download.bin".to_string()
+    } else {
+        ascii_fallback
+    };
+    let utf8_encoded: String = raw
+        .bytes()
+        .map(|b| {
+            // RFC 5987 attr-char — a/A-z/Z, 0-9, plus the safe symbols
+            // `!#$&+-.^_`|~`. Everything else gets percent-encoded.
+            let safe = b.is_ascii_alphanumeric()
+                || matches!(
+                    b,
+                    b'!' | b'#'
+                        | b'$'
+                        | b'&'
+                        | b'+'
+                        | b'-'
+                        | b'.'
+                        | b'^'
+                        | b'_'
+                        | b'`'
+                        | b'|'
+                        | b'~'
+                );
+            if safe {
+                (b as char).to_string()
+            } else {
+                format!("%{:02X}", b)
+            }
+        })
+        .collect();
+    format!("attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{utf8_encoded}")
 }
 
 fn candidate_key(dst_root: &std::path::Path, rel: &str) -> String {
@@ -325,6 +426,14 @@ impl IntoResponse for RouteError {
                     "Template render failure.".to_string(),
                 )
             }
+            RouteError::PayloadTooLarge { size, limit } => (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                format!(
+                    "File is {size} bytes; the recovery endpoint caps single-file \
+                     downloads at {limit} bytes to bound RAM usage. A streaming \
+                     download endpoint is tracked as a future phase."
+                ),
+            ),
         };
         let body = ErrorTemplate {
             status_code: status.as_u16(),

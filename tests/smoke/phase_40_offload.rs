@@ -86,6 +86,35 @@ fn case03_az_arm_is_a_single_top_level_json_object() {
         out.contains("\"$schema\""),
         "ARM template missing schema declaration"
     );
+    // Phase 40 review-fix — `customData` MUST contain a real base64
+    // payload, not the legacy `<base64-encoded cloud-init goes here>`
+    // placeholder. The base64 must decode back to a cloud-init body
+    // (starts with `#cloud-config`).
+    assert!(
+        !out.contains("<base64-encoded cloud-init goes here>"),
+        "ARM customData still contains the placeholder string"
+    );
+    let custom_data_marker = "\"customData\": \"";
+    let start = out
+        .find(custom_data_marker)
+        .expect("ARM template missing customData field")
+        + custom_data_marker.len();
+    let end = out[start..]
+        .find('"')
+        .expect("customData field is unclosed")
+        + start;
+    let b64 = &out[start..end];
+    assert!(!b64.is_empty(), "customData base64 is empty");
+    use base64::Engine;
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .expect("customData should be valid base64");
+    let decoded_str =
+        std::str::from_utf8(&decoded).expect("decoded customData should be UTF-8 cloud-init");
+    assert!(
+        decoded_str.starts_with("#cloud-config"),
+        "decoded customData should be a cloud-init body, got:\n{decoded_str}"
+    );
 }
 
 #[test]

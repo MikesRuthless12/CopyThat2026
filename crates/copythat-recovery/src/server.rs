@@ -6,6 +6,7 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use axum::Router;
 use axum::middleware::from_fn_with_state;
@@ -39,10 +40,19 @@ pub(crate) struct ServerState {
 /// remembers a "stable random" port. `shutdown().await` triggers a
 /// graceful drain — outstanding requests finish, then the task
 /// returns. `abort()` kills the task without waiting.
+///
+/// Phase 40 review-fix — `is_live()` reflects whether the underlying
+/// axum task is still serving requests. Flips `false` if the task
+/// returned with an error (port reclaimed by another process,
+/// listener closed unexpectedly, panic in the runtime). The Tauri
+/// shell's `recovery_status` IPC reads this flag so the Settings
+/// panel surfaces a crashed server instead of silently lying about
+/// the bound URL.
 pub struct JoinHandle {
     local_addr: SocketAddr,
     task: tokio::task::JoinHandle<()>,
     shutdown: Option<oneshot::Sender<()>>,
+    live: Arc<AtomicBool>,
 }
 
 impl JoinHandle {
@@ -51,6 +61,17 @@ impl JoinHandle {
     #[must_use]
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
+    }
+
+    /// Phase 40 review-fix — `true` while the server task is still
+    /// accepting requests. The IPC layer polls this so a Tauri shell
+    /// that's been running for hours can detect a server task that
+    /// died after a port-reclaim race or a runtime panic, instead of
+    /// rendering a stale "active" status. Cheap (`Relaxed` load on a
+    /// single atomic bool) — safe to read from any thread.
+    #[must_use]
+    pub fn is_live(&self) -> bool {
+        self.live.load(Ordering::Relaxed)
     }
 
     /// Trigger a graceful shutdown. Outstanding requests are
@@ -118,6 +139,8 @@ pub fn serve(
     let router = build_router(state);
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let live = Arc::new(AtomicBool::new(true));
+    let live_for_task = Arc::clone(&live);
     let task = handle.spawn(async move {
         let server =
             axum::serve(listener, router.into_make_service()).with_graceful_shutdown(async move {
@@ -126,12 +149,20 @@ pub fn serve(
         if let Err(e) = server.await {
             tracing::warn!(error = ?e, "recovery server task ended with error");
         }
+        // Phase 40 review-fix — flip the liveness flag whether the
+        // task ended cleanly (graceful shutdown) or with an error.
+        // The Tauri shell's `recovery_status` IPC reads this to tell
+        // the Settings panel that the server it thought was running
+        // has actually stopped. Relaxed ordering is sufficient — the
+        // worst-case stale read is one IPC poll cycle of out-of-date.
+        live_for_task.store(false, Ordering::Relaxed);
     });
 
     Ok(JoinHandle {
         local_addr,
         task,
         shutdown: Some(shutdown_tx),
+        live,
     })
 }
 
