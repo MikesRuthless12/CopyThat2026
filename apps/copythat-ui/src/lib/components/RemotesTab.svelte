@@ -10,14 +10,84 @@
   import { t } from "../i18n";
   import {
     addBackend,
+    defaultOffloadOpts,
     emptyBackendConfig,
     listBackends,
     removeBackend,
+    renderOffloadTemplate,
     testBackendConnection,
     updateBackend,
     type BackendDto,
+    type OffloadOptsDto,
+    type OffloadTemplateFormat,
     type TestConnectionResult,
   } from "../ipc";
+
+  // Phase 40 Part B — cloud-VM offload-template wizard. Lets the user
+  // pair two configured backends + a target format and render a
+  // deployment template they paste into their cloud's console. The
+  // wizard never invokes cloud APIs itself; the rendered string is
+  // the only side effect.
+  let offloadShow = $state(false);
+  let offloadFormat = $state<OffloadTemplateFormat>("cloud-init");
+  let offloadSrcName = $state("");
+  let offloadDstName = $state("");
+  let offloadOpts = $state<OffloadOptsDto>(defaultOffloadOpts());
+  let offloadOutput = $state("");
+  let offloadBusy = $state(false);
+  let offloadCopied = $state(false);
+
+  function offloadOpen() {
+    offloadShow = true;
+    offloadFormat = "cloud-init";
+    offloadOutput = "";
+    offloadCopied = false;
+    offloadOpts = defaultOffloadOpts();
+    if (backends.length >= 2) {
+      offloadSrcName = backends[0].name;
+      offloadDstName = backends[1].name;
+    } else if (backends.length === 1) {
+      offloadSrcName = backends[0].name;
+      offloadDstName = backends[0].name;
+    }
+  }
+
+  async function offloadRender() {
+    const src = backends.find((b) => b.name === offloadSrcName);
+    const dst = backends.find((b) => b.name === offloadDstName);
+    if (!src || !dst) {
+      offloadOutput = "";
+      return;
+    }
+    offloadBusy = true;
+    offloadCopied = false;
+    try {
+      offloadOutput = await renderOffloadTemplate(
+        offloadFormat,
+        src,
+        dst,
+        offloadOpts,
+      );
+    } catch (e) {
+      offloadOutput = String(e);
+    } finally {
+      offloadBusy = false;
+    }
+  }
+
+  async function offloadCopyToClipboard() {
+    if (!offloadOutput) return;
+    try {
+      await navigator.clipboard.writeText(offloadOutput);
+      offloadCopied = true;
+      setTimeout(() => {
+        offloadCopied = false;
+      }, 2000);
+    } catch {
+      // Clipboard write can fail on locked-down platforms; swallow
+      // and let the user copy manually from the textarea.
+    }
+  }
 
   // Twelve kinds in display order. The `is_enabled` flag on each
   // returned BackendDto tells us whether the build lights the OpenDAL
@@ -354,6 +424,97 @@
       </form>
     {/if}
   {/if}
+
+  <!--
+    Phase 40 Part B — cloud-VM offload helper section. Sits below the
+    backend list; the "Render template" button gates on two configured
+    backends so the user has source + destination to pair.
+  -->
+  <section class="offload-section">
+    <h3 class="offload-heading">{t("cloud-offload-heading")}</h3>
+    <p class="offload-hint">{t("cloud-offload-hint")}</p>
+    {#if !offloadShow}
+      <button
+        type="button"
+        class="primary"
+        onclick={offloadOpen}
+        disabled={backends.length < 1}
+      >
+        {t("cloud-offload-render-button")}
+      </button>
+    {:else}
+      <div class="offload-form">
+        <label>
+          <span>{t("cloud-offload-template-format")}</span>
+          <select bind:value={offloadFormat}>
+            <option value="cloud-init">cloud-init</option>
+            <option value="aws-terraform">AWS Terraform</option>
+            <option value="az-arm">Azure ARM</option>
+            <option value="gcp-deployment">GCP Deployment Manager</option>
+          </select>
+        </label>
+        <div class="offload-pair">
+          <label>
+            <span>Source</span>
+            <select bind:value={offloadSrcName}>
+              {#each backends as b (b.name)}
+                <option value={b.name}>{b.name} ({b.kind})</option>
+              {/each}
+            </select>
+          </label>
+          <label>
+            <span>Destination</span>
+            <select bind:value={offloadDstName}>
+              {#each backends as b (b.name)}
+                <option value={b.name}>{b.name} ({b.kind})</option>
+              {/each}
+            </select>
+          </label>
+        </div>
+        <div class="offload-pair">
+          <label>
+            <span>Job name</span>
+            <input type="text" bind:value={offloadOpts.jobName} />
+          </label>
+          <label>
+            <span>Region</span>
+            <input type="text" bind:value={offloadOpts.region} />
+          </label>
+        </div>
+        <div class="offload-pair">
+          <label>
+            <span>Instance size</span>
+            <input type="text" bind:value={offloadOpts.instanceSize} />
+          </label>
+          <label>
+            <span>IAM role / identity</span>
+            <input type="text" bind:value={offloadOpts.iamRole} />
+          </label>
+        </div>
+        <p class="offload-warning">
+          {t("cloud-offload-self-destruct-warning", {
+            minutes: offloadOpts.selfDestructMinutes,
+          })}
+        </p>
+        <div class="form-actions">
+          <button type="button" class="primary" onclick={offloadRender} disabled={offloadBusy}>
+            {t("cloud-offload-render-button")}
+          </button>
+          <button type="button" onclick={() => { offloadShow = false; }} disabled={offloadBusy}>
+            {t("remote-cancel")}
+          </button>
+        </div>
+        {#if offloadOutput}
+          <textarea readonly class="offload-output" rows="14">{offloadOutput}</textarea>
+          <div class="form-actions">
+            <button type="button" onclick={offloadCopyToClipboard}>
+              {offloadCopied ? "✓" : t("cloud-offload-copy-clipboard")}
+            </button>
+          </div>
+        {/if}
+      </div>
+    {/if}
+  </section>
 </div>
 
 <style>
@@ -361,6 +522,68 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+
+  /* Phase 40 Part B — offload-helper section. Reuses the form-action
+     button styles from the existing add-backend wizard so the visual
+     vocabulary stays consistent. */
+  .offload-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border, rgba(128, 128, 128, 0.18));
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .offload-heading {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+  }
+  .offload-hint {
+    margin: 0;
+    color: var(--fg-dim, #5f5f5f);
+    font-size: 12px;
+  }
+  .offload-warning {
+    margin: 4px 0;
+    padding: 8px;
+    background: rgba(255, 165, 0, 0.08);
+    border-left: 3px solid #ffa500;
+    color: var(--fg, #1f1f1f);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .offload-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: var(--surface-2, rgba(128, 128, 128, 0.05));
+    border-radius: 6px;
+  }
+  .offload-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+  }
+  .offload-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .offload-output {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 11px;
+    line-height: 1.4;
+    padding: 8px;
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, rgba(128, 128, 128, 0.18));
+    border-radius: 4px;
+    resize: vertical;
   }
   .backend-list {
     list-style: none;

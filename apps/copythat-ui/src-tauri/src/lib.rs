@@ -53,6 +53,7 @@ pub mod ipc_safety;
 pub mod live_mirror;
 pub mod mobile_commands;
 pub mod mount_commands;
+pub mod offload_commands;
 pub mod power;
 pub mod progress_channel;
 pub mod recovery_commands;
@@ -426,6 +427,10 @@ pub fn run() {
             recovery_commands::recovery_status,
             recovery_commands::recovery_apply,
             recovery_commands::recovery_rotate_token,
+            // Phase 40 Part B — SMB compression probe + cloud-VM
+            // offload-template wizard.
+            offload_commands::smb_compression_state,
+            offload_commands::render_offload_template,
         ])
         .setup(move |app| {
             // Phase 40 — start the named-pipe broker that future

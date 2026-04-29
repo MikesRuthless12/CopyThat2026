@@ -90,6 +90,15 @@ pub const EVENT_META_TRANSLATED_TO_APPLEDOUBLE: &str = "meta-translated-to-apple
 // aggregates across every job in the run.
 pub const EVENT_COMPRESSION_SAVINGS: &str = "compression-savings";
 
+// Phase 40 — the engine *requested* SMB 3.1.1 traffic compression on a
+// UNC destination. Header.svelte listens and renders the
+// "🗜 SMB compression requested" badge while at least one active job
+// is in this state. Per the event variant docstring, the kernel does
+// not surface the per-share negotiation outcome to user mode — the
+// event indicates a successful flag-pass, not a confirmed compressed
+// wire.
+pub const EVENT_SMB_COMPRESSION_ACTIVE: &str = "smb-compression-active";
+
 // Phase 21 — shape rate changed (settings update OR schedule poll
 // minute tick). The header badge subscribes so the "🔻 30 MB/s · scheduled"
 // pill re-renders without polling.
@@ -1469,6 +1478,20 @@ pub struct CompressionSavingsDto {
     pub job_id: u64,
     pub ratio: f64,
     pub bytes_saved: u64,
+}
+
+/// Phase 40 — payload for `smb-compression-active`. `algo` is the
+/// stable wire string from `CopyEvent::SmbCompressionActive`
+/// (`"xpress-lz77"` / `"xpress-huffman"` / `"lznt1"` / `"unknown"`);
+/// today the value is `"unknown"` on every host because Windows does
+/// not expose the negotiated algorithm to user mode. The
+/// `Header.svelte` SMB badge interpolates `algo` into the
+/// `smb-compress-badge` Fluent string.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SmbCompressionActiveDto {
+    pub job_id: u64,
+    pub algo: String,
 }
 
 /// Phase 19a — `scan-started` payload.
