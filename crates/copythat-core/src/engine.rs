@@ -8,6 +8,7 @@
 //! unless `keep_partial` overrides it.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use filetime::FileTime;
@@ -303,6 +304,41 @@ pub async fn copy_file(
     // below is what releases the underlying snapshot.
     let (mut src_file, snapshot_lease) =
         open_src_with_snapshot_fallback(&src_path, &dst_path, &opts, &events).await?;
+
+    // Phase 42 Part B — snapshot the about-to-be-overwritten
+    // destination before we open it with `truncate(true)`. Best-
+    // effort: snapshot failures are logged + swallowed so a sink
+    // outage cannot abort a copy. Fires only on `FreshStart`
+    // (resume reuses the existing prefix, so there's no overwrite-
+    // from-byte-0 to capture). The sink is responsible for the
+    // dst-exists check + chunk-store ingest + History row insert;
+    // the engine just hands it the path.
+    if matches!(resume_decision, ResumeDecision::FreshStart)
+        && opts.versioning.enabled
+        && let Some(sink) = opts.versioning_sink.as_ref()
+    {
+        // `tokio::fs::metadata` to confirm dst exists before
+        // bothering the sink — saves a round trip when the
+        // destination is brand-new.
+        if tokio::fs::metadata(&dst_path).await.is_ok() {
+            // Run the sink on `spawn_blocking` because typical
+            // implementations chunk-store-ingest, which is sync IO.
+            let sink = Arc::clone(sink);
+            let dst_for_sink = dst_path.clone();
+            let snapshot_outcome: Result<bool, String> = tokio::task::spawn_blocking(move || {
+                sink.snapshot_before_overwrite(&dst_for_sink, None)
+            })
+            .await
+            .unwrap_or_else(|join_err| Err(format!("versioning sink panicked: {join_err}")));
+            if let Err(e) = snapshot_outcome {
+                tracing::warn!(
+                    dst = %dst_path.display(),
+                    error = %e,
+                    "Phase 42 versioning snapshot failed; copy proceeds without snapshot",
+                );
+            }
+        }
+    }
 
     let mut open = OpenOptions::new();
     open.write(true);

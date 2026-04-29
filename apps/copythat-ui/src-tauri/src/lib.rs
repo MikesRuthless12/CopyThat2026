@@ -66,6 +66,7 @@ pub mod state;
 pub mod sync_commands;
 pub mod thumbnail;
 pub mod updater;
+pub mod version_commands;
 
 use std::sync::Mutex;
 
@@ -434,6 +435,10 @@ pub fn run() {
             offload_commands::render_offload_template,
             // Phase 41 — pre-execution tree-diff preview.
             preview_commands::compute_tree_diff,
+            // Phase 42 Part B — per-file rolling versions panel.
+            version_commands::list_versions,
+            version_commands::select_versions_to_prune,
+            version_commands::prune_versions,
         ])
         .setup(move |app| {
             // Phase 40 — start the named-pipe broker that future

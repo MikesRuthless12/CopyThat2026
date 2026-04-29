@@ -1228,3 +1228,13 @@ perceptual-warn-overwrite = Overwrite anyway  # MT
 perceptual-settings-heading = Visual-similarity dedup  # MT
 perceptual-settings-hint = Detect visually identical images at the destination before they're overwritten. Hash is perceptual (recognises the same picture re-saved as a different format), not byte-exact.  # MT
 perceptual-settings-threshold-label = Warn threshold (lower = stricter match)  # MT
+
+# Phase 42 Part B — per-file rolling versions.  # MT
+version-list-heading = Previous versions  # MT
+version-list-empty = No prior versions of this file  # MT
+version-list-restore = Restore this version  # MT
+version-retention-heading = Keep previous versions on overwrite  # MT
+version-retention-none = Keep every version forever  # MT
+version-retention-last-n = Keep last { $n } versions  # MT
+version-retention-older-than-days = Drop versions older than { $days } days  # MT
+version-retention-gfs = Hourly { $h } · daily { $d } · weekly { $w } · monthly { $m }  # MT

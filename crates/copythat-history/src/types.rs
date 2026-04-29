@@ -141,3 +141,56 @@ pub struct DayTotal {
     pub files: u64,
     pub jobs: u64,
 }
+
+/// Phase 42 Part B — newtype wrapping the rowid of a [`VersionRecord`]
+/// in the `versions` table. Mirrors the [`JobRowId`] pattern: prevents
+/// callers from accidentally substituting a `JobRowId` where a
+/// `VersionRowId` is expected even though both are `i64` underneath.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct VersionRowId(pub i64);
+
+impl VersionRowId {
+    pub fn as_i64(self) -> i64 {
+        self.0
+    }
+}
+
+/// Phase 42 Part B — one row in the `versions` table.
+///
+/// Recorded by the engine each time it snapshots a destination file
+/// before overwriting it. The actual bytes live in the Phase 27 chunk
+/// store keyed by content-hash; `manifest_blake3` is the hash of the
+/// manifest the snapshot ingested into so a later restore can pull
+/// the right tree of chunks. `dst_path` is the destination path the
+/// version was captured for (the *target* of the overwriting copy,
+/// not the source). `ts_ms` is milliseconds-since-epoch at snapshot
+/// time. `retained_until_ms` is an optional retention floor — the
+/// pruner refuses to delete a row whose `retained_until_ms` is in the
+/// future, even when the size-based or count-based policy would
+/// otherwise drop it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VersionRecord {
+    /// Populated by `record_version` after insert. Zero on the
+    /// insert-path input.
+    pub row_id: i64,
+    /// Destination path the snapshot was captured for.
+    pub dst_path: PathBuf,
+    /// Milliseconds-since-epoch at snapshot time.
+    pub ts_ms: i64,
+    /// 32-byte BLAKE3 of the chunk-store manifest the snapshot
+    /// ingested into. Stored as raw bytes in SQLite (`BLOB`) so a
+    /// later restore step can hex-encode for display + use the raw
+    /// bytes for chunk-store lookups.
+    pub manifest_blake3: [u8; 32],
+    /// Size of the snapshot in bytes (= the size of the file at the
+    /// moment of capture).
+    pub size: u64,
+    /// Optional retention floor — milliseconds-since-epoch beyond
+    /// which the pruner is allowed to drop this row. `None` = "no
+    /// floor; drop me whenever the active policy says to."
+    pub retained_until_ms: Option<i64>,
+    /// Optional FK to the `jobs` row that triggered this snapshot.
+    /// `None` after the triggering job is purged from history (the
+    /// FK is `ON DELETE SET NULL`, not `CASCADE`).
+    pub triggered_by_job_id: Option<i64>,
+}

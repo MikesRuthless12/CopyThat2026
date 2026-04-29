@@ -1760,6 +1760,7 @@ dependencies = [
 name = "copythat-history"
 version = "1.0.0"
 dependencies = [
+ "copythat-core",
  "directories",
  "rusqlite",
  "tempfile",

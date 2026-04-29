@@ -131,6 +131,7 @@ pub mod sparse;
 pub mod translate;
 mod tree;
 pub mod verify;
+pub mod versioning;
 
 pub use collision::CollisionPolicy;
 pub use control::CopyControl;
@@ -171,3 +172,6 @@ pub use translate::{
 };
 pub use tree::{copy_tree, copy_tree_from_scan, move_file, move_tree};
 pub use verify::{Hasher, Verifier};
+pub use versioning::{
+    GfsPolicy, RetentionPolicy, VersionEntry, VersioningPolicy, VersioningSink, select_for_pruning,
+};
