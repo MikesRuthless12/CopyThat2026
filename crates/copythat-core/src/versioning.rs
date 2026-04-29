@@ -48,6 +48,16 @@ pub struct VersionEntry {
     pub row_id: i64,
     /// Capture timestamp, milliseconds since epoch.
     pub ts_ms: i64,
+    /// Phase 42 post-review (P42 H1) — wall-clock floor below which
+    /// the pruner refuses to delete this row, in milliseconds since
+    /// epoch. `None` means "no floor". The compliance-hold contract
+    /// in `copythat-history::VersionRecord::retained_until_ms` is
+    /// enforced here: any row whose floor is in the future
+    /// (`retained_until_ms > now_ms`) is unconditionally retained,
+    /// regardless of the active [`RetentionPolicy`]. Without this
+    /// gate the pre-review implementation silently violated the
+    /// documented "compliance hold" contract.
+    pub retained_until_ms: Option<i64>,
 }
 
 /// Per-job versioning configuration.
@@ -212,10 +222,26 @@ pub fn select_for_pruning(
         RetentionPolicy::Gfs(gfs) => gfs_select_for_pruning(&sorted, gfs),
     };
 
+    // Phase 42 post-review (H1) — compliance-hold enforcement. Build
+    // a set of row ids whose `retained_until_ms` floor is in the
+    // future and unconditionally subtract them from the drop set.
+    // The pre-review implementation lost this contract because
+    // `select_for_pruning` was passed VersionEntries without the
+    // floor; the new field on `VersionEntry` (above) plus this
+    // filter close the gap.
+    let held: std::collections::HashSet<i64> = sorted
+        .iter()
+        .filter(|v| matches!(v.retained_until_ms, Some(floor) if floor > now_ms))
+        .map(|v| v.row_id)
+        .collect();
+
     // Belt-and-suspenders: never include the freshest snapshot's
     // row id in the drop set, even if a future policy variant drifts
     // and forgets the invariant.
-    to_drop.into_iter().filter(|id| *id != newest).collect()
+    to_drop
+        .into_iter()
+        .filter(|id| *id != newest && !held.contains(id))
+        .collect()
 }
 
 /// GFS bucket-keeper. Groups `sorted_newest_first` by hour / day /
@@ -325,7 +351,19 @@ mod tests {
     use super::*;
 
     fn entry(row_id: i64, ts_ms: i64) -> VersionEntry {
-        VersionEntry { row_id, ts_ms }
+        VersionEntry {
+            row_id,
+            ts_ms,
+            retained_until_ms: None,
+        }
+    }
+
+    fn entry_held(row_id: i64, ts_ms: i64, retained_until_ms: i64) -> VersionEntry {
+        VersionEntry {
+            row_id,
+            ts_ms,
+            retained_until_ms: Some(retained_until_ms),
+        }
     }
 
     #[test]
@@ -500,5 +538,75 @@ mod tests {
         let p = VersioningPolicy::default();
         assert!(!p.enabled);
         assert_eq!(p.retention, RetentionPolicy::None);
+    }
+
+    #[test]
+    fn retained_until_floor_blocks_aggressive_pruning() {
+        // Phase 42 post-review (H1) — a row with a future retention
+        // floor must survive every pruning policy that would
+        // otherwise drop it. The pre-review pruner ignored the
+        // floor; this test pins down the corrected contract.
+        let now = 1_000_000_000;
+        let future_floor = now + 5 * MS_PER_DAY; // 5 days out
+
+        // Entry 1 has a hold; entries 2 and 3 don't.
+        let versions = [
+            entry_held(1, now - 10 * MS_PER_DAY, future_floor),
+            entry(2, now - 5 * MS_PER_DAY),
+            entry(3, now - MS_PER_DAY),
+        ];
+
+        // LastN(1) would normally drop ids 1 and 2; the hold rescues 1.
+        let drop = select_for_pruning(&versions, &RetentionPolicy::LastN(1), now);
+        assert_eq!(drop, vec![2], "LastN(1): hold must save id 1");
+
+        // OlderThanDays(2) would drop ids 1 and 2 (both >2d old);
+        // the hold rescues 1.
+        let drop = select_for_pruning(&versions, &RetentionPolicy::OlderThanDays(2), now);
+        assert_eq!(drop, vec![2], "OlderThanDays(2): hold must save id 1");
+
+        // GFS with everything zero would drop ids 1 and 2 (newest
+        // wins anyway); the hold rescues 1.
+        let drop = select_for_pruning(&versions, &RetentionPolicy::Gfs(GfsPolicy::default()), now);
+        let mut sorted = drop;
+        sorted.sort();
+        assert_eq!(sorted, vec![2], "GFS-zero: hold must save id 1");
+    }
+
+    #[test]
+    fn retained_until_floor_in_the_past_does_not_save() {
+        // A floor that has elapsed before `now_ms` should NOT save
+        // the row. (The compliance-hold semantics are a one-way
+        // ratchet only while the floor is future.)
+        let now = 1_000_000_000;
+        let past_floor = now - MS_PER_DAY;
+        let versions = [
+            entry_held(1, now - 10 * MS_PER_DAY, past_floor),
+            entry(2, now - MS_PER_DAY),
+        ];
+        let drop = select_for_pruning(&versions, &RetentionPolicy::LastN(1), now);
+        assert_eq!(drop, vec![1], "elapsed floor must not save the row");
+    }
+
+    #[test]
+    fn bucket_floor_monthly_handles_year_boundary() {
+        // Phase 42 post-review (H2) — the reverse Hinnant
+        // computation (m≤2 → y_adjusted = y+1 path) is non-trivial.
+        // Pin down four boundary cases.
+
+        // 2024-01-15T00:00:00Z = 1705276800000 ms → 2024-01-01T00:00Z = 1704067200000
+        assert_eq!(bucket_floor_monthly(1_705_276_800_000), 1_704_067_200_000);
+
+        // 2024-02-29T12:00:00Z = 1709208000000 ms (leap day)
+        // → 2024-02-01T00:00Z = 1706745600000
+        assert_eq!(bucket_floor_monthly(1_709_208_000_000), 1_706_745_600_000);
+
+        // 2023-12-31T23:59:59Z = 1704067199000 ms
+        // → 2023-12-01T00:00Z = 1701388800000
+        assert_eq!(bucket_floor_monthly(1_704_067_199_000), 1_701_388_800_000);
+
+        // 2024-03-01T00:00:00Z = 1709251200000 (boundary itself)
+        // → same value (already on the bucket floor)
+        assert_eq!(bucket_floor_monthly(1_709_251_200_000), 1_709_251_200_000);
     }
 }

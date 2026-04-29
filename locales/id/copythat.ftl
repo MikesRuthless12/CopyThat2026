@@ -1254,3 +1254,4 @@ provenance-job-completed-title = Provenance manifest saved  # MT
 provenance-job-completed-body = { $count } files signed → { $path }  # MT
 provenance-verify-clean = Manifest valid for { $count } files; signature { $sig }; merkle root OK.  # MT
 provenance-verify-tampered = Manifest INVALID — { $tampered } tampered, { $missing } missing.  # MT
+provenance-action-staged = Phase 43 — wiring the IPC for this action lands in a follow-up commit.  # MT

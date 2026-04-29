@@ -1007,3 +1007,6 @@ provenance-job-completed-title = Provenance manifest saved
 provenance-job-completed-body = { $count } files signed → { $path }
 provenance-verify-clean = Manifest valid for { $count } files; signature { $sig }; merkle root OK.
 provenance-verify-tampered = Manifest INVALID — { $tampered } tampered, { $missing } missing.
+# Phase 43 post-review hardening — toast text for the Settings →
+# Provenance buttons whose Tauri IPC has not yet landed.
+provenance-action-staged = Phase 43 — wiring the IPC for this action lands in a follow-up commit.

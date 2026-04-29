@@ -29,7 +29,7 @@ use crate::encoder::{BaoOutboardEncoder, RootOnlyEncoder};
 use crate::error::{ProvenanceError, ProvenanceErrorKind};
 use crate::manifest::{
     FileRecord, ProvenanceManifest, Rfc3161Token, Signature, manifest_root_blake3,
-    manifest_signing_bytes, write_manifest_cbor,
+    manifest_signing_bytes, validate_rel_path, write_manifest_cbor,
 };
 use crate::sign::SigningKey;
 
@@ -209,6 +209,19 @@ impl ProvenanceSink for CopyThatProvenanceSink {
         bao_outboard: Vec<u8>,
     ) {
         let rel_path = derive_rel_path(&self.config.src_root, src);
+        // Phase 43 post-review — defense-in-depth: refuse to record a
+        // rel_path that would later round-trip through `verify_manifest`
+        // and trigger the path-traversal guard. A hostile engine adapter
+        // could otherwise poison the manifest with `../../../etc/passwd`
+        // entries; the verify-side guard catches it on read, but
+        // failing fast at write time gives a clearer error.
+        if validate_rel_path(&rel_path).is_err() {
+            eprintln!(
+                "copythat-provenance: rejected rel_path {rel_path:?} (traversal check) for src {}",
+                src.display()
+            );
+            return;
+        }
         let record = FileRecord {
             rel_path,
             size,
@@ -222,26 +235,48 @@ impl ProvenanceSink for CopyThatProvenanceSink {
 }
 
 /// Derive the manifest-friendly rel_path for `src` against
-/// `src_root`. Forward-slash separated; falls back to
-/// `src.file_name()` when stripping the prefix fails (e.g. when the
-/// engine was driven on absolute paths from outside `src_root`).
+/// `src_root`. Forward-slash separated; only emits `Component::Normal`
+/// segments (root / drive / parent components are filtered out so the
+/// manifest stays portable and the verify-side traversal guard never
+/// has to reject a path produced by this function).
+///
+/// Phase 43 post-review (P43 #6): when `src.strip_prefix(src_root)`
+/// fails — caller drove the engine on an absolute path from outside
+/// `src_root` — we previously fell back to `src` itself, which on
+/// long absolute paths produced a multi-component rel_path that COULD
+/// collide between two source files sharing the same suffix tail.
+/// New behavior: fall back to just the filename. Multiple files at
+/// different absolute paths sharing a basename will collide on the
+/// rel_path, but the alternative (silently encoding the absolute
+/// path into the manifest) is worse — the manifest's rel_path is
+/// supposed to be relative to `dst_root` for the verify side.
+/// Callers that drive the engine outside `src_root` are off-policy
+/// and get a best-effort name-only record.
 fn derive_rel_path(src_root: &Path, src: &Path) -> String {
-    let rel = src.strip_prefix(src_root).unwrap_or(src);
-    let mut parts: Vec<String> = rel
+    let rel = src.strip_prefix(src_root).unwrap_or_else(|_| {
+        // Out-of-tree caller — emit only the filename.
+        std::path::Path::new(
+            src.file_name()
+                .map(|s| s.to_str().unwrap_or("?"))
+                .unwrap_or("?"),
+        )
+    });
+    let parts: Vec<String> = rel
         .components()
         .filter_map(|c| match c {
             std::path::Component::Normal(s) => Some(s.to_string_lossy().into_owned()),
-            std::path::Component::ParentDir => Some("..".into()),
-            std::path::Component::CurDir => None,
-            std::path::Component::RootDir | std::path::Component::Prefix(_) => None,
+            // ParentDir, RootDir, Prefix, CurDir are dropped so the
+            // emitted rel_path always satisfies `validate_rel_path`.
+            _ => None,
         })
         .collect();
     if parts.is_empty() {
+        // Nothing usable produced — fall back to the basename (or
+        // `?` if even that's not available).
         if let Some(name) = src.file_name() {
-            parts.push(name.to_string_lossy().into_owned());
-        } else {
-            parts.push(String::from("?"));
+            return name.to_string_lossy().into_owned();
         }
+        return "?".into();
     }
     parts.join("/")
 }

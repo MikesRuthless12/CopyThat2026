@@ -224,7 +224,13 @@ pub fn canonical_cbor_bytes<T: Serialize>(value: &T) -> Result<Vec<u8>, Provenan
     Ok(out)
 }
 
-/// Parse a manifest from canonical CBOR bytes.
+/// Parse a manifest from canonical CBOR bytes. Validates `rel_path`
+/// fields against directory-traversal so an attacker-supplied
+/// manifest can't steer `verify_manifest` into reading arbitrary
+/// files outside `dst_root` (Phase 43 post-review security finding —
+/// the verify pass would otherwise leak `BLAKE3` hashes of
+/// attacker-targeted files via the `Tampered { actual }` outcome,
+/// giving a hash-confirmation oracle for arbitrary file contents).
 pub fn parse_manifest_cbor(bytes: &[u8]) -> Result<ProvenanceManifest, ProvenanceError> {
     let m: ProvenanceManifest = ciborium::de::from_reader(bytes)?;
     if m.schema_version != ProvenanceManifest::SCHEMA_VERSION {
@@ -237,7 +243,67 @@ pub fn parse_manifest_cbor(bytes: &[u8]) -> Result<ProvenanceManifest, Provenanc
             ),
         ));
     }
+    for record in &m.files {
+        validate_rel_path(&record.rel_path)?;
+    }
     Ok(m)
+}
+
+/// Reject a `rel_path` that could escape `dst_root` when joined.
+/// Accepts only forward-slash separated paths whose components are
+/// all `Component::Normal`. Closes the Phase 43 path-traversal
+/// vector on the verify side and the same vector on the sink side
+/// (a hostile engine adapter could otherwise poison the manifest at
+/// write time).
+pub fn validate_rel_path(rel: &str) -> Result<(), ProvenanceError> {
+    if rel.is_empty() {
+        return Err(ProvenanceError::classify(
+            crate::error::ProvenanceErrorKind::Protocol,
+            "empty rel_path",
+        ));
+    }
+    // Reject obvious absolutes / drive prefixes / pre-translated
+    // backslashes before the lexical walk.
+    if rel.starts_with('/') || rel.starts_with('\\') {
+        return Err(ProvenanceError::classify(
+            crate::error::ProvenanceErrorKind::Protocol,
+            format!("absolute rel_path rejected: {rel:?}"),
+        ));
+    }
+    // Windows drive prefixes — `C:`, `\\?\C:\...`, `\\server\share\...`.
+    let lower = rel.as_bytes();
+    if lower.len() >= 2 && lower[1] == b':' {
+        return Err(ProvenanceError::classify(
+            crate::error::ProvenanceErrorKind::Protocol,
+            format!("drive-prefixed rel_path rejected: {rel:?}"),
+        ));
+    }
+    if rel.contains('\\') {
+        return Err(ProvenanceError::classify(
+            crate::error::ProvenanceErrorKind::Protocol,
+            format!("backslash in rel_path rejected (manifest is forward-slash-only): {rel:?}"),
+        ));
+    }
+    // Walk the lexical components. `..` / root / prefix all reject.
+    let pb = std::path::PathBuf::from(rel);
+    for c in pb.components() {
+        match c {
+            std::path::Component::Normal(_) => {}
+            std::path::Component::CurDir => {
+                // `.` segments are harmless but discouraged; allow
+                // for tolerance with exotic engine adapters.
+            }
+            std::path::Component::ParentDir
+            | std::path::Component::RootDir
+            | std::path::Component::Prefix(_) => {
+                return Err(ProvenanceError::classify(
+                    crate::error::ProvenanceErrorKind::Protocol,
+                    format!("rel_path contains non-normal component {c:?}: {rel:?}"),
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Write `manifest` to `path` as canonical CBOR. Overwrites the file
@@ -403,6 +469,87 @@ mod tests {
             err.kind(),
             crate::error::ProvenanceErrorKind::Protocol,
             "unknown schema version should classify as Protocol"
+        );
+    }
+
+    #[test]
+    fn validate_rel_path_accepts_normal_relative_paths() {
+        validate_rel_path("file.txt").unwrap();
+        validate_rel_path("a/b/c.txt").unwrap();
+        validate_rel_path("nested/deep/d.bin").unwrap();
+        validate_rel_path("./already/normalised.txt").unwrap();
+    }
+
+    #[test]
+    fn validate_rel_path_rejects_traversal_components() {
+        for bad in ["../etc/passwd", "a/../b", "../../foo", "a/b/.."] {
+            let err = validate_rel_path(bad).unwrap_err();
+            assert_eq!(
+                err.kind(),
+                crate::error::ProvenanceErrorKind::Protocol,
+                "expected Protocol error for {bad:?}, got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_rel_path_rejects_absolute_and_drive_prefixes() {
+        for bad in [
+            "/etc/passwd",
+            "\\Windows\\System32\\sam",
+            "C:\\Users\\victim\\.ssh\\id_rsa",
+            "C:/Users/victim/.ssh/id_rsa",
+            "D:foo",
+        ] {
+            let err = validate_rel_path(bad).unwrap_err();
+            assert_eq!(
+                err.kind(),
+                crate::error::ProvenanceErrorKind::Protocol,
+                "expected Protocol error for {bad:?}, got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_rel_path_rejects_backslashes_and_empty() {
+        validate_rel_path("").unwrap_err();
+        validate_rel_path("a\\b").unwrap_err();
+    }
+
+    #[test]
+    fn parse_manifest_rejects_traversal_rel_paths() {
+        // Build a manifest with a malicious record, then confirm
+        // `parse_manifest_cbor` rejects it. This is the end-to-end
+        // guard the verify command relies on — without it,
+        // `verify_manifest` would happily read `../../../etc/passwd`
+        // and leak the BLAKE3 hash via the `Tampered { actual }`
+        // outcome (Phase 43 post-review path-traversal finding).
+        let now = Utc::now();
+        let mut m = ProvenanceManifest::new(
+            PathBuf::from("/s"),
+            PathBuf::from("/d"),
+            now,
+            now,
+            "h".into(),
+            "u".into(),
+            "v".into(),
+            vec![FileRecord {
+                rel_path: "../../../etc/passwd".into(),
+                size: 0,
+                blake3_root: [0u8; 32],
+                bao_outboard: Vec::new(),
+            }],
+        );
+        // Manifest::new sorts files; here the malicious entry
+        // survives sort because there's only one. The CBOR roundtrip
+        // is identical to canonical bytes for fresh manifests.
+        let _ = m.signature.take();
+        let bytes = canonical_cbor_bytes(&m).unwrap();
+        let err = parse_manifest_cbor(&bytes).unwrap_err();
+        assert_eq!(
+            err.kind(),
+            crate::error::ProvenanceErrorKind::Protocol,
+            "traversal rel_path must be rejected at parse time"
         );
     }
 }
