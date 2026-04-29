@@ -639,6 +639,66 @@ export async function renderOffloadTemplate(
 }
 
 // ---------------------------------------------------------------------
+// Phase 41 — pre-execution tree-diff preview.
+// ---------------------------------------------------------------------
+
+/** Mirrors `copythat_core::dryrun::DryRunOptions`. The Tauri command
+ *  accepts camelCase (the `DryRunOptionsDto` derives serde with
+ *  `rename_all = "camelCase"`). */
+export type DryRunOptionsDto = {
+  forceOverwrite: boolean;
+  trustSizeMtime: boolean;
+};
+
+export type ReplacementRow = {
+  relPath: string;
+  /** Stable wire string: `"source-newer"` / `"force-overwrite-older"` /
+   *  `"content-different"`. */
+  reason: string;
+};
+
+export type SkipRow = {
+  relPath: string;
+  /** Stable wire string: `"identical-content"` / `"destination-newer"` /
+   *  `"filtered-out"` / `"unsupported-source-kind"`. */
+  reason: string;
+};
+
+export type ConflictRow = {
+  relPath: string;
+  /** Stable wire string: `"both-modified-since-common-ancestor"` /
+   *  `"kind-mismatch"` / `"ambiguous"`. */
+  kind: string;
+};
+
+/** Wire shape for `copythat_core::dryrun::TreeDiff`. Vectors are
+ *  grouped per category so the preview modal can render each colour
+ *  band without re-bucketing. */
+export type TreeDiffDto = {
+  additions: string[];
+  replacements: ReplacementRow[];
+  skips: SkipRow[];
+  conflicts: ConflictRow[];
+  unchanged: string[];
+  bytesToTransfer: number;
+  bytesTotal: number;
+  totalFiles: number;
+  hasBlockingConflicts: boolean;
+};
+
+/** Render a dry-run plan for `src` → `dst`. Single-threaded; the
+ *  Settings → "Show preview before running copies" toggle gates this
+ *  call on a sane size threshold so multi-million-file jobs don't
+ *  stall the UI. */
+export async function computeTreeDiff(
+  src: string,
+  dst: string,
+  opts: DryRunOptionsDto,
+): Promise<TreeDiffDto> {
+  return invoke<TreeDiffDto>("compute_tree_diff", { src, dst, opts });
+}
+
+// ---------------------------------------------------------------------
 // Phase 33 — mount-as-filesystem.
 // ---------------------------------------------------------------------
 

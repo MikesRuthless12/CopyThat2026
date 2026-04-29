@@ -55,6 +55,7 @@ pub mod mobile_commands;
 pub mod mount_commands;
 pub mod offload_commands;
 pub mod power;
+pub mod preview_commands;
 pub mod progress_channel;
 pub mod recovery_commands;
 pub mod reveal;
@@ -431,6 +432,8 @@ pub fn run() {
             // offload-template wizard.
             offload_commands::smb_compression_state,
             offload_commands::render_offload_template,
+            // Phase 41 — pre-execution tree-diff preview.
+            preview_commands::compute_tree_diff,
         ])
         .setup(move |app| {
             // Phase 40 — start the named-pipe broker that future
