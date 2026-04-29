@@ -1,0 +1,57 @@
+[package]
+name = "copythat-provenance"
+description = "Phase 43 — forensic chain-of-custody manifests + BLAKE3 verified streaming for Copy That. Ed25519 detached signing; canonical CBOR; opt-in RFC 3161 timestamping."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Phase 43 — RFC 3161 timestamping is opt-in. The Phase 43 spec
+# referenced an `rfc3161-client` crate that does not exist on
+# crates.io; rather than introduce a half-working bespoke encoder,
+# this build ships the manifest schema for timestamps
+# (`Rfc3161Token`) but leaves the *request* path stubbed at
+# `Err(TsaFeatureDisabled)` even when `--features tsa` is on. A
+# follow-up phase will wire the actual TSA HTTP client (likely a
+# minimal in-tree TimeStampReq encoder over `pkcs8` + `reqwest`).
+# Until then, manifests carry no timestamp; the verify pass treats
+# `timestamp = None` as a clean state.
+tsa = []
+
+[dependencies]
+copythat-core = { path = "../copythat-core", version = "1" }
+# `bao` already depends on `blake3`; we keep `blake3` as a direct
+# dep too because verify-time re-hash uses the streaming hasher
+# directly (no Bao tree needed when you only want the root).
+bao = "0.13"
+blake3 = "1"
+ciborium = "0.2"
+# Ed25519 detached signing. The `pkcs8` + `pem` features expose
+# `from_pkcs8_pem` / `to_pkcs8_pem` for keyring import/export.
+ed25519-dalek = { version = "2", features = ["rand_core", "pkcs8", "pem"] }
+hex = "0.4"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+# CBOR's canonical encoding for byte strings: `serde_bytes` opts
+# `Vec<u8>` fields out of the default per-element encoding.
+serde_bytes = "0.11"
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+copythat-hash = { path = "../copythat-hash", version = "1" }
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
+
+[[test]]
+name = "phase_43_provenance"
+path = "../../tests/smoke/phase_43_provenance.rs"

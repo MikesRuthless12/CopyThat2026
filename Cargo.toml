@@ -25,6 +25,7 @@ members = [
     "crates/copythat-mobile",
     "crates/copythat-recovery",
     "crates/copythat-perceptual",
+    "crates/copythat-provenance",
     "xtask",
     "apps/copythat-ui/src-tauri",
 ]

@@ -122,8 +122,67 @@ pub enum Cmd {
     Version(VersionArgs),
     /// Get / set / reset values in the persistent settings file.
     Config(ConfigArgs),
+    /// Phase 43 — forensic chain-of-custody manifest tooling.
+    Provenance(ProvenanceArgs),
     /// Emit a shell-completion script for bash / zsh / fish / pwsh.
     Completions(CompletionsArgs),
+}
+
+/// `copythat provenance <…>` — Phase 43 forensic chain-of-custody.
+#[derive(Args, Debug, Clone)]
+pub struct ProvenanceArgs {
+    #[command(subcommand)]
+    pub action: ProvenanceAction,
+}
+
+/// Sub-actions for the `provenance` subcommand.
+#[derive(Subcommand, Debug, Clone)]
+pub enum ProvenanceAction {
+    /// Verify a `.copythat-provenance.cbor` manifest against the
+    /// destination tree. Re-hashes each file at its claimed path,
+    /// compares BLAKE3 roots, validates the Merkle root, validates
+    /// the ed25519 signature when present, and reports any tampered
+    /// or missing files.
+    ///
+    /// Exit codes:
+    ///   - 0: manifest verified clean
+    ///   - 4: at least one file tampered, missing, or signature
+    ///     invalid (verify-failed bucket)
+    ///   - 9: manifest itself unparseable (config-invalid bucket)
+    Verify(ProvenanceVerifyArgs),
+    /// Generate a fresh ed25519 signing key and write its PKCS#8
+    /// PEM to `--out`. The matching public key is printed to
+    /// `stdout` (or written next to the private key with a `.pub`
+    /// suffix when `--write-public` is supplied).
+    Keygen(ProvenanceKeygenArgs),
+}
+
+/// `copythat provenance verify <MANIFEST>` arguments.
+#[derive(Args, Debug, Clone)]
+pub struct ProvenanceVerifyArgs {
+    /// Path to a `.copythat-provenance.cbor` manifest file.
+    #[arg(value_name = "MANIFEST")]
+    pub manifest: PathBuf,
+
+    /// Optional pinned public key (PEM SPKI). When supplied, the
+    /// verify pass treats a manifest signed with a different public
+    /// key as a `bad-signature` failure even if the cryptographic
+    /// check would otherwise pass.
+    #[arg(long, value_name = "PEM")]
+    pub trusted_key: Option<PathBuf>,
+}
+
+/// `copythat provenance keygen --out <PATH>` arguments.
+#[derive(Args, Debug, Clone)]
+pub struct ProvenanceKeygenArgs {
+    /// Where to write the PKCS#8 PEM private key.
+    #[arg(long, value_name = "PATH")]
+    pub out: PathBuf,
+
+    /// Also write the matching SPKI PEM public key to
+    /// `<out>.pub`. Default: print public key to stdout only.
+    #[arg(long)]
+    pub write_public: bool,
 }
 
 /// `copy` and `move` share a flag surface — same `CopyArgs` struct.

@@ -52,6 +52,9 @@ pub(crate) fn dispatch(cli: Cli) -> ExitCode {
             Cmd::Schedule(args) => commands::schedule::run(&cli.global, args, writer.clone()).await,
             Cmd::Version(_) => commands::version::run(&cli.global, writer.clone()).await,
             Cmd::Config(args) => commands::config::run(&cli.global, args, writer.clone()).await,
+            Cmd::Provenance(args) => {
+                commands::provenance::run(&cli.global, args, writer.clone()).await
+            }
             Cmd::Completions(args) => commands::completions::run(args).await,
         }
     })

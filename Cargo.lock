@@ -715,6 +715,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bao"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f9125f93587b894c196d58b0a752ce2213552d0d483c98ee41530e38202a511"
+dependencies = [
+ "arrayvec",
+ "blake3",
+]
+
+[[package]]
 name = "base16ct"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1642,6 +1652,7 @@ dependencies = [
  "copythat-hash",
  "copythat-history",
  "copythat-platform",
+ "copythat-provenance",
  "copythat-settings",
  "copythat-shape",
  "predicates",
@@ -1878,6 +1889,27 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "zbus",
+]
+
+[[package]]
+name = "copythat-provenance"
+version = "1.0.0"
+dependencies = [
+ "bao",
+ "blake3",
+ "chrono",
+ "ciborium",
+ "copythat-core",
+ "copythat-hash",
+ "ed25519-dalek 2.2.0",
+ "hex",
+ "rand 0.8.5",
+ "serde",
+ "serde_bytes",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -2413,6 +2445,7 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
  "curve25519-dalek-derive",
+ "digest 0.10.7",
  "fiat-crypto 0.2.9",
  "rustc_version",
  "subtle",
@@ -2812,6 +2845,16 @@ dependencies = [
 
 [[package]]
 name = "ed25519"
+version = "2.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
+dependencies = [
+ "pkcs8 0.10.2",
+ "signature 2.2.0",
+]
+
+[[package]]
+name = "ed25519"
 version = "3.0.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6e914c7c52decb085cea910552e24c63ac019e3ab8bf001ff736da9a9d9d890"
@@ -2822,12 +2865,27 @@ dependencies = [
 
 [[package]]
 name = "ed25519-dalek"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
+dependencies = [
+ "curve25519-dalek 4.1.3",
+ "ed25519 2.2.3",
+ "rand_core 0.6.4",
+ "serde",
+ "sha2 0.10.9",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "ed25519-dalek"
 version = "3.0.0-pre.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "053618a4c3d3bc24f188aa660ae75a46eeab74ef07fb415c61431e5e7cd4749b"
 dependencies = [
  "curve25519-dalek 5.0.0-pre.6",
- "ed25519",
+ "ed25519 3.0.0-rc.4",
  "rand_core 0.10.1",
  "serde",
  "sha2 0.11.0",
@@ -4440,7 +4498,7 @@ dependencies = [
  "bcrypt-pbkdf",
  "crypto-bigint",
  "ecdsa",
- "ed25519-dalek",
+ "ed25519-dalek 3.0.0-pre.6",
  "hex",
  "hmac 0.13.0",
  "p256",
@@ -7285,7 +7343,7 @@ dependencies = [
  "der 0.8.0",
  "digest 0.10.7",
  "ecdsa",
- "ed25519-dalek",
+ "ed25519-dalek 3.0.0-pre.6",
  "elliptic-curve",
  "enum_dispatch",
  "flate2",
@@ -7859,6 +7917,16 @@ dependencies = [
  "serde",
  "serde_core",
  "typeid",
+]
+
+[[package]]
+name = "serde_bytes"
+version = "0.11.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5d440709e79d88e51ac01c4b72fc6cb7314017bb7da9eeff678aa94c10e3ea8"
+dependencies = [
+ "serde",
+ "serde_core",
 ]
 
 [[package]]

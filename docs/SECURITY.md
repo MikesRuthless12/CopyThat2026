@@ -672,6 +672,113 @@ file's header comment.
   there carries a `// SAFETY:` comment a reviewer signed off on
   (enforced by `rg -t rust 'unsafe'` in §1 of the QA checklist).
 
+## Phase 43 — forensic chain-of-custody manifests (`copythat-provenance`)
+
+Phase 43 introduces an opt-in pipeline that lets a copy job produce
+a signed BLAKE3 + ed25519 manifest at the destination root. This
+section documents what the manifest does and does NOT prove, the
+private-key handling rules, and the deferred TSA path.
+
+### What the manifest authenticates
+
+- **On-disk integrity.** Every byte at the recorded `rel_path`
+  matches the `blake3_root` taken at copy time. Tampering with one
+  byte in one destination file flips its outcome to `Tampered { .. }`
+  in `verify_manifest`'s report; every other file remains `Ok`.
+- **Per-file Merkle roots aggregate to a manifest Merkle root**
+  (`manifest.merkle_root` = BLAKE3 over the per-file roots after
+  sorting by `rel_path`). Editing the manifest (renaming a file,
+  swapping a digest) re-computes to a different root and
+  invalidates the ed25519 signature.
+- **Authorship via ed25519.** When a signing key is configured, the
+  manifest carries a 64-byte detached signature over the
+  signing-bytes view (CBOR re-encode with `signature` + `timestamp`
+  cleared). Verifiers either pin the public key
+  (`--trusted-key <PEM>` on the CLI) or trust on first use against
+  the embedded `public_key`.
+
+### What the manifest does NOT authenticate
+
+- **Source-side authenticity.** The manifest proves the destination
+  bytes match what was hashed; it does NOT prove the source bytes
+  were genuine. A signing key the user controls can stamp anything
+  the engine copies.
+- **Time of copy** (without an RFC 3161 timestamp). The `started_at`
+  / `finished_at` fields on the manifest come from the host's
+  wall-clock and are trivially forgeable. Combined with a TSA
+  timestamp (deferred — see below), the manifest establishes "this
+  content existed in this form at this point in time"; without one,
+  the temporal claim is system-clock-only and unverifiable.
+
+### Key-handling rules
+
+- **Private keys never leave the caller's keyring.** The engine sees
+  only an `ed25519_dalek::SigningKey` instance the caller threaded
+  through `SinkConfig::signing_key`. The sink's
+  `signing_key_to_pem` / `_from_pem` helpers exist so the UI's
+  Settings → Provenance panel can hand keys to the OS keyring
+  without the caller learning curve25519 — the keyring is the
+  durable store of record.
+- **Public keys are out-of-band.** Distribution is the user's
+  responsibility (publish on a key server, hand-share, embed in a
+  build, etc.). The manifest carries the public key inline so a
+  verifier without out-of-band trust can still confirm the manifest
+  is internally consistent (TOFU mode); pinning a `--trusted-key`
+  promotes that to authenticated mode.
+- **`copythat provenance keygen --out <PATH>` writes a PKCS#8 PEM
+  private key** with no passphrase by default. Users running on
+  shared machines should chmod the file to user-only or store it
+  in a passphrase-protected keyring instead. The keygen command
+  does not enforce any access mode; that's deferred to a future
+  hardening pass.
+
+### Deferred RFC 3161 timestamping
+
+The Phase 43 spec referenced an `rfc3161-client` crate that does
+not exist on crates.io. Rather than introduce a half-working
+bespoke ASN.1 encoder this build wires the manifest schema for
+timestamps (`Rfc3161Token { tsa_url, token_der, stamped_at }`) but
+classifies the request path as `TsaFeatureDisabled` even with the
+opt-in `tsa` Cargo feature enabled. Manifests carry
+`timestamp = None` until a follow-up phase wires the actual TSA
+HTTP client; the verify pass treats absent timestamps as a clean
+state and reports `signature` integrity alone.
+
+When the TSA path lands:
+
+- `https://freetsa.org/tsr` is the documented default (free,
+  publicly trusted, opt-in via the Settings → Provenance "Default
+  TSA URL" field). Other RFC 3161 services work unchanged.
+- The TSA call is the only non-loopback network operation Copy
+  That makes during a provenance-enabled copy. It must be opt-in
+  per `SinkConfig::tsa_url` — never on by default for jobs whose
+  user has not explicitly typed a URL.
+- The TSA receives a hash of the manifest's signing-bytes view
+  (BLAKE3 of the same bytes ed25519 signs). The TSA learns nothing
+  about the file paths, sizes, or contents.
+
+### Threat model — what attacks are out of scope
+
+- **Compromised signing host.** If the attacker gets root on the
+  signing machine they can stamp anything; the manifest proves
+  bytes matched the digest, not authenticity of those bytes against
+  an external truth. Use a hardware-backed key (YubiKey, TPM-bound)
+  if the threat surface includes signing-host compromise.
+- **Manifest collision attacks.** BLAKE3 is preimage-resistant at
+  128-bit security; finding two different file sets whose Merkle
+  roots collide is computationally infeasible. We don't claim
+  256-bit collision resistance — that's the BLAKE3 spec's claim,
+  not an engineering guarantee.
+- **Bao verified-streaming proof tampering.** When a Bao outboard
+  is present in a `FileRecord`, an attacker who modifies one chunk
+  of the destination must also produce a forged outboard whose
+  per-chunk hashes match the new bytes AND whose tree root matches
+  the original `blake3_root`. This is equivalent to a BLAKE3
+  collision. We don't gate verification on the outboard today —
+  the verify pass re-hashes the full file rather than running a
+  partial-byte-range proof, so the outboard is currently a future-
+  proofing artefact for partial-content attestation use cases.
+
 ## What we will not do
 
 - Telemetry. The app does not phone home. Any future opt-in telemetry will

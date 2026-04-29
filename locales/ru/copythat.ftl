@@ -1238,3 +1238,19 @@ version-retention-none = Keep every version forever  # MT
 version-retention-last-n = Keep last { $n } versions  # MT
 version-retention-older-than-days = Drop versions older than { $days } days  # MT
 version-retention-gfs = Hourly { $h } · daily { $d } · weekly { $w } · monthly { $m }  # MT
+
+# Phase 43 — forensic chain-of-custody manifests.  # MT
+provenance-settings-heading = Forensic chain-of-custody  # MT
+provenance-settings-hint = Sign every copy job with a BLAKE3 + ed25519 manifest. Reviewers can re-hash the destination tree later and prove no byte changed since the copy.  # MT
+provenance-settings-enable-default = Sign every new job by default  # MT
+provenance-settings-show-after-job = Show manifest after each completed job  # MT
+provenance-settings-tsa-url-label = Default RFC 3161 timestamp authority URL  # MT
+provenance-settings-tsa-url-hint = Optional. When set, manifests carry a free TSA timestamp proving the bytes existed at this point in time. Leave empty to skip.  # MT
+provenance-settings-keys-heading = Signing keys  # MT
+provenance-settings-keys-generate = Generate new key  # MT
+provenance-settings-keys-import = Import key…  # MT
+provenance-settings-keys-export = Export public key…  # MT
+provenance-job-completed-title = Provenance manifest saved  # MT
+provenance-job-completed-body = { $count } files signed → { $path }  # MT
+provenance-verify-clean = Manifest valid for { $count } files; signature { $sig }; merkle root OK.  # MT
+provenance-verify-tampered = Manifest INVALID — { $tampered } tampered, { $missing } missing.  # MT

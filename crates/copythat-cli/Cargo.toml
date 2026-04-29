@@ -58,6 +58,10 @@ copythat-settings = { path = "../copythat-settings", version = "1" }
 copythat-shape = { path = "../copythat-shape", version = "1" }
 # Phase 36 — `copythat history` reads the same SQLite table as the GUI.
 copythat-history = { path = "../copythat-history", version = "1" }
+# Phase 43 — `copythat provenance verify / keygen` wraps the
+# manifest verifier + ed25519 keygen helpers from
+# `copythat-provenance`.
+copythat-provenance = { path = "../copythat-provenance", version = "1" }
 # Phase 36 — UTC timestamps in the JSON event stream. Workspace already
 # carries chrono indirectly; explicit dep here keeps the surface small.
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }

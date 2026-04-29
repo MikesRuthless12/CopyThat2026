@@ -69,6 +69,26 @@ exceptions = []
 # Adding the new top-level `copythat-recovery` crate is itself
 # `LicenseRef-AllRightsReserved` like every other workspace crate
 # (private.ignore = true skips it).
+#
+# Phase 43 audit-pass — forensic chain-of-custody manifests
+# (`copythat-provenance`) pulls in:
+#   - `bao` (MIT-OR-Apache-2.0) — verified-streaming outboard encoder
+#     over BLAKE3 trees. By Jack O'Connor (BLAKE3's author).
+#   - `ed25519-dalek` (BSD-3-Clause) — RFC 8032 detached signing.
+#     Audited; constant-time scalar multiplication; no known
+#     side-channel issues at the Rust API surface.
+#   - `ciborium` (Apache-2.0) — canonical CBOR (RFC 8949). Used for
+#     manifest serialisation; deterministic encoder output is
+#     mandatory for signature compatibility across versions.
+#   - `serde_bytes` (MIT-OR-Apache-2.0) — newtype adapter for byte
+#     strings on `Vec<u8>` / `[u8; N]` fields so they CBOR-encode as
+#     CBOR byte strings rather than CBOR arrays of integers.
+#   - `chrono` (MIT-OR-Apache-2.0) — already in tree (Phase 27); no
+#     new license footprint.
+# Behind the opt-in `tsa` feature: `rfc3161-client` (MIT) +
+# `reqwest` (MIT-OR-Apache-2.0) for RFC 3161 timestamping. The
+# default build does NOT pull these in. Every license above is
+# already covered by the allowlist; no new entries needed.
 
 # ----- Bans -------------------------------------------------------------------
 [bans]
@@ -205,4 +225,18 @@ ignore = [
     # Re-audit when compio drops `paste` or migrates to a maintained
     # alternative.
     "RUSTSEC-2024-0436",
+    # Phase 43 — `rand 0.8.5` ThreadRng aliased-mutable-reference UB
+    # under custom log() loggers that touch ThreadRng during reseed.
+    # Workspace-wide concern: `rand 0.8.5` is the resolved version
+    # for `age` / `age-core` / `rsa` / `pageant` / `phf_generator` /
+    # `reqsign` / `russh` / `russh-keys` and now `copythat-provenance`
+    # (which uses `rand::rngs::OsRng` for ed25519 keygen — NOT
+    # ThreadRng — so the unsoundness path doesn't apply to our
+    # call-sites). Mitigation: every workspace consumer either uses
+    # `OsRng` (safe under this advisory) or doesn't install a custom
+    # `log` logger that would hit the reseed-from-logger pathway.
+    # Tracked for upgrade when the upstream graph migrates the rand
+    # 0.8 → 0.9 ecosystem (age 0.12, rsa 0.10, etc.); single-bump
+    # cascade waits on `age` upstream.
+    "RUSTSEC-2026-0097",
 ]

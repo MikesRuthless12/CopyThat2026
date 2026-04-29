@@ -581,6 +581,25 @@ pub struct CopyOptions {
     /// `enabled = true` — the engine has no way to capture the
     /// snapshot without a sink to talk to.
     pub versioning_sink: Option<Arc<dyn crate::versioning::VersioningSink>>,
+
+    /// Phase 43 — forensic chain-of-custody manifest policy.
+    ///
+    /// When `Some`, the engine creates a fresh
+    /// [`crate::OutboardEncoder`] per file via
+    /// [`crate::ProvenanceSink::make_encoder`], feeds it source bytes
+    /// from the same `fill_buf` loop that drives the verify hasher,
+    /// and after a successful copy hands the finalized
+    /// `(blake3_root, bao_outboard)` pair back to the sink via
+    /// [`crate::ProvenanceSink::record_file`]. The sink owns the
+    /// per-job [`copythat_provenance::ProvenanceManifest`] state and
+    /// is finalized (signed, optionally TSA-stamped, written to disk)
+    /// by the *caller* after the tree-walk returns — the engine never
+    /// touches the manifest writer.
+    ///
+    /// `None` (the default) preserves pre-Phase-43 behaviour. Mutually
+    /// non-exclusive with [`Self::verify`]; the two share the source
+    /// read pass and pay one extra `update(buf)` per buffered chunk.
+    pub provenance: Option<crate::provenance::ProvenancePolicy>,
 }
 
 /// Bridge contract for the Phase 32 cloud sink.
@@ -760,6 +779,7 @@ impl Default for CopyOptions {
             dest_jail_root: None,
             versioning: crate::versioning::VersioningPolicy::default(),
             versioning_sink: None,
+            provenance: None,
         }
     }
 }

@@ -8,6 +8,7 @@ pub(crate) mod copy;
 pub(crate) mod history;
 pub(crate) mod mount;
 pub(crate) mod plan;
+pub(crate) mod provenance;
 pub(crate) mod remote;
 pub(crate) mod schedule;
 pub(crate) mod shred;

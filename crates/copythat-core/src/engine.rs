@@ -435,6 +435,13 @@ pub async fn copy_file(
     let mut journal_hasher: Option<blake3::Hasher> =
         opts.journal.as_ref().map(|_| blake3::Hasher::new());
 
+    // Phase 43 — provenance outboard encoder. Lives alongside the
+    // verify hasher and consumes the same bytes from the same
+    // `fill_buf` loop. Finalized after the copy succeeds and handed
+    // to the sink via `record_file`.
+    let mut provenance_encoder: Option<Box<dyn crate::OutboardEncoder>> =
+        opts.provenance.as_ref().map(|p| p.sink.make_encoder());
+
     // On a successful resume, prime the journal hasher with the
     // prefix bytes from the destination — they are byte-identical
     // to the source's first `resume_offset` bytes by construction
@@ -510,6 +517,9 @@ pub async fn copy_file(
         }
         if let Some(h) = journal_hasher.as_mut() {
             h.update(buf);
+        }
+        if let Some(enc) = provenance_encoder.as_mut() {
+            enc.update(buf);
         }
         reader.consume(n);
         copied += n as u64;
@@ -651,6 +661,18 @@ pub async fn copy_file(
             if let (Some(journal), Some(h)) = (opts.journal.as_ref(), journal_hasher.take()) {
                 let final_hash: [u8; 32] = *h.finalize().as_bytes();
                 journal.finish_file(opts.journal_file_idx, final_hash);
+            }
+
+            // Phase 43 — finalize the provenance encoder and hand the
+            // (root, outboard) pair to the sink. The sink derives the
+            // manifest's rel_path against the job-level src_root it
+            // was constructed with; we just feed it the absolutes.
+            if let (Some(policy), Some(enc)) = (opts.provenance.as_ref(), provenance_encoder.take())
+            {
+                let (root, outboard) = enc.finalize();
+                policy
+                    .sink
+                    .record_file(&src_path, &dst_path, copied, root, outboard);
             }
 
             let _ = events

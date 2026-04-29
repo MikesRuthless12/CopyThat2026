@@ -987,3 +987,23 @@ version-retention-none = Keep every version forever
 version-retention-last-n = Keep last { $n } versions
 version-retention-older-than-days = Drop versions older than { $days } days
 version-retention-gfs = Hourly { $h } · daily { $d } · weekly { $w } · monthly { $m }
+
+# Phase 43 — forensic chain-of-custody manifests + BLAKE3 verified
+# streaming. 14 keys cover the Settings → Provenance panel
+# (heading, hint, toggles, TSA URL, signing-key management) plus
+# the post-job manifest notification + the verify command's two
+# headline result lines.
+provenance-settings-heading = Forensic chain-of-custody
+provenance-settings-hint = Sign every copy job with a BLAKE3 + ed25519 manifest. Reviewers can re-hash the destination tree later and prove no byte changed since the copy.
+provenance-settings-enable-default = Sign every new job by default
+provenance-settings-show-after-job = Show manifest after each completed job
+provenance-settings-tsa-url-label = Default RFC 3161 timestamp authority URL
+provenance-settings-tsa-url-hint = Optional. When set, manifests carry a free TSA timestamp proving the bytes existed at this point in time. Leave empty to skip.
+provenance-settings-keys-heading = Signing keys
+provenance-settings-keys-generate = Generate new key
+provenance-settings-keys-import = Import key…
+provenance-settings-keys-export = Export public key…
+provenance-job-completed-title = Provenance manifest saved
+provenance-job-completed-body = { $count } files signed → { $path }
+provenance-verify-clean = Manifest valid for { $count } files; signature { $sig }; merkle root OK.
+provenance-verify-tampered = Manifest INVALID — { $tampered } tampered, { $missing } missing.
