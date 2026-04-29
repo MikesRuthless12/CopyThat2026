@@ -76,20 +76,30 @@ async fn verify(
         });
         ExitCode::Success
     } else {
-        let mut tampered_paths: Vec<String> = Vec::new();
-        for (path, outcome) in &report.per_file {
-            if matches!(outcome, VerificationOutcome::Tampered { .. }) {
-                tampered_paths.push(path.display().to_string());
-            }
-        }
-        // Phase 43 post-review — emit a typed `ProvenanceVerifyFailed`
-        // event so JSON consumers can branch on `kind` instead of
-        // parsing the human-readable summary out of `Info`.
-        // Cap `tampered_paths` at 32 entries to keep the JSON line
-        // small on degenerate trees; the `tampered_count` field is
-        // the authoritative total.
-        let mut paths_for_event = tampered_paths.clone();
-        paths_for_event.truncate(32);
+        // Phase 43 re-review (H-1, H-2) — collect tampered AND
+        // missing paths, both clamped at 32 entries with `take(32)`
+        // (no cloning a million-element vec just to truncate the
+        // first 32). Build the human-readable summary from the full
+        // tampered_paths_full vec separately.
+        let tampered_paths_full: Vec<String> = report
+            .per_file
+            .iter()
+            .filter_map(|(path, outcome)| match outcome {
+                VerificationOutcome::Tampered { .. } => Some(path.display().to_string()),
+                _ => None,
+            })
+            .collect();
+        let missing_paths_full: Vec<String> = report
+            .per_file
+            .iter()
+            .filter_map(|(path, outcome)| match outcome {
+                VerificationOutcome::Missing { .. } => Some(path.display().to_string()),
+                _ => None,
+            })
+            .collect();
+        let tampered_for_event: Vec<String> =
+            tampered_paths_full.iter().take(32).cloned().collect();
+        let missing_for_event: Vec<String> = missing_paths_full.iter().take(32).cloned().collect();
         let _ = writer.emit(JsonEventKind::ProvenanceVerifyFailed {
             manifest: args.manifest.display().to_string(),
             ok_count: report.ok_count as u64,
@@ -98,8 +108,10 @@ async fn verify(
             merkle_root_ok: report.merkle_root_ok,
             signature_ok: report.signature_ok,
             timestamp_ok: report.timestamp_ok,
-            tampered_paths: paths_for_event,
+            tampered_paths: tampered_for_event,
+            missing_paths: missing_for_event,
         });
+        let tampered_paths = tampered_paths_full;
         // Also emit the human-readable summary as Info for the
         // default text mode (the typed event is redundant under
         // OutputMode::Human; the writer drops it).

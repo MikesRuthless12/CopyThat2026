@@ -288,7 +288,59 @@ pub fn validate_rel_path(rel: &str) -> Result<(), ProvenanceError> {
     let pb = std::path::PathBuf::from(rel);
     for c in pb.components() {
         match c {
-            std::path::Component::Normal(_) => {}
+            std::path::Component::Normal(seg) => {
+                // Phase 43 re-review (M-2) — validate per-segment.
+                let s = seg.to_string_lossy();
+                // NUL bytes terminate paths in C-string FFI (Windows
+                // CreateFile / Unix open); Rust's `CString::new`
+                // returns InvalidInput for them, but rejecting at
+                // parse time gives a cleaner error than a downstream
+                // open failure.
+                if s.contains('\0') {
+                    return Err(ProvenanceError::classify(
+                        crate::error::ProvenanceErrorKind::Protocol,
+                        format!("rel_path segment contains NUL byte: {rel:?}"),
+                    ));
+                }
+                // Windows reserved DOS device names (case-insensitive)
+                // attach to console / printer / serial devices when
+                // opened. An attacker-supplied manifest with
+                // rel_path = "CON.txt" could cause `verify_one` to
+                // open the console device, returning bytes it shouldn't
+                // have access to. Reject across all platforms — the
+                // manifest is meant to be portable.
+                let stem = s.split('.').next().unwrap_or(&s).to_ascii_uppercase();
+                if matches!(
+                    stem.as_str(),
+                    "CON"
+                        | "PRN"
+                        | "AUX"
+                        | "NUL"
+                        | "COM1"
+                        | "COM2"
+                        | "COM3"
+                        | "COM4"
+                        | "COM5"
+                        | "COM6"
+                        | "COM7"
+                        | "COM8"
+                        | "COM9"
+                        | "LPT1"
+                        | "LPT2"
+                        | "LPT3"
+                        | "LPT4"
+                        | "LPT5"
+                        | "LPT6"
+                        | "LPT7"
+                        | "LPT8"
+                        | "LPT9"
+                ) {
+                    return Err(ProvenanceError::classify(
+                        crate::error::ProvenanceErrorKind::Protocol,
+                        format!("rel_path uses Windows reserved device name: {rel:?}"),
+                    ));
+                }
+            }
             std::path::Component::CurDir => {
                 // `.` segments are harmless but discouraged; allow
                 // for tolerance with exotic engine adapters.

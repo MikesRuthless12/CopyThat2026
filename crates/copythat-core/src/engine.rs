@@ -87,21 +87,26 @@ pub async fn copy_file(
         return copy_symlink(&src_path, &dst_path, &opts, &events).await;
     }
 
-    // Phase 42 Part B + Phase 43 post-review hardening — pre-dispatch
-    // snapshot. The Phase-42 reviewer caught that the snapshot block
-    // sat inside the dense-path branch only (engine.rs:316-341), so
-    // every fast path (sparse-aware, fast_copy_hook, transform) and
-    // the cloud-sink branch silently bypassed the user's
-    // "Keep previous versions on overwrite" toggle. Lifting the call
-    // up here makes versioning fire on all local-dst paths.
+    // Phase 42-43 hardening regression fix (re-review C-1) — the
+    // first hardening pass lifted the snapshot helper to a single
+    // pre-dispatch call site, but lost the FreshStart guard the
+    // dense-path block had. That meant a resumed copy (journal +
+    // versioning enabled) snapshotted the partial dst before
+    // appending the resume tail, creating a phantom version row.
     //
-    // Skipped for cloud_sink (dst is a remote key, no local file to
-    // snapshot) and for `fail_if_exists` (the engine is about to
-    // fail with `AlreadyExists` and never overwrite — snapshotting
-    // would create a phantom version row without any matching copy).
-    if opts.cloud_sink.is_none() && !opts.fail_if_exists {
-        maybe_snapshot_before_overwrite(&dst_path, &opts).await;
-    }
+    // The corrected pattern fires the snapshot per-branch:
+    //   - cloud_sink: skipped (dst is a remote key, no local file).
+    //   - transform: fires (overwrite-from-byte-0; encrypted bytes
+    //     replace the prior plaintext).
+    //   - sparse-aware: fires (truncate(true) before extent walk).
+    //   - fast_copy_hook: fires (CopyFileExW / reflink overwrite).
+    //   - dense path: fires only on FreshStart (resume reuses the
+    //     existing prefix; snapshotting a partial-resume dst would
+    //     misrepresent an in-flight transfer as a "previous
+    //     version").
+    // The `fail_if_exists` guard belongs at every fire site since
+    // the create_new(true) is about to fail with AlreadyExists and
+    // never overwrite.
 
     // Phase 43 post-review — provenance forces the async source-read
     // loop so the encoder sees every byte. Mirrors the existing
@@ -132,6 +137,12 @@ pub async fn copy_file(
     // hash transformed (encrypted) bytes, not source bytes — that
     // breaks the "verify rehashes against the source" contract.
     if let Some(sink) = opts.transform.clone() {
+        // Phase 42-43 hardening: snapshot the about-to-be-overwritten
+        // plaintext dst before the transform sink replaces it with
+        // encrypted/compressed bytes. Transform doesn't resume.
+        if !opts.fail_if_exists {
+            maybe_snapshot_before_overwrite(&dst_path, &opts).await;
+        }
         return copy_file_to_transform(src_path, dst_path, opts, ctrl, events, src_metadata, sink)
             .await;
     }
@@ -195,6 +206,12 @@ pub async fn copy_file(
                             .await;
                         // Fall through to the classic dense path below.
                     } else {
+                        // Phase 42-43 hardening: snapshot before the
+                        // sparse-aware path opens dst with truncate(true).
+                        // Sparse path doesn't resume.
+                        if !opts.fail_if_exists {
+                            maybe_snapshot_before_overwrite(&dst_path, &opts).await;
+                        }
                         return copy_file_sparse_aware(
                             src_path,
                             dst_path,
@@ -237,6 +254,13 @@ pub async fn copy_file(
         && opts.strategy != CopyStrategy::AlwaysAsync
         && let Some(hook) = opts.fast_copy_hook.clone()
     {
+        // Phase 42-43 hardening: snapshot before reflink/CopyFileExW
+        // overwrite. The fast hook doesn't resume from a partial dst —
+        // it always overwrites byte-zero — so the FreshStart guard the
+        // dense path uses doesn't apply here.
+        if !opts.fail_if_exists {
+            maybe_snapshot_before_overwrite(&dst_path, &opts).await;
+        }
         match hook
             .try_copy(
                 src_path.clone(),
@@ -340,10 +364,22 @@ pub async fn copy_file(
     let (mut src_file, snapshot_lease) =
         open_src_with_snapshot_fallback(&src_path, &dst_path, &opts, &events).await?;
 
-    // (Phase 42 Part B versioning snapshot was here in the original
-    // implementation; lifted to `maybe_snapshot_before_overwrite`
-    // pre-dispatch so it fires for every local-dst path, not just
-    // the dense one. See engine.rs:~88 for the new call site.)
+    // Phase 42 Part B (re-review fix) — snapshot the about-to-be-
+    // overwritten dst before the dense path opens it with
+    // truncate(true). Fires only on FreshStart: a Resume reuses the
+    // existing prefix bytes intact, so there's no overwrite-from-
+    // byte-0 to capture, and snapshotting the partial dst would
+    // record an in-flight resume as a "previous version" — a UX
+    // regression from the first hardening pass that lifted this
+    // call to pre-dispatch and lost the FreshStart guard.
+    //
+    // The other fast paths (transform / sparse-aware / fast_copy_hook)
+    // each fire `maybe_snapshot_before_overwrite` from their own
+    // pre-dispatch sites because they don't have a resume concept;
+    // see the comment block at the top of this function.
+    if matches!(resume_decision, ResumeDecision::FreshStart) && !opts.fail_if_exists {
+        maybe_snapshot_before_overwrite(&dst_path, &opts).await;
+    }
 
     let mut open = OpenOptions::new();
     open.write(true);
@@ -1800,6 +1836,13 @@ async fn prime_blake3_from_dst_prefix(
 /// only sees the post-resume tail, producing a BLAKE3 root that
 /// diverges from the source file's true root and silently invalidating
 /// the manifest.
+///
+/// Phase 43 re-review (M-4): refuses to silently truncate. If the
+/// dst is shorter than `resume_offset` between `decide_resume`'s
+/// metadata stat and this open (e.g. an external process or a
+/// concurrent rename moved bytes off the file), `read_exact`-style
+/// behaviour returns `UnexpectedEof` rather than priming the
+/// encoder with a too-short prefix.
 async fn prime_outboard_from_dst_prefix(
     encoder: &mut Box<dyn crate::OutboardEncoder>,
     dst_path: &Path,
@@ -1812,7 +1855,13 @@ async fn prime_outboard_from_dst_prefix(
         let to_read = std::cmp::min(buf.len() as u64, remaining) as usize;
         let read = f.read(&mut buf[..to_read]).await?;
         if read == 0 {
-            break;
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                format!(
+                    "provenance prime: dst shrank below resume_offset \
+                     ({remaining} bytes still expected)"
+                ),
+            ));
         }
         encoder.update(&buf[..read]);
         remaining -= read as u64;

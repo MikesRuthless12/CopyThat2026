@@ -123,6 +123,11 @@ pub enum JsonEventKind {
         /// pipe-friendly on huge trees; the count above is the
         /// authoritative total).
         tampered_paths: Vec<String>,
+        /// Up to 32 missing paths (same clamp as `tampered_paths`).
+        /// Phase 43 re-review (H-2) — pre-fix only `tampered_paths`
+        /// was surfaced, so JSON consumers couldn't tell which
+        /// files went missing without re-running verify.
+        missing_paths: Vec<String>,
     },
     Info {
         message: String,
