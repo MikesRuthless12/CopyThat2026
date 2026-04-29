@@ -961,9 +961,7 @@ pub async fn history_rerun(
     // otherwise the engine falls through to the async-fallback Rust
     // loop and runs at ~600 MiB/s instead of CopyFileExW's 2400+.
     let copy_opts = CopyOptions {
-        fast_copy_hook: Some(std::sync::Arc::new(
-            copythat_platform::PlatformFastCopyHook,
-        )),
+        fast_copy_hook: Some(std::sync::Arc::new(copythat_platform::PlatformFastCopyHook)),
         ..CopyOptions::default()
     };
     Ok(crate::shell::enqueue_jobs(

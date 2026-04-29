@@ -50,8 +50,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use windows_sys::Win32::Foundation::{
-    CloseHandle, ERROR_ALREADY_EXISTS, ERROR_PIPE_BUSY, GetLastError, HANDLE,
-    INVALID_HANDLE_VALUE,
+    CloseHandle, ERROR_ALREADY_EXISTS, ERROR_PIPE_BUSY, GetLastError, HANDLE, INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE,
@@ -144,10 +143,7 @@ pub fn try_forward_argv(argv: &[String]) -> Result<(), String> {
     let secret = crate::broker_auth::load_secret_for_client()
         .map_err(|e| format!("session token unavailable: {e}"))?;
 
-    let pipe_name: Vec<u16> = OsStr::new(PIPE_NAME)
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
+    let pipe_name: Vec<u16> = OsStr::new(PIPE_NAME).encode_wide().chain(Some(0)).collect();
 
     // Wait briefly for the pipe to be available — the first
     // instance's setup hook may still be installing it. 500 ms is
@@ -244,10 +240,9 @@ pub fn try_forward_argv(argv: &[String]) -> Result<(), String> {
         )
     };
     if ok == 0 || (written as usize) != wire.len() {
-        return Err(format!(
-            "WriteFile pipe failed: os error {}",
-            unsafe { GetLastError() }
-        ));
+        return Err(format!("WriteFile pipe failed: os error {}", unsafe {
+            GetLastError()
+        }));
     }
 
     // Wait for the server's ack byte with a hard 5-second timeout.
@@ -278,10 +273,9 @@ pub fn try_forward_argv(argv: &[String]) -> Result<(), String> {
             // on timeout which cancels the read).
             let ok = unsafe { ReadFile(h, ack.as_mut_ptr(), 1, &mut nread, ptr::null_mut()) };
             let result = if ok == 0 || nread != 1 {
-                Err(format!(
-                    "ReadFile pipe ack failed: os error {}",
-                    unsafe { GetLastError() }
-                ))
+                Err(format!("ReadFile pipe ack failed: os error {}", unsafe {
+                    GetLastError()
+                }))
             } else {
                 Ok(ack[0])
             };
@@ -342,10 +336,7 @@ pub fn start_pipe_server(app: tauri::AppHandle) {
 }
 
 fn pipe_server_loop(app: tauri::AppHandle) {
-    let pipe_name: Vec<u16> = OsStr::new(PIPE_NAME)
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
+    let pipe_name: Vec<u16> = OsStr::new(PIPE_NAME).encode_wide().chain(Some(0)).collect();
     loop {
         // Create a fresh server-end of the pipe for each connection.
         // PIPE_ACCESS_DUPLEX so we can write the ack back; byte-mode
@@ -505,10 +496,9 @@ fn handle_connection(pipe: HANDLE, app: &tauri::AppHandle) -> Result<(), String>
     // SAFETY: ack is a stack array.
     let ok = unsafe { WriteFile(pipe, ack.as_ptr(), 1, &mut written, ptr::null_mut()) };
     if ok == 0 || written != 1 {
-        return Err(format!(
-            "ack WriteFile failed: os error {}",
-            unsafe { GetLastError() }
-        ));
+        return Err(format!("ack WriteFile failed: os error {}", unsafe {
+            GetLastError()
+        }));
     }
     Ok(())
 }
@@ -543,7 +533,10 @@ mod tests {
         let first = is_second_instance();
         let second = is_second_instance();
         assert!(!first, "first call should report first instance");
-        assert!(second, "second call within same process should report second instance");
+        assert!(
+            second,
+            "second call within same process should report second instance"
+        );
     }
 
     /// `MAX_WIRE_BYTES` must equal the pipe's buffer size — keeping

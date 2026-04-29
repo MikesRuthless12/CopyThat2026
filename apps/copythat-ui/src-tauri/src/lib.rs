@@ -32,6 +32,8 @@
 //! into the `drop-received` IPC event for the Svelte layer.
 
 pub mod audit_commands;
+#[cfg(windows)]
+pub mod broker_auth;
 pub mod cli;
 pub mod clipboard;
 pub mod clipboard_watcher;
@@ -45,8 +47,6 @@ pub mod global_paste;
 pub mod i18n;
 pub mod icon;
 #[cfg(windows)]
-pub mod broker_auth;
-#[cfg(windows)]
 pub mod instance_broker;
 pub mod ipc;
 pub mod ipc_safety;
@@ -55,6 +55,7 @@ pub mod mobile_commands;
 pub mod mount_commands;
 pub mod power;
 pub mod progress_channel;
+pub mod recovery_commands;
 pub mod reveal;
 pub mod runner;
 pub mod scan_commands;
@@ -421,6 +422,10 @@ pub fn run() {
             mobile_commands::mobile_handle_remote_command,
             mobile_commands::mobile_onboarding_qr,
             mobile_commands::mobile_onboarding_dismiss,
+            // Phase 39 — browser-accessible recovery UI.
+            recovery_commands::recovery_status,
+            recovery_commands::recovery_apply,
+            recovery_commands::recovery_rotate_token,
         ])
         .setup(move |app| {
             // Phase 40 — start the named-pipe broker that future
@@ -613,6 +618,23 @@ pub fn run() {
                 }
             }
 
+            // Phase 39 — start the recovery web UI if the user has
+            // the toggle on. Best-effort; any failure logs and the
+            // launch continues with the server idle (matches every
+            // other "auto-start on launch" Phase 33+ convention).
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let state: tauri::State<'_, state::AppState> = handle.state();
+                    if !state.settings_snapshot().recovery.enabled {
+                        return;
+                    }
+                    if let Err(e) = recovery_commands::recovery_apply(state).await {
+                        eprintln!("[recovery] startup serve failed: {e}");
+                    }
+                });
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -627,8 +649,7 @@ pub fn run() {
 fn init_tracing_subscriber() {
     use tracing_subscriber::EnvFilter;
 
-    let filter = EnvFilter::try_from_env("COPYTHAT_LOG")
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_env("COPYTHAT_LOG").unwrap_or_else(|_| EnvFilter::new("info"));
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_writer(std::io::stderr)

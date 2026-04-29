@@ -36,20 +36,20 @@
 //! ## Migration plan (Phase 43)
 //!
 //! - [ ] Build a `compio_overlapped::try_overlapped_copy_compio`
-//!       function with the same signature as
-//!       `windows_overlapped::try_overlapped_copy`.
+//!   function with the same signature as
+//!   `windows_overlapped::try_overlapped_copy`.
 //! - [ ] Use `compio::fs::File::open` + `read_at` / `write_at` to
-//!       drive `N_SLOTS` × `BUFFER_BYTES` in flight, mirroring the
-//!       hand-rolled loop's pipelining.
+//!   drive `N_SLOTS` × `BUFFER_BYTES` in flight, mirroring the
+//!   hand-rolled loop's pipelining.
 //! - [ ] Add an env-var toggle (`COPYTHAT_COMPIO_OVERLAPPED=1`) so
-//!       users can A/B without rebuilding.
+//!   users can A/B without rebuilding.
 //! - [ ] Add a smoke test that copies a 256 MiB file via the compio
-//!       path and verifies byte-equal output.
+//!   path and verifies byte-equal output.
 //! - [ ] Run `xtask bench-vs` head-to-head; if compio is within
-//!       ±5 % of the hand-rolled path on every measured topology,
-//!       flip the default.
+//!   ±5 % of the hand-rolled path on every measured topology,
+//!   flip the default.
 //! - [ ] Once the default is flipped, delete `windows_overlapped.rs`
-//!       (the OpCtx / OVERLAPPED / IOCP machinery becomes dead code).
+//!   (the OpCtx / OVERLAPPED / IOCP machinery becomes dead code).
 //!
 //! Until then this module is scaffolding only — it documents the
 //! plan and reserves the `compio` dependency slot under the

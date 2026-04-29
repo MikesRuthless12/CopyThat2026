@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}CopyThat Recovery — Jobs{% endblock %}
+{% block content %}
+<h2>All jobs</h2>
+<form method="get" action="/jobs">
+  <label>Kind
+    <select name="kind">
+      <option value="">any</option>
+      <option value="copy"{% if kind_filter == "copy" %} selected{% endif %}>copy</option>
+      <option value="move"{% if kind_filter == "move" %} selected{% endif %}>move</option>
+      <option value="restore"{% if kind_filter == "restore" %} selected{% endif %}>restore</option>
+      <option value="secure-delete"{% if kind_filter == "secure-delete" %} selected{% endif %}>secure-delete</option>
+    </select>
+  </label>
+  <label>Status
+    <select name="status">
+      <option value="">any</option>
+      <option value="succeeded"{% if status_filter == "succeeded" %} selected{% endif %}>succeeded</option>
+      <option value="failed"{% if status_filter == "failed" %} selected{% endif %}>failed</option>
+      <option value="running"{% if status_filter == "running" %} selected{% endif %}>running</option>
+    </select>
+  </label>
+  <label>Path contains
+    <input type="text" name="text" value="{{ text_filter }}" placeholder="">
+  </label>
+  <button type="submit">Filter</button>
+</form>
+{% if jobs.is_empty() %}
+  <p class="muted">No matching jobs.</p>
+{% else %}
+  <table>
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>Kind</th>
+        <th>Status</th>
+        <th>Source → Destination</th>
+        <th>Bytes</th>
+        <th>Files</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for j in jobs %}
+      <tr>
+        <td>{{ j.started_iso }}</td>
+        <td><span class="kind">{{ j.kind }}</span></td>
+        <td><span class="status {{ j.status }}">{{ j.status }}</span></td>
+        <td><a href="/jobs/{{ j.row_id }}">{{ j.src_root }} → {{ j.dst_root }}</a></td>
+        <td>{{ j.total_bytes_human }}</td>
+        <td>{{ j.files_ok }} / {{ j.files_failed }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

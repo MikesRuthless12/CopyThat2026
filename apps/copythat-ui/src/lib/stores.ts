@@ -310,6 +310,46 @@ function basenameOf(p: string): string {
   const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
   return i >= 0 ? p.slice(i + 1) : p;
 }
+
+function parentOf(p: string): string {
+  if (!p) return "";
+  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  if (i <= 0) return p;
+  return p.slice(0, i);
+}
+
+export interface CurrentCopyDirs {
+  src: string;
+  dst: string;
+}
+
+/// Per-job "currently copying from / to" parent-folder paths,
+/// derived from the most recent in-flight FileActivity row. The
+/// JobRow's second line uses these instead of the static job-root
+/// src/dst while a copy is actively running, so the user sees the
+/// real subfolder the engine is walking through right now.
+export const currentCopyDirs: Readable<Map<number, CurrentCopyDirs>> = derived(
+  fileActivityStore,
+  ($rows) => {
+    const out = new Map<number, CurrentCopyDirs>();
+    // Walk newest-first: first in-flight (`start`/`progress`) row
+    // we see for a given job wins. Done/error rows are ignored so
+    // a finished file doesn't pin the label after the engine has
+    // already moved on to the next folder.
+    for (let i = $rows.length - 1; i >= 0; i--) {
+      const r = $rows[i];
+      if (r.phase !== "start" && r.phase !== "progress" && r.phase !== "dir") {
+        continue;
+      }
+      if (out.has(r.jobId)) continue;
+      out.set(r.jobId, {
+        src: parentOf(r.src),
+        dst: parentOf(r.dst),
+      });
+    }
+    return out;
+  },
+);
 export const sortedFileActivity: Readable<FileActivityRow[]> = derived(
   [fileActivityStore, activitySortStore],
   ([$rows, $mode]) => {

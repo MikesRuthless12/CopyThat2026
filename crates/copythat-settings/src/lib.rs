@@ -124,6 +124,15 @@ pub struct Settings {
     /// keychain-backed APNs / FCM signers will move them to the OS
     /// keychain.
     pub mobile: MobileSettings,
+    /// Phase 39 — browser-accessible recovery UI (loopback HTTP
+    /// server backed by `copythat-recovery`). Off by default;
+    /// enabling it via Settings → Advanced spins the axum runner
+    /// inside the Tauri shell. Bind address defaults to `127.0.0.1`
+    /// and a non-loopback bind requires the explicit
+    /// `allow_non_loopback` toggle (with the warning string from
+    /// `settings-recovery-non-loopback-warning`). See
+    /// [`RecoverySettings`].
+    pub recovery: RecoverySettings,
 }
 
 impl Settings {
@@ -2089,6 +2098,67 @@ pub enum MobilePushTarget {
     StubEndpoint {
         url: String,
     },
+}
+
+// ---------------------------------------------------------------------
+// Recovery web UI (Phase 39)
+// ---------------------------------------------------------------------
+
+/// Persistent state for the Phase 39 browser-accessible recovery UI.
+///
+/// The Tauri shell consults this struct on every start: when
+/// [`RecoverySettings::enabled`] is `true`, it constructs the bind
+/// `SocketAddr` from `bind_address` + `port` and calls
+/// `copythat_recovery::serve()` with the persisted token and the
+/// shared `History` + `ChunkStore` handles. When `enabled` is
+/// `false`, the recovery server is never started — no port is
+/// opened.
+///
+/// `bind_address` is forced back to `127.0.0.1` whenever
+/// `allow_non_loopback` is `false`, even if the user manually
+/// edited `settings.toml` to point at a routable interface. The
+/// invariant lives at the Tauri shell's load-time validation step,
+/// not in this struct's `Default` impl, so unit tests can poke at
+/// non-loopback states without tripping the guard.
+///
+/// `token` defaults to an empty string; the Tauri shell mints a
+/// fresh Crockford-base32 token on first launch (or any rotation
+/// click) via `copythat_recovery::generate_token()`. Keeping the
+/// token in TOML means restarts pick up the same one — users who
+/// bookmarked `http://127.0.0.1:<port>?t=<token>` after the first
+/// launch don't have to re-paste on every cold start.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct RecoverySettings {
+    /// Master toggle. Off by default — recovery is opt-in.
+    pub enabled: bool,
+    /// Bind address. Defaults to loopback; non-loopback requires
+    /// `allow_non_loopback = true`.
+    pub bind_address: String,
+    /// TCP port. `0` = let the OS pick a free one on first launch
+    /// and persist whatever it returned so subsequent runs keep the
+    /// same URL bookmarks.
+    pub port: u16,
+    /// Bearer token. Empty string means "the runner will mint one
+    /// on next start." Crockford-base32, 32 chars when minted.
+    pub token: String,
+    /// Allow `bind_address` to point at a non-loopback interface.
+    /// Off by default — flipping this requires the user to
+    /// acknowledge the warning rendered from the
+    /// `settings-recovery-non-loopback-warning` Fluent key.
+    pub allow_non_loopback: bool,
+}
+
+impl Default for RecoverySettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bind_address: "127.0.0.1".to_string(),
+            port: 0,
+            token: String::new(),
+            allow_non_loopback: false,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------

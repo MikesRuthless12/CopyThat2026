@@ -1049,8 +1049,7 @@ mod tests {
         // free the underlying 16 bytes by reconstituting an honest
         // `Box` over `real_ptr`.
         let huge: usize = u32::MAX as usize + 1;
-        let lying_payload: Vec<u8> =
-            unsafe { Vec::from_raw_parts(real_ptr, huge, huge) };
+        let lying_payload: Vec<u8> = unsafe { Vec::from_raw_parts(real_ptr, huge, huge) };
         let lying_stream = ForeignStream {
             name: "user.huge".to_string(),
             payload: lying_payload,
@@ -1285,8 +1284,7 @@ mod tests {
         // brute-force search over 2-character ASCII strings, then
         // assert the probe.
         let chars: Vec<u8> = (b'a'..=b'z').chain(b'0'..=b'9').collect();
-        let mut seen: std::collections::HashMap<u32, String> =
-            std::collections::HashMap::new();
+        let mut seen: std::collections::HashMap<u32, String> = std::collections::HashMap::new();
         let mut pair: Option<(String, String, u32)> = None;
         'outer: for length in [2usize, 3, 4] {
             seen.clear();
@@ -1312,9 +1310,8 @@ mod tests {
                 }
             }
         }
-        let (a, b, h) = pair.expect(
-            "expected to find an FNV-1a collision among short alphanumeric strings",
-        );
+        let (a, b, h) =
+            pair.expect("expected to find an FNV-1a collision among short alphanumeric strings");
         // Confirm the collision really is one — distinct names, same
         // hash.
         assert_ne!(a, b, "collision pair must be distinct strings");
@@ -1341,8 +1338,7 @@ mod tests {
         // names and verify the 12-byte entry-descriptor table at
         // offset 26 carries two distinct IDs.
         let chars: Vec<u8> = (b'a'..=b'z').chain(b'0'..=b'9').collect();
-        let mut seen: std::collections::HashMap<u32, String> =
-            std::collections::HashMap::new();
+        let mut seen: std::collections::HashMap<u32, String> = std::collections::HashMap::new();
         let mut pair: Option<(String, String)> = None;
         'outer: for length in [2usize, 3, 4] {
             seen.clear();

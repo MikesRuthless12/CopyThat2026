@@ -18,6 +18,7 @@
     formatRate,
     truncatePath,
   } from "../format";
+  import { currentCopyDirs } from "../stores";
   import type { FileIconDto, JobDto } from "../types";
 
   interface Props {
@@ -94,8 +95,21 @@
       ? `${job.filesDone.toLocaleString()} / ${job.filesTotal.toLocaleString()}`
       : "—",
   );
-  const srcDisplay = $derived(truncatePath(job.src ?? "", 46));
-  const dstDisplay = $derived(truncatePath(job.dst ?? "", 46));
+  // Live "currently copying from / to" parent-folder paths. While
+  // a copy is actively running, the second line follows the engine
+  // into each subfolder it walks (truncated middle-ellipsis); when
+  // the job is queued / paused / done we fall back to the static
+  // job roots so the row keeps a stable identity.
+  const liveDirs = $derived($currentCopyDirs.get(job.id));
+  const useLive = $derived(
+    job.state === "running" && liveDirs !== undefined,
+  );
+  const srcPath = $derived(useLive ? liveDirs!.src : (job.src ?? ""));
+  const dstPath = $derived(
+    useLive ? liveDirs!.dst : (job.dst ?? ""),
+  );
+  const srcDisplay = $derived(truncatePath(srcPath, 46));
+  const dstDisplay = $derived(truncatePath(dstPath, 46));
 </script>
 
 <div
@@ -136,10 +150,10 @@
     <div class="cell name" role="cell">
       <div class="pri" title={job.src}>{job.name}</div>
       <div class="paths">
-        <span class="path src" title={job.src}>{srcDisplay}</span>
-        {#if job.dst}
+        <span class="path src" title={srcPath}>{srcDisplay}</span>
+        {#if dstPath}
           <span class="arrow" aria-hidden="true">→</span>
-          <span class="path dst" title={job.dst}>{dstDisplay}</span>
+          <span class="path dst" title={dstPath}>{dstDisplay}</span>
         {/if}
       </div>
     </div>

@@ -655,6 +655,57 @@ pub struct SettingsDto {
     /// cleanly when a newer UI reads them.
     #[serde(default)]
     pub mobile: MobileDto,
+    /// Phase 39 — browser-accessible recovery UI. Loopback HTTP
+    /// server, off by default. Marked `#[serde(default)]` so older
+    /// persisted settings round-trip cleanly when a newer UI reads
+    /// them.
+    #[serde(default)]
+    pub recovery: RecoveryDto,
+}
+
+/// Phase 39 — wire form of `copythat_settings::RecoverySettings`.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryDto {
+    pub enabled: bool,
+    pub bind_address: String,
+    pub port: u16,
+    pub token: String,
+    pub allow_non_loopback: bool,
+}
+
+impl From<copythat_settings::RecoverySettings> for RecoveryDto {
+    fn from(s: copythat_settings::RecoverySettings) -> Self {
+        Self {
+            enabled: s.enabled,
+            bind_address: s.bind_address,
+            port: s.port,
+            token: s.token,
+            allow_non_loopback: s.allow_non_loopback,
+        }
+    }
+}
+
+impl From<RecoveryDto> for copythat_settings::RecoverySettings {
+    fn from(d: RecoveryDto) -> Self {
+        // Defensive: a tampered settings.toml or a frontend that
+        // sets `bind_address = "0.0.0.0"` without flipping the
+        // `allow_non_loopback` toggle is forced back to loopback so
+        // the warning gate cannot be bypassed by editing the wire
+        // payload.
+        let bind_address = if d.allow_non_loopback {
+            d.bind_address
+        } else {
+            "127.0.0.1".to_string()
+        };
+        Self {
+            enabled: d.enabled,
+            bind_address,
+            port: d.port,
+            token: d.token,
+            allow_non_loopback: d.allow_non_loopback,
+        }
+    }
 }
 
 /// Phase 37 — wire form of `copythat_settings::MobileSettings`.
@@ -1765,6 +1816,7 @@ impl From<&copythat_settings::Settings> for SettingsDto {
             audit: s.audit.clone().into(),
             crypt: s.crypt.clone().into(),
             mobile: s.mobile.clone().into(),
+            recovery: s.recovery.clone().into(),
         }
     }
 }
@@ -1978,6 +2030,7 @@ impl SettingsDto {
         s.audit = self.audit.into();
         s.crypt = self.crypt.into();
         s.mobile = self.mobile.into();
+        s.recovery = self.recovery.into();
 
         s
     }

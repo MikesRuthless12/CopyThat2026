@@ -102,10 +102,7 @@ impl<W: Write> EncryptionSink<W> {
     /// caller can chain into the next pipeline stage (e.g. flush a
     /// file handle, hand it back to the runner for the next file).
     pub fn finish(mut self) -> Result<W> {
-        let writer = self
-            .inner
-            .take()
-            .expect("encryption sink already finished");
+        let writer = self.inner.take().expect("encryption sink already finished");
         // Translate the age `io::Error` to our bounded enum: only the
         // `ErrorKind` propagates — never the verbatim `Display` of
         // the inner error, which on some pipeline configurations can
@@ -264,7 +261,10 @@ mod tests {
         assert!(rendered.contains("BrokenPipe"));
         assert!(!rendered.contains("/"));
         let wrap = CryptFinishError::WrapOutput;
-        assert_eq!(format!("{wrap}"), "wrap-output rejected the recipient chain");
+        assert_eq!(
+            format!("{wrap}"),
+            "wrap-output rejected the recipient chain"
+        );
     }
 
     #[test]

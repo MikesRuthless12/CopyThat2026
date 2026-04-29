@@ -471,7 +471,9 @@ mod tests {
         assert!(is_safe_https_for_browser(
             "https://login.microsoftonline.com/devicecode"
         ));
-        assert!(is_safe_https_for_browser("https://accounts.google.com/o/auth"));
+        assert!(is_safe_https_for_browser(
+            "https://accounts.google.com/o/auth"
+        ));
     }
 
     #[test]

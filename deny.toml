@@ -60,6 +60,16 @@ allow = [
 # Per-crate exceptions — none for Phase 0; add here only with documented reason.
 exceptions = []
 
+# Phase 39 audit-pass — browser-accessible recovery UI introduces
+# `axum` (MIT), `askama` + `askama_derive` + `askama_parser` (all
+# MIT-OR-Apache-2.0), `tower` + `tower-http` (MIT), `matchit` (MIT-
+# OR-Apache-2.0), `httpdate` (MIT-OR-Apache-2.0), `serde_path_to_error`
+# (MIT-OR-Apache-2.0), and `axum-core` (MIT). Every transitive license
+# is already covered by the allowlist above; no new entries needed.
+# Adding the new top-level `copythat-recovery` crate is itself
+# `LicenseRef-AllRightsReserved` like every other workspace crate
+# (private.ignore = true skips it).
+
 # ----- Bans -------------------------------------------------------------------
 [bans]
 multiple-versions = "warn"
@@ -186,4 +196,13 @@ ignore = [
     "RUSTSEC-2025-0081",
     "RUSTSEC-2025-0098",
     "RUSTSEC-2025-0100",
+    # paste 1.0.15 — upstream archived. Inherited transitively through
+    # `compio 0.13` → `compio-driver` / `-fs` / `-net` / `-runtime` /
+    # `-io`, used by `copythat-platform`'s Windows IOCP fast path
+    # (Phase 6+) and Phase 31 power probes. No vulnerability;
+    # maintenance signal only. Replacement candidates `pastey` /
+    # `with_builtin_macros` would require a compio upstream bump.
+    # Re-audit when compio drops `paste` or migrates to a maintained
+    # alternative.
+    "RUSTSEC-2024-0436",
 ]

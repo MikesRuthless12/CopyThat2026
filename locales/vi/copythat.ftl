@@ -1178,3 +1178,13 @@ phase42-sharing-violation-retries-label = Số lần thử lại trên các tệ
 phase42-sharing-violation-retries-hint = Số lần thử lại khi một tiến trình khác đang giữ tệp nguồn mở với khóa độc quyền. Thời gian chờ tăng gấp đôi sau mỗi lần thử (mặc định 50 ms / 100 ms / 200 ms). Mặc định: 3, giống với Robocopy /R:3.
 phase42-cloud-placeholder-warning = { $name } là tệp OneDrive chỉ có trên đám mây. Sao chép tệp sẽ kích hoạt tải xuống — lên đến { $size } qua kết nối mạng của bạn.
 phase42-defender-exclusion-hint = Để đạt thông lượng sao chép tối đa, hãy thêm thư mục đích vào danh sách loại trừ của Microsoft Defender trước khi truyền hàng loạt. Xem docs/PERFORMANCE_TUNING.md.
+
+# Phase 39 — Browser-accessible recovery UI.  # MT
+settings-recovery-heading = Recovery web UI  # MT
+settings-recovery-enable = Enable recovery web UI  # MT
+settings-recovery-bind-address = Bind address  # MT
+settings-recovery-port = Port (0 = pick a free one)  # MT
+settings-recovery-show-url = Show URL & token  # MT
+settings-recovery-rotate-token = Rotate token  # MT
+settings-recovery-allow-non-loopback = Allow non-loopback bind  # MT
+settings-recovery-non-loopback-warning = WARNING: enabling a non-loopback bind exposes the recovery UI to your local network. Anyone who learns the token can browse your file history and download files. Front it with TLS or a reverse proxy if the LAN is untrusted.  # MT

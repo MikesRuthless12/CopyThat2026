@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}CopyThat Recovery — Restore{% endblock %}
+{% block content %}
+<h2>Restore a folder at a past timestamp</h2>
+<p class="muted">Pick a job, the relative path inside it, and a target Unix-epoch-millisecond timestamp. The recovery engine spins up a new restore job and returns its job ID.</p>
+<form method="post" action="/restore" enctype="application/x-www-form-urlencoded">
+  <label>Source job
+    <select name="job_id" required>
+      {% for j in jobs %}
+        <option value="{{ j.row_id }}">#{{ j.row_id }} · {{ j.kind }} · {{ j.dst_root }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <br>
+  <label>Path (relative inside the destination tree)
+    <input type="text" name="path" placeholder="docs/quarterly-report.pdf" required>
+  </label>
+  <br>
+  <label>Timestamp (Unix epoch milliseconds)
+    <input type="number" name="timestamp_ms" min="0" required>
+  </label>
+  <br>
+  <button type="submit">Initiate restore</button>
+</form>
+{% endblock %}

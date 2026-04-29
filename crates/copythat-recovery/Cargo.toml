@@ -1,0 +1,95 @@
+[package]
+name = "copythat-recovery"
+description = "Phase 39 — browser-accessible recovery UI. Loopback HTTP (axum) server with bearer-token auth that lets the user browse the history archive, download files as they were at a past timestamp, and initiate restores into a fresh job. Spun up by the Tauri shell when the user enables Settings → Advanced → Recovery web UI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Phase 9 — read history rows for the landing page + job detail.
+copythat-history = { path = "../copythat-history", version = "1" }
+# Phase 27 — pull manifests + materialise chunks for the file-as-of-
+# timestamp download path.
+copythat-chunk = { path = "../copythat-chunk", version = "1" }
+
+# Phase 39 — HTTP framework. axum 0.8 is the current stable line; it
+# pulls in hyper / tower / tokio which are already in the workspace
+# tree (Phase 32 / 37 brought those in transitively). MIT.
+axum = { version = "0.8", default-features = false, features = [
+    "http1",
+    "tokio",
+    "json",
+    "form",
+    "query",
+    "matched-path",
+] }
+# Phase 39 — compile-time HTML templating. askama 0.14 catches typo'd
+# template variables at `cargo build` time, which matches the
+# project-wide "never break the build" rule. MIT/Apache-2.0.
+askama = "0.14"
+# Phase 39 — `tower-http` ships the `set-header` + `trace` layers we
+# rely on. MIT.
+tower = { version = "0.5", default-features = false }
+tower-http = { version = "0.6", default-features = false, features = [
+    "set-header",
+] }
+# Phase 39 — bearer-token auth uses a constant-time compare so timing
+# leaks can't sketch the token byte-by-byte. `subtle` already in the
+# tree via Phase 35 (age recipient crypto). BSD-3-Clause.
+subtle = "2"
+# Phase 39 — the auth surface accepts a `SecretString` so the token
+# is wiped from memory on drop. `secrecy` already in the tree via
+# Phase 35. Apache-2.0.
+secrecy = "0.10"
+
+http = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = [
+    "macros",
+    "net",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+# Phase 39 — random port + token rotation use the same `getrandom`
+# already pulled in by Phase 37. MIT/Apache-2.0.
+getrandom = "0.3"
+# Phase 39 — base32 (Crockford) encoder, already in the tree via
+# Phase 37 mobile pairing tokens; reused so the recovery token shares
+# the same friendly alphabet (`[0-9A-Z]`).
+base32 = "0.5"
+# Phase 39 — percent-decode incoming `<path>` segments on the
+# `/jobs/:id/files/*path` route so users can open files whose names
+# carry spaces or non-ASCII characters. MIT/Apache-2.0.
+percent-encoding = "2"
+
+[dev-dependencies]
+tempfile = "3"
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
+tokio = { version = "1", features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "net",
+    "sync",
+    "time",
+    "test-util",
+] }
+
+[[test]]
+name = "phase_39_recovery"
+path = "../../tests/smoke/phase_39_recovery.rs"

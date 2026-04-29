@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}CopyThat Recovery — Error {{ status_code }}{% endblock %}
+{% block content %}
+<div class="error-banner">{{ status_code }} {{ status_text }}</div>
+<p>{{ message }}</p>
+<p><a href="/">← Back to home</a></p>
+{% endblock %}

@@ -917,3 +917,16 @@ phase42-sharing-violation-retries-label = Retry attempts on locked source files
 phase42-sharing-violation-retries-hint = How many times to retry when another process is holding the source file open with an exclusive lock. Backoff doubles each attempt (50 ms / 100 ms / 200 ms by default). Default 3, matching Robocopy /R:3.
 phase42-cloud-placeholder-warning = { $name } is a cloud-only OneDrive file. Copying it will trigger a download — up to { $size } over your network connection.
 phase42-defender-exclusion-hint = For maximum copy throughput, add the destination folder to Microsoft Defender exclusions before bulk transfers. See docs/PERFORMANCE_TUNING.md.
+
+# Phase 39 — Browser-accessible recovery UI. Settings → Advanced
+# exposes these strings; the recovery server itself renders askama
+# templates that always read English — these eight keys are the
+# Settings prose the user actually reads in their preferred locale.
+settings-recovery-heading = Recovery web UI
+settings-recovery-enable = Enable recovery web UI
+settings-recovery-bind-address = Bind address
+settings-recovery-port = Port (0 = pick a free one)
+settings-recovery-show-url = Show URL & token
+settings-recovery-rotate-token = Rotate token
+settings-recovery-allow-non-loopback = Allow non-loopback bind
+settings-recovery-non-loopback-warning = WARNING: enabling a non-loopback bind exposes the recovery UI to your local network. Anyone who learns the token can browse your file history and download files. Front it with TLS or a reverse proxy if the LAN is untrusted.

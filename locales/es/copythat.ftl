@@ -1178,3 +1178,13 @@ phase42-sharing-violation-retries-label = Reintentos en archivos de origen bloqu
 phase42-sharing-violation-retries-hint = Cuántas veces reintentar cuando otro proceso mantiene abierto el archivo de origen con un bloqueo exclusivo. El intervalo se duplica en cada intento (50 ms / 100 ms / 200 ms por defecto). Predeterminado: 3, igual que Robocopy /R:3.
 phase42-cloud-placeholder-warning = { $name } es un archivo exclusivo en la nube de OneDrive. Copiarlo activará una descarga — hasta { $size } a través de tu conexión de red.
 phase42-defender-exclusion-hint = Para obtener el máximo rendimiento de copia, añade la carpeta de destino a las exclusiones de Microsoft Defender antes de las transferencias masivas. Consulta docs/PERFORMANCE_TUNING.md.
+
+# Phase 39 — Browser-accessible recovery UI.  # MT
+settings-recovery-heading = Recovery web UI  # MT
+settings-recovery-enable = Enable recovery web UI  # MT
+settings-recovery-bind-address = Bind address  # MT
+settings-recovery-port = Port (0 = pick a free one)  # MT
+settings-recovery-show-url = Show URL & token  # MT
+settings-recovery-rotate-token = Rotate token  # MT
+settings-recovery-allow-non-loopback = Allow non-loopback bind  # MT
+settings-recovery-non-loopback-warning = WARNING: enabling a non-loopback bind exposes the recovery UI to your local network. Anyone who learns the token can browse your file history and download files. Front it with TLS or a reverse proxy if the LAN is untrusted.  # MT

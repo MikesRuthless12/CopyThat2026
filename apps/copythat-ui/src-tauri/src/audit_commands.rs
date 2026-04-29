@@ -499,9 +499,7 @@ mod tests {
             format: "json-lines".into(),
             ..AuditSettings::default()
         };
-        let sink = build_sink(&cfg)
-            .expect("enabled build_sink")
-            .expect("sink");
+        let sink = build_sink(&cfg).expect("enabled build_sink").expect("sink");
         let registry = AuditRegistry::new();
         registry.set(Some(sink));
         record_login(&registry);

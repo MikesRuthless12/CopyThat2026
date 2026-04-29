@@ -381,6 +381,71 @@ sensitive flags survive a copy. The threat model:
   x25519-dalek, scrypt, sha2, hmac, hkdf) are all RustCrypto-
   ecosystem MIT/Apache-2.0.
 
+## Phase 39 — browser-accessible recovery UI
+
+`copythat-recovery` ships a loopback HTTP server that exposes the
+Phase 9 history archive + the Phase 27 chunk store through a small
+authenticated browser UI. The threat-surface additions are:
+
+- **One new listening socket.** Default `127.0.0.1:<random>`,
+  off-by-default. Enabling it requires the user to flip Settings →
+  Advanced → "Recovery web UI" → "Enable". The server is loopback-
+  only unless the user also flips "Allow non-loopback bind", which
+  is gated behind the `settings-recovery-non-loopback-warning`
+  warning string ("WARNING: enabling a non-loopback bind exposes the
+  recovery UI to your local network. Anyone who learns the token can
+  browse your file history and download files. Front it with TLS or
+  a reverse proxy if the LAN is untrusted.").
+- **Bearer-token authentication.** 20 random bytes from the OS RNG
+  (`getrandom` — same source as Phase 37's SAS seed and Phase 17g's
+  hardening flags), rendered as 32-character Crockford base32. ~100
+  bits of entropy. Compared in constant time via
+  `subtle::ConstantTimeEq` so a 401-loop attacker cannot recover the
+  token byte-by-byte by timing the response. Stored inside an
+  `Arc<secrecy::SecretString>` so it never leaks into `Debug` /
+  `Display` / serde output. Persists in `settings.toml` so the user
+  can bookmark the URL with `?t=<token>` once and reuse it across
+  restarts; rotation is a single Settings button (token is then
+  invalidated immediately, the running server is torn down and
+  restarted with the new one).
+- **No outbound traffic.** The recovery server never initiates a
+  network connection. The only bytes it emits are direct replies to
+  in-flight HTTP requests on the bound socket.
+- **No write to the chunk store.** The recovery server is read-only
+  on the chunk store: it pulls manifests + chunk bytes for the
+  per-file download route. `POST /restore` records a fresh `restore`
+  row in the History database (same write path as a regular copy
+  job's start) but does not actually move bytes — the engine-level
+  replay is a Phase 49+ follow-up.
+- **Path-decode hardening.** `GET /jobs/<id>/files/<path>` percent-
+  decodes the path segment before looking up the manifest. The
+  manifest key search is restricted to two well-known prefixes
+  (`<dst_root>/<rel>` and `<job_id>/<rel>`); a key that doesn't
+  match either returns 404 instead of leaking what is or isn't in
+  the store. The History database's bind on `dst_root` ensures the
+  caller cannot reach manifest keys for other jobs by guessing.
+- **Defence-in-depth in the IPC bridge.** The Tauri-side
+  `RecoveryDto::From` impl forces `bind_address` back to
+  `127.0.0.1` whenever `allow_non_loopback` is `false`, even if the
+  caller hand-edited `settings.toml` or sent a tampered DTO. The
+  `allow_non_loopback` toggle is the single source of truth for
+  whether a non-loopback bind is permitted.
+
+Out of scope for Phase 39 (deferred to follow-ups):
+
+- TLS / mTLS termination on the listener. Loopback bind makes TLS
+  unnecessary by default; deployers who flip "Allow non-loopback
+  bind" are told in the warning string to front the server with a
+  reverse-proxy.
+- Rate-limiting / lockout on repeated 401s. Not landing in Phase
+  39 because constant-time compare + 100-bit token entropy +
+  loopback-default already make brute force infeasible without
+  network access.
+- Per-route ACLs (read-only token vs restore-allowed token). All
+  authenticated users have full access in Phase 39; granular
+  scopes will land alongside the engine-level restore replay in a
+  later phase.
+
 ## Phase 37 — desktop-side mobile companion
 
 Phase 37 introduces a local-network pair-server on the desktop. The

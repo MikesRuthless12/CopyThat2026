@@ -184,10 +184,7 @@ mod zfs_version_warning {
     }
 
     fn read_zfs_bclone_enabled() -> Option<bool> {
-        let raw = std::fs::read_to_string(
-            "/sys/module/zfs/parameters/zfs_bclone_enabled",
-        )
-        .ok()?;
+        let raw = std::fs::read_to_string("/sys/module/zfs/parameters/zfs_bclone_enabled").ok()?;
         Some(raw.trim() != "0")
     }
 

@@ -433,8 +433,10 @@ unsafe fn do_overlapped_copy(
     const FILE_SKIP_COMPLETION_PORT_ON_SUCCESS: u8 = 0x1;
     const FILE_SKIP_SET_EVENT_ON_HANDLE: u8 = 0x2;
     let skip_flags = FILE_SKIP_COMPLETION_PORT_ON_SUCCESS | FILE_SKIP_SET_EVENT_ON_HANDLE;
-    let src_skip_iocp_on_success = SetFileCompletionNotificationModes(src_handle.0, skip_flags) != 0;
-    let dst_skip_iocp_on_success = SetFileCompletionNotificationModes(dst_handle.0, skip_flags) != 0;
+    let src_skip_iocp_on_success =
+        SetFileCompletionNotificationModes(src_handle.0, skip_flags) != 0;
+    let dst_skip_iocp_on_success =
+        SetFileCompletionNotificationModes(dst_handle.0, skip_flags) != 0;
 
     // --- Allocate buffers + contexts --------------------------------
     let mut buffers: Vec<OwnedBuffer> = Vec::with_capacity(n_slots);
@@ -486,7 +488,7 @@ unsafe fn do_overlapped_copy(
         }
         let want = (alloc_size - next_read_offset).min(buffer_bytes as u64) as u32;
         let aligned = round_up_sector(want, sector_bytes);
-        match post_read(
+        if let Some(sync_bytes) = post_read(
             src_handle.0,
             buffers[slot].0,
             aligned,
@@ -494,12 +496,9 @@ unsafe fn do_overlapped_copy(
             &mut ctxs[slot],
             src_skip_iocp_on_success,
         )? {
-            Some(sync_bytes) => {
-                let ctx_ptr: *mut OpCtx = &mut *ctxs[slot];
-                let gen_snapshot = ctxs[slot].generation;
-                initial_inline.push((ctx_ptr, sync_bytes, gen_snapshot));
-            }
-            None => {}
+            let ctx_ptr: *mut OpCtx = &mut *ctxs[slot];
+            let gen_snapshot = ctxs[slot].generation;
+            initial_inline.push((ctx_ptr, sync_bytes, gen_snapshot));
         }
         next_read_offset += aligned as u64;
         in_flight += 1;
@@ -1113,9 +1112,7 @@ mod tests {
                 strategy: ChosenStrategy::CopyFileExW,
                 ..
             } => {}
-            other => panic!(
-                "unexpected outcome on pre-cancelled copy: {other:?}"
-            ),
+            other => panic!("unexpected outcome on pre-cancelled copy: {other:?}"),
         }
 
         // dst should not exist after a cancellation (the cleanup

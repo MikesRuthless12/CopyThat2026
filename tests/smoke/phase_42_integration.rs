@@ -276,7 +276,9 @@ async fn scenario_01_sparse_copy_file2_enable_sparse_copy() {
         let events = drain_task.await.unwrap();
 
         assert!(
-            events.iter().any(|e| matches!(e, CopyEvent::Started { .. })),
+            events
+                .iter()
+                .any(|e| matches!(e, CopyEvent::Started { .. })),
             "expected at least one Started event"
         );
         assert!(
@@ -368,22 +370,12 @@ async fn scenario_02_unc_dest_compressed_traffic() {
         // `\\?\UNC\localhost\C$\…` is the long-path UNC form. We use
         // the plain `\\localhost\C$\…` so std and CopyFileExW handle
         // it identically.
-        let dst = unc_root.join(format!(
-            "phase42-unc-{}.dst",
-            std::process::id()
-        ));
+        let dst = unc_root.join(format!("phase42-unc-{}.dst", std::process::id()));
         let _cleanup = scopeguard_remove(dst.clone());
 
         let (tx, rx) = mpsc::channel::<CopyEvent>(64);
         let drain_task = tokio::spawn(drain(rx));
-        let result = fast_copy(
-            &src,
-            &dst,
-            CopyOptions::default(),
-            CopyControl::new(),
-            tx,
-        )
-        .await;
+        let result = fast_copy(&src, &dst, CopyOptions::default(), CopyControl::new(), tx).await;
         let events = drain_task.await.unwrap();
 
         match result {
@@ -479,11 +471,12 @@ async fn scenario_03_cross_volume_auto_overlapped() {
                 return;
             }
         };
-        let large = std::env::var("COPYTHAT_PHASE42_LARGE")
-            .ok()
-            .as_deref()
-            == Some("1");
-        let size = if large { CROSS_VOLUME_LARGE } else { CROSS_VOLUME_DEFAULT };
+        let large = std::env::var("COPYTHAT_PHASE42_LARGE").ok().as_deref() == Some("1");
+        let size = if large {
+            CROSS_VOLUME_LARGE
+        } else {
+            CROSS_VOLUME_DEFAULT
+        };
 
         let src_dir = tempdir().expect("src tempdir");
         let dst_dir = tempfile::Builder::new()
@@ -509,15 +502,9 @@ async fn scenario_03_cross_volume_auto_overlapped() {
         });
 
         let started = Instant::now();
-        let outcome = fast_copy(
-            &src,
-            &dst,
-            CopyOptions::default(),
-            CopyControl::new(),
-            tx,
-        )
-        .await
-        .expect("fast_copy cross-volume");
+        let outcome = fast_copy(&src, &dst, CopyOptions::default(), CopyControl::new(), tx)
+            .await
+            .expect("fast_copy cross-volume");
         let events = drain_task.await.unwrap();
         let elapsed = started.elapsed();
         let samples = progress_samples.lock().unwrap().clone();
@@ -622,7 +609,10 @@ async fn scenario_04_paranoid_verify_with_cache_eviction() {
     assert!(!saw_failed, "verify pass should not fail on a clean copy");
     let (src_hex, dst_hex) =
         saw_completed.expect("expected CopyEvent::VerifyCompleted in event stream");
-    assert_eq!(src_hex, dst_hex, "verify hashes diverged: {src_hex} vs {dst_hex}");
+    assert_eq!(
+        src_hex, dst_hex,
+        "verify hashes diverged: {src_hex} vs {dst_hex}"
+    );
     println!(
         "[phase-42][scenario-04] OK: algo=xxh3-128 size={} hash={}",
         VERIFY_SIZE, src_hex
@@ -653,7 +643,7 @@ async fn scenario_05_sharing_violation_retry() {
         let src = dir.path().join("phase42-locked.src");
         let dst = dir.path().join("phase42-locked.dst");
         write_pattern(&src, 256 * 1024); // 256 KiB — the test is about
-                                         // retry latency, not throughput
+        // retry latency, not throughput
 
         // Background thread: hold an exclusive (FILE_SHARE_NONE) read
         // lock for ~50 ms, then release. The engine's first open

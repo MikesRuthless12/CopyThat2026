@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}CopyThat Recovery — Home{% endblock %}
+{% block content %}
+<h2>Recent jobs</h2>
+<p class="muted">Browse the history archive, restore files at a past timestamp, and download files as they were when copied.</p>
+{% if recent.is_empty() %}
+  <p class="muted">No jobs recorded yet.</p>
+{% else %}
+  <table>
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>Kind</th>
+        <th>Status</th>
+        <th>Source → Destination</th>
+        <th>Bytes</th>
+        <th>Files</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for j in recent %}
+      <tr>
+        <td>{{ j.started_iso }}</td>
+        <td><span class="kind">{{ j.kind }}</span></td>
+        <td><span class="status {{ j.status }}">{{ j.status }}</span></td>
+        <td>
+          <a href="/jobs/{{ j.row_id }}">{{ j.src_root }} → {{ j.dst_root }}</a>
+        </td>
+        <td>{{ j.total_bytes_human }}</td>
+        <td>{{ j.files_ok }} ok / {{ j.files_failed }} failed</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

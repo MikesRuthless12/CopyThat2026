@@ -212,9 +212,7 @@ fn dispatch_enqueue(app: &AppHandle, args: EnqueueArgs) {
         // unhooked path runs at ~600 MiB/s; the hook unlocks the
         // 2400+ MiB/s `CopyFileExW` ceiling we measured headlessly.
         let copy_opts = CopyOptions {
-            fast_copy_hook: Some(std::sync::Arc::new(
-                copythat_platform::PlatformFastCopyHook,
-            )),
+            fast_copy_hook: Some(std::sync::Arc::new(copythat_platform::PlatformFastCopyHook)),
             ..CopyOptions::default()
         };
         let _ = enqueue_jobs(

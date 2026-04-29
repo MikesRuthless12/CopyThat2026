@@ -170,15 +170,7 @@ mod tests {
         // Phase 32h — `..` / `.` / spaces / dots / colons all
         // refused under the tighter `[A-Za-z0-9_-]` allowlist.
         for bad in [
-            "..",
-            ".",
-            "a.b",
-            "a b",
-            "a:b",
-            "a@b",
-            "a\\b",
-            "ünicode",
-            "name?",
+            "..", ".", "a.b", "a b", "a:b", "a@b", "a\\b", "ünicode", "name?",
         ] {
             assert!(
                 matches!(

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}CopyThat Recovery — Job {{ job.row_id }}{% endblock %}
+{% block content %}
+<p><a href="/jobs">← All jobs</a></p>
+<h2>Job #{{ job.row_id }}</h2>
+<p class="muted">
+  <span class="kind">{{ job.kind }}</span>
+  <span class="status {{ job.status }}">{{ job.status }}</span>
+  · {{ job.started_iso }}
+</p>
+<p>
+  <strong>Source:</strong> {{ job.src_root }}<br>
+  <strong>Destination:</strong> {{ job.dst_root }}<br>
+  <strong>Bytes:</strong> {{ job.total_bytes_human }}<br>
+  <strong>Files:</strong> {{ job.files_ok }} succeeded / {{ job.files_failed }} failed
+</p>
+
+<h3>Items</h3>
+{% if items.is_empty() %}
+  <p class="muted">No item rows recorded for this job.</p>
+{% else %}
+  <table>
+    <thead>
+      <tr>
+        <th>Source</th>
+        <th>Destination</th>
+        <th>Size</th>
+        <th>Status</th>
+        <th>Error</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for it in items %}
+      <tr>
+        <td>{{ it.src }}</td>
+        <td>
+          <a href="/jobs/{{ job.row_id }}/files/{{ it.dst }}">{{ it.dst }}</a>
+        </td>
+        <td>{{ it.size_human }}</td>
+        <td><span class="status {{ it.status }}">{{ it.status }}</span></td>
+        <td>{% match it.error_msg %}{% when Some with (msg) %}{{ msg }}{% when None %}—{% endmatch %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

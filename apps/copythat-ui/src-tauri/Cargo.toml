@@ -73,6 +73,18 @@ copythat-crypt = { path = "../../../crates/copythat-crypt", version = "1" }
 # pair-server, return the QR PNG bytes, complete the SAS, and
 # dispatch APNs / FCM pushes when a job finishes.
 copythat-mobile = { path = "../../../crates/copythat-mobile", version = "1" }
+# Phase 39 — browser-accessible recovery UI. AppState owns a
+# RecoveryRegistry whose live `JoinHandle` reflects the current
+# Settings → Advanced → Recovery toggle. Started/stopped via
+# `recovery_commands::recovery_apply` at boot + on every
+# `update_settings` flip.
+copythat-recovery = { path = "../../../crates/copythat-recovery", version = "1" }
+# Phase 39 — `recovery_commands` opens the default chunk store path
+# the same way `lib.rs` will hand it to a future per-job sink, so
+# the recovery server can pull manifests without a second config
+# knob. The crate is otherwise consumed only by the engine's
+# `CopyThatChunkSink`; listing it here makes the dep explicit.
+copythat-chunk = { path = "../../../crates/copythat-chunk", version = "1" }
 # Phase 17d — privilege-separated helper. Used by retry_elevated and
 # (future) shell-extension install/uninstall flows.
 copythat-helper = { path = "../../../crates/copythat-helper", version = "1" }

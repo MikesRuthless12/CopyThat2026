@@ -659,11 +659,8 @@ pub async fn dispatch_with_auth<C: RemoteControl + ?Sized>(
             if let Some(prev) = auth.last_keep_awake_toggle
                 && now.saturating_duration_since(prev).as_secs() < KEEP_AWAKE_RATE_LIMIT_SECS
             {
-                ctl.audit_command(
-                    "set_keep_awake.rate_limited",
-                    &format!("enabled={enabled}"),
-                )
-                .await;
+                ctl.audit_command("set_keep_awake.rate_limited", &format!("enabled={enabled}"))
+                    .await;
                 return RemoteResponse::Error {
                     message: "err-mobile-rate-limited".into(),
                 };
@@ -1038,8 +1035,7 @@ mod tests {
         assert!(!auth.is_authenticated());
 
         // ListJobs is still refused — no challenge response yet.
-        let still_refused =
-            dispatch_with_auth(RemoteCommand::ListJobs, &ctl, &mut auth).await;
+        let still_refused = dispatch_with_auth(RemoteCommand::ListJobs, &ctl, &mut auth).await;
         assert!(matches!(still_refused, RemoteResponse::Error { .. }));
 
         let mac = compute_challenge_mac(&shared, &phone_key, &nonce, 1);

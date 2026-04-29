@@ -403,8 +403,7 @@ pub async fn mobile_handle_remote_command(
     // NUL / U+FFFD payloads at the dispatch boundary so the engine
     // never sees a shaped-bad path regardless of who originated it.
     if let Err(resp) = preflight_validate_command_paths(&cmd) {
-        return serde_json::to_string(&resp)
-            .map_err(|e| format!("encode response: {e}"));
+        return serde_json::to_string(&resp).map_err(|e| format!("encode response: {e}"));
     }
 
     let ctl = AppStateRemoteControl {
@@ -450,9 +449,7 @@ pub async fn mobile_handle_remote_command(
 /// This is a compile-time-checked match over `RemoteCommand` — adding
 /// a new variant that carries a path will surface as an unhandled-arm
 /// warning rather than silently bypassing the gate.
-fn preflight_validate_command_paths(
-    cmd: &RemoteCommand,
-) -> Result<(), RemoteResponse> {
+fn preflight_validate_command_paths(cmd: &RemoteCommand) -> Result<(), RemoteResponse> {
     let invalid = || RemoteResponse::Error {
         message: "err-invalid-path".to_string(),
     };

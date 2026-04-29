@@ -140,8 +140,7 @@ fn path_exists_with_retry(p: &Path) -> bool {
 /// (the overwhelmingly common case) and is cheap.
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 fn paths_match(a: &Path, b: &Path) -> bool {
-    a.as_os_str().to_string_lossy().to_lowercase()
-        == b.as_os_str().to_string_lossy().to_lowercase()
+    a.as_os_str().to_string_lossy().to_lowercase() == b.as_os_str().to_string_lossy().to_lowercase()
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]

@@ -28,9 +28,7 @@ use std::time::Instant;
 use copythat_core::{CopyControl, CopyEvent};
 use tokio::sync::mpsc;
 use windows_sys::Win32::Foundation::{BOOL, FALSE, GetLastError, TRUE};
-use windows_sys::Win32::Storage::FileSystem::{
-    CopyFileExW, LPPROGRESS_ROUTINE_CALLBACK_REASON,
-};
+use windows_sys::Win32::Storage::FileSystem::{CopyFileExW, LPPROGRESS_ROUTINE_CALLBACK_REASON};
 
 use super::NativeOutcome;
 use crate::outcome::ChosenStrategy;
@@ -604,10 +602,7 @@ struct CopyFile2ExtendedParameters {
     dwCopyFlags: u32,
     pfCancel: *mut BOOL,
     pProgressRoutine: Option<
-        unsafe extern "system" fn(
-            *const CopyFile2MessageHeader,
-            *mut core::ffi::c_void,
-        ) -> u32,
+        unsafe extern "system" fn(*const CopyFile2MessageHeader, *mut core::ffi::c_void) -> u32,
     >,
     pvCallbackContext: *mut core::ffi::c_void,
 }
@@ -853,7 +848,7 @@ fn wide(path: &Path) -> Vec<u16> {
 fn copyfile2_hresult_to_io_error(hresult: i32) -> io::Error {
     let facility = (hresult >> 16) & 0x1FFF;
     if facility == 7 {
-        io::Error::from_raw_os_error((hresult & 0xFFFF) as i32)
+        io::Error::from_raw_os_error(hresult & 0xFFFF)
     } else {
         io::Error::other(format!(
             "CopyFile2 HRESULT 0x{hresult:08x} (facility {facility})"
@@ -945,17 +940,11 @@ pub(crate) fn is_ssd(path: &Path) -> Option<bool> {
 pub(crate) fn filesystem_name(path: &Path) -> Option<String> {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{
-        GetVolumeInformationW, GetVolumePathNameW,
-    };
+    use windows_sys::Win32::Storage::FileSystem::{GetVolumeInformationW, GetVolumePathNameW};
 
     // Files that don't yet exist (typical for the destination of an
     // in-flight copy) get probed via their parent directory.
-    let probe_target: &Path = if path.is_file() {
-        path.parent()?
-    } else {
-        path
-    };
+    let probe_target: &Path = if path.is_file() { path.parent()? } else { path };
     let mut wide: Vec<u16> = OsStr::new(probe_target).encode_wide().collect();
     wide.push(0);
 
@@ -965,9 +954,8 @@ pub(crate) fn filesystem_name(path: &Path) -> Option<String> {
     let mut root_buf: [u16; 260] = [0; 260];
     // SAFETY: `wide` is NUL-terminated; `root_buf` is a fixed-size
     // buffer sized to `MAX_PATH + 1` per Win32 documented limit.
-    let path_ok = unsafe {
-        GetVolumePathNameW(wide.as_ptr(), root_buf.as_mut_ptr(), root_buf.len() as u32)
-    };
+    let path_ok =
+        unsafe { GetVolumePathNameW(wide.as_ptr(), root_buf.as_mut_ptr(), root_buf.len() as u32) };
     if path_ok == 0 {
         return None;
     }
@@ -1130,7 +1118,7 @@ mod tests {
     #[test]
     fn copyfile2_hresult_other_non_win32_facilities_use_io_error_other() {
         for (hresult, facility) in [
-            (0x80090001u32 as i32, 9), // FACILITY_SECURITY
+            (0x80090001u32 as i32, 9),  // FACILITY_SECURITY
             (0x800C0001u32 as i32, 12), // FACILITY_HTTP (Windows decimal 12 = 0xC)
         ] {
             let err = copyfile2_hresult_to_io_error(hresult);

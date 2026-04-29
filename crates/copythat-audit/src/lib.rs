@@ -935,7 +935,9 @@ mod tests {
         assert!(is_worm_already_applied_message(
             "Operation not permitted (os error 1)"
         ));
-        assert!(is_worm_already_applied_message("Access is denied. (os error 5)"));
+        assert!(is_worm_already_applied_message(
+            "Access is denied. (os error 5)"
+        ));
         assert!(is_worm_already_applied_message("Read-only file system"));
         assert!(!is_worm_already_applied_message("disk full"));
     }
@@ -995,8 +997,8 @@ mod tests {
         // --- Step 4: writer + verifier agree on the redacted chain step ---
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("audit.log");
-        let sink = AuditSink::open(&path, AuditFormat::JsonLines, WormMode::Off)
-            .expect("open audit sink");
+        let sink =
+            AuditSink::open(&path, AuditFormat::JsonLines, WormMode::Off).expect("open audit sink");
         sink.record(&event_a).expect("record event_a");
         sink.record(&event_b).expect("record event_b");
         drop(sink);

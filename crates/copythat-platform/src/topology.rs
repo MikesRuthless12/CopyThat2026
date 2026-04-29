@@ -68,7 +68,16 @@ pub enum MediaClass {
 /// Best-effort topology snapshot for a path's backing volume.
 #[derive(Debug, Clone, Copy)]
 pub struct VolumeTopology {
+    /// Bus class (NVMe / SATA / USB / SD / SMB / etc.) reported by
+    /// `STORAGE_DEVICE_DESCRIPTOR::BusType`. Picks the per-bus
+    /// buffer + queue-depth heuristic in
+    /// [`recommended_buffer_bytes`](Self::recommended_buffer_bytes)
+    /// and
+    /// [`recommended_queue_depth`](Self::recommended_queue_depth).
     pub bus_type: BusType,
+    /// Whether the backing media is solid-state, rotational, or
+    /// indeterminate. SSD vs HDD changes the queue-depth ceiling
+    /// dramatically (NCQ on SSDs vs head-seek on HDDs).
     pub media_class: MediaClass,
     /// Physical sector size from `STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR`.
     /// Common values: 512 (legacy), 4096 (Advanced Format), 8192
@@ -96,26 +105,24 @@ impl VolumeTopology {
             // NVMe — assume Gen3-class minimum; deeper queues with
             // larger buffers go through the auto-overlapped path,
             // which has its own knob.
-            (BusType::Nvme, _) => 1 * MIB,
+            (BusType::Nvme, _) => MIB,
             // SATA SSD: flat curve 128K-1M, settle on 256K.
             (BusType::Sata, MediaClass::Ssd) => 256 * KIB,
             // SATA HDD: cache-friendly large blocks.
             (BusType::Sata, MediaClass::Hdd) => 4 * MIB,
-            (BusType::Sata, _) => 1 * MIB,
+            (BusType::Sata, _) => MIB,
             // USB / UASP enclosures — moderate.
             (BusType::Usb, _) => 512 * KIB,
             // SD / MMC — small.
             (BusType::Sd, _) | (BusType::Mmc, _) => 256 * KIB,
             // VHDX / iSCSI / RAID — assume parallel-friendly large
             // buffers help.
-            (BusType::FileBackedVirtual, _)
-            | (BusType::Iscsi, _)
-            | (BusType::Raid, _) => 4 * MIB,
+            (BusType::FileBackedVirtual, _) | (BusType::Iscsi, _) | (BusType::Raid, _) => 4 * MIB,
             // SMB — the auto-overlapped path's 4 MiB / QD 8 default
             // works well in 10 GbE; smaller for slow links.
-            (BusType::Smb, _) => 1 * MIB,
+            (BusType::Smb, _) => MIB,
             // Unknown.
-            (BusType::Other, _) => 1 * MIB,
+            (BusType::Other, _) => MIB,
         }
     }
 
@@ -130,9 +137,7 @@ impl VolumeTopology {
             (BusType::Sata, _) => 4,
             (BusType::Usb, _) => 4, // vendor bridges choke deeper
             (BusType::Sd, _) | (BusType::Mmc, _) => 2,
-            (BusType::FileBackedVirtual, _)
-            | (BusType::Iscsi, _)
-            | (BusType::Raid, _) => 8,
+            (BusType::FileBackedVirtual, _) | (BusType::Iscsi, _) | (BusType::Raid, _) => 8,
             (BusType::Smb, _) => 8,
             (BusType::Other, _) => 4,
         }
@@ -145,10 +150,7 @@ impl VolumeTopology {
     pub fn parallel_chunk_friendly(&self) -> bool {
         matches!(
             self.bus_type,
-            BusType::FileBackedVirtual
-                | BusType::Iscsi
-                | BusType::Raid
-                | BusType::Smb
+            BusType::FileBackedVirtual | BusType::Iscsi | BusType::Raid | BusType::Smb
         )
     }
 }
@@ -192,8 +194,7 @@ pub fn is_unc_path(path: &Path) -> bool {
 fn cache() -> &'static std::sync::Mutex<std::collections::HashMap<u64, VolumeTopology>> {
     use std::sync::Mutex;
     use std::sync::OnceLock;
-    static CACHE: OnceLock<Mutex<std::collections::HashMap<u64, VolumeTopology>>> =
-        OnceLock::new();
+    static CACHE: OnceLock<Mutex<std::collections::HashMap<u64, VolumeTopology>>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
@@ -220,9 +221,7 @@ fn probe_impl(path: &Path) -> Option<VolumeTopology> {
         // otherwise force every subsequent caller to re-probe the
         // 2 ms IOCTL forever.
         let guard = cache.lock().unwrap_or_else(|e| {
-            eprintln!(
-                "copythat-platform::topology: recovering from poisoned cache lock (read)"
-            );
+            eprintln!("copythat-platform::topology: recovering from poisoned cache lock (read)");
             e.into_inner()
         });
         if let Some(t) = guard.get(&serial) {
@@ -233,9 +232,7 @@ fn probe_impl(path: &Path) -> Option<VolumeTopology> {
     let topo = win_probe(path).unwrap_or_else(VolumeTopology::conservative_default);
     {
         let mut guard = cache.lock().unwrap_or_else(|e| {
-            eprintln!(
-                "copythat-platform::topology: recovering from poisoned cache lock (write)"
-            );
+            eprintln!("copythat-platform::topology: recovering from poisoned cache lock (write)");
             e.into_inner()
         });
         guard.insert(serial, topo);
@@ -254,12 +251,12 @@ fn win_probe(path: &Path) -> Option<VolumeTopology> {
     use windows_sys::Win32::Storage::FileSystem::{
         CreateFileW, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
-    use windows_sys::Win32::System::Ioctl::{
-        IOCTL_STORAGE_QUERY_PROPERTY, PropertyStandardQuery, STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR,
-        STORAGE_DEVICE_DESCRIPTOR, STORAGE_PROPERTY_QUERY, StorageAccessAlignmentProperty,
-        StorageDeviceProperty, StorageDeviceSeekPenaltyProperty, DEVICE_SEEK_PENALTY_DESCRIPTOR,
-    };
     use windows_sys::Win32::System::IO::DeviceIoControl;
+    use windows_sys::Win32::System::Ioctl::{
+        DEVICE_SEEK_PENALTY_DESCRIPTOR, IOCTL_STORAGE_QUERY_PROPERTY, PropertyStandardQuery,
+        STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR, STORAGE_DEVICE_DESCRIPTOR, STORAGE_PROPERTY_QUERY,
+        StorageAccessAlignmentProperty, StorageDeviceProperty, StorageDeviceSeekPenaltyProperty,
+    };
 
     // Need a path that names a volume. For an arbitrary file/dir,
     // walk up to the volume root.
@@ -283,7 +280,10 @@ fn win_probe(path: &Path) -> Option<VolumeTopology> {
         return None;
     }
     // Convert "C:\" → "\\.\C:" for the IOCTL handle.
-    let len = root_buf.iter().position(|&c| c == 0).unwrap_or(root_buf.len());
+    let len = root_buf
+        .iter()
+        .position(|&c| c == 0)
+        .unwrap_or(root_buf.len());
     let root_str = String::from_utf16_lossy(&root_buf[..len]);
     let drive_letter = root_str
         .chars()
@@ -342,26 +342,26 @@ fn win_probe(path: &Path) -> Option<VolumeTopology> {
             ptr::null_mut(),
         )
     };
-    let bus_type = if ok != 0 && bytes_returned >= std::mem::size_of::<STORAGE_DEVICE_DESCRIPTOR>() as u32 {
-        // SAFETY: device_buf holds a STORAGE_DEVICE_DESCRIPTOR after a
-        // successful IOCTL with sufficient bytes_returned.
-        let desc: &STORAGE_DEVICE_DESCRIPTOR = unsafe {
-            &*(device_buf.as_ptr() as *const STORAGE_DEVICE_DESCRIPTOR)
+    let bus_type =
+        if ok != 0 && bytes_returned >= std::mem::size_of::<STORAGE_DEVICE_DESCRIPTOR>() as u32 {
+            // SAFETY: device_buf holds a STORAGE_DEVICE_DESCRIPTOR after a
+            // successful IOCTL with sufficient bytes_returned.
+            let desc: &STORAGE_DEVICE_DESCRIPTOR =
+                unsafe { &*(device_buf.as_ptr() as *const STORAGE_DEVICE_DESCRIPTOR) };
+            match desc.BusType {
+                0x7 => BusType::Usb,
+                0x9 => BusType::Iscsi,
+                0xB => BusType::Sata,
+                0xC => BusType::Sd,
+                0xD => BusType::Mmc,
+                0xF => BusType::Raid,
+                0x11 => BusType::Nvme,
+                0x15 => BusType::FileBackedVirtual,
+                _ => BusType::Other,
+            }
+        } else {
+            BusType::Other
         };
-        match desc.BusType {
-            0x7 => BusType::Usb,
-            0x9 => BusType::Iscsi,
-            0xB => BusType::Sata,
-            0xC => BusType::Sd,
-            0xD => BusType::Mmc,
-            0xF => BusType::Raid,
-            0x11 => BusType::Nvme,
-            0x15 => BusType::FileBackedVirtual,
-            _ => BusType::Other,
-        }
-    } else {
-        BusType::Other
-    };
 
     // --- Query SeekPenaltyProperty (HDD vs SSD) ---
     let mut query2 = STORAGE_PROPERTY_QUERY {
@@ -384,19 +384,18 @@ fn win_probe(path: &Path) -> Option<VolumeTopology> {
             ptr::null_mut(),
         )
     };
-    let media_class = if ok2 != 0
-        && bytes2 >= std::mem::size_of::<DEVICE_SEEK_PENALTY_DESCRIPTOR>() as u32
-    {
-        // SAFETY: ok2 / bytes2 confirm the descriptor is filled in.
-        let desc = unsafe { seek_desc.assume_init() };
-        if desc.IncursSeekPenalty != 0 {
-            MediaClass::Hdd
+    let media_class =
+        if ok2 != 0 && bytes2 >= std::mem::size_of::<DEVICE_SEEK_PENALTY_DESCRIPTOR>() as u32 {
+            // SAFETY: ok2 / bytes2 confirm the descriptor is filled in.
+            let desc = unsafe { seek_desc.assume_init() };
+            if desc.IncursSeekPenalty != 0 {
+                MediaClass::Hdd
+            } else {
+                MediaClass::Ssd
+            }
         } else {
-            MediaClass::Ssd
-        }
-    } else {
-        MediaClass::Unknown
-    };
+            MediaClass::Unknown
+        };
 
     // --- Query AccessAlignmentProperty (physical sector size) ---
     let mut query3 = STORAGE_PROPERTY_QUERY {
@@ -498,13 +497,22 @@ mod tests {
 
     #[test]
     fn raid_smb_iscsi_are_parallel_friendly() {
-        for bt in [BusType::Raid, BusType::Smb, BusType::Iscsi, BusType::FileBackedVirtual] {
+        for bt in [
+            BusType::Raid,
+            BusType::Smb,
+            BusType::Iscsi,
+            BusType::FileBackedVirtual,
+        ] {
             let t = VolumeTopology {
                 bus_type: bt,
                 media_class: MediaClass::Ssd,
                 bytes_per_physical_sector: 4096,
             };
-            assert!(t.parallel_chunk_friendly(), "expected parallel-friendly: {:?}", bt);
+            assert!(
+                t.parallel_chunk_friendly(),
+                "expected parallel-friendly: {:?}",
+                bt
+            );
         }
     }
 
@@ -548,8 +556,7 @@ mod tests {
             // exist; probe walks up to the volume root.
             probe(Path::new("."))
         });
-        let topo_opt = probe_outcome
-            .expect("probe must not panic when the cache lock is poisoned");
+        let topo_opt = probe_outcome.expect("probe must not panic when the cache lock is poisoned");
 
         // Recovery means we still get a sensible answer back. On
         // Windows local paths the probe either succeeds (live volume)

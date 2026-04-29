@@ -48,10 +48,7 @@ impl SrcAttributes {
     /// "open and stream bytes". Currently: any reparse point, any
     /// sparse file, or any cloud/offline placeholder.
     pub fn needs_special_handling(&self) -> bool {
-        self.is_reparse_point
-            || self.is_sparse
-            || self.is_offline
-            || self.is_recall_on_data_access
+        self.is_reparse_point || self.is_sparse || self.is_offline || self.is_recall_on_data_access
     }
 }
 

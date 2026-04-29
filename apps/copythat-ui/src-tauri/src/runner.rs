@@ -250,7 +250,11 @@ pub(crate) async fn run_job(job: RunJob) {
                 .unwrap_or(false);
             tracing::debug!(
                 source_is_dir,
-                op = if source_is_dir { "copy_tree" } else { "copy_file" },
+                op = if source_is_dir {
+                    "copy_tree"
+                } else {
+                    "copy_file"
+                },
                 "run_job dispatching copy",
             );
             if source_is_dir {

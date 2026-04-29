@@ -67,7 +67,8 @@
 //! # }
 //! ```
 
-#![allow(unsafe_code)] // Justified per-module: every fast path is a raw FFI call.
+#![allow(unsafe_code)]
+// Justified per-module: every fast path is a raw FFI call.
 // Phase 42 doc audit: warn-only on missing public-API docs so future
 // additions are flagged without breaking the build on the historic
 // undocumented FFI surface (raw struct fields, syscall constants).

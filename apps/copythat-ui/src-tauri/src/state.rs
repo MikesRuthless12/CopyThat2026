@@ -143,6 +143,12 @@ pub struct AppState {
     /// surfaces work unchanged. See `progress_channel.rs` for the
     /// migration path forward.
     pub progress_channels: ProgressChannelRegistry,
+    /// Phase 39 — browser-accessible recovery UI. Holds the live
+    /// `copythat_recovery::JoinHandle` while the user has Settings →
+    /// Advanced → "Recovery web UI" enabled; `None` when the toggle
+    /// is off. `recovery_commands::recovery_apply` is the only
+    /// writer.
+    pub recovery: crate::recovery_commands::RecoveryRegistry,
 }
 
 impl AppState {
@@ -221,6 +227,10 @@ impl AppState {
             // opts in per-job via the `register_progress_channel`
             // command (see `progress_channel.rs`).
             progress_channels: ProgressChannelRegistry::new(),
+            // Phase 39 — idle recovery server. `recovery_apply` at
+            // boot (and on every `update_settings`) flips this to
+            // `Some` when the user has the toggle on.
+            recovery: crate::recovery_commands::RecoveryRegistry::new(),
         }
     }
 

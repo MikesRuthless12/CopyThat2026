@@ -52,6 +52,10 @@ pub struct HardlinkSet {
 }
 
 impl HardlinkSet {
+    /// Construct an empty ledger. Equivalent to
+    /// `HardlinkSet::default()`; provided as the canonical name so
+    /// callers don't have to remember which trait we picked for the
+    /// no-arg constructor.
     pub fn new() -> Self {
         Self::default()
     }
@@ -74,9 +78,7 @@ impl HardlinkSet {
         // byte-copy, exactly the "store the bytes once" invariant we
         // built this for.
         let guard = self.inner.lock().unwrap_or_else(|e| {
-            eprintln!(
-                "copythat-platform::hardlink_set: recovering from poisoned ledger (get)"
-            );
+            eprintln!("copythat-platform::hardlink_set: recovering from poisoned ledger (get)");
             e.into_inner()
         });
         guard.get(ident).cloned()
@@ -88,9 +90,7 @@ impl HardlinkSet {
     /// same `ident` overwrites with the latest `dst`.
     pub fn record(&self, ident: LinkIdentity, dst: PathBuf) {
         let mut g = self.inner.lock().unwrap_or_else(|e| {
-            eprintln!(
-                "copythat-platform::hardlink_set: recovering from poisoned ledger (record)"
-            );
+            eprintln!("copythat-platform::hardlink_set: recovering from poisoned ledger (record)");
             e.into_inner()
         });
         g.insert(ident, dst);
@@ -187,8 +187,7 @@ fn identity_impl(src: &Path) -> Option<LinkIdentity> {
     }
     // SAFETY: ok != 0 means info is filled in.
     let info = unsafe { info.assume_init() };
-    let file_id =
-        ((info.nFileIndexHigh as u128) << 32) | (info.nFileIndexLow as u128);
+    let file_id = ((info.nFileIndexHigh as u128) << 32) | (info.nFileIndexLow as u128);
     Some(LinkIdentity {
         volume: info.dwVolumeSerialNumber as u64,
         file_id,
@@ -223,9 +222,7 @@ fn create_hardlink(existing: &Path, new_link: &Path) -> io::Result<()> {
     let mut new_w: Vec<u16> = OsStr::new(new_link).encode_wide().collect();
     new_w.push(0);
     // SAFETY: both buffers are NUL-terminated.
-    let ok = unsafe {
-        CreateHardLinkW(new_w.as_ptr(), existing_w.as_ptr(), ptr::null_mut())
-    };
+    let ok = unsafe { CreateHardLinkW(new_w.as_ptr(), existing_w.as_ptr(), ptr::null_mut()) };
     if ok != 0 {
         Ok(())
     } else {
@@ -287,7 +284,7 @@ mod tests {
         let src = dir.path().join("src.txt");
         fs::write(&src, b"x").unwrap();
         let dst = dir.path().join("dst.txt");
-        assert_eq!(set.dispatch(&src, &dst).unwrap(), false);
+        assert!(!set.dispatch(&src, &dst).unwrap());
     }
 
     #[test]

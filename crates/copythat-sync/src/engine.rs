@@ -256,8 +256,7 @@ pub async fn sync(
                 // whether the re-created content is "new" relative to
                 // the last-synced state.
                 let baseline = db.get_file(relpath)?;
-                let outcome =
-                    apply_delete(pair, relpath, *direction, baseline.as_ref()).await?;
+                let outcome = apply_delete(pair, relpath, *direction, baseline.as_ref()).await?;
                 match outcome {
                     DeleteOutcome::Deleted => {
                         db.delete_file(relpath)?;
@@ -745,8 +744,7 @@ async fn apply_conflict(
     // digits, zero-padded) sequence numbers until we find a free
     // slot. Cap at one million attempts so a directory-listing bug
     // can't loop forever.
-    let preservation_path =
-        unique_conflict_path(&preservation_dir, relpath, host_label);
+    let preservation_path = unique_conflict_path(&preservation_dir, relpath, host_label);
 
     // Delete-edit conflict where loser is the deleter: the loser
     // has nothing to preserve. For the other kinds, rename the

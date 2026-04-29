@@ -1540,9 +1540,7 @@ enum ResumeDecision {
     /// for already-finalised rows; fixes a row stuck with
     /// `final_hash=None` if the prior run never hit the success
     /// path).
-    AlreadyComplete {
-        final_hash: [u8; 32],
-    },
+    AlreadyComplete { final_hash: [u8; 32] },
 }
 
 /// Probe the journal + the existing destination and decide whether
@@ -1902,7 +1900,8 @@ async fn open_src_with_retry(
                         && attempt + 1 < total_attempts
                     {
                         // Exponential backoff: base × 2^attempt, saturating.
-                        let ms = base_delay_ms.saturating_mul(1u64.checked_shl(attempt).unwrap_or(u64::MAX));
+                        let ms = base_delay_ms
+                            .saturating_mul(1u64.checked_shl(attempt).unwrap_or(u64::MAX));
                         last_err = e;
                         tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
                         continue;
