@@ -1218,3 +1218,13 @@ preview-reason-content-different = Content differs  # MT
 preview-reason-identical = Identical to source  # MT
 preview-button-run = Run plan  # MT
 preview-button-reduce = Reduce my plan…  # MT
+
+# Phase 42 — perceptual-hash visual-similarity dedup.  # MT
+perceptual-warn-title = Looks visually identical  # MT
+perceptual-warn-body = { $name } at the destination appears to match the source picture. Continue copying anyway?  # MT
+perceptual-warn-keep-both = Keep both  # MT
+perceptual-warn-skip = Skip this file  # MT
+perceptual-warn-overwrite = Overwrite anyway  # MT
+perceptual-settings-heading = Visual-similarity dedup  # MT
+perceptual-settings-hint = Detect visually identical images at the destination before they're overwritten. Hash is perceptual (recognises the same picture re-saved as a different format), not byte-exact.  # MT
+perceptual-settings-threshold-label = Warn threshold (lower = stricter match)  # MT

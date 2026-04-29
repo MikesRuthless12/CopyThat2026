@@ -965,3 +965,14 @@ preview-reason-content-different = Content differs
 preview-reason-identical = Identical to source
 preview-button-run = Run plan
 preview-button-reduce = Reduce my plan…
+
+# Phase 42 — perceptual-hash visual-similarity dedup. Eight keys cover
+# the pre-copy "looks visually identical" warning + the Settings panel.
+perceptual-warn-title = Looks visually identical
+perceptual-warn-body = { $name } at the destination appears to match the source picture. Continue copying anyway?
+perceptual-warn-keep-both = Keep both
+perceptual-warn-skip = Skip this file
+perceptual-warn-overwrite = Overwrite anyway
+perceptual-settings-heading = Visual-similarity dedup
+perceptual-settings-hint = Detect visually identical images at the destination before they're overwritten. Hash is perceptual (recognises the same picture re-saved as a different format), not byte-exact.
+perceptual-settings-threshold-label = Warn threshold (lower = stricter match)

@@ -1,0 +1,50 @@
+[package]
+name = "copythat-perceptual"
+description = "Phase 42 — perceptual-hash + visual-similarity dedup for Copy That. Pure-Rust image-hasher integration; no ONNX, no model weights."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Phase 42 — gate the audio-fingerprint surface behind a feature flag
+# so the default build doesn't pull in chromaprint / FFmpeg deps. The
+# audio path is incomplete in this revision (see lib.rs); the smoke
+# test detects-and-skips when the feature is off.
+audio-perceptual = []
+
+[dependencies]
+# Phase 42 — `image_hasher` ships aHash / dHash / pHash / wHash /
+# DoubleGradient. MIT-licensed; pulls `image` 0.25 (MIT/Apache-2.0)
+# transitively for decode. We pick the DoubleGradient algorithm —
+# 64-bit output, slightly more discriminating than dHash on
+# similar-but-distinct images per the upstream README.
+image_hasher = "3"
+# Phase 42 — bring `image` in directly so we control which decoders
+# light up (`png`, `jpeg`, `bmp`, `webp`, `gif` — defaults that match
+# what the upstream `image-hasher` smoke test exercises). MIT/
+# Apache-2.0.
+image = { version = "0.25", default-features = false, features = [
+    "png",
+    "jpeg",
+    "bmp",
+    "webp",
+    "gif",
+] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+serde_json = "1"
+tempfile = "3"
+
+[[test]]
+name = "phase_42_perceptual"
+path = "../../tests/smoke/phase_42_perceptual.rs"
