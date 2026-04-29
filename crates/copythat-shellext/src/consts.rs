@@ -36,10 +36,10 @@ pub const DISPLAY_COPY: &str = "Copy with Copy That";
 pub const DISPLAY_MOVE: &str = "Move with Copy That";
 
 /// ProgID-style friendly names under `HKCR\CLSID\{guid}\(default)`.
-pub const PROG_COPY: &str = "Copy That v1.0.0 — Copy command";
+pub const PROG_COPY: &str = "Copy That v0.19.84 — Copy command";
 
 /// See [`PROG_COPY`].
-pub const PROG_MOVE: &str = "Copy That v1.0.0 — Move command";
+pub const PROG_MOVE: &str = "Copy That v0.19.84 — Move command";
 
 /// Name of the target binary the verbs invoke. Resolved via PATH;
 /// Phase 16 packaging puts `copythat.exe` there (on Windows today,

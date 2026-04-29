@@ -1,8 +1,8 @@
 {
   "name": "copythat-ui",
   "private": true,
-  "version": "1.0.0",
-  "description": "Copy That v1.0.0 — Tauri 2.x + Svelte 5 shell",
+  "version": "0.19.84",
+  "description": "Copy That v0.19.84 — Tauri 2.x + Svelte 5 shell",
   "type": "module",
   "scripts": {
     "dev": "vite",

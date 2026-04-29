@@ -14,10 +14,10 @@ workspace = true
 
 [dependencies]
 # Phase 9 — read history rows for the landing page + job detail.
-copythat-history = { path = "../copythat-history", version = "1" }
+copythat-history = { path = "../copythat-history", version = "0.19" }
 # Phase 27 — pull manifests + materialise chunks for the file-as-of-
 # timestamp download path.
-copythat-chunk = { path = "../copythat-chunk", version = "1" }
+copythat-chunk = { path = "../copythat-chunk", version = "0.19" }
 
 # Phase 39 — HTTP framework. axum 0.8 is the current stable line; it
 # pulls in hyper / tower / tokio which are already in the workspace

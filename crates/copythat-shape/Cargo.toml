@@ -24,7 +24,7 @@ slow-tests = []
 # Direction matches `copythat-journal` and `copythat-snapshot` so core
 # stays free of any runtime-adjacent concern (scheduling, clocks,
 # OS-specific metered/battery probes).
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 # GCRA rate limiter. MIT. Accurate-to-a-quantum token bucket; the
 # standard Rust crate for "rate-limit this many ops per unit time".
 governor = "0.10"

@@ -58,7 +58,7 @@ futures = "0.3"
 bytes = "1"
 async-trait = "0.1"
 # Phase 32b — CloudSink adapter against copythat-core's trait bound.
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 
 # Phase 32f — SFTP via russh + russh-sftp. Pure-Rust MIT-licensed
 # replacement for OpenDAL's `services-sftp` (which pulls the
@@ -120,11 +120,11 @@ tokio = { version = "1", features = [
     "test-util",
 ] }
 toml = "0.9"
-copythat-settings = { path = "../copythat-settings", version = "1" }
+copythat-settings = { path = "../copythat-settings", version = "0.19" }
 # Phase 32d — smoke exercises the `copy_file` engine-level cloud-sink
 # branch end-to-end. Dev-only so the release graph stays independent
 # of copythat-core.
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 
 
 [[test]]

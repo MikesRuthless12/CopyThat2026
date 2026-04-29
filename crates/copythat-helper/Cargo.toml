@@ -23,7 +23,7 @@ path = "src/bin/helper.rs"
 # Phase 17d shares the lexical safety bar with the main app — every
 # IPC argument that names a path passes through Phase 17a's
 # validate_path_no_traversal before the helper acts on it.
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
@@ -38,7 +38,7 @@ hex = "0.4"
 tempfile = "3"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "io-util", "fs", "net", "time", "sync"] }
 # Phase 8 follow-up smoke uses copythat-hash for the SHA-256 round-trip.
-copythat-hash = { path = "../copythat-hash", version = "1" }
+copythat-hash = { path = "../copythat-hash", version = "0.19" }
 
 [[test]]
 name = "phase_17d_helper"

@@ -1,4 +1,4 @@
-//! Windows COM in-proc shell extension for Copy That v1.0.0.
+//! Windows COM in-proc shell extension for Copy That v0.19.84.
 //!
 //! Adds "Copy with Copy That" and "Move with Copy That" entries to
 //! the Windows Explorer right-click menu for files and folders. Each

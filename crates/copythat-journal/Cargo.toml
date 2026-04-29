@@ -25,7 +25,7 @@ slow-tests = []
 # Phase 20 — engine `JournalSink` trait + CopyError live in core.
 # Direction matches `copythat-snapshot`'s dep so core stays free of
 # any persistence concern.
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 # Phase 20 — co-located alongside the Phase 9 history DB. We reuse
 # the same `ProjectDirs` helper to pick the OS user-data dir.
 directories = "6"

@@ -85,6 +85,20 @@ async fn shred_file_inner(
         return Err(ShredError::purge_not_supported(path));
     }
 
+    // Phase 44 — refuse on copy-on-write filesystems (Btrfs / ZFS /
+    // APFS) and thin-provisioned LVM. Block-level overwrites don't
+    // reach the original content there; the FS reuses storage on
+    // the next write. Caller should route the user to whole-drive
+    // sanitize ([`crate::SsdSanitizeMode`]) instead.
+    //
+    // Phase 44 first cut: `is_cow_filesystem` returns false for all
+    // paths until the platform probe lands; the check is a no-op in
+    // shipped binaries today. The smoke test uses an explicit
+    // `refuse_shred_on_cow` invocation to exercise the error path.
+    if crate::sanitize::is_cow_filesystem(path) {
+        return Err(crate::sanitize::refuse_shred_on_cow(path));
+    }
+
     // Refuse symlinks and directories up front.
     let meta = tokio::fs::symlink_metadata(path)
         .await

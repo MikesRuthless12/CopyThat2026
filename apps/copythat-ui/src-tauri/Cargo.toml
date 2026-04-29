@@ -20,74 +20,74 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-copythat-core = { path = "../../../crates/copythat-core", version = "1" }
-copythat-hash = { path = "../../../crates/copythat-hash", version = "1" }
-copythat-history = { path = "../../../crates/copythat-history", version = "1" }
-copythat-platform = { path = "../../../crates/copythat-platform", version = "1" }
-copythat-secure-delete = { path = "../../../crates/copythat-secure-delete", version = "1" }
-copythat-settings = { path = "../../../crates/copythat-settings", version = "1" }
+copythat-core = { path = "../../../crates/copythat-core", version = "0.19" }
+copythat-hash = { path = "../../../crates/copythat-hash", version = "0.19" }
+copythat-history = { path = "../../../crates/copythat-history", version = "0.19" }
+copythat-platform = { path = "../../../crates/copythat-platform", version = "0.19" }
+copythat-secure-delete = { path = "../../../crates/copythat-secure-delete", version = "0.19" }
+copythat-settings = { path = "../../../crates/copythat-settings", version = "0.19" }
 # Phase 19b — filesystem-snapshot bridge (VSS / ZFS / Btrfs / APFS)
 # wired into `CopyOptions::snapshot_hook` when the user opts into the
 # "Use snapshot" locked-file policy.
-copythat-snapshot = { path = "../../../crates/copythat-snapshot", version = "1" }
+copythat-snapshot = { path = "../../../crates/copythat-snapshot", version = "0.19" }
 # Phase 20 — durable resume journal. Opened at app start; the runner
 # attaches a per-job CopyThatJournalSink to every CopyOptions so a
 # crash mid-copy can resume from the last 50 ms checkpoint.
-copythat-journal = { path = "../../../crates/copythat-journal", version = "1" }
+copythat-journal = { path = "../../../crates/copythat-journal", version = "0.19" }
 # Phase 21 — bandwidth shaping. AppState owns a shared `Shape` whose
 # rate is updated once a minute by a tokio interval task driven by
 # the user's NetworkSettings.
-copythat-shape = { path = "../../../crates/copythat-shape", version = "1" }
+copythat-shape = { path = "../../../crates/copythat-shape", version = "0.19" }
 # Phase 25 — two-way sync with vector-clock conflict detection.
 # AppState owns a map of configured pairs; each `start_sync` IPC
 # spawns a runner task that emits sync-* events through Tauri.
-copythat-sync = { path = "../../../crates/copythat-sync", version = "1" }
+copythat-sync = { path = "../../../crates/copythat-sync", version = "0.19" }
 # Phase 26 — real-time filesystem watcher. Live-mirror mode spawns
 # one watcher per sync pair; a debounced event triggers a re-sync.
-copythat-watch = { path = "../../../crates/copythat-watch", version = "1" }
+copythat-watch = { path = "../../../crates/copythat-watch", version = "0.19" }
 # Phase 31 — power-aware copying. AppState owns a PowerBus; a
 # subscriber task maps PowerEvent into pause_all / resume_all / shape
 # cap directives driven by the user's PowerPoliciesSettings.
-copythat-power = { path = "../../../crates/copythat-power", version = "1" }
+copythat-power = { path = "../../../crates/copythat-power", version = "0.19" }
 # Phase 32 — cloud backend matrix via OpenDAL. AppState owns the
 # BackendRegistry + keychain-backed Credentials; IPC commands in
 # cloud_commands.rs surface list/add/remove/test-connection.
-copythat-cloud = { path = "../../../crates/copythat-cloud", version = "1" }
+copythat-cloud = { path = "../../../crates/copythat-cloud", version = "0.19" }
 # Phase 33 — mount-as-filesystem. AppState owns the MountRegistry +
 # an active NoopBackend (33b); real fuser / winfsp dispatch behind
 # the crate's feature flags lands in Phase 33c.
-copythat-mount = { path = "../../../crates/copythat-mount", version = "1" }
+copythat-mount = { path = "../../../crates/copythat-mount", version = "0.19" }
 # Phase 34 — enterprise audit log export + WORM mode. AppState owns
 # an `AuditRegistry` whose live `Arc<AuditSink>` is (re)built from
 # `Settings::audit` at startup + on every `update_settings` flip.
 # The runner records `JobStarted` / `JobCompleted` / `FileCopied`
 # / `FileFailed` / `CollisionResolved` / `SettingsChanged` into
 # the sink when one is active.
-copythat-audit = { path = "../../../crates/copythat-audit", version = "1" }
+copythat-audit = { path = "../../../crates/copythat-audit", version = "0.19" }
 # Phase 35 — destination encryption + on-the-fly compression. The
 # runner builds a `CopyThatCryptHook` from `Settings::crypt` and
 # attaches it to every queued job's `CopyOptions::transform`.
-copythat-crypt = { path = "../../../crates/copythat-crypt", version = "1" }
+copythat-crypt = { path = "../../../crates/copythat-crypt", version = "0.19" }
 # Phase 37 follow-up — desktop-side mobile companion. AppState owns
 # a MobileRegistry; `mobile_commands` IPC handlers spin up the
 # pair-server, return the QR PNG bytes, complete the SAS, and
 # dispatch APNs / FCM pushes when a job finishes.
-copythat-mobile = { path = "../../../crates/copythat-mobile", version = "1" }
+copythat-mobile = { path = "../../../crates/copythat-mobile", version = "0.19" }
 # Phase 39 — browser-accessible recovery UI. AppState owns a
 # RecoveryRegistry whose live `JoinHandle` reflects the current
 # Settings → Advanced → Recovery toggle. Started/stopped via
 # `recovery_commands::recovery_apply` at boot + on every
 # `update_settings` flip.
-copythat-recovery = { path = "../../../crates/copythat-recovery", version = "1" }
+copythat-recovery = { path = "../../../crates/copythat-recovery", version = "0.19" }
 # Phase 39 — `recovery_commands` opens the default chunk store path
 # the same way `lib.rs` will hand it to a future per-job sink, so
 # the recovery server can pull manifests without a second config
 # knob. The crate is otherwise consumed only by the engine's
 # `CopyThatChunkSink`; listing it here makes the dep explicit.
-copythat-chunk = { path = "../../../crates/copythat-chunk", version = "1" }
+copythat-chunk = { path = "../../../crates/copythat-chunk", version = "0.19" }
 # Phase 17d — privilege-separated helper. Used by retry_elevated and
 # (future) shell-extension install/uninstall flows.
-copythat-helper = { path = "../../../crates/copythat-helper", version = "1" }
+copythat-helper = { path = "../../../crates/copythat-helper", version = "0.19" }
 # Phase 37 follow-up — `RemoteControl` is async-trait. The impl
 # in `mobile_commands.rs` re-applies the macro on the impl block,
 # so the host crate needs the dep too.
@@ -232,8 +232,8 @@ arboard = { version = "3", features = ["wayland-data-control"] }
 
 [dev-dependencies]
 tempfile = "3"
-copythat-settings = { path = "../../../crates/copythat-settings", version = "1" }
-copythat-platform = { path = "../../../crates/copythat-platform", version = "1" }
+copythat-settings = { path = "../../../crates/copythat-settings", version = "0.19" }
+copythat-platform = { path = "../../../crates/copythat-platform", version = "0.19" }
 # Phase 22 smoke test — seeds colliding trees with explicit mtimes to
 # exercise the `OverwriteIfNewer` rule branch. `filetime` is already a
 # workspace dep via `copythat-core` and `copythat-secure-delete`.

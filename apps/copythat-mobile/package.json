@@ -1,7 +1,7 @@
 {
   "name": "copythat-mobile",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.19.84",
   "type": "module",
   "description": "Phase 37 — Copy That mobile companion. Vite + Svelte 5 PWA that connects to the desktop's PeerJS peer-id over WebRTC and drives the full /control surface (job pause/resume/cancel, collision resolution, history rerun, secure delete, live globals stats). Distributed as a PWA — users install via Add to Home Screen, no App Store gate.",
   "scripts": {

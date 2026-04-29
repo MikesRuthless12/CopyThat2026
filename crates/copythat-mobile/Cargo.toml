@@ -17,7 +17,7 @@ workspace = true
 # copythat-settings (stringly typed); this crate's `settings_bridge`
 # module maps between the persistence shape and the runtime
 # `MobileSettings`.
-copythat-settings = { path = "../copythat-settings", version = "1" }
+copythat-settings = { path = "../copythat-settings", version = "0.19" }
 
 # Phase 37 — X25519 ECDH for the SAS-emoji handshake. The shared
 # secret is derived once at pairing time and persisted alongside the

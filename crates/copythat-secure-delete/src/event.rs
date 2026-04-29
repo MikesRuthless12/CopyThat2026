@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use crate::error::ShredError;
 use crate::method::ShredMethod;
+use crate::sanitize::SsdSanitizeMode;
 
 /// A single event emitted on the `events` channel during a shred.
 ///
@@ -123,6 +124,21 @@ pub enum ShredEvent {
     },
     Failed {
         err: ShredError,
+    },
+    /// Phase 44 — whole-drive sanitize started. Fires before the
+    /// privileged helper is invoked. Pair with `SanitizeCompleted`
+    /// or `Failed`.
+    SanitizeStarted {
+        device: PathBuf,
+        mode: SsdSanitizeMode,
+    },
+    /// Phase 44 — whole-drive sanitize finished successfully.
+    /// `mode` reflects the actual mode that ran, which may differ
+    /// from the requested mode when the helper falls back.
+    SanitizeCompleted {
+        device: PathBuf,
+        mode: SsdSanitizeMode,
+        duration: Duration,
     },
 }
 

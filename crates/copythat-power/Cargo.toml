@@ -16,7 +16,7 @@ workspace = true
 # Phase 21 stub enums live in `copythat-shape` — re-used here so the
 # Network Settings tab and the Power & State tab share one vocabulary
 # for `NetworkClass`.
-copythat-shape = { path = "../copythat-shape", version = "1" }
+copythat-shape = { path = "../copythat-shape", version = "0.19" }
 # Cross-platform battery probe. Apache-2.0 OR MIT. Phase 21 brief
 # flagged this as the crate to pull in during Phase 31; it exposes a
 # safe enumerator + `Manager::batteries()` + per-battery
@@ -44,7 +44,7 @@ raw-cpuid = "11"
 # allowed to carry unsafe code. We re-export through the safe
 # `is_in_presentation_mode` / `is_in_fullscreen_mode` helpers.
 [target.'cfg(target_os = "windows")'.dependencies]
-copythat-platform = { path = "../copythat-platform", version = "1" }
+copythat-platform = { path = "../copythat-platform", version = "0.19" }
 
 # Phase 31b — Linux DBus ScreenSaver Inhibit probe via zbus 5.
 # zbus is already a workspace dep through copythat-platform's
@@ -67,7 +67,7 @@ tempfile = "3"
 # Phase 31 smoke exercises the TOML round-trip of
 # `PowerPoliciesSettings`. Dev-only so the power crate's release
 # graph stays independent of `copythat-settings`.
-copythat-settings = { path = "../copythat-settings", version = "1" }
+copythat-settings = { path = "../copythat-settings", version = "0.19" }
 
 # Phase 31 smoke test lives at the workspace root so it's easy to find
 # alongside the other phase smokes.

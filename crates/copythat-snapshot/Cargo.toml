@@ -41,7 +41,7 @@ vss-com = ["dep:winapi"]
 # dep in this direction (rather than core → snapshot) preserves
 # copythat-core's `#![forbid(unsafe_code)]` and keeps the platform-
 # specific unsafe blocks confined to this crate.
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

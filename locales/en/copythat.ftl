@@ -1,5 +1,5 @@
-app-name = Copy That v1.0.0
-window-title = Copy That v1.0.0
+app-name = Copy That v0.19.84
+window-title = Copy That v0.19.84
 shred-ssd-advisory = Warning: this target lives on an SSD. Multi-pass overwrites do not reliably sanitize flash memory because wear-leveling and over-provisioning move data out from under the logical block address. For solid-state media, prefer ATA SECURE ERASE, NVMe Format with Secure Erase, or full-disk encryption with a discarded key.
 
 # Global aggregate states (header pill)
@@ -1010,3 +1010,24 @@ provenance-verify-tampered = Manifest INVALID — { $tampered } tampered, { $mis
 # Phase 43 post-review hardening — toast text for the Settings →
 # Provenance buttons whose Tauri IPC has not yet landed.
 provenance-action-staged = Phase 43 — wiring the IPC for this action lands in a follow-up commit.
+
+# Phase 44 — SSD-aware whole-drive sanitize (NVMe Sanitize / OPAL
+# Crypto Erase) + the per-file shred refusal on copy-on-write
+# filesystems. 16 keys cover the new "Drive sanitize" Settings
+# subsection and the localized error messages.
+sanitize-heading = Whole-drive secure sanitize
+sanitize-hint = NVMe Sanitize, OPAL Crypto Erase, and ATA Secure Erase wipe a flash drive at the firmware layer in milliseconds. Per-file overwrite is meaningless on flash — multi-pass shred only burns NAND. Use this for actual purge.
+sanitize-pick-device = Choose the drive to sanitize
+sanitize-mode-label = Sanitization method
+sanitize-mode-nvme-format = NVMe Format (with secure erase)
+sanitize-mode-nvme-sanitize-block = NVMe Sanitize — Block Erase (slow, every cell)
+sanitize-mode-nvme-sanitize-crypto = NVMe Sanitize — Crypto Erase (instant)
+sanitize-mode-ata-secure-erase = ATA Secure Erase (legacy SATA SSDs)
+sanitize-mode-opal-crypto-erase = TCG OPAL Crypto Erase (Self-Encrypting Drives)
+sanitize-confirm-1 = This destroys EVERY byte on { $device }. There is no undo.
+sanitize-confirm-2 = I understand that all partitions, all files, and all snapshots on { $device } will be permanently unreadable.
+sanitize-confirm-3 = Type the drive's model name to proceed: { $model }
+sanitize-running = Sanitizing { $device } ({ $mode }) — this can take from milliseconds (crypto erase) to tens of minutes (block erase). Do not power down.
+sanitize-completed = Sanitize complete — { $device } is now blank.
+ssd-honest-shred-meaningless = Per-file shred on a copy-on-write filesystem (Btrfs / ZFS / APFS) cannot reach the underlying blocks. Use whole-drive sanitize plus full-disk-encryption key rotation instead.
+ssd-honest-advisory = This file lives on flash. Per-file overwrite costs NAND wear and does NOT guarantee the original cells are unrecoverable. For sensitive data, sanitize the whole drive.

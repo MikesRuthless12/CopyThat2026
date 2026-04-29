@@ -25,7 +25,7 @@ slow-tests = []
 # Phase 25 drives `copy_file` + reads `CopyErrorKind` for error
 # translation. No leakage in the other direction — core stays free of
 # sync concerns.
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 # BLAKE3 content digests are the lingua franca across Phases 3, 20,
 # 24, and now 25. Sharing the algorithm means a synced file that
 # already rode through verify doesn't need re-hashing.
