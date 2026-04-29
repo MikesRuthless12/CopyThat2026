@@ -15,7 +15,7 @@ workspace = true
 [dependencies]
 # Phase 35d — adapter implements `copythat_core::TransformSink` so
 # the engine can wire the crypt pipeline as an optional hook.
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 # `age` is the Rust implementation of the age encryption format:
 # X25519 + ChaCha20-Poly1305 + scrypt for passphrase-derived KEKs.
 # We pull the default features for SSH-recipient support; the

@@ -1,6 +1,6 @@
-app-name = Copy That v1.0.0
+app-name = Copy That v0.19.84
 # MT
-window-title = Copy That v1.0.0
+window-title = Copy That v0.19.84
 # MT
 shred-ssd-advisory = Uyarı: bu hedef bir SSD üzerindedir. Yıpranma dengeleme ve aşırı tahsis, verileri mantıksal blok adresinin dışına taşıdığından, çok geçişli üzerine yazma işlemleri flash belleği güvenilir biçimde temizleyemez. Katı hal ortamları için ATA SECURE ERASE, Güvenli Silme ile NVMe Format veya anahtarı imha edilmiş tam disk şifrelemesini tercih edin.
 
@@ -1255,3 +1255,21 @@ provenance-job-completed-body = { $count } files signed → { $path }  # MT
 provenance-verify-clean = Manifest valid for { $count } files; signature { $sig }; merkle root OK.  # MT
 provenance-verify-tampered = Manifest INVALID — { $tampered } tampered, { $missing } missing.  # MT
 provenance-action-staged = Phase 43 — wiring the IPC for this action lands in a follow-up commit.  # MT
+
+# Phase 44 — SSD-aware whole-drive sanitize.  # MT
+sanitize-heading = Whole-drive secure sanitize  # MT
+sanitize-hint = NVMe Sanitize, OPAL Crypto Erase, and ATA Secure Erase wipe a flash drive at the firmware layer in milliseconds. Per-file overwrite is meaningless on flash — multi-pass shred only burns NAND. Use this for actual purge.  # MT
+sanitize-pick-device = Choose the drive to sanitize  # MT
+sanitize-mode-label = Sanitization method  # MT
+sanitize-mode-nvme-format = NVMe Format (with secure erase)  # MT
+sanitize-mode-nvme-sanitize-block = NVMe Sanitize — Block Erase (slow, every cell)  # MT
+sanitize-mode-nvme-sanitize-crypto = NVMe Sanitize — Crypto Erase (instant)  # MT
+sanitize-mode-ata-secure-erase = ATA Secure Erase (legacy SATA SSDs)  # MT
+sanitize-mode-opal-crypto-erase = TCG OPAL Crypto Erase (Self-Encrypting Drives)  # MT
+sanitize-confirm-1 = This destroys EVERY byte on { $device }. There is no undo.  # MT
+sanitize-confirm-2 = I understand that all partitions, all files, and all snapshots on { $device } will be permanently unreadable.  # MT
+sanitize-confirm-3 = Type the drive's model name to proceed: { $model }  # MT
+sanitize-running = Sanitizing { $device } ({ $mode }) — this can take from milliseconds (crypto erase) to tens of minutes (block erase). Do not power down.  # MT
+sanitize-completed = Sanitize complete — { $device } is now blank.  # MT
+ssd-honest-shred-meaningless = Per-file shred on a copy-on-write filesystem (Btrfs / ZFS / APFS) cannot reach the underlying blocks. Use whole-drive sanitize plus full-disk-encryption key rotation instead.  # MT
+ssd-honest-advisory = This file lives on flash. Per-file overwrite costs NAND wear and does NOT guarantee the original cells are unrecoverable. For sensitive data, sanitize the whole drive.  # MT

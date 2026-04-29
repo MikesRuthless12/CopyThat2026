@@ -25,6 +25,12 @@ pub enum ShredErrorKind {
     /// / device combination. Recommend Clear + full-disk-encryption key
     /// rotation instead.
     PurgeNotSupported,
+    /// Phase 44 — the per-file shred is meaningless on this
+    /// filesystem (CoW: Btrfs / ZFS / APFS, or thin-provisioned
+    /// LVM). Block-level overwrites won't reach the original
+    /// content. Caller should route the user to whole-drive
+    /// sanitize ([`crate::SsdSanitizeMode`]) plus FDE key rotation.
+    ShredMeaningless,
     /// The target is a directory but the caller passed it to
     /// `shred_file`, or a symlink which the shredder refuses to follow.
     BadTarget,

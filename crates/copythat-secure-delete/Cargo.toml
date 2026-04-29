@@ -13,7 +13,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 rand = "0.9"
 thiserror = "2"
 tokio = { version = "1", features = [
@@ -44,3 +44,9 @@ tokio = { version = "1", features = [
 [[test]]
 name = "phase_04_shred"
 path = "../../tests/smoke/phase_04_shred.rs"
+
+# Phase 44 smoke test — exercises the SanitizeHelper trait surface
+# through Noop + a mock helper, plus the CoW refusal path.
+[[test]]
+name = "phase_44_sanitize"
+path = "../../tests/smoke/phase_44_sanitize.rs"

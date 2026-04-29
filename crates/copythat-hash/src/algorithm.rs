@@ -11,7 +11,7 @@ use std::str::FromStr;
 
 pub use copythat_core::Hasher;
 
-/// The set of verification algorithms Copy That v1.0.0 supports.
+/// The set of verification algorithms Copy That v0.19.84 supports.
 ///
 /// Order and stability of this enum matter — it is serialised in
 /// `CopyOptions`, in sidecar filenames, and in the Phase 3 smoke test.

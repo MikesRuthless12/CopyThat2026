@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 # Phase 27 implements `copythat_core::options::ChunkStoreSink`.
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 # Full-file + chunk hashes share one algorithm. BLAKE3 is already in
 # the tree via Phase 3 (copythat-hash) and Phase 20 (journal).
 blake3 = "1"

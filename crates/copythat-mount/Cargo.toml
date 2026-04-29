@@ -39,13 +39,13 @@ winfsp = ["dep:winfsp_wrs", "dep:widestring", "dep:tokio"]
 # History + chunk-store references feed the virtual tree. The mount
 # crate consumes read-only — it never opens the DBs itself, the Tauri
 # runner passes live handles in.
-copythat-history = { path = "../copythat-history", version = "1" }
-copythat-chunk = { path = "../copythat-chunk", version = "1" }
+copythat-history = { path = "../copythat-history", version = "0.19" }
+copythat-chunk = { path = "../copythat-chunk", version = "0.19" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 # Path sanitisation on mount roots reuses the same traversal guard
 # the engine's `safety::validate_path_no_traversal` enforces.
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 
 # Phase 33c — `fuser` is the actively-maintained Rust FUSE binding.
 # MIT. Target-gated so a `cargo build --features fuse` on Windows

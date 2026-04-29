@@ -27,7 +27,7 @@ default = []
 tsa = []
 
 [dependencies]
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 # `bao` already depends on `blake3`; we keep `blake3` as a direct
 # dep too because verify-time re-hash uses the streaming hasher
 # directly (no Bao tree needed when you only want the root).
@@ -48,7 +48,7 @@ thiserror = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
-copythat-hash = { path = "../copythat-hash", version = "1" }
+copythat-hash = { path = "../copythat-hash", version = "0.19" }
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
 

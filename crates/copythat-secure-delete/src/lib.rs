@@ -74,6 +74,7 @@ mod event;
 mod method;
 mod pattern;
 mod purge;
+mod sanitize;
 mod ssd;
 mod tree;
 
@@ -82,5 +83,9 @@ pub use error::{ShredError, ShredErrorKind};
 pub use event::{ShredEvent, ShredReport};
 pub use method::{CHUNK_SIZE, ShredMethod};
 pub use pattern::PassPattern;
+pub use sanitize::{
+    NoopSanitizeHelper, SanitizeCapabilities, SanitizeHelper, SanitizeReport, SsdSanitizeMode,
+    is_cow_filesystem, refuse_shred_on_cow, sanitize_capabilities, whole_drive_sanitize,
+};
 pub use ssd::is_ssd;
 pub use tree::shred_tree;

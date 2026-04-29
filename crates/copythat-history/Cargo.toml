@@ -38,7 +38,7 @@ tokio = { version = "1", features = [
 # Phase 42 Part B smoke — exercises the retention math from
 # copythat-core against the new `versions` table. Dev-only; the
 # runtime graph stays free of copythat-core to avoid a cycle.
-copythat-core = { path = "../copythat-core", version = "1" }
+copythat-core = { path = "../copythat-core", version = "0.19" }
 
 # Phase 9 smoke test lives at the workspace root (same convention as
 # Phase 6/7a/7b/8).

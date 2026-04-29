@@ -73,7 +73,7 @@ windows-sys = { version = "0.59", features = [
 tempfile = "3"
 # Phase 17f smoke exercises hash sidecar relpath enforcement across
 # crate boundaries. Dev-only — not part of the audit crate's runtime.
-copythat-hash = { path = "../copythat-hash", version = "1" }
+copythat-hash = { path = "../copythat-hash", version = "0.19" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs"] }
 
 [[test]]
