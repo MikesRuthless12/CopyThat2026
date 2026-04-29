@@ -1273,3 +1273,6 @@ sanitize-running = Sanitizing { $device } ({ $mode }) — this can take from mil
 sanitize-completed = Sanitize complete — { $device } is now blank.  # MT
 ssd-honest-shred-meaningless = Per-file shred on a copy-on-write filesystem (Btrfs / ZFS / APFS) cannot reach the underlying blocks. Use whole-drive sanitize plus full-disk-encryption key rotation instead.  # MT
 ssd-honest-advisory = This file lives on flash. Per-file overwrite costs NAND wear and does NOT guarantee the original cells are unrecoverable. For sensitive data, sanitize the whole drive.  # MT
+
+# Phase 44.1f.  # MT
+sanitize-action-staged = Phase 44.1 — wiring the IPC for this action lands in a follow-up commit.  # MT

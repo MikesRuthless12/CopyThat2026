@@ -96,8 +96,8 @@ pub mod wake_lock;
 pub use dedup::{DedupMode, DedupOptions, DedupOutcome, DedupStrategy, HardlinkPolicy, try_dedup};
 pub use dispatcher::fast_copy;
 pub use helpers::{
-    DEFAULT_HDD_CONCURRENCY, filesystem_name, free_space_bytes, is_ssd, recommend_concurrency,
-    supports_reflink, volume_id,
+    DEFAULT_HDD_CONCURRENCY, filesystem_name, free_space_bytes, is_cow_filesystem, is_ssd,
+    recommend_concurrency, supports_reflink, volume_id,
 };
 pub use hook::PlatformFastCopyHook;
 pub use meta::PlatformMetaOps;

@@ -59,6 +59,39 @@ pub fn supports_reflink(path: &Path) -> Option<bool> {
     }
 }
 
+/// Phase 44.1 — does the filesystem at `path` use copy-on-write
+/// semantics? Returns `Some(true)` for filesystems where a per-file
+/// overwrite cannot reach the underlying blocks (Btrfs / ZFS / APFS /
+/// XFS-with-reflink / bcachefs); `Some(false)` for traditional
+/// in-place filesystems (NTFS / ext4 / FAT-family / HFS+);
+/// `None` when the probe fails or the FS is unknown.
+///
+/// Used by `copythat-secure-delete::shred_file` to refuse with
+/// `ShredErrorKind::ShredMeaningless` when the user asks for a
+/// per-file shred on a CoW filesystem — block-level overwrite cannot
+/// reach the original content because the FS reuses storage on the
+/// next write.
+///
+/// **ReFS is treated as CoW** even though it lacks block-level
+/// reflink on classic NTFS volumes — Dev Drive (Win11+) enables it.
+/// We err toward refusing on ReFS because the user can always
+/// explicitly opt back into per-file shred on a non-CoW destination,
+/// and Phase 44's threat model is "honest about flash, even at the
+/// cost of a few false-refusals on edge filesystems."
+pub fn is_cow_filesystem(path: &Path) -> Option<bool> {
+    let name = filesystem_name(path)?.to_ascii_lowercase();
+    match name.as_str() {
+        "btrfs" | "zfs" | "apfs" | "bcachefs" | "refs" => Some(true),
+        // XFS supports reflink but writes-in-place by default; we
+        // treat it as in-place so users on traditional XFS aren't
+        // surprised by a refusal. The reflink-enabled XFS variant
+        // does have CoW for cloned files; that's the rarer config.
+        "xfs" | "ntfs" | "ext2" | "ext3" | "ext4" | "fat" | "fat32" | "vfat" | "exfat"
+        | "msdos" | "hfs" | "hfs+" | "hfsplus" | "smbfs" | "cifs" | "nfs" | "nfs4" => Some(false),
+        _ => None,
+    }
+}
+
 /// Phase 14 — return the number of bytes currently free on the
 /// volume that backs `path`. `None` when the OS probe fails (unknown
 /// path, permission denied, unmounted volume). The caller can treat

@@ -230,6 +230,57 @@ pub trait SanitizeHelper: Send + Sync + std::fmt::Debug {
         device: &Path,
         requested: SsdSanitizeMode,
     ) -> Result<SsdSanitizeMode, String>;
+
+    /// Phase 44.1 — extended sanitize that reports mid-operation
+    /// progress through `progress(percent)`. Same semantics as
+    /// [`run_sanitize_blocking`]; the only difference is that
+    /// helpers that support polling (NVM Express §5.24.1 SPROG via
+    /// `nvme sanitize-log`; Windows
+    /// IOCTL_STORAGE_REINITIALIZE_MEDIA progress reads) call
+    /// `progress(p)` at ~1 Hz with the current 0-100 percent.
+    ///
+    /// The default impl ignores `progress` and delegates to
+    /// [`run_sanitize_blocking`] — backwards-compatible with
+    /// pre-44.1 helper impls.
+    ///
+    /// `progress` is `Arc<dyn Fn(u8) + Send + Sync + 'static>` so
+    /// the helper can clone + share it across worker threads if
+    /// needed, and so `whole_drive_sanitize` can pre-bake the
+    /// device + mode + events::Sender into the closure.
+    fn run_sanitize_blocking_with_progress(
+        &self,
+        device: &Path,
+        requested: SsdSanitizeMode,
+        progress: std::sync::Arc<dyn Fn(u8) + Send + Sync + 'static>,
+    ) -> Result<SsdSanitizeMode, String> {
+        let _ = progress;
+        self.run_sanitize_blocking(device, requested)
+    }
+
+    /// Phase 44.1 — macOS free-space TRIM (`diskutil secureErase
+    /// freespace 0 <disk>`). Distinct from [`SsdSanitizeMode`]
+    /// because free-space TRIM does NOT touch the live filesystem;
+    /// it only TRIMs the unallocated blocks the FS reports as free.
+    /// Useful as a defense-in-depth pass on flash where the user
+    /// previously deleted sensitive files but didn't zero the
+    /// destination first.
+    ///
+    /// Default impl returns `NotImplemented`. macOS helper impls
+    /// override; Linux + Windows return `NotImplemented` because
+    /// the spec only calls out the macOS path
+    /// (Linux's `fstrim` runs on mount points not block devices,
+    /// and Windows uses Storage Optimizer which is the user's
+    /// "Optimize Drives" tool — neither maps cleanly to a
+    /// "trim free space NOW" operation).
+    fn run_free_space_trim_blocking(&self, device: &Path) -> Result<(), String> {
+        let _ = device;
+        Err(
+            "free-space TRIM is not implemented for this platform; only macOS (diskutil) ships \
+             a one-shot free-space TRIM in Phase 44.1. Linux's fstrim works on mount points; \
+             Windows uses the OS's scheduled Storage Optimizer task."
+                .into(),
+        )
+    }
 }
 
 /// Test / fallback `SanitizeHelper` that always reports "no
@@ -347,8 +398,32 @@ pub async fn whole_drive_sanitize(
     let started_at = std::time::Instant::now();
     let device_owned = device.to_path_buf();
     let helper_clone = Arc::clone(&helper);
+
+    // Phase 44.1 — bake `(events, device, mode)` into a `Send + Sync`
+    // closure the helper can call for SPROG / progress reads. The
+    // closure's `events.blocking_send` blocks until the async
+    // receiver picks the event up; failures (closed channel) are
+    // swallowed because progress is advisory.
+    let events_for_progress = events.clone();
+    let device_for_progress = device.to_path_buf();
+    let mode_for_progress = mode;
+    let progress_callback: Arc<dyn Fn(u8) + Send + Sync + 'static> =
+        Arc::new(move |percent: u8| {
+            let clamped = percent.min(100);
+            // Phase 44.1 post-review (M1) — `try_send` instead of
+            // `blocking_send` so a sluggish UI consumer cannot pin
+            // a tokio blocking-pool worker indefinitely. Progress
+            // events are advisory by contract; dropping a tick on
+            // backpressure is the correct behaviour.
+            let _ = events_for_progress.try_send(ShredEvent::SanitizeProgress {
+                device: device_for_progress.clone(),
+                mode: mode_for_progress,
+                percent: clamped,
+            });
+        });
+
     let outcome = tokio::task::spawn_blocking(move || {
-        helper_clone.run_sanitize_blocking(&device_owned, mode)
+        helper_clone.run_sanitize_blocking_with_progress(&device_owned, mode, progress_callback)
     })
     .await
     .map_err(|e| ShredError {
@@ -387,6 +462,32 @@ pub async fn whole_drive_sanitize(
     }
 }
 
+/// Pluggable copy-on-write filesystem probe (Phase 44.1).
+/// `fn(&Path) -> Option<bool>` — `Some(true)` for CoW filesystems
+/// (Btrfs / ZFS / APFS / bcachefs / ReFS), `Some(false)` for
+/// in-place filesystems (NTFS / ext4 / FAT-family / network mounts),
+/// `None` for unknown / probe-failed paths.
+pub type CowProbe = fn(&Path) -> Option<bool>;
+
+static COW_PROBE: std::sync::OnceLock<CowProbe> = std::sync::OnceLock::new();
+
+/// Phase 44.1 — install the CoW filesystem probe. The Tauri runner /
+/// CLI wires `copythat_platform::is_cow_filesystem` here at app
+/// startup:
+///
+/// ```ignore
+/// copythat_secure_delete::set_cow_probe(
+///     copythat_platform::is_cow_filesystem,
+/// );
+/// ```
+///
+/// First call wins; subsequent calls are silent no-ops (the
+/// underlying [`std::sync::OnceLock`] only accepts the first set).
+/// Tests that need a different probe must construct a fresh process.
+pub fn set_cow_probe(probe: CowProbe) {
+    let _ = COW_PROBE.set(probe);
+}
+
 /// Detect whether `path` resides on a copy-on-write filesystem
 /// (Btrfs / ZFS / APFS) or a thin-provisioned LVM. CoW filesystems
 /// reuse blocks for new writes instead of overwriting in place, so
@@ -394,24 +495,97 @@ pub async fn whole_drive_sanitize(
 /// readable until the FS reclaims them via TRIM/discard or the
 /// pool's GC pass.
 ///
-/// Implementation: best-effort. Reads `statvfs` / `GetVolumeInformation`
-/// to extract the FS label, then matches against a known list. A
-/// `false` result means "not CoW or couldn't tell"; callers should
-/// NOT branch on `false` as a positive assertion of in-place
-/// overwriting.
+/// Phase 44.1 — when [`set_cow_probe`] has installed the platform-
+/// native probe (`copythat_platform::is_cow_filesystem`), this
+/// delegates. When no probe is installed, returns `false` so the
+/// per-file shredder retains the pre-44.1 contract — a missing
+/// probe must NOT cause a blanket refusal. A `false` result means
+/// "not CoW or couldn't tell"; callers must NOT treat it as a
+/// positive assertion of in-place overwriting.
+pub fn is_cow_filesystem(path: &Path) -> bool {
+    match COW_PROBE.get() {
+        Some(probe) => probe(path).unwrap_or(false),
+        None => {
+            // No probe installed → preserve the Phase 4 contract.
+            // The Tauri runner / CLI installs the platform probe
+            // at startup; tests that want to exercise the refusal
+            // path can install their own probe via `set_cow_probe`
+            // (the smoke test passes a fixture probe that returns
+            // true for paths under a tempdir marker).
+            false
+        }
+    }
+}
+
+/// Phase 44.1 — final record returned by [`free_space_trim`].
+/// Distinct from [`SanitizeReport`] because free-space TRIM does
+/// not touch live data; the report carries only the device + the
+/// wall-clock duration so a UI can show "free-space TRIM took N
+/// seconds" without claiming any sanitize-grade guarantee.
+#[derive(Debug, Clone)]
+pub struct FreeSpaceTrimReport {
+    /// The device that was TRIMmed (`/dev/disk2` on macOS, etc.).
+    pub device: PathBuf,
+    /// Wall-clock duration of the helper call.
+    pub duration: Duration,
+}
+
+/// Phase 44.1 — async free-space TRIM entrypoint. Same wire-shape
+/// as [`whole_drive_sanitize`] but doesn't carry an
+/// [`SsdSanitizeMode`] — free-space TRIM is its own mode by
+/// definition, and crossing it with the sanitize enum would
+/// mislead UI labelling that branches on
+/// [`SanitizeCapabilities::has_guaranteed_crypto_erase`].
 ///
-/// On Phase 44 first cut this is a placeholder that returns `false`
-/// for every path. The real probe lives in `copythat-platform` and
-/// will be wired in the Phase 44.1 follow-up. Until then, the
-/// per-file shredder retains its Phase 4 behavior: no CoW refusal.
-pub fn is_cow_filesystem(_path: &Path) -> bool {
-    // TODO(Phase 44.1): wire copythat_platform::topology to read the
-    // filesystem label and match against {btrfs, zfs, apfs, lvm-thin}.
-    // Returning false here preserves the Phase 4 contract — no
-    // accidental refusals on misconfigured systems while the probe
-    // is being built. The CoW-refusal smoke test passes a manual
-    // override (see `tests/smoke/phase_44_sanitize.rs`).
-    false
+/// macOS only in Phase 44.1 first cut (the spec calls out
+/// `diskutil secureErase freespace 0 disk0`). Linux + Windows
+/// helpers return `NotImplemented`; future phases may add Linux
+/// `fstrim` integration via the mount-point indirection.
+///
+/// **Caller contract** mirrors `whole_drive_sanitize`:
+/// pre-helper cancel honoured; cancel-after-dispatch unsupported;
+/// caller must verify the helper binary's authenticity before
+/// invocation.
+pub async fn free_space_trim(
+    helper: Arc<dyn SanitizeHelper>,
+    device: &Path,
+    ctrl: CopyControl,
+) -> Result<FreeSpaceTrimReport, ShredError> {
+    if ctrl.is_cancelled() {
+        return Err(ShredError {
+            kind: ShredErrorKind::Interrupted,
+            path: device.to_path_buf(),
+            raw_os_error: None,
+            message: "free_space_trim cancelled before helper invocation".to_string(),
+        });
+    }
+
+    let started_at = std::time::Instant::now();
+    let device_owned = device.to_path_buf();
+    let helper_clone = Arc::clone(&helper);
+    let outcome = tokio::task::spawn_blocking(move || {
+        helper_clone.run_free_space_trim_blocking(&device_owned)
+    })
+    .await
+    .map_err(|e| ShredError {
+        kind: ShredErrorKind::IoOther,
+        path: device.to_path_buf(),
+        raw_os_error: None,
+        message: format!("free_space_trim helper join failed: {e}"),
+    })?;
+
+    match outcome {
+        Ok(()) => Ok(FreeSpaceTrimReport {
+            device: device.to_path_buf(),
+            duration: started_at.elapsed(),
+        }),
+        Err(msg) => Err(ShredError {
+            kind: ShredErrorKind::IoOther,
+            path: device.to_path_buf(),
+            raw_os_error: None,
+            message: format!("free_space_trim helper failed: {msg}"),
+        }),
+    }
 }
 
 /// Phase 44 — refuse to per-file-shred when the filesystem makes

@@ -71,21 +71,34 @@
 mod engine;
 mod error;
 mod event;
+#[cfg(target_os = "linux")]
+mod linux_helper;
+#[cfg(target_os = "macos")]
+mod macos_helper;
 mod method;
 mod pattern;
 mod purge;
 mod sanitize;
 mod ssd;
 mod tree;
+#[cfg(target_os = "windows")]
+mod windows_helper;
 
 pub use engine::shred_file;
 pub use error::{ShredError, ShredErrorKind};
 pub use event::{ShredEvent, ShredReport};
+#[cfg(target_os = "linux")]
+pub use linux_helper::LinuxSanitizeHelper;
+#[cfg(target_os = "macos")]
+pub use macos_helper::MacosSanitizeHelper;
 pub use method::{CHUNK_SIZE, ShredMethod};
 pub use pattern::PassPattern;
 pub use sanitize::{
-    NoopSanitizeHelper, SanitizeCapabilities, SanitizeHelper, SanitizeReport, SsdSanitizeMode,
-    is_cow_filesystem, refuse_shred_on_cow, sanitize_capabilities, whole_drive_sanitize,
+    CowProbe, FreeSpaceTrimReport, NoopSanitizeHelper, SanitizeCapabilities, SanitizeHelper,
+    SanitizeReport, SsdSanitizeMode, free_space_trim, is_cow_filesystem, refuse_shred_on_cow,
+    sanitize_capabilities, set_cow_probe, whole_drive_sanitize,
 };
 pub use ssd::is_ssd;
 pub use tree::shred_tree;
+#[cfg(target_os = "windows")]
+pub use windows_helper::WindowsSanitizeHelper;

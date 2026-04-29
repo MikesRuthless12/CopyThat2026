@@ -140,6 +140,21 @@ pub enum ShredEvent {
         mode: SsdSanitizeMode,
         duration: Duration,
     },
+    /// Phase 44.1 — mid-sanitize progress percent (0-100) for
+    /// long-running modes (NVMe Sanitize Block can take tens of
+    /// minutes). Helpers that support polling (Linux:
+    /// `nvme sanitize-log`, NVM Express §5.24.1 SPROG; Windows:
+    /// IOCTL_STORAGE_REINITIALIZE_MEDIA progress reads) emit these
+    /// at ~1 Hz. Helpers without polling support never emit; the
+    /// UI sees Started → Completed only.
+    SanitizeProgress {
+        device: PathBuf,
+        mode: SsdSanitizeMode,
+        /// 0–100. The helper clamps to this range; a `100` value
+        /// is advisory — the authoritative completion signal is
+        /// `SanitizeCompleted`.
+        percent: u8,
+    },
 }
 
 /// Final success record returned by `shred_file` and `shred_tree`.

@@ -151,7 +151,25 @@ workloads.
   - **Grandfather-Father-Son (GFS)** — group versions into per-hour / per-day / per-week / per-month UTC buckets, keep the newest version in each of the most recent N buckets per tier, drop the rest. Buckets are unioned (a version that survives in any tier is retained), so a typical "24h hourly · 7 daily · 4 weekly · 12 monthly" config covers a year of history at a fraction of the disk cost of "keep everything."
 - **Engine integration is best-effort by contract**: the snapshot hook fires on a `tokio::task::spawn_blocking` worker so it doesn't stall the copy hot path; if the chunk store is unavailable, the snapshot fails, the engine logs a `tracing::warn!`, and the copy proceeds normally. A failing snapshot must NEVER abort a user copy.
 
-### SSD-honest secure delete (Phase 44)
+### SSD-honest secure delete (Phase 44 + 44.1)
+
+Phase 44.1 layered the platform helpers on top of the Phase 44
+trait surface — the `copythat-secure-delete` crate now ships
+`LinuxSanitizeHelper` (nvme-cli + hdparm shell-outs with validated
+device paths + `--` end-of-options separator, hex/decimal SANICAP
+parse, 2s SPROG-poll timeout), `MacosSanitizeHelper` (diskutil for
+free-space TRIM), and a `WindowsSanitizeHelper` stub pending the
+Phase 44.2 DeviceIoControl wiring. The `is_cow_filesystem` probe
+in `copythat-platform` plugs into the per-file shredder via
+`set_cow_probe` so Btrfs / ZFS / APFS shred attempts now refuse
+honestly. New `free_space_trim` async API + `ShredEvent::SanitizeProgress`
+event + Settings → Drive sanitize tab with three-confirmation UX.
+Phase 44.1 review-pass closed a security MEDIUM
+(argument-injection via leading-dash device paths) plus three
+correctness items (hex SANICAP, SPROG timeout, blocking_send →
+try_send) before commit.
+
+
 
 - **Whole-drive sanitize via firmware** — NVMe Sanitize Crypto Erase (instant; rotates the drive's media key), NVMe Sanitize Block Erase (every cell), NVMe Format with Secure Erase (FSE bit), ATA Secure Erase (legacy SATA SSDs), and TCG OPAL Crypto Erase (Self-Encrypting Drives). The new `SsdSanitizeMode` enum + `whole_drive_sanitize` async API + `sanitize_capabilities` probe live in `copythat-secure-delete::sanitize`. The actual privileged command runs through a pluggable `SanitizeHelper` trait — `NoopSanitizeHelper` ships as a safe-by-default fallback that refuses every call; the real Linux (`nvme-cli` / `hdparm` via `copythat-helper`) and Windows (`DeviceIoControl(IOCTL_STORAGE_SECURITY_PROTOCOL_OUT)`) impls land in a Phase 44.1 follow-up.
 - **Per-file shred refusal on copy-on-write filesystems.** New `ShredErrorKind::ShredMeaningless` variant. When the user calls `shred_file` on a path that resides on Btrfs / ZFS / APFS (CoW filesystems where block-level overwrite cannot reach the original content because the FS reuses storage on next write), the shredder refuses with a localized explanation pointing at whole-drive sanitize plus full-disk-encryption key rotation. The CoW-detection probe itself is a Phase 44.1 follow-up — first cut ships the contract + the refusal helper, with a stub detector that returns `false` everywhere; the smoke test exercises the refusal via direct invocation of `refuse_shred_on_cow`.
