@@ -946,3 +946,22 @@ cloud-offload-render-button = Render template
 cloud-offload-copy-clipboard = Copy to clipboard
 cloud-offload-template-format = Template format
 cloud-offload-self-destruct-warning = The VM auto-shuts down after { $minutes } minutes — confirm IAM role + region before deploying.
+
+# Phase 41 — animated before/after tree-diff preview. The `Preview
+# changes` modal renders the rolled-up plan before the engine starts
+# work; 14 keys cover the title, the summary header / counts, the
+# row-reason labels, and the two action buttons.
+preview-modal-title = Preview changes
+preview-summary-header = What will happen
+preview-category-additions = { $count } additions
+preview-category-replacements = { $count } replacements
+preview-category-skips = { $count } skipped
+preview-category-conflicts = { $count } conflicts
+preview-category-unchanged = { $count } unchanged
+preview-bytes-to-transfer = { $bytes } to transfer
+preview-reason-source-newer = Source is newer
+preview-reason-dest-newer = Destination is newer — will skip
+preview-reason-content-different = Content differs
+preview-reason-identical = Identical to source
+preview-button-run = Run plan
+preview-button-reduce = Reduce my plan…

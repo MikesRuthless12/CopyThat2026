@@ -136,6 +136,11 @@ path = "../../tests/smoke/phase_19a_scan_db.rs"
 name = "phase_30_translate"
 path = "../../tests/smoke/phase_30_translate.rs"
 
+# Phase 41 — pre-execution tree-diff dry-run plan + Fluent locale parity.
+[[test]]
+name = "phase_41_preview"
+path = "../../tests/smoke/phase_41_preview.rs"
+
 # Phase 13 — Criterion benchmarks for the async copy engine.
 # `cargo bench -p copythat-core --bench copy_bench` runs the full
 # matrix (1 GiB single file, 10 k × 16 KiB many-small, mixed tree).

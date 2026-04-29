@@ -1202,3 +1202,19 @@ cloud-offload-render-button = Render template  # MT
 cloud-offload-copy-clipboard = Copy to clipboard  # MT
 cloud-offload-template-format = Template format  # MT
 cloud-offload-self-destruct-warning = The VM auto-shuts down after { $minutes } minutes — confirm IAM role + region before deploying.  # MT
+
+# Phase 41 — animated before/after tree-diff preview.  # MT
+preview-modal-title = Preview changes  # MT
+preview-summary-header = What will happen  # MT
+preview-category-additions = { $count } additions  # MT
+preview-category-replacements = { $count } replacements  # MT
+preview-category-skips = { $count } skipped  # MT
+preview-category-conflicts = { $count } conflicts  # MT
+preview-category-unchanged = { $count } unchanged  # MT
+preview-bytes-to-transfer = { $bytes } to transfer  # MT
+preview-reason-source-newer = Source is newer  # MT
+preview-reason-dest-newer = Destination is newer — will skip  # MT
+preview-reason-content-different = Content differs  # MT
+preview-reason-identical = Identical to source  # MT
+preview-button-run = Run plan  # MT
+preview-button-reduce = Reduce my plan…  # MT

@@ -117,6 +117,7 @@
 
 pub mod collision;
 mod control;
+pub mod dryrun;
 mod engine;
 mod error;
 mod event;
@@ -133,6 +134,10 @@ pub mod verify;
 
 pub use collision::CollisionPolicy;
 pub use control::CopyControl;
+pub use dryrun::{
+    ConflictKind, DryRunOptions, ReasonForReplacement, ReasonForSkip, RelPath, TreeDiff,
+    compute_tree_diff,
+};
 pub use engine::copy_file;
 pub use error::{CopyError, CopyErrorKind};
 pub use event::{
