@@ -60,6 +60,7 @@ pub mod progress_channel;
 pub mod recovery_commands;
 pub mod reveal;
 pub mod runner;
+pub mod sanitize_commands;
 pub mod scan_commands;
 pub mod shell;
 pub mod state;
@@ -439,8 +440,19 @@ pub fn run() {
             version_commands::list_versions,
             version_commands::select_versions_to_prune,
             version_commands::prune_versions,
+            // Phase 44.2 — SSD-aware whole-drive sanitize IPC.
+            sanitize_commands::sanitize_list_devices,
+            sanitize_commands::sanitize_capabilities_cmd,
+            sanitize_commands::sanitize_run,
+            sanitize_commands::sanitize_free_space_trim,
         ])
         .setup(move |app| {
+            // Phase 44.2b — install the platform-native CoW probe so
+            // `copythat-secure-delete::shred_file` refuses honestly
+            // on Btrfs / ZFS / APFS / bcachefs / ReFS. First-set wins
+            // per OnceLock; calling once at startup is correct.
+            copythat_secure_delete::set_cow_probe(copythat_platform::is_cow_filesystem);
+
             // Phase 40 — start the named-pipe broker that future
             // `--enqueue` invocations talk to instead of booting a
             // second Tauri instance. See `instance_broker.rs`.

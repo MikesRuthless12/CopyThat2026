@@ -205,6 +205,137 @@ impl SanitizeHelper for LinuxSanitizeHelper {
                 .into(),
         )
     }
+
+    /// Phase 44.2d — TCG OPAL PSID-revert via `sedutil-cli`.
+    ///
+    /// `sedutil-cli --PSIDrevert <PSID> <device>` issues a
+    /// `RevertSP` command to the drive's Admin SP, cycling its
+    /// media-encryption key. Works on initialized + uninitialized
+    /// SED drives; doesn't require any prior password setup.
+    ///
+    /// # Security caveat — PSID exposure via argv (post-review Vuln 1)
+    ///
+    /// **DO NOT USE THIS FLOW ON A MULTI-USER SYSTEM.** The PSID is
+    /// passed as a command-line argument to `sedutil-cli`. Linux
+    /// exposes any process's argv to local users via
+    /// `/proc/<pid>/cmdline` (world-readable by default unless
+    /// `/proc` is `hidepid=2`-mounted). An unprivileged local
+    /// attacker who races a `cat /proc/*/cmdline` loop during the
+    /// (1-2 second) sedutil invocation can capture the PSID and
+    /// later use it to brick the drive on any physical/local-root
+    /// access. A future revision will pipe the PSID via stdin or
+    /// route the underlying `SG_IO` ioctl through
+    /// `copythat-platform` to keep the secret out of argv.
+    ///
+    /// Phase 44.2 ships this with the prominent warning rather than
+    /// blocking the feature; single-user workstations (the common
+    /// case for SED drive disposal) aren't exposed.
+    ///
+    /// **PSID validation (post-review M1):** Real OPAL PSIDs are
+    /// 32 alphanumeric characters per the TCG OPAL Storage
+    /// Specification. We accept the strict 32-char form only;
+    /// non-standard SED firmwares with shorter/longer PSIDs would
+    /// require a documented opt-in.
+    ///
+    /// **Required tooling:** `sedutil-cli` is NOT in most distros'
+    /// stock package set. The user must install it via their
+    /// package manager (`sedutil` on Debian/Ubuntu, `sedutil` on
+    /// Arch's AUR) or build from source. If the binary is
+    /// missing, this call fails with a `spawn sedutil-cli` error
+    /// surfacing the underlying ENOENT.
+    fn run_opal_psid_revert_blocking(&self, device: &Path, psid: &str) -> Result<(), String> {
+        validate_device_path(device)?;
+        let trimmed_psid = psid.trim();
+        validate_opal_psid(trimmed_psid)?;
+        let output = Command::new("sedutil-cli")
+            .arg("--PSIDrevert")
+            .arg(trimmed_psid)
+            .arg("--")
+            .arg(device)
+            .output()
+            .map_err(|e| format!("spawn sedutil-cli: {e}"))?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Don't include the PSID in the error message — it's
+            // sensitive and may end up in logs.
+            Err(format!(
+                "sedutil-cli --PSIDrevert <PSID> -- {} failed (exit={:?}): {}",
+                device.display(),
+                output.status.code(),
+                stderr.trim()
+            ))
+        }
+    }
+}
+
+/// Phase 44.2 post-review (M1) — extracted PSID validator.
+/// Strict 32-alphanumeric per the TCG OPAL Storage Specification.
+/// The error messages do NOT include the PSID itself (post-review
+/// L1: the length echo from the prior implementation is also
+/// dropped — length is one bit of side-channel info but cheap to
+/// avoid).
+pub(crate) fn validate_opal_psid(psid: &str) -> Result<(), String> {
+    if psid.is_empty() {
+        return Err("PSID is empty; refused".into());
+    }
+    if psid.len() != 32 {
+        return Err(
+            "PSID format invalid; expected 32 alphanumeric characters per TCG OPAL spec".into(),
+        );
+    }
+    if !psid.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err("PSID contains non-alphanumeric characters; refused".into());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_opal_psid_accepts_32_alphanumeric() {
+        assert!(validate_opal_psid("ABCDEFGHIJKLMNOPQRSTUVWXYZ012345").is_ok());
+        assert!(validate_opal_psid("0123456789abcdefghijklmnopqrstuv").is_ok());
+    }
+
+    #[test]
+    fn validate_opal_psid_rejects_empty() {
+        assert!(validate_opal_psid("").is_err());
+    }
+
+    #[test]
+    fn validate_opal_psid_rejects_too_short() {
+        assert!(validate_opal_psid("ABCDEFG").is_err());
+        assert!(validate_opal_psid("ABCDEFG1234567890").is_err());
+    }
+
+    #[test]
+    fn validate_opal_psid_rejects_too_long() {
+        assert!(validate_opal_psid("A".repeat(33).as_str()).is_err());
+        assert!(validate_opal_psid("A".repeat(64).as_str()).is_err());
+    }
+
+    #[test]
+    fn validate_opal_psid_rejects_non_alphanumeric() {
+        assert!(validate_opal_psid("ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 ").is_err());
+        assert!(validate_opal_psid("ABCDEFGHIJKLMNOPQRSTUVWXYZ01234;").is_err());
+        assert!(validate_opal_psid("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n").is_err());
+    }
+
+    #[test]
+    fn parse_decimal_or_hex_handles_both_forms() {
+        assert_eq!(parse_decimal_or_hex("7"), Some(7));
+        assert_eq!(parse_decimal_or_hex("0x7"), Some(7));
+        assert_eq!(parse_decimal_or_hex("0X7"), Some(7));
+        assert_eq!(parse_decimal_or_hex(" 0x7 "), Some(7));
+        assert_eq!(parse_decimal_or_hex("0xff"), Some(255));
+        assert_eq!(parse_decimal_or_hex("65535"), Some(65_535));
+        assert_eq!(parse_decimal_or_hex("0xZZ"), None);
+        assert_eq!(parse_decimal_or_hex(""), None);
+    }
 }
 
 /// Phase 44.1 post-review (Vuln 1) — accept a device path only if
