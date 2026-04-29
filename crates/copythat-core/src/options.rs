@@ -553,6 +553,34 @@ pub struct CopyOptions {
     ///
     /// `None` (default) preserves pre-Phase-17-followup behaviour.
     pub dest_jail_root: Option<std::path::PathBuf>,
+
+    /// Phase 42 Part B — per-file rolling-versions policy.
+    ///
+    /// When [`crate::VersioningPolicy::enabled`] is `true` and
+    /// [`Self::versioning_sink`] is `Some`, the engine snapshots the
+    /// existing destination file (when one exists) before opening
+    /// it with `truncate(true)`. The sink owns the chunk-store +
+    /// `versions` table writes; the policy's `retention` field is
+    /// consulted by the pruning pass that runs *after* the snapshot
+    /// (in the sink, not the engine — keeps the engine's hot path
+    /// free of retention math).
+    ///
+    /// Defaults to `VersioningPolicy::default()` — `enabled = false`,
+    /// no snapshot, no behaviour change for any pre-Phase-42 caller.
+    pub versioning: crate::versioning::VersioningPolicy,
+
+    /// Phase 42 Part B — pluggable bridge to the chunk-store +
+    /// History adapter that captures the snapshot.
+    ///
+    /// When `Some` AND [`Self::versioning`].enabled is `true`, the
+    /// engine calls
+    /// [`crate::VersioningSink::snapshot_before_overwrite`] exactly
+    /// once per file at the moment we know an overwrite is about to
+    /// happen but before the destination is opened with `truncate`.
+    /// `None` (the default) makes the policy a no-op even when
+    /// `enabled = true` — the engine has no way to capture the
+    /// snapshot without a sink to talk to.
+    pub versioning_sink: Option<Arc<dyn crate::versioning::VersioningSink>>,
 }
 
 /// Bridge contract for the Phase 32 cloud sink.
@@ -730,6 +758,8 @@ impl Default for CopyOptions {
             cloud_sink: None,
             transform: None,
             dest_jail_root: None,
+            versioning: crate::versioning::VersioningPolicy::default(),
+            versioning_sink: None,
         }
     }
 }

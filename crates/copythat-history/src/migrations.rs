@@ -19,11 +19,11 @@ use crate::error::HistoryError;
 /// Current on-disk schema version. Bump when appending to
 /// [`MIGRATIONS`]; `apply_pending` refuses to open a DB whose
 /// `user_version` is higher (a downgrade scenario).
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 /// `(from_version, to_version, sql)`. Must form a dense ladder from
 /// 0 to [`CURRENT_SCHEMA_VERSION`].
-const MIGRATIONS: &[(u32, u32, &str)] = &[(0, 1, V0_TO_V1)];
+const MIGRATIONS: &[(u32, u32, &str)] = &[(0, 1, V0_TO_V1), (1, 2, V1_TO_V2)];
 
 /// Schema bootstrap. `jobs` carries lifecycle + totals; `items`
 /// carries per-file rows linked to a job. Two indexes keep the UI
@@ -69,6 +69,45 @@ CREATE TABLE IF NOT EXISTS items (
 
 CREATE INDEX IF NOT EXISTS idx_jobs_started ON jobs(started_at_ms);
 CREATE INDEX IF NOT EXISTS idx_items_job    ON items(job_id);
+"#;
+
+/// Phase 42 Part B — per-file rolling versions. The `versions` table
+/// records one row each time the engine snapshots a destination file
+/// before overwriting it. `manifest_blake3` is the BLAKE3 of the
+/// chunk-store manifest the snapshot ingested into; the chunks
+/// themselves live in the Phase 27 chunk store keyed by content hash.
+///
+/// `dst_path` is the destination path the version was captured for.
+/// `ts` is milliseconds-since-epoch at snapshot time. `size` is the
+/// size of the snapshot in bytes (= the size of the file at the
+/// moment of capture). `retained_until` is an optional deadline (also
+/// milliseconds-since-epoch) the retention pruner uses when the
+/// active policy includes a hard floor; `NULL` = "no floor". Every
+/// row optionally references the `jobs` row that *triggered* the
+/// snapshot — i.e., the copy job whose overwrite caused us to keep
+/// the prior content. The FK is `ON DELETE SET NULL` rather than
+/// `CASCADE`: removing the triggering job from history shouldn't
+/// silently delete the user's version snapshots; the versions remain
+/// but lose the back-reference.
+///
+/// Two indexes: `idx_versions_path` for the per-file "list versions
+/// of `<file>`" lookup, `idx_versions_ts` for the global "newest
+/// versions across all files" pull.
+const V1_TO_V2: &str = r#"
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS versions (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    dst_path            TEXT    NOT NULL,
+    ts                  INTEGER NOT NULL,
+    manifest_blake3     BLOB    NOT NULL,
+    size                INTEGER NOT NULL DEFAULT 0,
+    retained_until      INTEGER,
+    triggered_by_job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_versions_path ON versions(dst_path);
+CREATE INDEX IF NOT EXISTS idx_versions_ts   ON versions(ts);
 "#;
 
 /// Run every migration whose `from` matches the current user_version.
@@ -149,7 +188,7 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         apply_pending(&mut conn).unwrap();
 
-        for name in ["jobs", "items"] {
+        for name in ["jobs", "items", "versions"] {
             let n: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
@@ -159,7 +198,12 @@ mod tests {
                 .unwrap();
             assert_eq!(n, 1, "table {name} missing");
         }
-        for name in ["idx_jobs_started", "idx_items_job"] {
+        for name in [
+            "idx_jobs_started",
+            "idx_items_job",
+            "idx_versions_path",
+            "idx_versions_ts",
+        ] {
             let n: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?1",
@@ -169,6 +213,58 @@ mod tests {
                 .unwrap();
             assert_eq!(n, 1, "index {name} missing");
         }
+    }
+
+    #[test]
+    fn fresh_db_lands_on_v2_with_versions_columns() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        apply_pending(&mut conn).unwrap();
+        assert_eq!(read_version(&conn).unwrap(), 2);
+        // Spot-check the versions table column shape.
+        let cols: Vec<String> = conn
+            .prepare("SELECT name FROM pragma_table_info('versions')")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        for name in [
+            "id",
+            "dst_path",
+            "ts",
+            "manifest_blake3",
+            "size",
+            "retained_until",
+            "triggered_by_job_id",
+        ] {
+            assert!(
+                cols.iter().any(|c| c == name),
+                "versions column {name} missing — got {cols:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn v1_dbs_migrate_forward_to_v2() {
+        // Open a fresh DB but force user_version back to 1 to
+        // simulate a Phase-39-era v1.0.0 install upgrading.
+        let mut conn = Connection::open_in_memory().unwrap();
+        // Apply v0→v1 only by running the v0→v1 SQL directly.
+        conn.execute_batch(V0_TO_V1).unwrap();
+        conn.pragma_update(None, "user_version", 1i64).unwrap();
+        assert_eq!(read_version(&conn).unwrap(), 1);
+
+        apply_pending(&mut conn).unwrap();
+
+        assert_eq!(read_version(&conn).unwrap(), 2);
+        let n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='versions'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1, "v1→v2 migration didn't create versions");
     }
 
     #[test]

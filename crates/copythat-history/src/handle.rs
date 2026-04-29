@@ -24,7 +24,7 @@ use crate::error::HistoryError;
 use crate::migrations;
 use crate::types::{
     DEFAULT_SEARCH_LIMIT, DayTotal, HistoryFilter, ItemRow, JobRowId, JobSummary, KindBreakdown,
-    Totals,
+    Totals, VersionRecord, VersionRowId,
 };
 
 /// Cheap clonable handle. Every `tauri::command` takes one out of
@@ -500,6 +500,105 @@ impl History {
                 out.push(r?);
             }
             Ok(out)
+        })
+        .await
+        .map_err(|_| HistoryError::WorkerPanicked)?
+    }
+
+    // ---------- Phase 42 Part B — versions table ----------
+
+    /// Insert a new `versions` row and return the assigned row id.
+    /// `record.row_id` is ignored on input; the returned
+    /// [`VersionRowId`] is the authoritative primary key.
+    pub async fn record_version(
+        &self,
+        record: &VersionRecord,
+    ) -> Result<VersionRowId, HistoryError> {
+        let record = record.clone();
+        let inner = self.inner.clone();
+        task::spawn_blocking(move || -> Result<VersionRowId, HistoryError> {
+            let conn = inner.conn.lock().expect("history conn poisoned");
+            conn.execute(
+                "INSERT INTO versions
+                    (dst_path, ts, manifest_blake3, size, retained_until,
+                     triggered_by_job_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    path_to_str(&record.dst_path),
+                    record.ts_ms,
+                    record.manifest_blake3.as_slice(),
+                    record.size as i64,
+                    record.retained_until_ms,
+                    record.triggered_by_job_id,
+                ],
+            )?;
+            Ok(VersionRowId(conn.last_insert_rowid()))
+        })
+        .await
+        .map_err(|_| HistoryError::WorkerPanicked)?
+    }
+
+    /// Pull every version recorded for `dst_path`, newest-first.
+    /// Used by the Settings → Versions panel and the per-file
+    /// "previous versions" context menu.
+    pub async fn versions_for_path(
+        &self,
+        dst_path: PathBuf,
+    ) -> Result<Vec<VersionRecord>, HistoryError> {
+        let inner = self.inner.clone();
+        task::spawn_blocking(move || -> Result<Vec<VersionRecord>, HistoryError> {
+            let conn = inner.conn.lock().expect("history conn poisoned");
+            let mut stmt = conn.prepare(
+                "SELECT id, dst_path, ts, manifest_blake3, size,
+                        retained_until, triggered_by_job_id
+                   FROM versions
+                  WHERE dst_path = ?1
+                  ORDER BY ts DESC",
+            )?;
+            let rows = stmt
+                .query_map([path_to_str(&dst_path)], |row| {
+                    let manifest_bytes: Vec<u8> = row.get(3)?;
+                    let mut manifest_blake3 = [0u8; 32];
+                    let len = manifest_blake3.len().min(manifest_bytes.len());
+                    manifest_blake3[..len].copy_from_slice(&manifest_bytes[..len]);
+                    Ok(VersionRecord {
+                        row_id: row.get(0)?,
+                        dst_path: PathBuf::from(row.get::<_, String>(1)?),
+                        ts_ms: row.get(2)?,
+                        manifest_blake3,
+                        size: row.get::<_, i64>(4)? as u64,
+                        retained_until_ms: row.get(5)?,
+                        triggered_by_job_id: row.get(6)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .await
+        .map_err(|_| HistoryError::WorkerPanicked)?
+    }
+
+    /// Delete the supplied version rows by id. Returns the number of
+    /// rows actually removed (for sanity-checking pruning policies).
+    /// Used by the Phase 42 retention pruner *after*
+    /// `select_for_pruning` decides which ids to drop.
+    pub async fn delete_versions(&self, ids: Vec<VersionRowId>) -> Result<u64, HistoryError> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let inner = self.inner.clone();
+        task::spawn_blocking(move || -> Result<u64, HistoryError> {
+            let mut conn = inner.conn.lock().expect("history conn poisoned");
+            let tx = conn.transaction()?;
+            let mut total = 0u64;
+            {
+                let mut stmt = tx.prepare("DELETE FROM versions WHERE id = ?1")?;
+                for id in ids {
+                    total += stmt.execute(params![id.0])? as u64;
+                }
+            }
+            tx.commit()?;
+            Ok(total)
         })
         .await
         .map_err(|_| HistoryError::WorkerPanicked)?

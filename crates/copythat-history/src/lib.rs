@@ -71,5 +71,5 @@ pub use export::export_csv;
 pub use handle::History;
 pub use types::{
     DEFAULT_SEARCH_LIMIT, DayTotal, HistoryFilter, ItemRow, JobRowId, JobSummary, KindBreakdown,
-    Totals,
+    Totals, VersionRecord, VersionRowId,
 };

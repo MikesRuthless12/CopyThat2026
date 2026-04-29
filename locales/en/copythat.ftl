@@ -976,3 +976,14 @@ perceptual-warn-overwrite = Overwrite anyway
 perceptual-settings-heading = Visual-similarity dedup
 perceptual-settings-hint = Detect visually identical images at the destination before they're overwritten. Hash is perceptual (recognises the same picture re-saved as a different format), not byte-exact.
 perceptual-settings-threshold-label = Warn threshold (lower = stricter match)
+
+# Phase 42 Part B — per-file rolling versions (Time Machine for any
+# destination). 8 keys cover the version-list panel + retention picker.
+version-list-heading = Previous versions
+version-list-empty = No prior versions of this file
+version-list-restore = Restore this version
+version-retention-heading = Keep previous versions on overwrite
+version-retention-none = Keep every version forever
+version-retention-last-n = Keep last { $n } versions
+version-retention-older-than-days = Drop versions older than { $days } days
+version-retention-gfs = Hourly { $h } · daily { $d } · weekly { $w } · monthly { $m }
