@@ -154,38 +154,29 @@ impl VolumeTopology {
         )
     }
 
-    /// Phase 46 — file-size threshold (bytes) above which the
-    /// auto-overlapped IOCP pipeline should engage on this topology,
-    /// or `None` to skip auto-engagement.
+    /// File-size threshold (bytes) above which the auto-overlapped
+    /// IOCP pipeline should engage on this topology, or `None` to
+    /// skip auto-engagement.
     ///
-    /// Phase 41 / 42 only auto-engaged the overlapped path on
-    /// cross-volume copies ≥1 GiB. That left same-volume NVMe at the
-    /// `CopyFileExW`-buffered ceiling (DRAM bandwidth) when the
-    /// device itself can sustain higher throughput on PCIe Gen3+.
-    ///
-    /// The new decision per topology:
-    ///
-    /// - **NVMe (any volume pairing)**: 256 MiB threshold. Modern NVMe
-    ///   sustained bandwidth often beats DRAM-to-DRAM coalescing, so
-    ///   deep-queue + NO_BUFFERING wins on same-volume copies too;
-    ///   256 MiB is enough to amortise per-handle setup cost.
+    /// Phase 46 dropped the cross-volume gate on NVMe (256 MiB
+    /// any-pairing threshold) on the premise that PCIe Gen3+ NVMe
+    /// sustained bandwidth beats DRAM-to-DRAM coalescing. A direct
+    /// head-to-head bench against `CopyFileExW` falsified that on
+    /// real hardware (KIOXIA KXG80ZNV1T02 PCIe 4.0): the kernel's
+    /// streaming path beats user-space IOCP on same-volume NVMe by
+    /// ~2.5× at 256 MiB and ~13% at 10 GiB. Same-volume NVMe routes
+    /// back through `CopyFileExW`; the overlapped pipeline stays
+    /// where Phase 41 originally validated it (cross-volume + the
+    /// always-pipelined network/RAID topologies).
     ///
     /// - **SMB / iSCSI / RAID / VHDX (any volume pairing)**: 1 GiB
     ///   threshold. Networked / multi-spindle storage always benefits
-    ///   from a pipelined deep queue, but the per-handle setup cost
-    ///   (TCP handshake / virtualisation round-trip) wants a larger
-    ///   floor.
-    ///
-    /// - **Other bus types** (SATA SSD / USB / SD / HDD): cross-volume
-    ///   only, 1 GiB threshold. Pre-Phase 46 behaviour. Same-volume
-    ///   SATA SSD already saturates on plain CopyFileExW; HDDs regress
-    ///   on multi-stream patterns; USB enclosures get the cross-volume
-    ///   win the heuristic was originally designed for.
+    ///   from a pipelined deep queue.
+    /// - **All other bus types** (NVMe / SATA SSD / USB / SD / HDD):
+    ///   cross-volume only, 1 GiB threshold.
     pub fn auto_overlapped_threshold(&self, is_cross_volume: bool) -> Option<u64> {
-        const MIB: u64 = 1024 * 1024;
-        const GIB: u64 = 1024 * MIB;
+        const GIB: u64 = 1024 * 1024 * 1024;
         match self.bus_type {
-            BusType::Nvme => Some(256 * MIB),
             BusType::Smb
             | BusType::Iscsi
             | BusType::Raid
