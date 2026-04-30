@@ -159,7 +159,10 @@ pub use options::{
     TreeOptions,
 };
 pub use provenance::{OutboardEncoder, ProvenancePolicy, ProvenanceSink};
-pub use queue::{Job, JobId, JobKind, JobState, Queue, QueueEvent};
+pub use queue::{
+    Job, JobId, JobKind, JobState, Queue, QueueEvent, QueueId, QueueMergeError, QueueRegistry,
+    QueueRegistryEvent, VolumeProbe,
+};
 pub use safety::{
     PathSafetyError, is_no_follow_rejection, is_within_root, no_follow_open_flags, validate_all,
     validate_path_no_traversal,
