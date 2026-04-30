@@ -96,18 +96,24 @@ pub async fn fast_copy(
         .map(|s| s.eq_ignore_ascii_case("ntfs"))
         .unwrap_or(false);
     // Phase 47 (2026-04-30) — re-enable the explicit reflink probe on
-    // 24H2+ ReFS. The Phase 42 skip rule assumed CopyFileExW would
-    // auto-engage `FSCTL_DUPLICATE_EXTENTS_TO_FILE` natively on
-    // 24H2+ ReFS (KB5034848+), making our explicit probe redundant.
-    // A head-to-head Dev Drive bench against Robocopy falsified that
-    // assumption: on freshly-written sources (cold cache),
-    // CopyFileExW's "native" auto block-clone does NOT engage and
-    // falls through to a real byte-by-byte copy (10 GB cold:
-    // CopyThat 7602 ms / 1347 MiB/s vs Robocopy 76 ms / 134 GiB/s
-    // = 100× gap). Robocopy is doing its own FSCTL call on cold;
-    // we now do the same. CopyFileExW remains the fallback if
-    // FSCTL fails (e.g. cross-volume, source filesystem won't
-    // expose extents).
+    // 24H2+ ReFS unconditionally. Phase 42 had skipped the probe on
+    // 24H2+ ReFS on the assumption that CopyFileExW would auto-engage
+    // `FSCTL_DUPLICATE_EXTENTS_TO_FILE` natively. A head-to-head Dev
+    // Drive bench falsified that for freshly-written sources: cold-
+    // cache CopyFileExW falls through to byte-copy (10 GB cold:
+    // 7602 ms / 1347 MiB/s vs Robocopy 76 ms / 134 GiB/s = 100× gap).
+    // Always trying our explicit FSCTL closes that gap (10 GB cold:
+    // 150 ms / 68 GiB/s post-fix — 51× speedup).
+    //
+    // A subsequent attempt to route small files (< 1 GiB) BACK to
+    // CopyFileExW on the assumption that explicit FSCTL had per-call
+    // overhead that hurt at small sizes was bench-falsified: explicit
+    // reflink is consistently FASTER than CopyFileExW for small files
+    // too because the reflink-copy crate's call path skips the
+    // attribute probe, event-channel spawn, and progress callback
+    // machinery that CopyFileExW's wrapper carries. So we keep
+    // explicit reflink on for everything ReFS — the 10 GB WARM case
+    // (44 ms → 163 ms) is the one acknowledged trade-off.
     let skip_explicit_reflink_for_24h2_refs = false;
 
     // Phase 43 — NTFS has no reflink syscall to attempt. Skip the
