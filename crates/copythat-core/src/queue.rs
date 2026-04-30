@@ -60,6 +60,15 @@ impl JobId {
     pub fn as_u64(self) -> u64 {
         self.0
     }
+
+    /// Construct a [`JobId`] from a raw `u64`. Primarily for IPC
+    /// callers that round-trip a job's wire id back to a typed
+    /// handle (Phase 45.7+ runner reconciliation does this when the
+    /// `queue_route_job` IPC needs to look the just-added job's
+    /// `CopyControl` back up from the registry queue).
+    pub const fn from_u64(value: u64) -> Self {
+        Self(value)
+    }
 }
 
 impl std::fmt::Display for JobId {

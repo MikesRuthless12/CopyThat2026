@@ -49,6 +49,15 @@ const EVENT_CHANNEL: usize = 512;
 pub(crate) struct RunJob {
     pub app: AppHandle,
     pub state: AppState,
+    /// Phase 45.7 — the queue this job lives in. Owned by either
+    /// `state.queue` (the legacy default) or one of the registry
+    /// queues in `state.queues`. All state-mutating calls
+    /// (`start`, `set_progress`, `mark_completed`, `mark_failed`,
+    /// `get`) flow through this handle so registry-routed jobs
+    /// land in their own queue's lifecycle, and `JobDto`
+    /// emissions stamp the right `queueId` for the
+    /// `JobListTabs` filter.
+    pub queue: Queue,
     pub id: JobId,
     pub kind: JobKind,
     pub src: PathBuf,
@@ -84,6 +93,7 @@ pub(crate) async fn run_job(job: RunJob) {
     let RunJob {
         app,
         state,
+        queue,
         id,
         kind,
         src,
@@ -98,12 +108,13 @@ pub(crate) async fn run_job(job: RunJob) {
     } = job;
     tracing::info!(
         id = id.as_u64(),
+        queue_id = queue.id().as_u64(),
         ?kind,
         src = %src.display(),
         dst = ?dst.as_ref().map(|p| p.display().to_string()),
         "run_job starting",
     );
-    state.queue.start(id);
+    queue.start(id);
     let _ = app.emit(EVENT_JOB_STARTED, JobIdDto { id: id.as_u64() });
     emit_globals(&app, &state);
 
@@ -136,6 +147,7 @@ pub(crate) async fn run_job(job: RunJob) {
 
     let app_for_events = app.clone();
     let state_for_events = state.clone();
+    let queue_for_events = queue.clone();
     // Per-job counter the forward_events task increments on every
     // `CopyEvent::FileError`. Shared via Arc so `run_job` can read
     // the final tally for `record_finish` instead of deriving it
@@ -146,6 +158,7 @@ pub(crate) async fn run_job(job: RunJob) {
     let forwarder = tokio::spawn(forward_events(
         app_for_events,
         state_for_events,
+        queue_for_events,
         id,
         rx,
         history_row,
@@ -232,6 +245,7 @@ pub(crate) async fn run_job(job: RunJob) {
                 finish_fail(
                     &app,
                     &state,
+                    &queue,
                     id,
                     CopyError {
                         kind: CopyErrorKind::IoOther,
@@ -286,6 +300,7 @@ pub(crate) async fn run_job(job: RunJob) {
                 finish_fail(
                     &app,
                     &state,
+                    &queue,
                     id,
                     CopyError {
                         kind: CopyErrorKind::IoOther,
@@ -338,8 +353,7 @@ pub(crate) async fn run_job(job: RunJob) {
     // history-level finish stamp.
     let terminal_status: &'static str = match &result {
         Ok(()) => {
-            if state
-                .queue
+            if queue
                 .get(id)
                 .map(|j| j.state == JobState::Cancelled)
                 .unwrap_or(false)
@@ -372,7 +386,7 @@ pub(crate) async fn run_job(job: RunJob) {
             if terminal_status == "cancelled" {
                 let _ = app.emit(EVENT_JOB_CANCELLED, JobIdDto { id: id.as_u64() });
             } else {
-                state.queue.mark_completed(id);
+                queue.mark_completed(id);
                 let _ = app.emit(EVENT_JOB_COMPLETED, JobIdDto { id: id.as_u64() });
             }
         }
@@ -406,7 +420,7 @@ pub(crate) async fn run_job(job: RunJob) {
                         let _ = h.record_item(&item).await;
                     }
                 }
-                state.queue.mark_failed(id, err.clone());
+                queue.mark_failed(id, err.clone());
                 let _ = app.emit(
                     EVENT_JOB_FAILED,
                     JobFailedDto {
@@ -425,7 +439,7 @@ pub(crate) async fn run_job(job: RunJob) {
 
     // Phase 9 — stamp the terminal status + final totals into the
     // history row.
-    let snapshot_for_totals = state.queue.get(id);
+    let snapshot_for_totals = queue.get(id);
     let total_bytes = snapshot_for_totals
         .as_ref()
         .map(|j| j.bytes_done)
@@ -476,8 +490,8 @@ pub(crate) async fn run_job(job: RunJob) {
 
 /// Re-emit a terminal failure with a synthesised error. Keeps the
 /// "no destination" edge case one line at the call site.
-async fn finish_fail(app: &AppHandle, state: &AppState, id: JobId, err: CopyError) {
-    state.queue.mark_failed(id, err.clone());
+async fn finish_fail(app: &AppHandle, state: &AppState, queue: &Queue, id: JobId, err: CopyError) {
+    queue.mark_failed(id, err.clone());
     let _ = app.emit(
         EVENT_JOB_FAILED,
         JobFailedDto {
@@ -496,6 +510,7 @@ async fn finish_fail(app: &AppHandle, state: &AppState, id: JobId, err: CopyErro
 async fn forward_events(
     app: AppHandle,
     state: AppState,
+    queue: Queue,
     id: JobId,
     mut rx: mpsc::Receiver<CopyEvent>,
     history_row: Option<JobRowId>,
@@ -553,7 +568,7 @@ async fn forward_events(
                     // signal we'll get.
                     last_bytes_total = total_bytes;
                     last_files_total = 1;
-                    state.queue.set_progress(id, 0, total_bytes, 0, 1);
+                    queue.set_progress(id, 0, total_bytes, 0, 1);
                 } else {
                     // Tree job: TreeProgress is the authoritative
                     // source for the aggregate counters, so we
@@ -608,14 +623,11 @@ async fn forward_events(
                 in_tree_mode = true;
                 last_files_total = files_so_far;
                 last_bytes_total = bytes_so_far;
-                let (cur_bytes, cur_files) = state
-                    .queue
+                let (cur_bytes, cur_files) = queue
                     .get(id)
                     .map(|j| (j.bytes_done, j.files_done))
                     .unwrap_or((0, 0));
-                state
-                    .queue
-                    .set_progress(id, cur_bytes, bytes_so_far, cur_files, files_so_far);
+                queue.set_progress(id, cur_bytes, bytes_so_far, cur_files, files_so_far);
                 emit_progress(
                     &app,
                     &state,
@@ -636,7 +648,7 @@ async fn forward_events(
                 tree_files_started = 0;
                 last_files_total = total_files;
                 last_bytes_total = total_bytes;
-                state.queue.set_progress(id, 0, total_bytes, 0, total_files);
+                queue.set_progress(id, 0, total_bytes, 0, total_files);
                 // Fire the tree totals at the UI *immediately* so the
                 // JobRow ring + bottom ProgressBar show the right
                 // denominator (e.g. "0 / 103", "0 B / 4.9 GiB")
@@ -668,7 +680,7 @@ async fn forward_events(
                 if !in_tree_mode {
                     // Always update the in-memory queue state so a
                     // late-attaching subscriber sees current bytes.
-                    state.queue.set_progress(id, bytes, total, 0, 1);
+                    queue.set_progress(id, bytes, total, 0, 1);
                     if throttle_now {
                         emit_progress(&app, &state, id, bytes, total, 0, 1, rate_bps);
                     }
@@ -703,9 +715,7 @@ async fn forward_events(
                 files_total,
                 rate_bps,
             } => {
-                state
-                    .queue
-                    .set_progress(id, bytes_done, bytes_total, files_done, files_total);
+                queue.set_progress(id, bytes_done, bytes_total, files_done, files_total);
                 emit_progress(
                     &app,
                     &state,
@@ -729,18 +739,14 @@ async fn forward_events(
                 // Treat verify as a second pass: reset the denominator
                 // so the ring restarts at 0%. Progress is continuous
                 // after that.
-                state
-                    .queue
-                    .set_progress(id, 0, total_bytes, last_files_total, last_files_total);
+                queue.set_progress(id, 0, total_bytes, last_files_total, last_files_total);
             }
             CopyEvent::VerifyProgress {
                 bytes,
                 total,
                 rate_bps,
             } => {
-                state
-                    .queue
-                    .set_progress(id, bytes, total, last_files_total, last_files_total);
+                queue.set_progress(id, bytes, total, last_files_total, last_files_total);
                 emit_progress(
                     &app,
                     &state,
@@ -779,7 +785,7 @@ async fn forward_events(
                 // tick → the oscillating counter. Only touch the
                 // queue in single-file mode.
                 if !in_tree_mode {
-                    state.queue.set_progress(
+                    queue.set_progress(
                         id,
                         bytes,
                         last_bytes_total.max(bytes),
@@ -849,7 +855,7 @@ async fn forward_events(
                 }
             }
             CopyEvent::TreeCompleted { bytes, files, .. } => {
-                state.queue.set_progress(id, bytes, bytes, files, files);
+                queue.set_progress(id, bytes, bytes, files, files);
             }
             CopyEvent::Failed { .. } => {
                 // Terminal per-file / per-tree failure — handled after
@@ -1138,7 +1144,24 @@ fn eta_seconds(bytes_done: u64, bytes_total: u64, rate_bps: u64) -> Option<u64> 
 /// Walk the queue snapshot and derive a `GlobalsDto`. Cheap —
 /// snapshot is O(n) in job count, which is bounded in practice.
 pub fn build_globals(queue: &Queue) -> GlobalsDto {
-    let jobs = queue.snapshot();
+    build_globals_from_jobs(&queue.snapshot())
+}
+
+/// Phase 45.7 — aggregate the legacy default queue and every
+/// registry queue into a single `GlobalsDto`. Used by the
+/// `globals` IPC command + `emit_globals` so the header strip /
+/// footer counters reflect every running job, not just the legacy
+/// queue's. Cheap: O(N) over all queued jobs, which is bounded in
+/// practice (~thousands).
+pub fn build_globals_for_state(state: &AppState) -> GlobalsDto {
+    let mut jobs = state.queue.snapshot();
+    for q in state.queues.queues() {
+        jobs.extend(q.snapshot());
+    }
+    build_globals_from_jobs(&jobs)
+}
+
+fn build_globals_from_jobs(jobs: &[Job]) -> GlobalsDto {
     let mut active = 0u64;
     let mut queued = 0u64;
     let mut paused = 0u64;
@@ -1148,7 +1171,7 @@ pub fn build_globals(queue: &Queue) -> GlobalsDto {
     let mut bytes_total = 0u64;
     let mut errors = 0u64;
 
-    for job in &jobs {
+    for job in jobs {
         match job.state {
             JobState::Running => active += 1,
             JobState::Pending => queued += 1,
@@ -1171,7 +1194,7 @@ pub fn build_globals(queue: &Queue) -> GlobalsDto {
         }
     }
 
-    let state = overall_state(active, paused, failed, &jobs);
+    let state = overall_state(active, paused, failed, jobs);
     GlobalsDto {
         state,
         active_jobs: active,
@@ -1205,7 +1228,7 @@ fn overall_state(active: u64, paused: u64, failed: u64, jobs: &[Job]) -> &'stati
 }
 
 fn emit_globals(app: &AppHandle, state: &AppState) {
-    let g = build_globals(&state.queue);
+    let g = build_globals_for_state(state);
     state.globals.fetch_add(1, Ordering::Relaxed);
     let _ = app.emit(EVENT_GLOBALS_TICK, g);
 }

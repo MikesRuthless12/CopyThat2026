@@ -422,29 +422,39 @@ fn resolve_verifier(
 
 #[tauri::command]
 pub fn pause_job(id: u64, state: State<'_, AppState>) -> Result<(), String> {
-    let job_id = job_id(id, &state)?;
-    state.queue.pause_job(job_id);
+    let (jid, q) =
+        find_queue_for_job(id, state.inner()).ok_or_else(|| format!("unknown job id: {id}"))?;
+    q.pause_job(jid);
     Ok(())
 }
 
 #[tauri::command]
 pub fn resume_job(id: u64, state: State<'_, AppState>) -> Result<(), String> {
-    let job_id = job_id(id, &state)?;
-    state.queue.resume_job(job_id);
+    let (jid, q) =
+        find_queue_for_job(id, state.inner()).ok_or_else(|| format!("unknown job id: {id}"))?;
+    q.resume_job(jid);
     Ok(())
 }
 
 #[tauri::command]
 pub fn cancel_job(id: u64, state: State<'_, AppState>) -> Result<(), String> {
-    let job_id = job_id(id, &state)?;
-    state.queue.cancel_job(job_id);
+    let (jid, q) =
+        find_queue_for_job(id, state.inner()).ok_or_else(|| format!("unknown job id: {id}"))?;
+    q.cancel_job(jid);
     Ok(())
 }
 
 #[tauri::command]
 pub fn remove_job(id: u64, state: State<'_, AppState>) -> Result<(), String> {
-    let job_id = job_id(id, &state)?;
-    state.queue.remove(job_id);
+    let (jid, q) =
+        find_queue_for_job(id, state.inner()).ok_or_else(|| format!("unknown job id: {id}"))?;
+    q.remove(jid);
+    // Phase 45.7 — if the removed job was the last in a registry
+    // queue, drop the now-empty queue from the tab strip. The
+    // legacy default queue (id=0) is never pruned.
+    if q.id() != copythat_core::QueueId::DEFAULT {
+        state.queues.prune_empty();
+    }
     Ok(())
 }
 
@@ -452,6 +462,11 @@ pub fn remove_job(id: u64, state: State<'_, AppState>) -> Result<(), String> {
 pub fn pause_all(state: State<'_, AppState>) -> Result<(), String> {
     for job in state.queue.snapshot() {
         state.queue.pause_job(job.id);
+    }
+    for q in state.queues.queues() {
+        for job in q.snapshot() {
+            q.pause_job(job.id);
+        }
     }
     Ok(())
 }
@@ -461,6 +476,11 @@ pub fn resume_all(state: State<'_, AppState>) -> Result<(), String> {
     for job in state.queue.snapshot() {
         state.queue.resume_job(job.id);
     }
+    for q in state.queues.queues() {
+        for job in q.snapshot() {
+            q.resume_job(job.id);
+        }
+    }
     Ok(())
 }
 
@@ -468,6 +488,11 @@ pub fn resume_all(state: State<'_, AppState>) -> Result<(), String> {
 pub fn cancel_all(state: State<'_, AppState>) -> Result<(), String> {
     for job in state.queue.snapshot() {
         state.queue.cancel_job(job.id);
+    }
+    for q in state.queues.queues() {
+        for job in q.snapshot() {
+            q.cancel_job(job.id);
+        }
     }
     Ok(())
 }
@@ -547,7 +572,7 @@ pub fn list_jobs_impl(state: &AppState) -> Vec<JobDto> {
 
 #[tauri::command]
 pub fn globals(state: State<'_, AppState>) -> crate::ipc::GlobalsDto {
-    crate::runner::build_globals(&state.queue)
+    crate::runner::build_globals_for_state(state.inner())
 }
 
 /// Classify a path for the frontend to pick a Lucide icon. Ships
@@ -602,13 +627,38 @@ pub fn system_locale() -> String {
 }
 
 fn job_id(id: u64, state: &State<'_, AppState>) -> Result<copythat_core::JobId, String> {
-    state
+    find_queue_for_job(id, state.inner())
+        .map(|(jid, _q)| jid)
+        .ok_or_else(|| format!("unknown job id: {id}"))
+}
+
+/// Phase 45.7 — locate the queue that owns the job with the given
+/// wire id. Walks `state.queue` (legacy default) first, then every
+/// registry queue. Returns `None` when no queue holds the id.
+///
+/// Cheap — each `snapshot()` clones a `Vec<Job>` per queue, which is
+/// bounded in practice (~thousands at most). Phase 45.4+ runner
+/// reconciliation calls this on every `pause_job` / `resume_job` /
+/// `cancel_job` / `remove_job` so registry-queue jobs are
+/// addressable through the same IPC surface as legacy ones.
+pub fn find_queue_for_job(
+    id: u64,
+    state: &AppState,
+) -> Option<(copythat_core::JobId, copythat_core::Queue)> {
+    if let Some(j) = state
         .queue
         .snapshot()
         .into_iter()
         .find(|j| j.id.as_u64() == id)
-        .map(|j| j.id)
-        .ok_or_else(|| format!("unknown job id: {id}"))
+    {
+        return Some((j.id, state.queue.clone()));
+    }
+    for q in state.queues.queues() {
+        if let Some(j) = q.snapshot().into_iter().find(|j| j.id.as_u64() == id) {
+            return Some((j.id, q));
+        }
+    }
+    None
 }
 
 // ---------------------------------------------------------------------

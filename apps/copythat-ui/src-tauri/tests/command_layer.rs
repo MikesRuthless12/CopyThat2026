@@ -111,6 +111,100 @@ fn list_jobs_impl_attributes_registry_jobs_to_their_queue_ids() {
 }
 
 #[test]
+fn find_queue_for_job_locates_registry_routed_jobs() {
+    // Phase 45.7 — pause/resume/cancel/remove must work for jobs
+    // that live in registry queues, not just `state.queue`. The
+    // helper this test exercises is what the IPC commands use to
+    // pick the owning queue by job id; without it, registry-queue
+    // jobs would be unaddressable through the existing per-job IPC
+    // surface.
+    let state = AppState::new();
+    let (legacy_id, _l_ctrl) = state.queue.add(
+        JobKind::Copy,
+        PathBuf::from("/legacy"),
+        Some(PathBuf::from("/legacy/d")),
+    );
+    let (qid, routed_id, _r_ctrl) = state.queues.route(
+        JobKind::Copy,
+        PathBuf::from("/routed"),
+        Some(PathBuf::from("/routed/d")),
+    );
+
+    let (legacy_jid, legacy_q) =
+        copythat_ui_lib::commands::find_queue_for_job(legacy_id.as_u64(), &state)
+            .expect("legacy job is findable");
+    assert_eq!(legacy_jid, legacy_id);
+    assert_eq!(legacy_q.id().as_u64(), 0, "legacy queue id is DEFAULT");
+
+    let (routed_jid, routed_q) =
+        copythat_ui_lib::commands::find_queue_for_job(routed_id.as_u64(), &state)
+            .expect("registry-routed job is findable");
+    assert_eq!(routed_jid, routed_id);
+    assert_eq!(routed_q.id(), qid, "routed job's queue id matches the registry's");
+
+    // An unknown id resolves to None — IPC commands use this to
+    // surface an "unknown job id" error.
+    assert!(copythat_ui_lib::commands::find_queue_for_job(9_999_999, &state).is_none());
+}
+
+#[test]
+fn build_globals_for_state_aggregates_legacy_and_registry() {
+    // Phase 45.7 — header / footer counters must sum across every
+    // queue (legacy + every registry queue), otherwise the moment
+    // jobs route to per-drive queues the global counters silently
+    // under-report. This test seeds one job in each surface and
+    // asserts the aggregate.
+    let state = AppState::new();
+    state.queue.add(
+        JobKind::Copy,
+        PathBuf::from("/legacy"),
+        Some(PathBuf::from("/legacy/d")),
+    );
+    state.queues.route(
+        JobKind::Copy,
+        PathBuf::from("/routed1"),
+        Some(PathBuf::from("/routed1/d")),
+    );
+    state.queues.route(
+        JobKind::Copy,
+        PathBuf::from("/routed2"),
+        Some(PathBuf::from("/routed2/d")),
+    );
+
+    let g = copythat_ui_lib::runner::build_globals_for_state(&state);
+    assert_eq!(g.queued_jobs, 3, "all three pending jobs are summed");
+    assert_eq!(g.active_jobs, 0);
+    assert_eq!(g.state, "copying", "any pending work flips state to copying");
+}
+
+#[test]
+fn remove_job_via_registry_prunes_empty_queue() {
+    // Phase 45.7 — the `remove_job` IPC calls `prune_empty()` after
+    // dropping a registry-queue job so the now-empty queue
+    // disappears from the tab strip. This test simulates the
+    // helper's behavior end-to-end without booting a Tauri runtime
+    // (the IPC wrapper around it is tested manually via the smoke).
+    use copythat_core::QueueId;
+    let state = AppState::new();
+    let (qid, jid, _ctrl) = state.queues.route(
+        JobKind::Copy,
+        PathBuf::from("/routed"),
+        Some(PathBuf::from("/routed/d")),
+    );
+    assert_ne!(qid, QueueId::DEFAULT);
+    assert_eq!(state.queues.len(), 1);
+
+    // Locate the queue via the same helper the IPC uses, remove the
+    // job, then prune.
+    let (jid_resolved, queue) =
+        copythat_ui_lib::commands::find_queue_for_job(jid.as_u64(), &state).unwrap();
+    queue.remove(jid_resolved);
+    let pruned = state.queues.prune_empty();
+    assert_eq!(pruned, vec![qid]);
+    assert!(state.queues.is_empty(), "empty registry queue was pruned");
+}
+
+#[test]
 fn job_ids_are_unique_across_legacy_queue_and_registry() {
     // Phase 45.7 follow-up — the legacy `state.queue` and every
     // registry queue must mint ids from one shared counter so a

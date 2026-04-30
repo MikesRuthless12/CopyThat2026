@@ -51,7 +51,20 @@ pub fn enqueue_jobs(
         }
         let dst = destination_for(&src, dst_root);
 
-        let (id, ctrl) = state.queue.add(kind, src.clone(), Some(dst.clone()));
+        // Phase 45.7 — route through the per-drive registry instead
+        // of the legacy default queue. Sources whose destination
+        // lives on the same physical drive land in the same named
+        // queue (`"D: queue"` etc.); F2-mode short-circuits this and
+        // piles every routed job into whichever queue currently owns
+        // a running job. Falls back to a single anonymous "default"
+        // queue when the platform probe yields no drive id.
+        let (qid, id, ctrl) = state
+            .queues
+            .route(kind, src.clone(), Some(dst.clone()));
+        let queue = state
+            .queues
+            .get(qid)
+            .expect("just-routed queue must exist in registry");
         // Phase 22 — seed per-job collision rules from the user's
         // currently-active ConflictProfile. Later appends (via the
         // `add_conflict_rule` IPC) extend this list; the runner
@@ -62,15 +75,15 @@ pub fn enqueue_jobs(
                 state.collisions.seed_rules(id.as_u64(), profile.clone());
             }
         }
-        let snapshot = state
-            .queue
-            .get(id)
-            .expect("just-added job must be in queue");
-        emit_job_added(app, JobDto::from_job(&snapshot));
+        let snapshot = queue.get(id).expect("just-added job must be in queue");
+        // Stamp the routed queue's id onto the DTO so the
+        // JobListTabs filter places the row under the right tab.
+        emit_job_added(app, JobDto::from_job_in_queue(&snapshot, queue.id()));
 
         let run = RunJob {
             app: app.clone(),
             state: state.clone(),
+            queue,
             id,
             kind,
             src,
