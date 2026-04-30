@@ -1059,3 +1059,17 @@ queue-f2-active-hint = F2 mode: every new enqueue lands in this queue
 queue-f2-toggled-on = F2 queue mode ON — new enqueues join the running queue
 queue-f2-toggled-off = F2 queue mode OFF — new enqueues spawn parallel queues
 queue-f2-status-bar = F2 queue mode: ON
+
+# Phase 45.6 — tray destination targets (Subfeature D). Pinned
+# destinations appear in the OS tray menu; clicking one arms it as
+# the active drop target so the next file drop bypasses the
+# DropStagingDialog. Settings → General hosts the list editor.
+tray-target-section-title = Tray destinations
+tray-target-section-hint = Pinned destinations appear in the tray menu. Click one to arm it as the next drop target.
+tray-target-empty = No tray destinations pinned yet.
+tray-target-remove = Remove
+tray-target-add-label = Label
+tray-target-add-path = Path or backend URI
+tray-target-add = Add
+tray-target-armed-toast = Drop your next file to send it to { $label }
+tray-target-active-pill = → { $label }

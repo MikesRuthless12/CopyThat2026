@@ -1293,3 +1293,14 @@ queue-f2-active-hint = F2 mode: every new enqueue lands in this queue  # MT
 queue-f2-toggled-on = F2 queue mode ON — new enqueues join the running queue  # MT
 queue-f2-toggled-off = F2 queue mode OFF — new enqueues spawn parallel queues  # MT
 queue-f2-status-bar = F2 queue mode: ON  # MT
+
+# Phase 45.6 — tray destination targets.  # MT
+tray-target-section-title = Tray destinations  # MT
+tray-target-section-hint = Pinned destinations appear in the tray menu. Click one to arm it as the next drop target.  # MT
+tray-target-empty = No tray destinations pinned yet.  # MT
+tray-target-remove = Remove  # MT
+tray-target-add-label = Label  # MT
+tray-target-add-path = Path or backend URI  # MT
+tray-target-add = Add  # MT
+tray-target-armed-toast = Drop your next file to send it to { $label }  # MT
+tray-target-active-pill = → { $label }  # MT

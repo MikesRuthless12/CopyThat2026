@@ -28,7 +28,7 @@ use std::sync::atomic::Ordering;
 use copythat_core::{JobKind, JobState, QueueId, QueueRegistry, QueueRegistryEvent};
 use copythat_settings::{PinnedDestination, Settings};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Runtime};
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::state::AppState;
@@ -187,20 +187,42 @@ pub fn queue_set_f2_mode(state: tauri::State<'_, AppState>, enabled: bool) {
 /// `queue_pin_destination(label, path)` — append a row to
 /// `Settings::queue::pinned_destinations` and persist. Duplicate
 /// `(label, path)` pairs are ignored so a chatty UI can replay
-/// the same call without growing the list.
+/// the same call without growing the list. Phase 45.6 — calls
+/// [`crate::rebuild_tray_menu`] on success so the OS tray menu
+/// reflects the new row immediately.
 #[tauri::command]
-pub fn queue_pin_destination(
+pub fn queue_pin_destination<R: Runtime>(
     state: tauri::State<'_, AppState>,
+    app: AppHandle<R>,
     label: String,
     path: String,
 ) -> Result<Vec<PinnedDestinationDto>, String> {
-    queue_pin_destination_impl(state.inner(), &label, &path)
+    let result = queue_pin_destination_impl(state.inner(), &label, &path)?;
+    let _ = crate::rebuild_tray_menu(&app);
+    Ok(result)
 }
 
 /// `queue_get_pinned()` — return the current pinned-destination list.
 #[tauri::command]
 pub fn queue_get_pinned(state: tauri::State<'_, AppState>) -> Vec<PinnedDestinationDto> {
     queue_get_pinned_impl(state.inner())
+}
+
+/// `queue_unpin_destination(label, path)` — remove the matching row
+/// from `Settings::queue::pinned_destinations` and persist. Returns
+/// the post-removal list. Idempotent — removing a row that isn't
+/// pinned is a no-op (returns the unchanged list). Phase 45.6 —
+/// calls [`crate::rebuild_tray_menu`] on success.
+#[tauri::command]
+pub fn queue_unpin_destination<R: Runtime>(
+    state: tauri::State<'_, AppState>,
+    app: AppHandle<R>,
+    label: String,
+    path: String,
+) -> Result<Vec<PinnedDestinationDto>, String> {
+    let result = queue_unpin_destination_impl(state.inner(), &label, &path)?;
+    let _ = crate::rebuild_tray_menu(&app);
+    Ok(result)
 }
 
 // ---------------------------------------------------------------------
@@ -303,6 +325,29 @@ pub fn queue_get_pinned_impl(state: &AppState) -> Vec<PinnedDestinationDto> {
         .into_iter()
         .map(PinnedDestinationDto::from)
         .collect()
+}
+
+/// Implementation of [`queue_unpin_destination`]. Public for tests.
+pub fn queue_unpin_destination_impl(
+    state: &AppState,
+    label: &str,
+    path: &str,
+) -> Result<Vec<PinnedDestinationDto>, String> {
+    let label = label.trim().to_string();
+    let path = path.trim().to_string();
+    let target = PinnedDestination { label, path };
+    let mut s = state
+        .settings
+        .write()
+        .map_err(|_| "settings lock poisoned".to_string())?;
+    s.queue.pinned_destinations.retain(|p| p != &target);
+    save_settings(state, &s)?;
+    Ok(s.queue
+        .pinned_destinations
+        .iter()
+        .cloned()
+        .map(PinnedDestinationDto::from)
+        .collect())
 }
 
 // ---------------------------------------------------------------------

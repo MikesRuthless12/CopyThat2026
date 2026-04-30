@@ -739,7 +739,7 @@ export async function mountBackendName(): Promise<string> {
 // Phase 45.3 — named-queue tab strip.
 // ---------------------------------------------------------------------
 
-import type { QueueSnapshotDto } from "./types";
+import type { PinnedDestinationDto, QueueSnapshotDto } from "./types";
 
 /** Snapshot the registry — one entry per named queue, with the
  *  badge count the tab strip uses. The legacy default queue is NOT
@@ -748,6 +748,40 @@ import type { QueueSnapshotDto } from "./types";
  *  registry queues without UI changes. */
 export async function queueList(): Promise<QueueSnapshotDto[]> {
   return invoke<QueueSnapshotDto[]>("queue_list");
+}
+
+/** Phase 45.6 — return the persisted pinned-destination list. The
+ *  Settings panel and active-target store seed from this on mount. */
+export async function queueGetPinned(): Promise<PinnedDestinationDto[]> {
+  return invoke<PinnedDestinationDto[]>("queue_get_pinned");
+}
+
+/** Phase 45.6 — append a pinned destination. Returns the post-add
+ *  list; duplicate `(label, path)` pairs are deduped server-side.
+ *  Empty label or path rejects with a typed error. The Rust side
+ *  also rebuilds the OS tray menu on success. */
+export async function queuePinDestination(
+  label: string,
+  path: string,
+): Promise<PinnedDestinationDto[]> {
+  return invoke<PinnedDestinationDto[]>("queue_pin_destination", {
+    label,
+    path,
+  });
+}
+
+/** Phase 45.6 — remove a pinned destination. Returns the post-
+ *  remove list; idempotent (removing a row that isn't pinned is a
+ *  no-op). Whitespace in the inputs is trimmed before the
+ *  comparison. Rebuilds the OS tray menu on success. */
+export async function queueUnpinDestination(
+  label: string,
+  path: string,
+): Promise<PinnedDestinationDto[]> {
+  return invoke<PinnedDestinationDto[]>("queue_unpin_destination", {
+    label,
+    path,
+  });
 }
 
 /** Phase 45.4 — collapse `srcId` into `dstId`. The Rust side moves

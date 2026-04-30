@@ -144,6 +144,10 @@ export const EVENTS = {
   queueRemoved: "queue-removed",
   queueMerged: "queue-merged",
   queueJobRouted: "queue-job-routed",
+  // Phase 45.6 — emitted when the user picks a pinned destination
+  // from the OS tray menu. The frontend uses it as the active drop
+  // target for the next file drop.
+  trayTargetClicked: "tray-target-clicked",
 } as const;
 
 /// Phase 45.3 — wire shape of `queue_list()`.
@@ -182,6 +186,14 @@ export interface QueueMergedEvent {
 export interface QueueJobRoutedEvent {
   queueId: number;
   jobId: number;
+}
+
+/// Phase 45.6 — wire shape of one tray-pinned destination. Mirrors
+/// `Settings::queue::pinned_destinations`; same shape on the wire
+/// regardless of whether `path` is local or a Phase 32 backend URI.
+export interface PinnedDestinationDto {
+  label: string;
+  path: string;
 }
 
 export type FileActivityPhase =

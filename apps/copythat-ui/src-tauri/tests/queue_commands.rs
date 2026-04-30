@@ -23,7 +23,7 @@ use copythat_core::{QueueRegistry, QueueRegistryEvent, VolumeProbe};
 use copythat_settings::{ProfileStore, Settings};
 use copythat_ui_lib::queue_commands::{
     queue_get_pinned_impl, queue_list_impl, queue_merge_impl, queue_pin_destination_impl,
-    queue_route_job_impl, queue_set_f2_mode_impl,
+    queue_route_job_impl, queue_set_f2_mode_impl, queue_unpin_destination_impl,
 };
 use copythat_ui_lib::state::AppState;
 use std::path::Path;
@@ -194,6 +194,30 @@ fn pin_destination_rejects_empty_label_or_path() {
     assert!(queue_pin_destination_impl(&state, "Label", "  ").is_err());
     // None of the failed attempts should have leaked a row through.
     assert!(queue_get_pinned_impl(&state).is_empty());
+}
+
+#[test]
+fn unpin_destination_removes_match_and_is_idempotent() {
+    let state = fake_state();
+    queue_pin_destination_impl(&state, "Inbox", "/drive/A/inbox").unwrap();
+    queue_pin_destination_impl(&state, "Backup", "/drive/B/backup").unwrap();
+    assert_eq!(queue_get_pinned_impl(&state).len(), 2);
+
+    // Removing an existing row drops it; the other row survives.
+    let after = queue_unpin_destination_impl(&state, "Inbox", "/drive/A/inbox").unwrap();
+    assert_eq!(after.len(), 1);
+    assert_eq!(after[0].label, "Backup");
+
+    // Removing a row that isn't there is a no-op (idempotent).
+    let after_again = queue_unpin_destination_impl(&state, "Inbox", "/drive/A/inbox").unwrap();
+    assert_eq!(after_again.len(), 1);
+
+    // Whitespace in the inputs is trimmed before the comparison —
+    // chatty UIs that round-trip user input shouldn't leak phantom
+    // rows that escape removal.
+    let after_trim =
+        queue_unpin_destination_impl(&state, "  Backup  ", "  /drive/B/backup  ").unwrap();
+    assert!(after_trim.is_empty());
 }
 
 #[test]

@@ -33,7 +33,9 @@
   import { i18nVersion, locale, setLocale, t } from "../i18n";
   import {
     closeSettings,
+    pinnedDestinations,
     pushToast,
+    refreshPinnedDestinations,
     settingsOpen,
     setErrorDisplayMode,
   } from "../stores";
@@ -44,13 +46,20 @@
     importProfile,
     listProfiles,
     loadProfile,
+    queuePinDestination,
+    queueUnpinDestination,
     resetSettings,
     saveProfile,
     updateSettings,
     updaterCheckNow,
     updaterDismissVersion,
   } from "../ipc";
-  import type { ProfileInfoDto, SettingsDto, UpdateCheckDto } from "../types";
+  import type {
+    PinnedDestinationDto,
+    ProfileInfoDto,
+    SettingsDto,
+    UpdateCheckDto,
+  } from "../types";
 
   type TabId =
     | "general"
@@ -318,6 +327,51 @@
     }
   }
 
+  // ---- Phase 45.6 — tray-pinned destinations ----------------------
+  // Local form state for the "Add destination" row. Persisted state
+  // lives in `pinnedDestinations` (Rust → settings TOML); this panel
+  // round-trips through `queuePinDestination` / `queueUnpinDestination`.
+  let trayPinLabel = $state("");
+  let trayPinPath = $state("");
+
+  async function onPickTrayPinPath() {
+    try {
+      const picked = await openDialog({ multiple: false, directory: true });
+      if (typeof picked === "string" && picked.length > 0) {
+        trayPinPath = picked;
+      }
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onAddTrayPin() {
+    const label = trayPinLabel.trim();
+    const path = trayPinPath.trim();
+    // Silent no-op on empty inputs — the Add button is visible but
+    // the user sees the row simply not appear, matching the
+    // "Settings panel is responsive, never shouts" pattern of the
+    // rest of this modal.
+    if (label.length === 0 || path.length === 0) return;
+    try {
+      await queuePinDestination(label, path);
+      await refreshPinnedDestinations();
+      trayPinLabel = "";
+      trayPinPath = "";
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onRemoveTrayPin(row: PinnedDestinationDto) {
+    try {
+      await queueUnpinDestination(row.label, row.path);
+      await refreshPinnedDestinations();
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
   // ---- Phase 15 updater -----------------------------------------------
   // Most-recent check result; populated on demand. Rendered below the
   // channel selector when non-null.
@@ -561,6 +615,64 @@
                 <span class="label">{t("settings-auto-resume")}</span>
               </label>
               <p class="hint">{t("settings-auto-resume-hint")}</p>
+
+              <!-- Phase 45.6 — tray-pinned destinations. Each row
+                   becomes a tray-menu item; clicking the menu item
+                   stashes the destination as the active drop target
+                   for the next file drop. -->
+              <h4 class="subheading">{t("tray-target-section-title")}</h4>
+              <p class="hint">{t("tray-target-section-hint")}</p>
+
+              {#if $pinnedDestinations.length === 0}
+                <p class="hint empty">{t("tray-target-empty")}</p>
+              {:else}
+                <ul class="tray-pin-list">
+                  {#each $pinnedDestinations as row (row.label + "::" + row.path)}
+                    <li class="tray-pin-row">
+                      <span class="tray-pin-label">{row.label}</span>
+                      <span class="tray-pin-path" title={row.path}>{row.path}</span>
+                      <button
+                        type="button"
+                        class="tray-pin-remove"
+                        onclick={() => onRemoveTrayPin(row)}
+                        aria-label={t("tray-target-remove")}
+                        title={t("tray-target-remove")}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+
+              <div class="tray-pin-add">
+                <input
+                  type="text"
+                  bind:value={trayPinLabel}
+                  placeholder={t("tray-target-add-label")}
+                  spellcheck={false}
+                />
+                <input
+                  type="text"
+                  bind:value={trayPinPath}
+                  placeholder={t("tray-target-add-path")}
+                  spellcheck={false}
+                />
+                <button
+                  type="button"
+                  onclick={onPickTrayPinPath}
+                  class="tray-pin-pick"
+                >
+                  …
+                </button>
+                <button
+                  type="button"
+                  onclick={onAddTrayPin}
+                  class="tray-pin-add-btn"
+                >
+                  {t("tray-target-add")}
+                </button>
+              </div>
 
               {#if settings.dnd}
                 <h4 class="subheading">{t("settings-dnd-heading")}</h4>
@@ -1629,6 +1741,112 @@
     color: var(--muted, #6a6a6a);
     font-size: 12px;
     text-align: center;
+  }
+
+  /* Phase 45.6 — tray-pinned destinations panel. List rows show
+     label + path + a delete button; the add row sits below. */
+  .tray-pin-list {
+    list-style: none;
+    margin: 8px 0;
+    padding: 0;
+    border: 1px solid var(--border, rgba(128, 128, 128, 0.18));
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .tray-pin-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: var(--surface, #ffffff);
+    border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.12));
+  }
+
+  .tray-pin-row:last-child {
+    border-bottom: none;
+  }
+
+  .tray-pin-label {
+    flex: 0 0 auto;
+    min-width: 90px;
+    font-weight: 600;
+    color: var(--fg-strong, #1f1f1f);
+  }
+
+  .tray-pin-path {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--fg-dim, #6a6a6a);
+    font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 11px;
+  }
+
+  .tray-pin-remove {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--fg-dim, #6a6a6a);
+    font: inherit;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .tray-pin-remove:hover {
+    color: var(--error, #c24141);
+    border-color: var(--error, #c24141);
+  }
+
+  .tray-pin-add {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 4px;
+  }
+
+  .tray-pin-add input[type="text"] {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .tray-pin-add input[type="text"]:first-of-type {
+    flex: 0 0 120px;
+  }
+
+  .tray-pin-pick {
+    flex: 0 0 auto;
+    width: 28px;
+    padding: 4px 0;
+    background: var(--surface, #ffffff);
+    border: 1px solid var(--border, rgba(128, 128, 128, 0.3));
+    border-radius: 4px;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .tray-pin-add-btn {
+    flex: 0 0 auto;
+    padding: 4px 12px;
+    background: var(--accent, #4f8cff);
+    color: #ffffff;
+    border: 1px solid var(--accent, #4f8cff);
+    border-radius: 4px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .tray-pin-add-btn:hover {
+    filter: brightness(1.05);
   }
 
   .muted {

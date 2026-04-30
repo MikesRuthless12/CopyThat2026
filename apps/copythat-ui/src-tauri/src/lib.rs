@@ -72,12 +72,105 @@ pub mod version_commands;
 
 use std::sync::Mutex;
 
-use tauri::menu::{Menu, MenuEvent, MenuItem};
+use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
+use tauri::{AppHandle, DragDropEvent, Emitter, Manager, Runtime, WindowEvent};
 
 use crate::cli::CliAction;
+use crate::queue_commands::PinnedDestinationDto;
 use crate::state::AppState;
+
+/// Stable id of the main tray icon. Used to look the icon up via
+/// [`AppHandle::tray_by_id`] when [`rebuild_tray_menu`] swaps in a
+/// freshly-built menu after a pinned destination was added or
+/// removed (Phase 45.6).
+pub const TRAY_ICON_ID: &str = "copythat-main-tray";
+
+/// Tauri event name fired when the user clicks a pinned destination
+/// in the tray menu. Payload is a [`PinnedDestinationDto`]; the
+/// frontend listens via `EVENTS.trayTargetClicked` and stashes the
+/// destination as the active drop target.
+pub const EVENT_TRAY_TARGET_CLICKED: &str = "tray-target-clicked";
+
+/// Menu-id prefix for dynamically-generated pinned-destination
+/// items. The suffix after the colon is the destination's index in
+/// `Settings::queue::pinned_destinations`; the menu-event handler
+/// parses it back to look up the row before emitting the event.
+const TRAY_TARGET_ID_PREFIX: &str = "tray-target:";
+
+/// Build the main tray menu from the current pinned-destinations
+/// snapshot. Static items (`Show`, `Drop Stack`, `Quit`) anchor the
+/// menu; pinned destinations are inserted between Drop Stack and
+/// Quit, separated by `PredefinedMenuItem::separator`. An empty
+/// pinned list collapses to the original 3-item menu.
+fn build_tray_menu<R: Runtime>(
+    app: &AppHandle<R>,
+    pinned: &[PinnedDestinationDto],
+) -> tauri::Result<Menu<R>> {
+    let show = MenuItem::with_id(app, "tray-show", "Show", true, None::<&str>)?;
+    let dropstack =
+        MenuItem::with_id(app, "tray-dropstack", "Drop Stack", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "tray-quit", "Quit", true, None::<&str>)?;
+
+    if pinned.is_empty() {
+        return Menu::with_items(app, &[&show, &dropstack, &quit]);
+    }
+
+    // Build the dynamic pinned-destination items first so the
+    // borrow check is satisfied when assembling the final
+    // `&[&dyn IsMenuItem]` slice.
+    let mut pinned_items: Vec<MenuItem<R>> = Vec::with_capacity(pinned.len());
+    for (idx, p) in pinned.iter().enumerate() {
+        let id = format!("{TRAY_TARGET_ID_PREFIX}{idx}");
+        // Display "Label — Path" so the user can tell two same-
+        // labelled rows apart at a glance.
+        let display = format!("{} — {}", p.label, p.path);
+        pinned_items.push(MenuItem::with_id(app, id, display, true, None::<&str>)?);
+    }
+    let sep_top = PredefinedMenuItem::separator(app)?;
+    let sep_bot = PredefinedMenuItem::separator(app)?;
+
+    let mut items: Vec<&dyn tauri::menu::IsMenuItem<R>> = Vec::new();
+    items.push(&show);
+    items.push(&dropstack);
+    items.push(&sep_top);
+    for it in &pinned_items {
+        items.push(it);
+    }
+    items.push(&sep_bot);
+    items.push(&quit);
+    Menu::with_items(app, &items)
+}
+
+/// Rebuild the live tray menu in place. Cheap — invoked after every
+/// `queue_pin_destination` / `queue_unpin_destination` so the menu
+/// reflects the persisted list without the user having to relaunch.
+pub fn rebuild_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    let pinned = match app.try_state::<AppState>() {
+        Some(s) => crate::queue_commands::queue_get_pinned_impl(s.inner()),
+        None => Vec::new(),
+    };
+    let menu = build_tray_menu(app, &pinned)?;
+    if let Some(tray) = app.tray_by_id(TRAY_ICON_ID) {
+        tray.set_menu(Some(menu))?;
+    }
+    Ok(())
+}
+
+/// Resolve the menu id back to the pinned destination it was
+/// generated from. Returns `None` if the id isn't a tray-target id
+/// or the index has fallen out of range (e.g. another window
+/// removed the row in the same tick).
+fn pinned_target_for_menu_id<R: Runtime>(
+    app: &AppHandle<R>,
+    menu_id: &str,
+) -> Option<PinnedDestinationDto> {
+    let suffix = menu_id.strip_prefix(TRAY_TARGET_ID_PREFIX)?;
+    let idx: usize = suffix.parse().ok()?;
+    let state = app.try_state::<AppState>()?;
+    let pinned = crate::queue_commands::queue_get_pinned_impl(state.inner());
+    pinned.into_iter().nth(idx)
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -453,6 +546,7 @@ pub fn run() {
             queue_commands::queue_set_f2_mode,
             queue_commands::queue_pin_destination,
             queue_commands::queue_get_pinned,
+            queue_commands::queue_unpin_destination,
         ])
         .setup(move |app| {
             // Phase 44.2b — install the platform-native CoW probe so
@@ -469,36 +563,51 @@ pub fn run() {
             #[cfg(windows)]
             instance_broker::start_pipe_server(app.handle().clone());
 
-            // Phase 16 / 28 — tray icon + menu. Visible regardless
-            // of the "minimize to tray" setting; the setting only
-            // changes what the window's close button does. Phase 28
-            // adds the Drop Stack entry between Show and Quit so the
-            // user can pop the stack window from the tray without
-            // first restoring the main window.
-            let show = MenuItem::with_id(app, "tray-show", "Show", true, None::<&str>)?;
-            let dropstack =
-                MenuItem::with_id(app, "tray-dropstack", "Drop Stack", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "tray-quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &dropstack, &quit])?;
-            let _tray = TrayIconBuilder::with_id("copythat-main-tray")
+            // Phase 16 / 28 / 45.6 — tray icon + dynamic menu. Visible
+            // regardless of the "minimize to tray" setting; the
+            // setting only changes what the window's close button
+            // does. Phase 28 added the Drop Stack entry between Show
+            // and Quit; Phase 45.6 inserts pinned destinations
+            // between them via `build_tray_menu` and rebuilds the
+            // menu on every pin/unpin via [`rebuild_tray_menu`].
+            let pinned_initial = match app.try_state::<AppState>() {
+                Some(s) => crate::queue_commands::queue_get_pinned_impl(s.inner()),
+                None => Vec::new(),
+            };
+            let menu = build_tray_menu(&app.handle().clone(), &pinned_initial)?;
+            let _tray = TrayIconBuilder::with_id(TRAY_ICON_ID)
                 .tooltip("Copy That v0.19.84")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event: MenuEvent| match event.id.as_ref() {
-                    "tray-show" => show_main_window(app),
-                    "tray-dropstack" => {
-                        // Fire-and-forget — the Tauri runtime owns
-                        // the async context for the command.
-                        let handle = app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let _ = dropstack::dropstack_toggle_window(handle).await;
-                        });
+                .on_menu_event(|app, event: MenuEvent| {
+                    let id = event.id.as_ref();
+                    match id {
+                        "tray-show" => show_main_window(app),
+                        "tray-dropstack" => {
+                            // Fire-and-forget — the Tauri runtime
+                            // owns the async context for the command.
+                            let handle = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let _ = dropstack::dropstack_toggle_window(handle).await;
+                            });
+                        }
+                        "tray-quit" => {
+                            app.exit(0);
+                        }
+                        _ if id.starts_with(TRAY_TARGET_ID_PREFIX) => {
+                            // Phase 45.6 — clicking a pinned
+                            // destination forwards the row to the
+                            // frontend. The Svelte side stashes it
+                            // as the active drop target and
+                            // bypasses DropStagingDialog on the next
+                            // file drop.
+                            if let Some(target) = pinned_target_for_menu_id(app, id) {
+                                let _ = app.emit(EVENT_TRAY_TARGET_CLICKED, target);
+                            }
+                        }
+                        _ => {}
                     }
-                    "tray-quit" => {
-                        app.exit(0);
-                    }
-                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
                     // Left-click on the tray icon restores the main

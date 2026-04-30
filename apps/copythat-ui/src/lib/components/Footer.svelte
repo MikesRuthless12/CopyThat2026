@@ -6,6 +6,7 @@
   import Icon from "../icons/Icon.svelte";
   import { i18nVersion, t } from "../i18n";
   import {
+    activeTrayTarget,
     f2Mode,
     globals,
     openErrorLogDrawer,
@@ -14,6 +15,7 @@
     openSyncDrawer,
     openTotalsDrawer,
     pushToast,
+    setActiveTrayTarget,
   } from "../stores";
 
   // `t()` reads from the locale store non-reactively. Svelte only
@@ -103,6 +105,20 @@
       {t("footer-errors")}
     </button>
     <span class="spacer"></span>
+    {#if $activeTrayTarget}
+      <!-- Phase 45.6 — active tray drop-target pill. Surfaces the
+           tray destination the user just armed; the next file drop
+           bypasses the staging dialog and routes here. Click to
+           clear without dropping anything. -->
+      <button
+        type="button"
+        class="tray-pill"
+        aria-live="polite"
+        onclick={() => setActiveTrayTarget(null)}
+      >
+        {t("tray-target-active-pill", { label: $activeTrayTarget.label })}
+      </button>
+    {/if}
     {#if $f2Mode}
       <!-- Phase 45.5 — F2 status pill. Visible only while the
            registry's `auto_enqueue_next` flag is on; tells the user
@@ -276,5 +292,24 @@
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.02em;
+  }
+
+  .tray-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    background: var(--accent, #4f8cff);
+    color: #ffffff;
+    border: 1px solid var(--accent, #4f8cff);
+    border-radius: 10px;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+  }
+
+  .tray-pill:hover {
+    filter: brightness(1.05);
   }
 </style>

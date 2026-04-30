@@ -8,14 +8,17 @@
 
 import { derived, writable, type Readable } from "svelte/store";
 
+import { t } from "./i18n";
 import {
   enumerateTreeFiles,
   getSettings,
   listJobs,
   globals as fetchGlobals,
   onEvent,
+  queueGetPinned,
   queueList,
   queueSetF2Mode,
+  startCopy,
 } from "./ipc";
 import {
   EVENTS,
@@ -33,6 +36,7 @@ import {
   type JobFailedDto,
   type JobIdDto,
   type JobProgressDto,
+  type PinnedDestinationDto,
   type QueueSnapshotDto,
   type ToastKind,
   type ToastMessage,
@@ -756,6 +760,61 @@ export function currentF2Mode(): boolean {
   return value;
 }
 
+// ----------------------------------------------------------------------
+// Phase 45.6 — tray-pinned destinations + active drop target
+//
+// `pinnedDestinationsStore` mirrors `Settings::queue::pinned_destinations`
+// for the Settings panel and the Footer pill. Re-fetched after every
+// `queue_pin_destination` / `queue_unpin_destination` round trip.
+//
+// `activeTrayTargetStore` is transient frontend state — it's set when
+// the user clicks a pinned destination in the OS tray menu (the Rust
+// side fires `tray-target-clicked`) and cleared after one drop or by
+// explicit dismissal. While set, the next `drop-received` event is
+// fast-pathed straight into `start_copy(paths, target.path)` instead
+// of opening the staging dialog.
+// ----------------------------------------------------------------------
+
+const pinnedDestinationsStore = writable<PinnedDestinationDto[]>([]);
+const activeTrayTargetStore = writable<PinnedDestinationDto | null>(null);
+
+export const pinnedDestinations: Readable<PinnedDestinationDto[]> = {
+  subscribe: pinnedDestinationsStore.subscribe,
+};
+export const activeTrayTarget: Readable<PinnedDestinationDto | null> = {
+  subscribe: activeTrayTargetStore.subscribe,
+};
+
+/// Re-fetch the persisted pinned-destination list. Cheap (TOML
+/// snapshot read) — called after every pin/unpin so the Settings
+/// panel + Footer pill don't need to track Rust-side state.
+export async function refreshPinnedDestinations(): Promise<void> {
+  try {
+    const list = await queueGetPinned();
+    pinnedDestinationsStore.set(list);
+  } catch {
+    // Tauri may not be ready in test harnesses; keep the current
+    // snapshot rather than blanking the panel.
+  }
+}
+
+/// Stash a tray destination as the active drop target. Pass `null`
+/// to clear. Used by the `tray-target-clicked` listener (set) and
+/// by the Footer pill's clear button (clear).
+export function setActiveTrayTarget(
+  target: PinnedDestinationDto | null,
+): void {
+  activeTrayTargetStore.set(target);
+}
+
+function currentActiveTrayTarget(): PinnedDestinationDto | null {
+  let value: PinnedDestinationDto | null = null;
+  activeTrayTargetStore.subscribe((v) => {
+    value = v;
+  })();
+  return value;
+}
+
 /// Re-fetch the registry snapshot. Cheap (Rust-side iteration of a
 /// `Vec<Queue>`); called after every queue-* event so the badge
 /// counts stay current without polling.
@@ -825,6 +884,11 @@ export async function initStores(): Promise<() => void> {
   // `queue_route_job` call); the synthesised default tab covers
   // legacy-queue jobs in the meantime.
   await refreshQueues();
+
+  // Phase 45.6 — seed the pinned-destinations panel from settings
+  // so the Footer pill + Settings tab paint in their final shape on
+  // first frame. Same Tauri-readiness fallback as `refreshQueues`.
+  await refreshPinnedDestinations();
 
   const unlisten = await Promise.all([
     onEvent<JobDto>(EVENTS.jobAdded, (job) => {
@@ -898,7 +962,25 @@ export async function initStores(): Promise<() => void> {
       globalsStore.set(g);
     }),
     onEvent<DropReceivedDto>(EVENTS.dropReceived, (p) => {
-      droppedStore.set(p.paths ?? []);
+      const paths = p.paths ?? [];
+      // Phase 45.6 — fast path: when the user has selected a tray
+      // destination from the Drop-onto-tray menu, route the drop
+      // straight into `start_copy` and clear the activation rather
+      // than opening the staging dialog. Empty path lists fall
+      // through unchanged.
+      const target = currentActiveTrayTarget();
+      if (target && paths.length > 0) {
+        // Clear the activation before the IPC fires so a fresh drop
+        // mid-flight doesn't double-route. Job-added events are the
+        // implicit success signal — no extra toast needed.
+        activeTrayTargetStore.set(null);
+        startCopy(paths, target.path).catch((err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          pushToast("error", message);
+        });
+        return;
+      }
+      droppedStore.set(paths);
     }),
     // Phase 8: error / collision prompts + resolution echoes.
     onEvent<ErrorPromptDto>(EVENTS.errorRaised, (p) => {
@@ -1012,6 +1094,20 @@ export async function initStores(): Promise<() => void> {
     }),
     onEvent<unknown>(EVENTS.queueJobRouted, () => {
       void refreshQueues();
+    }),
+    // Phase 45.6 — user picked a pinned destination from the OS
+    // tray menu. Stash it as the active drop target; the next
+    // `drop-received` will fast-path into `start_copy` instead of
+    // opening the staging dialog. The toast interpolates `$label`,
+    // so we pre-format via `t(...)` rather than handing the key
+    // straight to `pushToast` (Toast renders raw strings without
+    // running them back through the locale table).
+    onEvent<PinnedDestinationDto>(EVENTS.trayTargetClicked, (target) => {
+      activeTrayTargetStore.set(target);
+      pushToast(
+        "info",
+        t("tray-target-armed-toast", { label: target.label }),
+      );
     }),
   ]);
 
