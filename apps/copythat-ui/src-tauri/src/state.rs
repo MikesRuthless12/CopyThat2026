@@ -8,9 +8,10 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
 
-use copythat_core::Queue;
+use copythat_core::{Queue, QueueRegistry};
 use copythat_history::History;
 use copythat_journal::{Journal, UnfinishedJob};
+use copythat_platform::PlatformVolumeProbe;
 use copythat_settings::{ProfileStore, Settings};
 use copythat_shape::Shape;
 
@@ -149,6 +150,14 @@ pub struct AppState {
     /// is off. `recovery_commands::recovery_apply` is the only
     /// writer.
     pub recovery: crate::recovery_commands::RecoveryRegistry,
+    /// Phase 45 — multi-queue registry keyed by physical destination
+    /// drive. The single-queue `queue` field above stays as the
+    /// process-wide default for back-compat (`QueueId::DEFAULT`); the
+    /// registry owns every other queue spawned by
+    /// `queue_route_job` / drag-merge / F2 mode. Wires
+    /// `PlatformVolumeProbe` so `route()` can discriminate by
+    /// `volume_id` + label tabs with the Windows drive letter.
+    pub queues: QueueRegistry,
 }
 
 impl AppState {
@@ -231,6 +240,12 @@ impl AppState {
             // boot (and on every `update_settings`) flips this to
             // `Some` when the user has the toggle on.
             recovery: crate::recovery_commands::RecoveryRegistry::new(),
+            // Phase 45 — registry seeded with the platform volume
+            // probe. Routing decisions go through
+            // `helpers::volume_id` (Windows VolumeSerialNumber /
+            // Unix `st_dev`); spawned-queue labels read the Windows
+            // drive letter and fall back to `"queue N"` on Unix.
+            queues: QueueRegistry::new().with_probe(Arc::new(PlatformVolumeProbe)),
         }
     }
 
