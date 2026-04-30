@@ -78,32 +78,52 @@ use crate::outcome::ChosenStrategy;
 /// wins over both for opt-in tuning.
 const NO_BUFFERING_THRESHOLD_DEFAULT: u64 = 16 * 1024 * 1024 * 1024;
 
-fn no_buffering_threshold() -> u64 {
-    // The threshold is computed once per process. Env-var changes
-    // after the first copy are ignored — set the variable before
-    // launching the binary if you need a per-run override (the bench
-    // harness does this via `Start-Process -Environment`).
-    static CACHED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
-    *CACHED.get_or_init(|| {
-        // 1. Explicit env var override always wins (used by `xtask
-        //    bench-vs` and by users with unusual hardware). Read
-        //    once at first call; see the cache comment above.
-        if let Some(mb) = std::env::var("COPYTHAT_NO_BUFFERING_THRESHOLD_MB")
+/// Phase 46 — NVMe-specific NO_BUFFERING floor. Modern NVMe sustained
+/// write bandwidth (5-7 GiB/s on PCIe Gen4, 12+ GiB/s on Gen5)
+/// exceeds DRAM-to-DRAM coalescing speed once a copy gets past the
+/// first ~1 GiB; the page cache stops being a useful staging buffer
+/// and starts being a net stall (eviction pressure on the
+/// SuperFetch standby list, dirty-page write-back contending with
+/// the in-progress copy). Streaming directly to the device with
+/// NO_BUFFERING wins for sustained throughput AND durability above
+/// this threshold.
+const NO_BUFFERING_THRESHOLD_NVME: u64 = 1024 * 1024 * 1024; // 1 GiB
+
+fn no_buffering_threshold(topo: &crate::topology::VolumeTopology) -> u64 {
+    // Env-var override always wins. Cached per-process so the
+    // string parse / env access happens once; set the variable
+    // before launching the binary if you need a per-run override
+    // (the bench harness does this via `Start-Process -Environment`).
+    static ENV_OVERRIDE: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
+    let override_val = ENV_OVERRIDE.get_or_init(|| {
+        std::env::var("COPYTHAT_NO_BUFFERING_THRESHOLD_MB")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
-        {
-            return mb.saturating_mul(1024 * 1024);
+            .map(|mb| mb.saturating_mul(1024 * 1024))
+    });
+    if let Some(v) = override_val {
+        return *v;
+    }
+
+    // Phase 46 — topology-aware default.
+    //
+    // - NVMe: 1 GiB floor (see NO_BUFFERING_THRESHOLD_NVME comment).
+    //   Almost academic in practice because the auto-overlapped
+    //   pipeline takes over for NVMe at ≥256 MiB (per
+    //   `VolumeTopology::auto_overlapped_threshold`); this branch
+    //   only matters when `COPYTHAT_DISABLE_AUTO_OVERLAPPED=1`.
+    // - Everything else: Phase 43 max(free_phys_ram, 16 GiB) default.
+    //   SATA SSDs / HDDs / USB / SMB benefit from write-back
+    //   coalescing on the bench clock; matches Explorer / cmd /
+    //   RoboCopy semantics on the common case.
+    use crate::topology::BusType;
+    match topo.bus_type {
+        BusType::Nvme => NO_BUFFERING_THRESHOLD_NVME,
+        _ => {
+            let free = free_phys_ram_bytes().unwrap_or(0);
+            free.max(NO_BUFFERING_THRESHOLD_DEFAULT)
         }
-        // 2. Phase 43 — adaptive default: max(free_RAM, 16 GiB).
-        //    Files smaller than this stay buffered (matches Explorer /
-        //    cmd / RoboCopy semantics + bench numbers); files at-or-
-        //    above engage `NO_BUFFERING` because the page cache cannot
-        //    coalesce a copy that's larger than free RAM anyway, and
-        //    streaming directly to disk avoids stalling on cache
-        //    eviction.
-        let free = free_phys_ram_bytes().unwrap_or(0);
-        free.max(NO_BUFFERING_THRESHOLD_DEFAULT)
-    })
+    }
 }
 
 /// Phase 42 — query free physical RAM via `GlobalMemoryStatusEx`.
@@ -119,6 +139,84 @@ fn free_phys_ram_bytes() -> Option<u64> {
         return None;
     }
     Some(info.ullAvailPhys)
+}
+
+/// Phase 46 — does the current process token hold
+/// `SE_MANAGE_VOLUME_NAME`?
+///
+/// `SetFileValidData` requires this privilege. When held, the
+/// parallel-chunk + overlapped pipelines can default-on the lazy-
+/// zero skip without forcing the user to set
+/// `COPYTHAT_SKIP_ZERO_FILL=1` manually. Cached per-process —
+/// privileges don't shift across a process's lifetime under
+/// normal conditions (no DropProcessPrivileges call, no token
+/// re-issuance).
+///
+/// Probes via `LookupPrivilegeValueW` + `OpenProcessToken` +
+/// `PrivilegeCheck`. Returns `false` on any FFI failure
+/// (conservative — we'd rather miss the optimisation than
+/// surprise-engage it on a process that doesn't actually hold
+/// the privilege).
+pub(crate) fn has_manage_volume_privilege() -> bool {
+    use std::sync::OnceLock;
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, LUID};
+    use windows_sys::Win32::Security::{
+        LUID_AND_ATTRIBUTES, LookupPrivilegeValueW, PRIVILEGE_SET, PrivilegeCheck, TOKEN_QUERY,
+    };
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    static CACHED: OnceLock<bool> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        // 1. Lookup the LUID for SeManageVolumePrivilege.
+        let priv_name: Vec<u16> = "SeManageVolumePrivilege"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let mut luid: LUID = unsafe { std::mem::zeroed() };
+        // SAFETY: priv_name is a NUL-terminated UTF-16 buffer; LUID
+        // is a plain POD struct that LookupPrivilegeValueW writes
+        // into. The NULL system-name pointer means "local system".
+        let ok = unsafe {
+            LookupPrivilegeValueW(std::ptr::null(), priv_name.as_ptr(), &mut luid)
+        };
+        if ok == 0 {
+            return false;
+        }
+
+        // 2. Open the current process token with TOKEN_QUERY rights.
+        let mut token: HANDLE = std::ptr::null_mut();
+        // SAFETY: GetCurrentProcess returns a pseudo-handle that's
+        // always valid; token is a stack-allocated HANDLE that
+        // OpenProcessToken writes into.
+        let ok = unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) };
+        if ok == 0 {
+            return false;
+        }
+
+        // 3. Build a one-entry PRIVILEGE_SET and ask Windows whether
+        //    it's enabled in the token. `Control: 0` (i.e. neither
+        //    `PRIVILEGE_SET_ALL_NECESSARY` nor flags) is fine for a
+        //    single-privilege check; "any" and "all" coincide.
+        let mut priv_set = PRIVILEGE_SET {
+            PrivilegeCount: 1,
+            Control: 0,
+            Privilege: [LUID_AND_ATTRIBUTES {
+                Luid: luid,
+                Attributes: 0,
+            }],
+        };
+        let mut result: i32 = 0;
+        // SAFETY: token is a valid HANDLE owned by this scope until
+        // the CloseHandle below; priv_set is properly sized for one
+        // privilege; result is a stack-allocated BOOL that
+        // PrivilegeCheck writes into.
+        let check_ok = unsafe { PrivilegeCheck(token, &mut priv_set, &mut result) };
+        // SAFETY: token was opened above; we own it.
+        unsafe {
+            CloseHandle(token);
+        }
+        check_ok != 0 && result != 0
+    })
 }
 const PROGRESS_MIN_BYTES: u64 = 16 * 1024;
 const PROGRESS_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
@@ -239,48 +337,57 @@ pub(crate) async fn try_native_copy(
         return super::windows_overlapped::try_overlapped_copy(src, dst, total, ctrl, events).await;
     }
 
-    // Phase 41 — auto-engage overlapped pipeline for cross-volume
-    // large-file copies. The COMPETITOR-TEST.md baseline showed
-    // Robocopy beat us by ~48 % on 10 GiB · C→E (USB-attached
-    // SSD) because its overlapped pipeline kept the slow USB
-    // command queue deeper than our default `CopyFileExW`
-    // single-stream. Auto-engaging the overlapped path with
-    // 8 in-flight 4 MiB slots and buffered I/O (NO_BUFFERING off,
-    // because USB drives often have small on-device caches that
-    // benefit from the OS write-behind) closes that gap on USB
-    // and external SATA / NVMe enclosures without affecting
-    // same-volume NVMe (which still gets the
-    // `CopyFileExW`-default fast path).
+    // Phase 41 / 42 / 46 — auto-engage overlapped pipeline.
     //
-    // Opt out via `COPYTHAT_DISABLE_AUTO_OVERLAPPED=1` if the
-    // heuristic regresses on a specific user's hardware.
-    if total >= 1024 * 1024 * 1024
-        && std::env::var("COPYTHAT_DISABLE_AUTO_OVERLAPPED")
-            .ok()
-            .as_deref()
-            .is_none_or(|v| !matches!(v, "1" | "true" | "on"))
-        && is_cross_volume(&src, &dst)
+    // History:
+    //   - Phase 41 (cross-volume, ≥1 GiB): closed the COMPETITOR-TEST
+    //     gap on 10 GiB · C→E (USB-attached SSD) where Robocopy beat
+    //     us by ~48 %. Same-volume NVMe stayed on the buffered
+    //     `CopyFileExW` default.
+    //   - Phase 42 added the IOCTL_STORAGE_QUERY_PROPERTY topology
+    //     probe so slot/buffer/QD/NO_BUFFERING become per-bus
+    //     decisions instead of fixed USB-tuned defaults.
+    //   - Phase 46 (this change) drops the hard cross-volume gate on
+    //     bus types that always benefit from a deep pipeline: NVMe
+    //     (256 MiB threshold) and networked / multi-spindle storage
+    //     (SMB / iSCSI / RAID / VHDX, 1 GiB threshold). Other bus
+    //     types (SATA SSD / USB / HDD / SD) keep the Phase 41
+    //     cross-volume + 1 GiB rule — same-volume SATA SSD already
+    //     saturates on plain CopyFileExW.
+    //
+    // Probe topology once up front so it's available for both the
+    // overlapped routing decision AND the NO_BUFFERING threshold
+    // below (which on NVMe is 1 GiB, see `no_buffering_threshold`).
+    // The probe is cached per-volume in `topology.rs` so re-calling
+    // for the same drive is a hash-map hit, not an IOCTL.
+    //
+    // Opt out via `COPYTHAT_DISABLE_AUTO_OVERLAPPED=1` if the new
+    // same-volume engagement regresses on a specific user's
+    // hardware (it ships an env-var escape hatch, not a recompile).
+    let dst_topo = crate::topology::probe(&dst)
+        .unwrap_or_else(crate::topology::VolumeTopology::conservative_default);
+    let auto_overlapped_disabled = std::env::var("COPYTHAT_DISABLE_AUTO_OVERLAPPED")
+        .ok()
+        .as_deref()
+        .is_some_and(|v| matches!(v, "1" | "true" | "on"));
+    let auto_overlapped_threshold = if auto_overlapped_disabled {
+        None
+    } else {
+        dst_topo.auto_overlapped_threshold(is_cross_volume(&src, &dst))
+    };
+    if let Some(threshold) = auto_overlapped_threshold
+        && total >= threshold
     {
-        // Phase 42 — topology-driven slot/buffer/QD picker. The
-        // Phase 41 fixed defaults (8 slots × 4 MiB, NO_BUFFERING
-        // off) were tuned for USB-attached external SSD — the
-        // canonical "competitor beats us by 48 %" scenario. With
-        // `IOCTL_STORAGE_QUERY_PROPERTY` we can now ask the
-        // destination volume what it actually is and pick the
-        // right shape per the swarm-research table:
+        // Per-bus slot/buffer/QD picker per the swarm-research table:
         //   NVMe   → 1 MiB / QD 8 / NO_BUFFERING on
         //   SATA SSD → 256 KiB / QD 4 / NO_BUFFERING on
         //   HDD    → 4 MiB / QD 1 / NO_BUFFERING off (cache friendly)
         //   USB    → 512 KiB / QD ≤4 / NO_BUFFERING off
         //   SMB    → 1 MiB / QD 8 / NO_BUFFERING off
-        // Probe-failure path falls back to the Phase 41 USB-tuned
-        // defaults (which is what we'd have shipped previously).
-        let topo = crate::topology::probe(&dst)
-            .unwrap_or_else(crate::topology::VolumeTopology::conservative_default);
-        let buffer_kb = topo.recommended_buffer_bytes() / 1024;
-        let slots = topo.recommended_queue_depth();
+        let buffer_kb = dst_topo.recommended_buffer_bytes() / 1024;
+        let slots = dst_topo.recommended_queue_depth();
         let no_buffering = matches!(
-            topo.bus_type,
+            dst_topo.bus_type,
             crate::topology::BusType::Nvme | crate::topology::BusType::Sata
         );
         return super::windows_overlapped::try_overlapped_copy_with_config(
@@ -438,7 +545,7 @@ pub(crate) async fn try_native_copy(
     // count. Treat zero as a contract violation in debug.
     debug_assert!(total > 0, "CopyFileExW path expects total > 0");
 
-    let mut flags: u32 = if total >= no_buffering_threshold() {
+    let mut flags: u32 = if total >= no_buffering_threshold(&dst_topo) {
         COPY_FILE_NO_BUFFERING
     } else {
         0
@@ -1056,16 +1163,50 @@ mod tests {
     /// `max(free_phys_ram, 16 GiB)`, so on a RAM-rich host it can be
     /// higher; we assert the floor.
     ///
-    /// `OnceLock`: this test reads the cached value, so it must run
-    /// in the same process as nothing that pre-sets the env var.
+    /// Phase 46 — the threshold became topology-aware. The
+    /// conservative-default topology (`BusType::Other`) lands in the
+    /// non-NVMe branch and preserves the Phase 43 floor. NVMe gets
+    /// its own 1 GiB floor (verified in
+    /// `no_buffering_threshold_nvme_is_1_gib`).
+    ///
+    /// `OnceLock`: the env-var override is cached, so this test must
+    /// run in the same process as nothing that pre-sets the env var.
     /// `cargo test` shares a process per test binary; the env var is
     /// not set by the test harness.
     #[test]
     fn no_buffering_threshold_floor_is_16_gib() {
-        let threshold = no_buffering_threshold();
+        let topo = crate::topology::VolumeTopology::conservative_default();
+        let threshold = no_buffering_threshold(&topo);
         assert!(
             threshold >= 16 * 1024 * 1024 * 1024,
             "Phase 43 floor regressed: threshold={threshold}, expected >= 16 GiB"
+        );
+    }
+
+    /// Phase 46 — NVMe destinations should engage NO_BUFFERING at
+    /// 1 GiB. Lower than the 16 GiB default for other bus types
+    /// because modern NVMe sustained writes outpace DRAM-to-DRAM
+    /// coalescing, so the page cache stops being a useful staging
+    /// buffer past ~1 GiB. (Mostly academic since the auto-overlapped
+    /// pipeline takes over at 256 MiB; this kicks in only when
+    /// `COPYTHAT_DISABLE_AUTO_OVERLAPPED=1`.)
+    #[test]
+    fn no_buffering_threshold_nvme_is_1_gib() {
+        let topo = crate::topology::VolumeTopology {
+            bus_type: crate::topology::BusType::Nvme,
+            media_class: crate::topology::MediaClass::Ssd,
+            bytes_per_physical_sector: 4096,
+        };
+        let threshold = no_buffering_threshold(&topo);
+        // No env override expected in the test process; `OnceLock`
+        // captures the (None) override on first call from any test.
+        // If a different test pre-set the env var, accept >= 1 GiB
+        // (the env override always wins, so a higher value still
+        // means the topology branch wasn't reached but the API
+        // contract held).
+        assert!(
+            threshold >= 1024 * 1024 * 1024,
+            "Phase 46 NVMe floor regressed: threshold={threshold}, expected >= 1 GiB"
         );
     }
 

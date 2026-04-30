@@ -341,11 +341,23 @@ pub(crate) async fn parallel_chunk_copy(
 /// `true` iff the system call succeeded — which requires the caller
 /// to hold `SE_MANAGE_VOLUME_NAME` (admin). On failure the call is
 /// silently a no-op; NTFS still zero-fills the extent during writes,
-/// just slower. Gated behind `COPYTHAT_SKIP_ZERO_FILL=1` so the
-/// admin / opt-in nature is explicit.
+/// just slower.
 ///
-/// Security note: an admin user opting into this acknowledges that
-/// the pre-allocated extent contains whatever bytes were on those
+/// Phase 46 — defaults ON when the process holds
+/// `SE_MANAGE_VOLUME_NAME` (i.e. is running elevated). Pre-Phase 46
+/// required `COPYTHAT_SKIP_ZERO_FILL=1` to be set explicitly even
+/// for admin users, leaving free throughput on the table for the
+/// common "elevated copy" case. The env var is now an explicit
+/// override either way:
+/// - `COPYTHAT_SKIP_ZERO_FILL=0` (or `false` / `off`) — opt OUT,
+///   force the lazy-zero pass even when elevated.
+/// - `COPYTHAT_SKIP_ZERO_FILL=1` (or `true` / `on`) — opt IN, try
+///   even when not elevated (the syscall returns ERROR_PRIVILEGE_
+///   NOT_HELD and we silently fall through; harmless).
+/// - unset — default-on iff `has_manage_volume_privilege()`.
+///
+/// Security note: an admin user using this acknowledges that the
+/// pre-allocated extent contains whatever bytes were on those
 /// clusters before. Copy That guarantees the workers write valid
 /// data over every byte, so the risk is bounded to the Copy That
 /// process — there's no cross-process data exposure.
@@ -354,11 +366,13 @@ fn try_skip_zero_fill(file: &File, size: u64) -> bool {
     use std::os::windows::io::AsRawHandle;
     use windows_sys::Win32::Storage::FileSystem::SetFileValidData;
 
-    if std::env::var("COPYTHAT_SKIP_ZERO_FILL")
-        .ok()
-        .as_deref()
-        .is_none_or(|v| !matches!(v, "1" | "true" | "on"))
-    {
+    let env_val = std::env::var("COPYTHAT_SKIP_ZERO_FILL").ok();
+    let should_try = match env_val.as_deref() {
+        Some("0") | Some("false") | Some("off") => false,
+        Some("1") | Some("true") | Some("on") => true,
+        _ => super::windows::has_manage_volume_privilege(),
+    };
+    if !should_try {
         return false;
     }
     let handle = file.as_raw_handle().cast::<core::ffi::c_void>();

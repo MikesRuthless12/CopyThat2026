@@ -375,18 +375,23 @@ unsafe fn do_overlapped_copy(
     let alloc_size = (total + sector_bytes as u64 - 1) & !(sector_bytes as u64 - 1);
     seek_and_set_eof(dst_handle.0, alloc_size as i64)
         .map_err(|e| io::Error::other(format!("set_eof alloc: {e}")))?;
-    // Phase 39 follow-up — opt-in lazy-zero skip via
-    // `SetFileValidData`. Only fires when the user has set
-    // `COPYTHAT_SKIP_ZERO_FILL=1` AND the process holds
-    // `SE_MANAGE_VOLUME_NAME` (admin). On failure the call is a
-    // best-effort no-op; NTFS will still lazy-zero on writes,
-    // just slower. See parallel.rs::try_skip_zero_fill for the
-    // matching path on the parallel-chunk branch.
-    if std::env::var("COPYTHAT_SKIP_ZERO_FILL")
-        .ok()
-        .as_deref()
-        .is_some_and(|v| matches!(v, "1" | "true" | "on"))
-    {
+    // Phase 39 follow-up — lazy-zero skip via `SetFileValidData`.
+    // Phase 46 — defaults ON when the process holds
+    // `SE_MANAGE_VOLUME_NAME`. Env var is the explicit override:
+    //   - `COPYTHAT_SKIP_ZERO_FILL=0` → force lazy-zero pass.
+    //   - `COPYTHAT_SKIP_ZERO_FILL=1` → try regardless (no-op if
+    //     unprivileged: SetFileValidData returns
+    //     ERROR_PRIVILEGE_NOT_HELD and we silently fall through).
+    //   - unset → default-on iff elevated.
+    // See parallel.rs::try_skip_zero_fill for the matching path on
+    // the parallel-chunk branch.
+    let env_val = std::env::var("COPYTHAT_SKIP_ZERO_FILL").ok();
+    let should_skip_zero = match env_val.as_deref() {
+        Some("0") | Some("false") | Some("off") => false,
+        Some("1") | Some("true") | Some("on") => true,
+        _ => super::windows::has_manage_volume_privilege(),
+    };
+    if should_skip_zero {
         // SAFETY: dst_handle is a valid open file handle held by
         // this scope; SetFileValidData has no aliasing constraints.
         let _ = SetFileValidData(dst_handle.0, alloc_size as i64);
