@@ -1043,3 +1043,10 @@ sanitize-action-staged = Phase 44.1 — wiring the IPC for this action lands in 
 queue-tab-default = Default
 queue-tab-empty-state = Job queues
 queue-badge-tooltip = Pending and running jobs in this queue
+
+# Phase 45.4 — drag-progress-merge (Subfeature B). Drag a queue tab
+# onto another to merge their job lists. The default tab is neither
+# draggable nor a drop target; only registry queues participate.
+queue-drag-hint = Drag onto another queue to merge
+queue-merge-confirm = Drop to merge
+queue-merge-toast = Queues merged

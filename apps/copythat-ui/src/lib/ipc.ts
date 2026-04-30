@@ -749,3 +749,12 @@ import type { QueueSnapshotDto } from "./types";
 export async function queueList(): Promise<QueueSnapshotDto[]> {
   return invoke<QueueSnapshotDto[]>("queue_list");
 }
+
+/** Phase 45.4 — collapse `srcId` into `dstId`. The Rust side moves
+ *  every job, removes the source queue, and emits `queue-merged` +
+ *  `queue-removed` events; the frontend's event listeners refresh
+ *  the tab strip on receipt. No-op when ids are equal; returns a
+ *  rejected promise when either id is unknown. */
+export async function queueMerge(srcId: number, dstId: number): Promise<void> {
+  await invoke("queue_merge", { srcId, dstId });
+}
