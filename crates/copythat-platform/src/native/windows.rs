@@ -304,6 +304,30 @@ pub(crate) async fn try_native_copy(
     // (~tens of thousands on multi-GB copies).
     disable_callback: bool,
 ) -> NativeOutcome {
+    // Phase 47 — opt-in IoRing fast path (Win 11 22000+).
+    // Gate behind `COPYTHAT_IORING_IO=1`. When the env var is set
+    // and the file is ≥256 MiB, attempt the IoRing path. If the
+    // kernel doesn't support it (Win 10 / older 22H2 / DLL absent),
+    // `try_ioring_copy` returns `Unsupported` and we fall through
+    // to the IOCP overlapped / CopyFileExW pathways below. See
+    // `windows_ioring.rs` for capability detection.
+    if super::windows_ioring::requested(total).is_some() {
+        match super::windows_ioring::try_ioring_copy(
+            src.clone(),
+            dst.clone(),
+            total,
+            ctrl.clone(),
+            events.clone(),
+        )
+        .await
+        {
+            NativeOutcome::Unsupported => {
+                // Fall through to overlapped IOCP / CopyFileExW.
+            }
+            other => return other,
+        }
+    }
+
     // Phase 38 follow-up — opt-in Robocopy-style overlapped I/O
     // pipeline for large files. Gate behind
     // `COPYTHAT_OVERLAPPED_IO=1` so users can A/B test against

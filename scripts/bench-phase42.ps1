@@ -22,7 +22,18 @@ param(
     # Default: full bench (all 5 tools). Pass `-OnlyTools @('CopyThat')`
     # for a CopyThat-only re-bench that keeps competitor data from the
     # last full run intact (merged by `scripts/bench-merge.ps1`).
-    [string[]]$OnlyTools = @('CopyThat', 'RoboCopy', 'CmdCopy', 'TeraCopy', 'FastCopy')
+    [string[]]$OnlyTools = @('CopyThat', 'RoboCopy', 'CmdCopy', 'TeraCopy', 'FastCopy'),
+
+    # Optional workdir override -- defaults to C:\copythat-bench-vs.
+    # Pass e.g. `-WorkDir T:\bench-vs` to bench on a different volume
+    # (Dev Drive / cross-volume / external SSD).
+    [string]$WorkDir = "C:\copythat-bench-vs",
+
+    # Optional tag for the output filenames. Useful when running
+    # multiple back-to-back benches on different volumes; the JSON /
+    # markdown / HTML pick up the suffix so the prior run isn't
+    # clobbered.
+    [string]$Tag = ""
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,10 +41,11 @@ $ErrorActionPreference = 'Stop'
 # ----- Config ----------------------------------------------------------
 
 $RepoRoot      = (Resolve-Path "$PSScriptRoot/..").Path
-$BenchDir      = "C:\copythat-bench-vs"
-$ResultJson    = Join-Path $RepoRoot "target\bench-phase42.json"
-$ResultMd      = Join-Path $RepoRoot "docs\BENCHMARKS_PHASE_42.md"
-$ResultHtml    = Join-Path $RepoRoot "target\bench-phase42.html"
+$BenchDir      = $WorkDir
+$suffix        = if ($Tag) { "-$Tag" } else { "" }
+$ResultJson    = Join-Path $RepoRoot "target\bench-phase42$suffix.json"
+$ResultMd      = Join-Path $RepoRoot "docs\BENCHMARKS_PHASE_42$suffix.md"
+$ResultHtml    = Join-Path $RepoRoot "target\bench-phase42$suffix.html"
 
 $CopyThat = "$RepoRoot\target\release\copythat.exe"
 $TeraCopy = "C:\Program Files\TeraCopy\TeraCopy.exe"
