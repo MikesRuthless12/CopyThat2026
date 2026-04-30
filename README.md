@@ -151,7 +151,24 @@ workloads.
   - **Grandfather-Father-Son (GFS)** — group versions into per-hour / per-day / per-week / per-month UTC buckets, keep the newest version in each of the most recent N buckets per tier, drop the rest. Buckets are unioned (a version that survives in any tier is retained), so a typical "24h hourly · 7 daily · 4 weekly · 12 monthly" config covers a year of history at a fraction of the disk cost of "keep everything."
 - **Engine integration is best-effort by contract**: the snapshot hook fires on a `tokio::task::spawn_blocking` worker so it doesn't stall the copy hot path; if the chunk store is unavailable, the snapshot fails, the engine logs a `tracing::warn!`, and the copy proceeds normally. A failing snapshot must NEVER abort a user copy.
 
-### SSD-honest secure delete (Phase 44 + 44.1 + 44.2)
+### SSD-honest secure delete (Phase 44 + 44.1 + 44.2 + 44.3)
+
+Phase 44.3 closes the Phase 44.2 SECURITY MEDIUM finding by
+installing a `prctl(PR_SET_DUMPABLE, 0)` hook on the sedutil-cli
+child process — `/proc/<pid>/cmdline` is no longer readable by
+other UIDs while the OPAL PSID-revert is running, so an
+unprivileged local attacker racing `cat /proc/*/cmdline` cannot
+capture the PSID. The Windows path now ships a real
+`IOCTL_STORAGE_QUERY_PROPERTY` capability probe (vendor /
+product / serial / TRIM-supported) + physical-drive enumeration
+via the safe-FFI seam in `copythat-platform`; Tauri's device
+picker populates on Windows instead of asking the user to type
+`\\.\PhysicalDriveN` paths manually. Real Windows TCG OPAL
+crypto-erase via `IOCTL_STORAGE_SECURITY_PROTOCOL_OUT` defers to
+Phase 44.4 because the StartSession/RevertSP/CloseSession command
+sequence needs hardware-validation on a real Self-Encrypting
+Drive on a Windows test bed; shipping untested destructive code
+against arbitrary user drives is the wrong tradeoff.
 
 Phase 44.2 wired the Tauri IPC bridge on top of Phase 44.1's
 platform helpers: `sanitize_capabilities_cmd` / `sanitize_run` /

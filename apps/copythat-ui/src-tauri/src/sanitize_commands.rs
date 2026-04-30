@@ -191,10 +191,14 @@ fn list_devices_via_helper(_helper: &dyn SanitizeHelper) -> Result<Vec<String>, 
 
 #[cfg(target_os = "windows")]
 fn list_devices_via_helper(_helper: &dyn SanitizeHelper) -> Result<Vec<String>, String> {
-    // Phase 44.3 — wire `IOCTL_STORAGE_QUERY_PROPERTY` enumeration
-    // via the `windows` crate. Returning an empty list means the
-    // user types the `\\.\PhysicalDriveN` path manually.
-    Ok(Vec::new())
+    // Phase 44.3c — enumerate physical drives via copythat-platform's
+    // safe IOCTL_STORAGE_QUERY_PROPERTY wrapper. Probes
+    // \\.\PhysicalDrive0..31 and returns those that opened
+    // successfully. Empty list when the user has no drives or
+    // when CreateFileW denies access on every probe (rare —
+    // GENERIC_READ on physical-drive paths works for standard
+    // users).
+    Ok(copythat_platform::windows_enumerate_physical_drives())
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
