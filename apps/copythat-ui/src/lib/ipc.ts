@@ -734,3 +734,18 @@ export async function unmountSnapshot(jobRowId: number): Promise<void> {
 export async function mountBackendName(): Promise<string> {
   return invoke<string>("mount_backend_name");
 }
+
+// ---------------------------------------------------------------------
+// Phase 45.3 — named-queue tab strip.
+// ---------------------------------------------------------------------
+
+import type { QueueSnapshotDto } from "./types";
+
+/** Snapshot the registry — one entry per named queue, with the
+ *  badge count the tab strip uses. The legacy default queue is NOT
+ *  included; the frontend synthesises its tab from the visibleJobs
+ *  store so Phase 45.4+ runner reconciliation can move jobs into
+ *  registry queues without UI changes. */
+export async function queueList(): Promise<QueueSnapshotDto[]> {
+  return invoke<QueueSnapshotDto[]>("queue_list");
+}

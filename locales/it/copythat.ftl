@@ -1277,3 +1277,8 @@ ssd-honest-advisory = This file lives on flash. Per-file overwrite costs NAND we
 
 # Phase 44.1f.  # MT
 sanitize-action-staged = Phase 44.1 — wiring the IPC for this action lands in a follow-up commit.  # MT
+
+# Phase 45.3 — named-queue tab strip.  # MT
+queue-tab-default = Default  # MT
+queue-tab-empty-state = Job queues  # MT
+queue-badge-tooltip = Pending and running jobs in this queue  # MT
