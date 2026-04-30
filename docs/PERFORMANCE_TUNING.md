@@ -107,24 +107,33 @@ When the overlapped path is engaged, control whether
 For the **default** `CopyFileExW` path, override the file-size
 threshold for setting `COPY_FILE_NO_BUFFERING`.
 
-**Phase 43 default**: `max(free_phys_ram, 16 GiB)`. Files smaller
-than the threshold use the kernel write-back cache (matches
-Explorer / `cmd` / RoboCopy semantics + bench numbers); files at-
-or-above stream directly to disk because the page cache cannot
-coalesce a copy that's larger than free RAM anyway. Phase 13b
-shipped a 256 MiB threshold; Phase 42 added a 1 GiB adaptive cap;
-Phase 43 raised the floor to 16 GiB so the 1–16 GiB band — i.e.
-the dominant single-file workload — stays cache-friendly and
-matches competitor wall-clock numbers.
+**Phase 46 default**: bus-aware.
+- **NVMe**: 1 GiB floor (modern NVMe sustained writes outpace
+  DRAM-to-DRAM coalescing past ~1 GiB; the page cache stops being
+  a useful staging buffer and starts being a net stall via
+  SuperFetch standby-list pressure). Mostly academic in practice
+  because the auto-overlapped pipeline takes over for NVMe at
+  ≥256 MiB (see `auto_overlapped_threshold` in `topology.rs`); this
+  branch only matters when `COPYTHAT_DISABLE_AUTO_OVERLAPPED=1`.
+- **Other bus types** (SATA SSD / USB / SD / HDD / SMB / RAID):
+  `max(free_phys_ram, 16 GiB)` — the Phase 43 default.
 
-**Trade-off**: in the 1–16 GiB band, `CopyFileExW` returns when
-bytes are queued in the kernel write-back cache, **not** when
-they're physically on disk. If durability matters more than wall
-time (e.g. you're scripting a backup pipeline), set
-`fsync_on_close = true` in your settings or pass `--verify <algo>`
-to force a post-copy hash that flushes first. Set this env var to
-a small number (e.g. `512`) to recover the Phase 13b "always
-durable above 512 MiB" behaviour.
+**History**: Phase 13b shipped 256 MiB; Phase 42 added a 1 GiB
+adaptive cap; Phase 43 raised the floor to 16 GiB so the 1–16 GiB
+band stays cache-friendly and matches competitor wall-clock
+numbers; Phase 46 splits NVMe back out at 1 GiB because the device
+is the bottleneck on NVMe, not the cache.
+
+**Trade-off (non-NVMe paths)**: in the 1–16 GiB band on SATA / USB
+/ HDD destinations, `CopyFileExW` returns when bytes are queued in
+the kernel write-back cache, **not** when they're physically on
+disk. If durability matters more than wall time (e.g. you're
+scripting a backup pipeline), set `fsync_on_close = true` in your
+settings or pass `--verify <algo>` to force a post-copy hash that
+flushes first. Set this env var to a small number (e.g. `512`) to
+recover the Phase 13b "always durable above 512 MiB" behaviour
+across all bus types — the env override always wins over the
+topology-aware default.
 
 ### Phase 43 — `--quiet` performance mode
 
@@ -144,18 +153,54 @@ Ctrl-C still kills the process — it just leaves a partial dst.
 
 After pre-allocating dst via `SetEndOfFile` (parallel-chunk and
 overlapped paths), call `SetFileValidData` to skip NTFS's lazy
-zero-fill of the unwritten extent. **Requires admin** —
-specifically the `SE_MANAGE_VOLUME_NAME` privilege.
+zero-fill of the unwritten extent. Requires the
+`SE_MANAGE_VOLUME_NAME` privilege (held by elevated processes).
 
-- `1` / `true` / `on` — attempt SetFileValidData (best-effort:
-  silently no-ops on `ERROR_PRIVILEGE_NOT_HELD`)
-- everything else (default) — do not attempt; NTFS lazy-zeros on
-  writes (slightly slower)
+**Phase 46 default**: ON when the process holds
+`SE_MANAGE_VOLUME_NAME`, OFF otherwise. Probed once per process
+via `LookupPrivilegeValueW` + `OpenProcessToken` + `PrivilegeCheck`
+(cached in a `OnceLock<bool>`).
+
+> **What "elevated" actually means.** This is the UAC-elevated
+> token, not just "your user is in the Administrators group". The
+> privilege is held when:
+>
+> - You launched the app via right-click → "Run as administrator"
+>   (and clicked through the UAC prompt), or
+> - You launched it from an already-elevated `cmd` / PowerShell, or
+> - It's running as the SYSTEM account (e.g. a Windows service).
+>
+> Just being signed in as an Administrator is NOT enough — Windows
+> UAC strips `SE_MANAGE_VOLUME_NAME` from the default "filtered"
+> token even for admin users. If you double-clicked the .exe and
+> didn't see a UAC prompt, the privilege is not held and the skip
+> stays off (no behavior change from pre-Phase 46).
+
+The env var is now an explicit override either way:
+
+- `0` / `false` / `off` — opt OUT, force the lazy-zero pass even
+  when elevated (e.g. for a paranoid backup where you want NTFS to
+  guarantee zeroed extents before the write loop touches them).
+- `1` / `true` / `on` — opt IN, try regardless of privilege (no-op
+  when not elevated: SetFileValidData returns
+  `ERROR_PRIVILEGE_NOT_HELD` and we silently fall through;
+  harmless).
+- unset (the common case) — default-on iff elevated.
 
 Phase 39 research showed this is +5-15 % on cold writes on a fast
-NVMe. Off by default because of the security implication: an admin
-opting into this acknowledges that the pre-allocated extent
-briefly contains whatever bytes were on those clusters before.
+NVMe. Pre-Phase 46 it was opt-in via the env var even for admin
+users, leaving free throughput on the table for the common
+"elevated copy" case.
+
+**Security note**: an admin process opting into this accepts that
+the pre-allocated extent briefly contains whatever bytes were on
+those clusters before. Copy That's parallel-chunk + overlapped
+workers always overwrite every byte before any other process can
+read the file (the dst handle is held with `FILE_SHARE_READ` off
+during the copy), so the disclosure surface is bounded to the
+Copy That process itself — there's no cross-process data
+exposure. If your threat model rules out even that, set
+`COPYTHAT_SKIP_ZERO_FILL=0`.
 
 ### `COPYTHAT_BENCH_VS_SIZE_MB=<N>`
 
@@ -205,12 +250,13 @@ surface.
 
 | Hardware | Recommended overrides |
 |----------|-----------------------|
-| Default NVMe Gen 3/4, ~16-64 GB RAM | (none — defaults are tuned for this) |
-| NVMe Gen 5, deep queues, ≥64 GB RAM | `COPYTHAT_PARALLEL_CHUNKS=8` |
+| Default NVMe Gen 3/4, ~16-64 GB RAM | (none — Phase 46 auto-engages overlapped IOCP at 256 MiB on NVMe; lazy-zero skip auto-on if elevated) |
+| NVMe Gen 5, deep queues, ≥64 GB RAM | `COPYTHAT_PARALLEL_CHUNKS=8` (only on multi-spindle layouts; single-NVMe still wins on the auto-overlapped single-stream path) |
 | ReFS / Win 11 Dev Drive | (none — block clone fires automatically) |
-| RAID-0 array, multiple spindles | `COPYTHAT_OVERLAPPED_IO=1 COPYTHAT_OVERLAPPED_SLOTS=8` |
-| External USB HDD / spinning media | `COPYTHAT_PARALLEL_CHUNKS=1` (or trust auto-detect) |
-| Admin + privacy-OK + max throughput | add `COPYTHAT_SKIP_ZERO_FILL=1` |
+| RAID-0 array, multiple spindles | (none — Phase 46 auto-engages overlapped IOCP for RAID at 1 GiB) |
+| External USB HDD / spinning media | (none — Phase 46 keeps the cross-volume + 1 GiB rule for USB / HDD; same-volume HDD copies stay on plain CopyFileExW) |
+| Force pre-Phase-46 same-volume behaviour | `COPYTHAT_DISABLE_AUTO_OVERLAPPED=1` (falls back to plain CopyFileExW on same-volume NVMe; useful for A/B benchmarking against the new default) |
+| Admin + paranoid (force NTFS lazy-zero) | `COPYTHAT_SKIP_ZERO_FILL=0` |
 
 ## Phase 39 research
 
