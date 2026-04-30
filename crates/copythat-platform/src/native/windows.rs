@@ -78,18 +78,7 @@ use crate::outcome::ChosenStrategy;
 /// wins over both for opt-in tuning.
 const NO_BUFFERING_THRESHOLD_DEFAULT: u64 = 16 * 1024 * 1024 * 1024;
 
-/// Phase 46 — NVMe-specific NO_BUFFERING floor. Modern NVMe sustained
-/// write bandwidth (5-7 GiB/s on PCIe Gen4, 12+ GiB/s on Gen5)
-/// exceeds DRAM-to-DRAM coalescing speed once a copy gets past the
-/// first ~1 GiB; the page cache stops being a useful staging buffer
-/// and starts being a net stall (eviction pressure on the
-/// SuperFetch standby list, dirty-page write-back contending with
-/// the in-progress copy). Streaming directly to the device with
-/// NO_BUFFERING wins for sustained throughput AND durability above
-/// this threshold.
-const NO_BUFFERING_THRESHOLD_NVME: u64 = 1024 * 1024 * 1024; // 1 GiB
-
-fn no_buffering_threshold(topo: &crate::topology::VolumeTopology) -> u64 {
+fn no_buffering_threshold(_topo: &crate::topology::VolumeTopology) -> u64 {
     // Env-var override always wins. Cached per-process so the
     // string parse / env access happens once; set the variable
     // before launching the binary if you need a per-run override
@@ -105,25 +94,13 @@ fn no_buffering_threshold(topo: &crate::topology::VolumeTopology) -> u64 {
         return *v;
     }
 
-    // Phase 46 — topology-aware default.
-    //
-    // - NVMe: 1 GiB floor (see NO_BUFFERING_THRESHOLD_NVME comment).
-    //   Almost academic in practice because the auto-overlapped
-    //   pipeline takes over for NVMe at ≥256 MiB (per
-    //   `VolumeTopology::auto_overlapped_threshold`); this branch
-    //   only matters when `COPYTHAT_DISABLE_AUTO_OVERLAPPED=1`.
-    // - Everything else: Phase 43 max(free_phys_ram, 16 GiB) default.
-    //   SATA SSDs / HDDs / USB / SMB benefit from write-back
-    //   coalescing on the bench clock; matches Explorer / cmd /
-    //   RoboCopy semantics on the common case.
-    use crate::topology::BusType;
-    match topo.bus_type {
-        BusType::Nvme => NO_BUFFERING_THRESHOLD_NVME,
-        _ => {
-            let free = free_phys_ram_bytes().unwrap_or(0);
-            free.max(NO_BUFFERING_THRESHOLD_DEFAULT)
-        }
-    }
+    // Phase 43 default (restored): max(free_phys_ram, 16 GiB) for
+    // every bus type. Phase 46 introduced a 1 GiB NVMe-specific
+    // floor on the premise that PCIe Gen3+ outpaces page-cache
+    // coalescing; head-to-head bench falsified that on real
+    // hardware (CopyFileExW buffered won by ~3× at 256 MiB).
+    let free = free_phys_ram_bytes().unwrap_or(0);
+    free.max(NO_BUFFERING_THRESHOLD_DEFAULT)
 }
 
 /// Phase 42 — query free physical RAM via `GlobalMemoryStatusEx`.
@@ -1157,22 +1134,14 @@ mod tests {
         );
     }
 
-    /// Phase 43 — the NO_BUFFERING threshold must default to at least
-    /// 16 GiB so files in the 1–16 GiB band stay buffered (matching
-    /// cmd / RoboCopy / Explorer semantics). The exact value is
+    /// The NO_BUFFERING threshold must default to at least 16 GiB so
+    /// files in the 1–16 GiB band stay buffered (matching cmd /
+    /// RoboCopy / Explorer semantics). The exact value is
     /// `max(free_phys_ram, 16 GiB)`, so on a RAM-rich host it can be
-    /// higher; we assert the floor.
-    ///
-    /// Phase 46 — the threshold became topology-aware. The
-    /// conservative-default topology (`BusType::Other`) lands in the
-    /// non-NVMe branch and preserves the Phase 43 floor. NVMe gets
-    /// its own 1 GiB floor (verified in
-    /// `no_buffering_threshold_nvme_is_1_gib`).
-    ///
-    /// `OnceLock`: the env-var override is cached, so this test must
-    /// run in the same process as nothing that pre-sets the env var.
-    /// `cargo test` shares a process per test binary; the env var is
-    /// not set by the test harness.
+    /// higher; we assert the floor. Applies to every bus type — the
+    /// Phase 46 NVMe-specific 1 GiB floor was reverted after a
+    /// head-to-head bench showed `CopyFileExW` buffered beats
+    /// NO_BUFFERING by ~3× on same-volume NVMe at 256 MiB.
     #[test]
     fn no_buffering_threshold_floor_is_16_gib() {
         let topo = crate::topology::VolumeTopology::conservative_default();
@@ -1183,30 +1152,17 @@ mod tests {
         );
     }
 
-    /// Phase 46 — NVMe destinations should engage NO_BUFFERING at
-    /// 1 GiB. Lower than the 16 GiB default for other bus types
-    /// because modern NVMe sustained writes outpace DRAM-to-DRAM
-    /// coalescing, so the page cache stops being a useful staging
-    /// buffer past ~1 GiB. (Mostly academic since the auto-overlapped
-    /// pipeline takes over at 256 MiB; this kicks in only when
-    /// `COPYTHAT_DISABLE_AUTO_OVERLAPPED=1`.)
     #[test]
-    fn no_buffering_threshold_nvme_is_1_gib() {
+    fn no_buffering_threshold_nvme_uses_phase43_floor() {
         let topo = crate::topology::VolumeTopology {
             bus_type: crate::topology::BusType::Nvme,
             media_class: crate::topology::MediaClass::Ssd,
             bytes_per_physical_sector: 4096,
         };
         let threshold = no_buffering_threshold(&topo);
-        // No env override expected in the test process; `OnceLock`
-        // captures the (None) override on first call from any test.
-        // If a different test pre-set the env var, accept >= 1 GiB
-        // (the env override always wins, so a higher value still
-        // means the topology branch wasn't reached but the API
-        // contract held).
         assert!(
-            threshold >= 1024 * 1024 * 1024,
-            "Phase 46 NVMe floor regressed: threshold={threshold}, expected >= 1 GiB"
+            threshold >= 16 * 1024 * 1024 * 1024,
+            "NVMe should use the same Phase 43 floor as other bus types: threshold={threshold}"
         );
     }
 
