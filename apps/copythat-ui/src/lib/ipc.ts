@@ -758,3 +758,11 @@ export async function queueList(): Promise<QueueSnapshotDto[]> {
 export async function queueMerge(srcId: number, dstId: number): Promise<void> {
   await invoke("queue_merge", { srcId, dstId });
 }
+
+/** Phase 45.5 — flip the registry's `auto_enqueue_next` atomic. When
+ *  enabled, every subsequent `queue_route_job` lands in whichever
+ *  queue currently owns a running job rather than spawning a new
+ *  parallel queue. Transient state — never persisted. */
+export async function queueSetF2Mode(enabled: boolean): Promise<void> {
+  await invoke("queue_set_f2_mode", { enabled });
+}

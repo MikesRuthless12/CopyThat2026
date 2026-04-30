@@ -6,6 +6,7 @@
   import Icon from "../icons/Icon.svelte";
   import { i18nVersion, t } from "../i18n";
   import {
+    f2Mode,
     globals,
     openErrorLogDrawer,
     openHistoryDrawer,
@@ -102,6 +103,13 @@
       {t("footer-errors")}
     </button>
     <span class="spacer"></span>
+    {#if $f2Mode}
+      <!-- Phase 45.5 — F2 status pill. Visible only while the
+           registry's `auto_enqueue_next` flag is on; tells the user
+           every fresh enqueue is being routed into the running queue
+           rather than spawning a parallel one. -->
+      <span class="f2-pill" aria-live="polite">{t("queue-f2-status-bar")}</span>
+    {/if}
     <label class="after-done" title={t("activity-after-done")}>
       <span>{t("activity-after-done")}</span>
       <select value={afterDone} onchange={onAfterDoneChange}>
@@ -256,5 +264,17 @@
     border: 1px solid var(--border, rgba(128, 128, 128, 0.3));
     border-radius: 4px;
     cursor: pointer;
+  }
+
+  .f2-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    background: var(--ok, #3faf6a);
+    color: #ffffff;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
   }
 </style>

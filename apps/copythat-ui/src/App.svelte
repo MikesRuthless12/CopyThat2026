@@ -37,11 +37,14 @@
   import { initTheme } from "./lib/theme";
   import {
     closeSyncDrawer,
+    currentF2Mode,
     dropped,
     errorDisplayMode,
     initStores,
     jobs,
     openSettings,
+    pushToast,
+    setF2Mode,
     syncDrawerOpen,
   } from "./lib/stores";
   import {
@@ -72,11 +75,42 @@
 
   let storesCleanup: (() => void) | null = null;
   let themeCleanup: (() => void) | null = null;
+  let f2KeyCleanup: (() => void) | null = null;
+
+  // Phase 45.5 — F2 toggles `auto_enqueue_next` on the registry so
+  // every subsequent enqueue piles into the running queue rather
+  // than spawning a parallel one. Window-scoped (not the system-wide
+  // `tauri-plugin-global-shortcut`) — F2 is too common a per-app
+  // shortcut to grab globally. Skipped while the user is typing in
+  // an input/textarea/contenteditable so a real rename gesture
+  // isn't intercepted.
+  function isTypingTarget(el: EventTarget | null): boolean {
+    if (!(el instanceof HTMLElement)) return false;
+    const tag = el.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    if (el.isContentEditable) return true;
+    return false;
+  }
+
+  async function onF2Keydown(e: KeyboardEvent): Promise<void> {
+    if (e.key !== "F2") return;
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (isTypingTarget(e.target)) return;
+    e.preventDefault();
+    const next = !currentF2Mode();
+    const applied = await setF2Mode(next);
+    pushToast(
+      "info",
+      applied ? "queue-f2-toggled-on" : "queue-f2-toggled-off",
+    );
+  }
 
   onMount(async () => {
     themeCleanup = initTheme();
     await initI18n();
     storesCleanup = await initStores();
+    window.addEventListener("keydown", onF2Keydown);
+    f2KeyCleanup = () => window.removeEventListener("keydown", onF2Keydown);
     // Phase 20 — fetch the pending-resume list once at mount. The
     // Rust side populated `AppState::startup_unfinished` from the
     // journal during `lib.rs::run`. Failure surfaces an empty list
@@ -103,6 +137,7 @@
   onDestroy(() => {
     storesCleanup?.();
     themeCleanup?.();
+    f2KeyCleanup?.();
   });
 
   function contextItemsFor(job: JobDto): ContextMenuItem[] {

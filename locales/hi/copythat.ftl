@@ -1287,3 +1287,9 @@ queue-badge-tooltip = Pending and running jobs in this queue  # MT
 queue-drag-hint = Drag onto another queue to merge  # MT
 queue-merge-confirm = Drop to merge  # MT
 queue-merge-toast = Queues merged  # MT
+
+# Phase 45.5 — F2-queue UX.  # MT
+queue-f2-active-hint = F2 mode: every new enqueue lands in this queue  # MT
+queue-f2-toggled-on = F2 queue mode ON — new enqueues join the running queue  # MT
+queue-f2-toggled-off = F2 queue mode OFF — new enqueues spawn parallel queues  # MT
+queue-f2-status-bar = F2 queue mode: ON  # MT

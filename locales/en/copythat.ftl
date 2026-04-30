@@ -1050,3 +1050,12 @@ queue-badge-tooltip = Pending and running jobs in this queue
 queue-drag-hint = Drag onto another queue to merge
 queue-merge-confirm = Drop to merge
 queue-merge-toast = Queues merged
+
+# Phase 45.5 — F2-queue UX (Subfeature C). F2 toggles
+# `auto_enqueue_next` so every fresh enqueue piles into the running
+# queue rather than spawning a parallel one. Status pill renders in
+# the Footer; pulsing dot renders on the running tab.
+queue-f2-active-hint = F2 mode: every new enqueue lands in this queue
+queue-f2-toggled-on = F2 queue mode ON — new enqueues join the running queue
+queue-f2-toggled-off = F2 queue mode OFF — new enqueues spawn parallel queues
+queue-f2-status-bar = F2 queue mode: ON
