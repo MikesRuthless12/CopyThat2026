@@ -105,6 +105,15 @@ pub enum SsdSanitizeMode {
     /// Drives. Requires the OPAL admin password (the helper prompts
     /// or accepts it via stdin).
     OpalCryptoErase,
+    /// Phase 44.4b — APFS native crypto-erase (macOS).
+    /// Rotates the per-volume class key on a FileVault-encrypted
+    /// APFS container by tearing it down via
+    /// `diskutil apfs deleteContainer`. Effective on T2 / Apple
+    /// Silicon hardware where the SEP attests the rotation; on
+    /// older Intel Macs without a T2, the container delete still
+    /// removes the metadata but the underlying flash blocks are
+    /// only TRIM'd, not crypto-erased.
+    ApfsCryptoErase,
 }
 
 impl SsdSanitizeMode {
@@ -118,17 +127,18 @@ impl SsdSanitizeMode {
             SsdSanitizeMode::NvmeSanitizeCrypto => "nvme-sanitize-crypto",
             SsdSanitizeMode::AtaSecureErase => "ata-secure-erase",
             SsdSanitizeMode::OpalCryptoErase => "opal-crypto-erase",
+            SsdSanitizeMode::ApfsCryptoErase => "apfs-crypto-erase",
         }
     }
 
-    /// All five modes in declaration order. Useful for capability
-    /// probes.
+    /// All modes in declaration order. Useful for capability probes.
     pub const ALL: &'static [SsdSanitizeMode] = &[
         SsdSanitizeMode::NvmeFormat,
         SsdSanitizeMode::NvmeSanitizeBlock,
         SsdSanitizeMode::NvmeSanitizeCrypto,
         SsdSanitizeMode::AtaSecureErase,
         SsdSanitizeMode::OpalCryptoErase,
+        SsdSanitizeMode::ApfsCryptoErase,
     ];
 }
 
@@ -766,7 +776,11 @@ mod tests {
             let name = m.name();
             assert!(!name.is_empty());
             assert!(
-                name.starts_with("nvme-") || name.starts_with("ata-") || name.starts_with("opal-")
+                name.starts_with("nvme-")
+                    || name.starts_with("ata-")
+                    || name.starts_with("opal-")
+                    || name.starts_with("apfs-"),
+                "unexpected wire-name prefix: {name}"
             );
         }
     }

@@ -18,6 +18,12 @@ use std::path::Path;
 /// capability probe. `model` is the user-pickable string the UI
 /// renders next to the path; `trim_supported` is the answer to
 /// "would a TRIM ioctl be honoured by this device".
+///
+/// Phase 44.4a extends this with `nvme_sanicap` — when `Some`, the
+/// raw 32-bit SANICAP value from the NVMe identify-controller
+/// response (NVM Express §5.15.2.2). Bits 0-2 encode crypto-erase /
+/// block-erase / overwrite support; [`nvme_sanicap_modes`] decodes
+/// them into the typed mode-name list the UI consumes.
 #[derive(Debug, Clone, Default)]
 pub struct WindowsDeviceInfo {
     /// Product / model string (e.g., "Samsung SSD 990 PRO 2TB").
@@ -30,6 +36,28 @@ pub struct WindowsDeviceInfo {
     /// Whether `IOCTL_STORAGE_TRIM` is supported. Read from
     /// `DEVICE_TRIM_DESCRIPTOR` (`StorageDeviceTrimProperty`).
     pub trim_supported: bool,
+    /// Phase 44.4a — raw SANICAP from the NVMe identify-controller
+    /// response (NVM Express §5.15.2.2). `None` for non-NVMe
+    /// devices or when the IOCTL probe failed.
+    pub nvme_sanicap: Option<u32>,
+}
+
+/// Phase 44.4a — decode a SANICAP value into the supported NVMe
+/// sanitize mode-name strings (matches the wire-stable strings
+/// `copythat-secure-delete::SsdSanitizeMode::name()` returns).
+/// `NvmeFormat` is always supported on NVMe controllers (NVM
+/// Express §5.14 FSE bit) so it's added unconditionally when
+/// SANICAP is present.
+pub fn nvme_sanicap_modes(sanicap: u32) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = Vec::new();
+    if sanicap & 0b001 != 0 {
+        out.push("nvme-sanitize-crypto");
+    }
+    if sanicap & 0b010 != 0 {
+        out.push("nvme-sanitize-block");
+    }
+    out.push("nvme-format");
+    out
 }
 
 /// Phase 44.3b — probe the device at `device_path` (typically
@@ -161,7 +189,117 @@ fn win_query(device_path: &Path) -> Option<WindowsDeviceInfo> {
         info.trim_supported = desc.TrimEnabled != 0;
     }
 
+    // --- Phase 44.4a: NVMe SANICAP via StorageAdapterProtocolSpecificProperty ---
+    info.nvme_sanicap = win_query_nvme_sanicap(h);
+
     Some(info)
+}
+
+/// Phase 44.4a — query NVMe SANICAP via
+/// `IOCTL_STORAGE_QUERY_PROPERTY` with
+/// `StorageAdapterProtocolSpecificProperty` and an NVMe Identify
+/// Controller request. SANICAP is at byte offset 331-334 of the
+/// 4096-byte identify-controller response (NVM Express §5.15.2.2,
+/// little-endian u32).
+///
+/// Returns `None` for:
+/// - non-NVMe devices (`ProtocolDataLength` returns 0 or IOCTL fails)
+/// - older Windows versions that don't expose the protocol-
+///   specific query (Windows 8.1+ has it; Windows 7 returns
+///   ERROR_INVALID_FUNCTION which we map to None)
+/// - drivers that don't honour the request (some USB-NVMe bridge
+///   firmware in particular)
+///
+/// The request buffer is a `STORAGE_PROPERTY_QUERY` header
+/// followed by a `STORAGE_PROTOCOL_SPECIFIC_DATA` payload — built
+/// here from raw bytes because the windows-sys 0.59 bindings for
+/// `STORAGE_PROTOCOL_SPECIFIC_DATA` are present but the field
+/// names vary across Windows SDK versions; using raw bytes pins
+/// the layout to what the kernel ABI actually wants.
+#[cfg(target_os = "windows")]
+fn win_query_nvme_sanicap(h: *mut core::ffi::c_void) -> Option<u32> {
+    use std::ptr;
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+    use windows_sys::Win32::System::Ioctl::IOCTL_STORAGE_QUERY_PROPERTY;
+
+    // Constants from `ntddstor.h` / `ntddstor.h` Windows SDK:
+    //   StorageAdapterProtocolSpecificProperty = 49
+    //   PropertyStandardQuery = 0
+    //   ProtocolTypeNvme = 3
+    //   NVMeDataTypeIdentify = 1
+    //   NVME_IDENTIFY_CNS_CONTROLLER = 1
+    const STORAGE_ADAPTER_PROTOCOL_SPECIFIC_PROPERTY: u32 = 49;
+    const PROPERTY_STANDARD_QUERY: u32 = 0;
+    const PROTOCOL_TYPE_NVME: u32 = 3;
+    const NVME_DATA_TYPE_IDENTIFY: u32 = 1;
+    const NVME_IDENTIFY_CNS_CONTROLLER: u32 = 1;
+    const NVME_IDENTIFY_RESPONSE_LEN: usize = 4096;
+    const SANICAP_OFFSET_IN_IDENTIFY: usize = 331;
+
+    // Build the request buffer:
+    //   STORAGE_PROPERTY_QUERY (8 bytes header)
+    //   STORAGE_PROTOCOL_SPECIFIC_DATA (40 bytes)
+    // The kernel reads these as a single contiguous structure.
+    // Total request size: 48 bytes.
+    let mut request = [0u8; 48];
+    // STORAGE_PROPERTY_QUERY
+    request[0..4].copy_from_slice(&STORAGE_ADAPTER_PROTOCOL_SPECIFIC_PROPERTY.to_le_bytes());
+    request[4..8].copy_from_slice(&PROPERTY_STANDARD_QUERY.to_le_bytes());
+    // STORAGE_PROTOCOL_SPECIFIC_DATA
+    request[8..12].copy_from_slice(&PROTOCOL_TYPE_NVME.to_le_bytes());
+    request[12..16].copy_from_slice(&NVME_DATA_TYPE_IDENTIFY.to_le_bytes());
+    request[16..20].copy_from_slice(&NVME_IDENTIFY_CNS_CONTROLLER.to_le_bytes());
+    // ProtocolDataRequestSubValue = 0 (controller identify, namespace 0)
+    // bytes 20..24 already 0
+    // ProtocolDataOffset = sizeof(STORAGE_PROTOCOL_DATA_DESCRIPTOR) = 40
+    request[24..28].copy_from_slice(&40_u32.to_le_bytes());
+    // ProtocolDataLength = 4096 (NVMe identify response size)
+    request[28..32].copy_from_slice(&4096_u32.to_le_bytes());
+    // FixedProtocolReturnData = 0 (we want the full response)
+    // bytes 32..36 already 0
+    // ProtocolDataRequestSubValue 2/3/4 = 0
+    // bytes 36..48 already 0
+
+    // Output buffer: STORAGE_PROTOCOL_DATA_DESCRIPTOR (40 bytes) +
+    // identify-controller response (4096 bytes).
+    const STORAGE_PROTOCOL_DATA_DESCRIPTOR_LEN: usize = 40;
+    let mut response = vec![0u8; STORAGE_PROTOCOL_DATA_DESCRIPTOR_LEN + NVME_IDENTIFY_RESPONSE_LEN];
+    let mut returned: u32 = 0;
+    // SAFETY: request is a 48-byte buffer matching the kernel's
+    // expected STORAGE_PROPERTY_QUERY + STORAGE_PROTOCOL_SPECIFIC_DATA
+    // layout; response is large enough for the descriptor + identify
+    // payload.
+    let ok = unsafe {
+        DeviceIoControl(
+            h,
+            IOCTL_STORAGE_QUERY_PROPERTY,
+            request.as_mut_ptr().cast(),
+            request.len() as u32,
+            response.as_mut_ptr().cast(),
+            response.len() as u32,
+            &mut returned,
+            ptr::null_mut(),
+        )
+    };
+    if ok == 0 || (returned as usize) < STORAGE_PROTOCOL_DATA_DESCRIPTOR_LEN + 332 {
+        return None;
+    }
+    // Skip the descriptor; the identify response starts at byte 40.
+    let identify_start = STORAGE_PROTOCOL_DATA_DESCRIPTOR_LEN;
+    if identify_start + SANICAP_OFFSET_IN_IDENTIFY + 4 > response.len() {
+        return None;
+    }
+    let bytes = &response[identify_start + SANICAP_OFFSET_IN_IDENTIFY
+        ..identify_start + SANICAP_OFFSET_IN_IDENTIFY + 4];
+    let mut sanicap_bytes = [0u8; 4];
+    sanicap_bytes.copy_from_slice(bytes);
+    Some(u32::from_le_bytes(sanicap_bytes))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[allow(dead_code)]
+fn win_query_nvme_sanicap(_h: *mut core::ffi::c_void) -> Option<u32> {
+    None
 }
 
 #[cfg(target_os = "windows")]
@@ -228,4 +366,48 @@ fn enum_windows() -> Vec<String> {
 #[cfg(not(target_os = "windows"))]
 fn enum_windows() -> Vec<String> {
     Vec::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nvme_sanicap_modes_decodes_crypto_only() {
+        let modes = nvme_sanicap_modes(0b001);
+        assert_eq!(modes, vec!["nvme-sanitize-crypto", "nvme-format"]);
+    }
+
+    #[test]
+    fn nvme_sanicap_modes_decodes_block_only() {
+        let modes = nvme_sanicap_modes(0b010);
+        assert_eq!(modes, vec!["nvme-sanitize-block", "nvme-format"]);
+    }
+
+    #[test]
+    fn nvme_sanicap_modes_decodes_both_sanitize_modes() {
+        let modes = nvme_sanicap_modes(0b011);
+        assert_eq!(
+            modes,
+            vec!["nvme-sanitize-crypto", "nvme-sanitize-block", "nvme-format"]
+        );
+    }
+
+    #[test]
+    fn nvme_sanicap_modes_zero_returns_only_format() {
+        // SANICAP=0 means no NVMe Sanitize support; nvme-format is
+        // always available as a fallback (it's a separate command,
+        // not gated by SANICAP bits — see NVM Express §5.14).
+        let modes = nvme_sanicap_modes(0);
+        assert_eq!(modes, vec!["nvme-format"]);
+    }
+
+    #[test]
+    fn nvme_sanicap_modes_ignores_reserved_bits() {
+        // Bits 3-31 are reserved per NVMe spec; the decoder must
+        // not surface garbage modes if the controller reports
+        // anything in them. Probe with bit 7 set.
+        let modes = nvme_sanicap_modes(0b1000_0000);
+        assert_eq!(modes, vec!["nvme-format"]);
+    }
 }

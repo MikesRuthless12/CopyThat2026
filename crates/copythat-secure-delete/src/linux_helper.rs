@@ -143,6 +143,12 @@ impl SanitizeHelper for LinuxSanitizeHelper {
                  a future phase. Use NvmeSanitizeCrypto on NVMe SEDs in the meantime."
                     .into(),
             ),
+            SsdSanitizeMode::ApfsCryptoErase => Err(
+                "ApfsCryptoErase is a macOS-only mode (`diskutil apfs deleteContainer`); \
+                 the Linux helper does not implement it. Use NvmeSanitizeCrypto on Linux for \
+                 equivalent crypto-erase semantics."
+                    .into(),
+            ),
         }
     }
 

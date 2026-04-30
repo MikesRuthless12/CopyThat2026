@@ -12,6 +12,18 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Phase 44.4c — TCG OPAL Storage Specification packet-encoding
+# scaffold. Off by default. Brings in the
+# `crate::opal` module's marshaling code without enabling any
+# destructive transport — the IOCTL / SCSI passthrough path that
+# would actually send these packets to a drive lands in a future
+# phase once we have a hardware test bed. The feature gate exists
+# so consumers (CLI / UI) don't accidentally link the encoding
+# work into release binaries before it's been validated against
+# real OPAL drives.
+experimental-tcg-opal = []
+
 [dependencies]
 copythat-core = { path = "../copythat-core", version = "0.19" }
 rand = "0.9"

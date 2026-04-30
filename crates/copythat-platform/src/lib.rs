@@ -108,7 +108,8 @@ pub use outcome::{ChosenStrategy, FastCopyOutcome};
 #[cfg(unix)]
 pub use process::linux_make_child_undumpable;
 pub use sanitize::{
-    WindowsDeviceInfo, windows_enumerate_physical_drives, windows_query_device_info,
+    WindowsDeviceInfo, nvme_sanicap_modes, windows_enumerate_physical_drives,
+    windows_query_device_info,
 };
 pub use smb::{SmbCompressionAlgo, SmbCompressionState, negotiate_smb_compression};
 pub use sparse::PlatformSparseOps;

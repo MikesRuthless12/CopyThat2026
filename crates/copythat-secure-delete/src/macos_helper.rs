@@ -50,16 +50,22 @@ impl MacosSanitizeHelper {
 
 impl SanitizeHelper for MacosSanitizeHelper {
     fn capabilities(&self, device: &Path) -> Result<SanitizeCapabilities, String> {
-        // macOS doesn't expose NVMe Sanitize / OPAL crypto erase to
-        // userland, so the `modes` set is conservative: free-space
-        // TRIM (separate API; not a SsdSanitizeMode) is always
-        // available; whole-drive sanitize is effectively
-        // unsupported. Future phases may add a Secure Enclave
-        // crypto-erase variant once the API surface is researched.
+        // Phase 44.4b — surface ApfsCryptoErase as a supported mode
+        // when the device hosts an APFS container. macOS still
+        // doesn't expose NVMe Sanitize / OPAL Crypto Erase to
+        // userland (those are firmware-gated through Apple's secure
+        // boot chain on Apple Silicon, and the kernel doesn't pass
+        // raw NVMe admin commands through), so the only honest
+        // whole-drive option is the APFS-native crypto-erase via
+        // `diskutil apfs deleteContainer`.
         let model = probe_model(device).unwrap_or_else(|_| "unknown".into());
+        let mut modes = Vec::new();
+        if probe_is_apfs(device) {
+            modes.push(SsdSanitizeMode::ApfsCryptoErase);
+        }
         Ok(SanitizeCapabilities {
             trim: true, // diskutil supports free-space TRIM on flash
-            modes: Vec::new(),
+            modes,
             bus: "macos-internal".into(),
             model,
         })
@@ -67,16 +73,19 @@ impl SanitizeHelper for MacosSanitizeHelper {
 
     fn run_sanitize_blocking(
         &self,
-        _device: &Path,
-        _requested: SsdSanitizeMode,
+        device: &Path,
+        requested: SsdSanitizeMode,
     ) -> Result<SsdSanitizeMode, String> {
-        Err(
-            "macOS does not expose NVMe Sanitize / OPAL Crypto Erase to userland; the recommended \
-             path is APFS native crypto-erase (rotate the volume's encryption key via \
-             `diskutil apfs encryptVolume` or by deleting the encrypted volume). This helper's \
-             sanitize path returns NotSupported by design."
-                .into(),
-        )
+        match requested {
+            SsdSanitizeMode::ApfsCryptoErase => run_apfs_crypto_erase(device),
+            _ => Err(
+                "macOS does not expose NVMe Sanitize / OPAL Crypto Erase to userland; the only \
+                 supported whole-drive sanitize is `SsdSanitizeMode::ApfsCryptoErase` via \
+                 `diskutil apfs deleteContainer`. This helper's other sanitize paths return \
+                 NotSupported by design."
+                    .into(),
+            ),
+        }
     }
 
     fn run_free_space_trim_blocking(&self, device: &Path) -> Result<(), String> {
@@ -159,4 +168,76 @@ fn probe_model(device: &Path) -> Result<String, String> {
         }
     }
     Ok(device.display().to_string())
+}
+
+/// Phase 44.4b — probe whether the device hosts an APFS container.
+/// Used by [`SanitizeHelper::capabilities`] to decide whether
+/// `ApfsCryptoErase` should be surfaced as a supported mode.
+///
+/// Best-effort: a `diskutil info` parse error returns `false`
+/// (conservative — better to omit a mode than to falsely advertise
+/// it). The check looks for "Type (Bundle): apfs" in the output,
+/// which is stable across macOS 10.15-15.x (the format changed
+/// from "File System Personality" in older versions; we accept
+/// both to keep the helper future-tolerant).
+fn probe_is_apfs(device: &Path) -> bool {
+    if validate_device_path(device).is_err() {
+        return false;
+    }
+    let Ok(output) = Command::new("diskutil").arg("info").arg(device).output() else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("Type (Bundle):") {
+            if rest.trim().eq_ignore_ascii_case("apfs") {
+                return true;
+            }
+        }
+        if let Some(rest) = trimmed.strip_prefix("File System Personality:") {
+            if rest.trim().to_ascii_lowercase().contains("apfs") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Phase 44.4b — invoke `diskutil apfs deleteContainer <device>` to
+/// crypto-erase the APFS container at `device`. On a FileVault-
+/// encrypted container this rotates the per-volume class key by
+/// destroying the container metadata; on T2 / Apple Silicon the
+/// SEP attests the rotation, making forensic recovery
+/// computationally infeasible.
+///
+/// **Currently a scaffold (returns `NotImplemented`).** The
+/// destructive `diskutil apfs deleteContainer` invocation needs
+/// hardware-validation on actual macOS test beds before we ship
+/// it against arbitrary user volumes. Phase 44.4b lands the
+/// trait dispatch + capability surface; Phase 44.5 (or later)
+/// flips this to the live invocation once the test bed is wired.
+///
+/// The validation gate (path shape, container detection) and the
+/// argv-injection defence already work; only the spawn path is
+/// stubbed.
+fn run_apfs_crypto_erase(device: &Path) -> Result<SsdSanitizeMode, String> {
+    validate_device_path(device)?;
+    if !probe_is_apfs(device) {
+        return Err(format!(
+            "device {} does not host an APFS container; `diskutil apfs deleteContainer` would \
+             refuse — refusing in this helper to keep the error messaging precise",
+            device.display()
+        ));
+    }
+    Err(format!(
+        "Phase 44.4b scaffold: `diskutil apfs deleteContainer {}` is wired through the trait \
+         dispatch but the destructive invocation is gated behind hardware-validation on a real \
+         macOS test bed. Capability surface + container detection are live; the spawn lands in \
+         Phase 44.5.",
+        device.display()
+    ))
 }
