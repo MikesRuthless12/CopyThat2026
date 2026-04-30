@@ -14,6 +14,7 @@
   import Footer from "./lib/components/Footer.svelte";
   import ProgressBar from "./lib/components/ProgressBar.svelte";
   import JobList from "./lib/components/JobList.svelte";
+  import JobListTabs from "./lib/components/JobListTabs.svelte";
   import FileActivityList from "./lib/components/FileActivityList.svelte";
   import ContextMenu from "./lib/components/ContextMenu.svelte";
   import DetailsDrawer from "./lib/components/DetailsDrawer.svelte";
@@ -175,6 +176,11 @@
 
 <main class="app" aria-label={t("window-title")}>
   <Header />
+  <!-- Phase 45.3 — named-queue tab strip. Hides itself when the
+       registry is empty (cold-launch UX), surfaces above the JobList
+       once Phase 45.4+ runner reconciliation begins routing jobs into
+       per-drive queues. -->
+  <JobListTabs />
   <JobList
     {selectedId}
     onSelect={(id) => {

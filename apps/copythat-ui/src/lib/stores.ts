@@ -14,6 +14,7 @@ import {
   listJobs,
   globals as fetchGlobals,
   onEvent,
+  queueList,
 } from "./ipc";
 import {
   EVENTS,
@@ -31,6 +32,7 @@ import {
   type JobFailedDto,
   type JobIdDto,
   type JobProgressDto,
+  type QueueSnapshotDto,
   type ToastKind,
   type ToastMessage,
 } from "./types";
@@ -690,9 +692,73 @@ export const liveBytes: Readable<{ done: number; total: number }> = derived(
       ),
 );
 
-/// Convenience: jobs visible in the list, in stable id order.
-export const visibleJobs: Readable<JobDto[]> = derived(jobsStore, ($jobs) =>
-  [...$jobs].sort((a, b) => a.id - b.id),
+// ----------------------------------------------------------------------
+// Phase 45.3 — named-queue tab strip
+//
+// `queuesStore` mirrors the Rust-side `QueueRegistry` snapshot via
+// `queue_list()`; it's reseeded on `queue-added` / `queue-removed` /
+// `queue-merged` events. The legacy single `state.queue` is NOT in
+// this list — its jobs carry `queueId === 0` and surface under the
+// synthesised "default" tab the JobListTabs component renders on top.
+//
+// `selectedQueueIdStore` defaults to 0 (default tab) so first-launch
+// users see the same JobList they always have. Switching tabs filters
+// `visibleJobs` to that queue.
+// ----------------------------------------------------------------------
+
+const queuesStore = writable<QueueSnapshotDto[]>([]);
+const selectedQueueIdStore = writable<number>(0);
+
+export const queues: Readable<QueueSnapshotDto[]> = {
+  subscribe: queuesStore.subscribe,
+};
+export const selectedQueueId: Readable<number> = {
+  subscribe: selectedQueueIdStore.subscribe,
+};
+
+export function setSelectedQueue(id: number): void {
+  selectedQueueIdStore.set(id);
+}
+
+/// Re-fetch the registry snapshot. Cheap (Rust-side iteration of a
+/// `Vec<Queue>`); called after every queue-* event so the badge
+/// counts stay current without polling.
+export async function refreshQueues(): Promise<void> {
+  try {
+    const list = await queueList();
+    queuesStore.set(list);
+    // If the previously-selected queue disappeared (merged/removed),
+    // fall back to the default tab so the JobList isn't pinned to a
+    // dead id.
+    const sel = currentSelectedQueueId();
+    if (sel !== 0 && !list.some((q) => q.id === sel)) {
+      selectedQueueIdStore.set(0);
+    }
+  } catch {
+    // Tauri may not be ready in test harnesses; keep the current
+    // snapshot rather than blanking the tab strip.
+  }
+}
+
+function currentSelectedQueueId(): number {
+  let value = 0;
+  selectedQueueIdStore.subscribe((v) => {
+    value = v;
+  })();
+  return value;
+}
+
+/// Convenience: jobs visible in the list, filtered to the active
+/// queue tab and sorted by id. The default tab (id=0) shows every
+/// job whose `queueId` is 0 — i.e. the legacy single-queue surface
+/// that today produces 100% of running work. Registry-routed jobs
+/// (Phase 45.4+) appear under their respective tabs.
+export const visibleJobs: Readable<JobDto[]> = derived(
+  [jobsStore, selectedQueueIdStore],
+  ([$jobs, $selected]) =>
+    $jobs
+      .filter((j) => (j.queueId ?? 0) === $selected)
+      .sort((a, b) => a.id - b.id),
 );
 
 /// Bootstrap: hydrate stores from a cold `list_jobs` call, then
@@ -717,6 +783,12 @@ export async function initStores(): Promise<() => void> {
   } catch {
     // Non-fatal: Tauri may not be ready yet in test harnesses.
   }
+
+  // Phase 45.3 — seed the queue tab strip from the registry. Empty
+  // on a cold launch (registry queues are spawned on first
+  // `queue_route_job` call); the synthesised default tab covers
+  // legacy-queue jobs in the meantime.
+  await refreshQueues();
 
   const unlisten = await Promise.all([
     onEvent<JobDto>(EVENTS.jobAdded, (job) => {
@@ -888,6 +960,23 @@ export async function initStores(): Promise<() => void> {
         pushToast("info", "toast-clipboard-files-detected");
       },
     ),
+    // Phase 45.3 — registry events. `queue-added` / `queue-removed`
+    // / `queue-merged` mutate the tab strip; `queue-job-routed` only
+    // updates badge counts (the snapshot already captures who owns
+    // which job). Cheap to re-fetch — the registry lives in-process
+    // and the snapshot iterates a `Vec<Queue>`.
+    onEvent<unknown>(EVENTS.queueAdded, () => {
+      void refreshQueues();
+    }),
+    onEvent<unknown>(EVENTS.queueRemoved, () => {
+      void refreshQueues();
+    }),
+    onEvent<unknown>(EVENTS.queueMerged, () => {
+      void refreshQueues();
+    }),
+    onEvent<unknown>(EVENTS.queueJobRouted, () => {
+      void refreshQueues();
+    }),
   ]);
 
   return () => {

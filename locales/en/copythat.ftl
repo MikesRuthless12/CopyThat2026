@@ -1036,3 +1036,10 @@ ssd-honest-advisory = This file lives on flash. Per-file overwrite costs NAND we
 # Phase 44.1f post-review — placeholder toast for SanitizeTab
 # buttons whose Tauri IPC has not yet landed.
 sanitize-action-staged = Phase 44.1 — wiring the IPC for this action lands in a follow-up commit.
+
+# Phase 45.3 — named-queue tab strip (Subfeature A). Tabs surface
+# once the QueueRegistry holds at least one queue; the synthesised
+# default tab keeps legacy single-queue jobs reachable.
+queue-tab-default = Default
+queue-tab-empty-state = Job queues
+queue-badge-tooltip = Pending and running jobs in this queue

@@ -16,7 +16,7 @@
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use copythat_core::{Job, JobKind, JobState};
+use copythat_core::{Job, JobKind, JobState, QueueId};
 
 pub const EVENT_JOB_ADDED: &str = "job-added";
 pub const EVENT_JOB_STARTED: &str = "job-started";
@@ -160,6 +160,12 @@ pub struct FileActivityDto {
 #[serde(rename_all = "camelCase")]
 pub struct JobDto {
     pub id: u64,
+    /// Phase 45.3 — id of the [`copythat_core::Queue`] this job belongs
+    /// to. The legacy single-queue path uses [`QueueId::DEFAULT`]
+    /// (= `0`); registry-routed jobs carry the assigned id from
+    /// [`copythat_core::QueueRegistry::route`]. The Svelte tab strip
+    /// filters `visibleJobs` against this field.
+    pub queue_id: u64,
     pub kind: &'static str,
     pub state: &'static str,
     pub src: String,
@@ -180,11 +186,21 @@ pub struct JobDto {
 impl JobDto {
     /// Build a DTO from a queue snapshot. `rate_bps` is left at 0 —
     /// the runner carries live rate in the `job-progress` event and
-    /// the frontend tracks it there.
+    /// the frontend tracks it there. `queue_id` defaults to
+    /// [`QueueId::DEFAULT`] for the legacy single-queue surface; use
+    /// [`Self::from_job_in_queue`] to attribute a job to a specific
+    /// registry queue.
     pub fn from_job(job: &Job) -> Self {
+        Self::from_job_in_queue(job, QueueId::DEFAULT)
+    }
+
+    /// Build a DTO and attribute it to `queue_id`. Used by registry-
+    /// aware emit paths (Phase 45.4+ runner reconciliation).
+    pub fn from_job_in_queue(job: &Job, queue_id: QueueId) -> Self {
         let (name, subpath) = split_display(&job.src);
         Self {
             id: job.id.as_u64(),
+            queue_id: queue_id.as_u64(),
             kind: job_kind_name(job.kind),
             state: job_state_name(job.state),
             src: path_to_string(&job.src),

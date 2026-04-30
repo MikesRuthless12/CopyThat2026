@@ -17,6 +17,10 @@ export type GlobalState = "idle" | "copying" | "paused" | "verifying" | "error";
 
 export interface JobDto {
   id: number;
+  /// Phase 45.3 — id of the queue this job belongs to. The legacy
+  /// single-queue surface emits 0 (the default queue); registry-
+  /// routed jobs carry the assigned id from `queue_route_job`.
+  queueId: number;
   kind: JobKind;
   state: JobState;
   src: string;
@@ -135,7 +139,50 @@ export const EVENTS = {
   fileActivity: "file-activity",
   // Post-Phase-12 paste hotkey + clipboard watcher
   clipboardFilesDetected: "clipboard-files-detected",
+  // Phase 45 — named-queue registry events.
+  queueAdded: "queue-added",
+  queueRemoved: "queue-removed",
+  queueMerged: "queue-merged",
+  queueJobRouted: "queue-job-routed",
 } as const;
+
+/// Phase 45.3 — wire shape of `queue_list()`.
+export interface QueueSnapshotDto {
+  /// Stable u64 id (`QueueId::as_u64()`). 0 is reserved for the
+  /// legacy default queue; registry queues start at 1.
+  id: number;
+  /// Tab label — drive-derived (`"D: queue"`) or `"queue N"` when
+  /// no probe label is available.
+  name: string;
+  /// Pending + Running jobs in this queue.
+  badgeCount: number;
+  /// `true` when at least one job in the queue is `Running`.
+  /// Phase 45.5 uses this to render the F2-mode pulse.
+  running: boolean;
+}
+
+/// Phase 45.3 — `queue-added` event payload.
+export interface QueueAddedEvent {
+  id: number;
+  name: string;
+}
+
+/// Phase 45.3 — `queue-removed` event payload.
+export interface QueueIdEvent {
+  id: number;
+}
+
+/// Phase 45.3 — `queue-merged` event payload.
+export interface QueueMergedEvent {
+  src: number;
+  dst: number;
+}
+
+/// Phase 45.3 — `queue-job-routed` event payload.
+export interface QueueJobRoutedEvent {
+  queueId: number;
+  jobId: number;
+}
 
 export type FileActivityPhase =
   | "start"
