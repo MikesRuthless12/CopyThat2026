@@ -1942,6 +1942,7 @@ name = "copythat-secure-delete"
 version = "0.19.84"
 dependencies = [
  "copythat-core",
+ "copythat-platform",
  "rand 0.9.4",
  "tempfile",
  "thiserror 2.0.18",

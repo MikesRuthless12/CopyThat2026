@@ -27,6 +27,21 @@ tokio = { version = "1", features = [
 ] }
 walkdir = "2"
 
+# Phase 44.3a — cross-crate hop into the unsafe-confined-to-platform
+# corner. `copythat-platform::linux_make_child_undumpable` wraps
+# `prctl(PR_SET_DUMPABLE, 0)` in a `Command::pre_exec` hook, closing
+# the Phase 44.2 PSID argv-leak finding without forcing this crate
+# to drop its `#![forbid(unsafe_code)]` invariant. Unix-only.
+[target.'cfg(unix)'.dependencies]
+copythat-platform = { path = "../copythat-platform", version = "0.19" }
+
+# Phase 44.3b — Windows-side IOCTL_STORAGE_QUERY_PROPERTY capability
+# probe + physical-drive enumeration via the same unsafe-confined-
+# to-platform seam. Replaces the Phase 44.2 stub
+# WindowsSanitizeHelper with real device-info reads.
+[target.'cfg(windows)'.dependencies]
+copythat-platform = { path = "../copythat-platform", version = "0.19" }
+
 [dev-dependencies]
 tempfile = "3"
 tokio = { version = "1", features = [

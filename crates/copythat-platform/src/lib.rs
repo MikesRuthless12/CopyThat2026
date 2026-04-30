@@ -87,7 +87,10 @@ mod native;
 pub mod os;
 mod outcome;
 pub mod presence;
+#[cfg(unix)]
+pub mod process;
 mod reflink_path;
+pub mod sanitize;
 pub mod smb;
 pub mod sparse;
 pub mod topology;
@@ -102,6 +105,11 @@ pub use helpers::{
 pub use hook::PlatformFastCopyHook;
 pub use meta::PlatformMetaOps;
 pub use outcome::{ChosenStrategy, FastCopyOutcome};
+#[cfg(unix)]
+pub use process::linux_make_child_undumpable;
+pub use sanitize::{
+    WindowsDeviceInfo, windows_enumerate_physical_drives, windows_query_device_info,
+};
 pub use smb::{SmbCompressionAlgo, SmbCompressionState, negotiate_smb_compression};
 pub use sparse::PlatformSparseOps;
 pub use wake_lock::{WakeLock, WakeLockError, acquire_keep_awake};

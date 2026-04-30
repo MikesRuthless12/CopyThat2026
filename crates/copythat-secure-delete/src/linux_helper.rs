@@ -247,11 +247,20 @@ impl SanitizeHelper for LinuxSanitizeHelper {
         validate_device_path(device)?;
         let trimmed_psid = psid.trim();
         validate_opal_psid(trimmed_psid)?;
-        let output = Command::new("sedutil-cli")
-            .arg("--PSIDrevert")
+        let mut cmd = Command::new("sedutil-cli");
+        cmd.arg("--PSIDrevert")
             .arg(trimmed_psid)
             .arg("--")
-            .arg(device)
+            .arg(device);
+        // Phase 44.3a — close the PSID argv-leak by marking the
+        // child non-dumpable before execve. After this hook fires
+        // in the child, `/proc/<pid>/cmdline` is no longer readable
+        // by other UIDs (root can still read it; same UID can
+        // still read its own). The threat model that Phase 44.2
+        // documented (unprivileged local attacker on a multi-user
+        // box racing `cat /proc/*/cmdline`) is closed.
+        copythat_platform::linux_make_child_undumpable(&mut cmd);
+        let output = cmd
             .output()
             .map_err(|e| format!("spawn sedutil-cli: {e}"))?;
         if output.status.success() {

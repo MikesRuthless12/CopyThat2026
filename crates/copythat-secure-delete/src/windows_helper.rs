@@ -49,16 +49,15 @@ impl WindowsSanitizeHelper {
 
 impl SanitizeHelper for WindowsSanitizeHelper {
     fn capabilities(&self, device: &Path) -> Result<SanitizeCapabilities, String> {
-        // Phase 44.2 stub: report no modes so the UI can render the
-        // picker without crashing. The real probe via
-        // `DeviceIoControl(IOCTL_STORAGE_QUERY_PROPERTY,
-        // StorageDeviceTrimProperty)` lands in Phase 44.3 alongside
-        // the OPAL command-set marshaling.
+        // Phase 44.3b — replaced the Phase 44.2 stub with a real
+        // IOCTL_STORAGE_QUERY_PROPERTY probe via copythat-platform.
+        // Returns vendor / product / serial / TRIM-supported. The
+        // sanitize-mode list stays empty until Phase 44.4 wires
+        // the destructive IOCTL_STORAGE_SECURITY_PROTOCOL_OUT path
+        // (which needs hardware-validation on a real SED drive).
         //
-        // Phase 44.2 also validates the device path for shape so
-        // a misconfigured caller gets a clear error rather than a
-        // silent NotSupported. Windows physical drives are
-        // `\\.\PhysicalDriveN`; volumes are `\\.\X:`.
+        // Phase 44.2 path-shape validation kept as a fast-fail
+        // guard before the IOCTL spend.
         let s = device.to_string_lossy();
         let plausible =
             s.starts_with(r"\\.\PhysicalDrive") || s.starts_with(r"\\.\") || s.starts_with(r"\\?\");
@@ -68,11 +67,47 @@ impl SanitizeHelper for WindowsSanitizeHelper {
                  (\\\\.\\PhysicalDriveN); refused"
             ));
         }
+        let info = copythat_platform::windows_query_device_info(device);
+        let (model, trim) = match info {
+            Some(i) => {
+                let model = if i.model.is_empty() {
+                    if i.vendor.is_empty() {
+                        // Phase 44.3 post-review (M2) — when the
+                        // descriptor came back empty, surface a
+                        // distinct sentinel so the third-
+                        // confirmation gate doesn't degrade to
+                        // "type the device path back". User sees
+                        // the explicit `(model unavailable)`
+                        // suffix and can refuse with eyes open.
+                        format!("{} (model unavailable)", device.display())
+                    } else {
+                        i.vendor
+                    }
+                } else if i.vendor.is_empty() {
+                    i.model
+                } else {
+                    format!("{} {}", i.vendor, i.model)
+                };
+                (model, i.trim_supported)
+            }
+            None => {
+                // Phase 44.3 post-review (M2) — IOCTL itself failed
+                // (open denied, IO error). Refuse the capability
+                // probe rather than silently returning a model =
+                // device-path entry that the third-confirmation
+                // gate would then reduce to a path-echo task.
+                return Err(format!(
+                    "could not probe device descriptor for {}; refuse to surface capabilities so \
+                     the three-confirmation gate stays meaningful",
+                    device.display()
+                ));
+            }
+        };
         Ok(SanitizeCapabilities {
-            trim: false,
+            trim,
             modes: Vec::new(),
-            bus: "windows-stub".into(),
-            model: device.display().to_string(),
+            bus: "windows".into(),
+            model,
         })
     }
 
