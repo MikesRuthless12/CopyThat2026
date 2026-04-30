@@ -1,11 +1,16 @@
 <!--
-  Phase 45.3 — named-queue tab strip.
+  Phase 45.3 / 45.4 — named-queue tab strip with drag-merge.
 
   Renders one tab per `QueueSnapshotDto` from the Rust-side
   `QueueRegistry`, plus a synthesised "default" tab (id=0) covering
   jobs that flow through the legacy single-queue surface. Selecting a
   tab updates `selectedQueueIdStore`; the existing `JobList` reads
   `visibleJobs`, which is now filtered by that selection.
+
+  Phase 45.4 — registry tabs are HTML5-draggable; dropping tab A on
+  tab B fires `queue_merge(A, B)`. The synthesised default tab is
+  neither a drag source nor a drop target (the legacy queue isn't
+  in the registry, so `queue_merge` can't address it).
 
   The strip is hidden entirely when the registry holds zero queues —
   cold-launch UX is unchanged from pre-Phase-45 (one implicit queue,
@@ -14,17 +19,25 @@
   default tab is needed to keep legacy-queue jobs reachable.
 
   i18n: `queue-tab-default`, `queue-tab-empty-state`,
-  `queue-badge-tooltip`.
+  `queue-badge-tooltip`, `queue-drag-hint`, `queue-merge-confirm`,
+  `queue-merge-toast`.
 -->
 <script lang="ts">
   import { i18nVersion, t } from "../i18n";
+  import { queueMerge } from "../ipc";
   import {
     jobs,
+    pushToast,
     queues,
     selectedQueueId,
     setSelectedQueue,
   } from "../stores";
   import type { JobDto, QueueSnapshotDto } from "../types";
+
+  /// MIME-ish wire format for the drag payload. Custom string so the
+  /// browser doesn't accidentally hand off the queue id to anything
+  /// other than another `JobListTabs` tab.
+  const DRAG_MIME = "application/x-copythat-queue";
 
   interface Tab {
     id: number;
@@ -77,8 +90,80 @@
     return out;
   });
 
+  // Phase 45.4 — drag-merge state. `draggingId` is the source-queue
+  // id while a drag is in flight; `dropTargetId` is the queue under
+  // the cursor (used for the highlight class). Both reset on
+  // `dragend` so an aborted drag (Esc, drop outside) leaves no
+  // stuck highlight.
+  let draggingId = $state<number | null>(null);
+  let dropTargetId = $state<number | null>(null);
+
   function onClick(id: number) {
     setSelectedQueue(id);
+  }
+
+  function isValidDropTarget(tab: Tab): boolean {
+    if (tab.isDefault) return false;
+    if (draggingId === null) return false;
+    if (draggingId === tab.id) return false;
+    return true;
+  }
+
+  function onDragStart(e: DragEvent, tab: Tab) {
+    if (tab.isDefault) {
+      e.preventDefault();
+      return;
+    }
+    draggingId = tab.id;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData(DRAG_MIME, String(tab.id));
+    }
+  }
+
+  function onDragEnd() {
+    draggingId = null;
+    dropTargetId = null;
+  }
+
+  function onDragEnter(e: DragEvent, tab: Tab) {
+    if (!isValidDropTarget(tab)) return;
+    e.preventDefault();
+    dropTargetId = tab.id;
+  }
+
+  function onDragOver(e: DragEvent, tab: Tab) {
+    if (!isValidDropTarget(tab)) return;
+    // `preventDefault` here is what tells the browser this element
+    // *accepts* the drop — without it the cursor stays "no entry"
+    // and `drop` never fires.
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  }
+
+  function onDragLeave(_e: DragEvent, tab: Tab) {
+    if (dropTargetId === tab.id) dropTargetId = null;
+  }
+
+  async function onDrop(e: DragEvent, tab: Tab) {
+    if (!isValidDropTarget(tab)) return;
+    e.preventDefault();
+    const raw = e.dataTransfer?.getData(DRAG_MIME);
+    const srcId = raw && raw.length > 0 ? Number(raw) : draggingId;
+    draggingId = null;
+    dropTargetId = null;
+    if (srcId === null || Number.isNaN(srcId) || srcId === tab.id) return;
+    try {
+      await queueMerge(srcId, tab.id);
+      // Registry events (`queue-merged`, `queue-removed`) refresh
+      // the tab strip; we only post the success toast here. If the
+      // selected tab was the source, store-side reconcile flips it
+      // back to the default — no extra logic in this component.
+      pushToast("info", "queue-merge-toast");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      pushToast("error", message);
+    }
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -117,10 +202,20 @@
           class="tab"
           class:active={$selectedQueueId === tab.id}
           class:running={tab.running}
+          class:dragging={draggingId === tab.id}
+          class:drop-target={dropTargetId === tab.id}
           data-queue-tab-id={tab.id}
           aria-selected={$selectedQueueId === tab.id}
           tabindex={$selectedQueueId === tab.id ? 0 : -1}
+          draggable={!tab.isDefault}
+          title={tab.isDefault ? undefined : t("queue-drag-hint")}
           onclick={() => onClick(tab.id)}
+          ondragstart={(e) => onDragStart(e, tab)}
+          ondragend={onDragEnd}
+          ondragenter={(e) => onDragEnter(e, tab)}
+          ondragover={(e) => onDragOver(e, tab)}
+          ondragleave={(e) => onDragLeave(e, tab)}
+          ondrop={(e) => onDrop(e, tab)}
         >
           <span class="label">{tab.label}</span>
           {#if tab.badge > 0}
@@ -130,6 +225,11 @@
               aria-label={t("queue-badge-tooltip")}
             >
               {tab.badge}
+            </span>
+          {/if}
+          {#if dropTargetId === tab.id}
+            <span class="drop-hint" aria-live="polite">
+              {t("queue-merge-confirm")}
             </span>
           {/if}
         </button>
@@ -205,5 +305,27 @@
   .tab.active .badge {
     background: var(--accent, #4f8cff);
     color: #ffffff;
+  }
+
+  /* Phase 45.4 — drag-merge visual feedback. The native HTML5 drag
+     ghost handles the moving thumbnail; these classes only style
+     the source / target chrome that stays behind. */
+  .tab.dragging {
+    opacity: 0.55;
+    cursor: grabbing;
+  }
+
+  .tab.drop-target {
+    background: var(--row-selected, rgba(79, 140, 255, 0.18));
+    border-color: var(--accent, #4f8cff);
+    color: var(--fg-strong, #1f1f1f);
+  }
+
+  .drop-hint {
+    margin-left: 6px;
+    font-size: 10px;
+    color: var(--accent, #4f8cff);
+    font-style: italic;
+    pointer-events: none;
   }
 </style>

@@ -1282,3 +1282,8 @@ sanitize-action-staged = Phase 44.1 — wiring the IPC for this action lands in 
 queue-tab-default = Default  # MT
 queue-tab-empty-state = Job queues  # MT
 queue-badge-tooltip = Pending and running jobs in this queue  # MT
+
+# Phase 45.4 — drag-progress-merge.  # MT
+queue-drag-hint = Drag onto another queue to merge  # MT
+queue-merge-confirm = Drop to merge  # MT
+queue-merge-toast = Queues merged  # MT
