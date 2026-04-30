@@ -1243,7 +1243,7 @@ mod tests {
 /// Probe the destination volume's physical sector size via
 /// `GetDiskFreeSpaceW`. Returns `None` on any failure — the caller
 /// then falls back to 4096 (matches every modern NVMe + SATA SSD).
-fn sector_size_for(path: &Path) -> Option<u32> {
+pub(crate) fn sector_size_for(path: &Path) -> Option<u32> {
     use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceW;
 
     // Walk up to find an existing ancestor (the dst file may not

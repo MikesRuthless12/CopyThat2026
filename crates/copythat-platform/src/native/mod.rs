@@ -54,6 +54,8 @@ pub(crate) use windows::{filesystem_name, is_ssd, try_native_copy};
 pub(crate) mod parallel;
 #[cfg(target_os = "windows")]
 pub(crate) mod windows_overlapped;
+#[cfg(target_os = "windows")]
+pub(crate) mod windows_ioring;
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 mod fallback;

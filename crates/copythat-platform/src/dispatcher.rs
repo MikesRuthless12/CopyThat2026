@@ -95,26 +95,20 @@ pub async fn fast_copy(
         .as_deref()
         .map(|s| s.eq_ignore_ascii_case("ntfs"))
         .unwrap_or(false);
-    // Phase 42 — on Win11 24H2+ with a ReFS / Dev Drive destination,
-    // `CopyFileExW` itself fires `FSCTL_DUPLICATE_EXTENTS_TO_FILE`
-    // natively (KB5034848+). Stage-1 reflink would do the same syscall;
-    // skipping it saves one extra `CreateFile` probe per copy. The
-    // CopyFileExW path always runs after — if its native block clone
-    // fails for any reason, no behaviour change.
-    let skip_explicit_reflink_for_24h2_refs = {
-        #[cfg(windows)]
-        {
-            crate::os::is_win11_24h2_plus()
-                && dst_fs_name
-                    .as_deref()
-                    .map(|s| s.eq_ignore_ascii_case("refs"))
-                    .unwrap_or(false)
-        }
-        #[cfg(not(windows))]
-        {
-            false
-        }
-    };
+    // Phase 47 (2026-04-30) — re-enable the explicit reflink probe on
+    // 24H2+ ReFS. The Phase 42 skip rule assumed CopyFileExW would
+    // auto-engage `FSCTL_DUPLICATE_EXTENTS_TO_FILE` natively on
+    // 24H2+ ReFS (KB5034848+), making our explicit probe redundant.
+    // A head-to-head Dev Drive bench against Robocopy falsified that
+    // assumption: on freshly-written sources (cold cache),
+    // CopyFileExW's "native" auto block-clone does NOT engage and
+    // falls through to a real byte-by-byte copy (10 GB cold:
+    // CopyThat 7602 ms / 1347 MiB/s vs Robocopy 76 ms / 134 GiB/s
+    // = 100× gap). Robocopy is doing its own FSCTL call on cold;
+    // we now do the same. CopyFileExW remains the fallback if
+    // FSCTL fails (e.g. cross-volume, source filesystem won't
+    // expose extents).
+    let skip_explicit_reflink_for_24h2_refs = false;
 
     // Phase 43 — NTFS has no reflink syscall to attempt. Skip the
     // explicit `try_reflink` probe; CopyFileExW is the only realistic
