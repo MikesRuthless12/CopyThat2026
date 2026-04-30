@@ -26,6 +26,7 @@
   import { i18nVersion, t } from "../i18n";
   import { queueMerge } from "../ipc";
   import {
+    f2Mode,
     jobs,
     pushToast,
     queues,
@@ -217,6 +218,13 @@
           ondragleave={(e) => onDragLeave(e, tab)}
           ondrop={(e) => onDrop(e, tab)}
         >
+          {#if $f2Mode && tab.running}
+            <span
+              class="f2-pulse"
+              title={t("queue-f2-active-hint")}
+              aria-label={t("queue-f2-active-hint")}
+            ></span>
+          {/if}
           <span class="label">{tab.label}</span>
           {#if tab.badge > 0}
             <span
@@ -327,5 +335,38 @@
     color: var(--accent, #4f8cff);
     font-style: italic;
     pointer-events: none;
+  }
+
+  /* Phase 45.5 — F2-mode pulse. Pinned to the leading edge of the
+     running tab so the eye picks up which queue every fresh enqueue
+     is about to land in. The animation uses a CSS keyframe rather
+     than `prefers-reduced-motion`-blind transitions, and respects
+     the user's reduced-motion preference. */
+  .f2-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ok, #3faf6a);
+    box-shadow: 0 0 0 0 rgba(63, 175, 106, 0.55);
+    animation: f2-pulse 1.4s ease-out infinite;
+    flex: none;
+  }
+
+  @keyframes f2-pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(63, 175, 106, 0.55);
+    }
+    70% {
+      box-shadow: 0 0 0 6px rgba(63, 175, 106, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(63, 175, 106, 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .f2-pulse {
+      animation: none;
+    }
   }
 </style>

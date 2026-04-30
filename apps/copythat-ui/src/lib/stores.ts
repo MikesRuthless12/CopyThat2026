@@ -15,6 +15,7 @@ import {
   globals as fetchGlobals,
   onEvent,
   queueList,
+  queueSetF2Mode,
 } from "./ipc";
 import {
   EVENTS,
@@ -708,6 +709,11 @@ export const liveBytes: Readable<{ done: number; total: number }> = derived(
 
 const queuesStore = writable<QueueSnapshotDto[]>([]);
 const selectedQueueIdStore = writable<number>(0);
+// Phase 45.5 — `auto_enqueue_next` mirror. Defaults to `false`
+// (matches the Rust-side default); flipped via `setF2Mode` on every
+// F2 keypress + Settings toggle. Transient — Rust never persists it
+// either, so a relaunch always starts in the OFF state.
+const f2ModeStore = writable<boolean>(false);
 
 export const queues: Readable<QueueSnapshotDto[]> = {
   subscribe: queuesStore.subscribe,
@@ -715,9 +721,39 @@ export const queues: Readable<QueueSnapshotDto[]> = {
 export const selectedQueueId: Readable<number> = {
   subscribe: selectedQueueIdStore.subscribe,
 };
+export const f2Mode: Readable<boolean> = {
+  subscribe: f2ModeStore.subscribe,
+};
 
 export function setSelectedQueue(id: number): void {
   selectedQueueIdStore.set(id);
+}
+
+/// Phase 45.5 — toggle F2 (auto-enqueue-next) mode. Updates the store
+/// optimistically and round-trips to Rust; on IPC failure the store
+/// is rolled back so the visual state never lies about the runtime
+/// flag. Returns the new effective value.
+export async function setF2Mode(enabled: boolean): Promise<boolean> {
+  const previous = currentF2Mode();
+  if (previous === enabled) return previous;
+  f2ModeStore.set(enabled);
+  try {
+    await queueSetF2Mode(enabled);
+    return enabled;
+  } catch {
+    f2ModeStore.set(previous);
+    return previous;
+  }
+}
+
+/// Synchronous read of the current F2-mode flag — used by the F2
+/// keydown handler so toggling doesn't depend on a `derived` rerun.
+export function currentF2Mode(): boolean {
+  let value = false;
+  f2ModeStore.subscribe((v) => {
+    value = v;
+  })();
+  return value;
 }
 
 /// Re-fetch the registry snapshot. Cheap (Rust-side iteration of a
