@@ -226,6 +226,7 @@ fn mode_from_wire(s: &str) -> Result<SsdSanitizeMode, String> {
         "nvme-sanitize-crypto" => SsdSanitizeMode::NvmeSanitizeCrypto,
         "ata-secure-erase" => SsdSanitizeMode::AtaSecureErase,
         "opal-crypto-erase" => SsdSanitizeMode::OpalCryptoErase,
+        "apfs-crypto-erase" => SsdSanitizeMode::ApfsCryptoErase,
         other => return Err(format!("unknown sanitize mode: {other:?}")),
     })
 }

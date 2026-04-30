@@ -388,5 +388,8 @@ fn ssd_sanitize_mode_names_are_stable() {
     );
     assert_eq!(SsdSanitizeMode::AtaSecureErase.name(), "ata-secure-erase");
     assert_eq!(SsdSanitizeMode::OpalCryptoErase.name(), "opal-crypto-erase");
-    assert_eq!(SsdSanitizeMode::ALL.len(), 5);
+    // Phase 44.4b — ApfsCryptoErase added; the wire name follows the
+    // same kebab-case pattern as the other modes.
+    assert_eq!(SsdSanitizeMode::ApfsCryptoErase.name(), "apfs-crypto-erase");
+    assert_eq!(SsdSanitizeMode::ALL.len(), 6);
 }

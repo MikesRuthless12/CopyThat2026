@@ -68,7 +68,7 @@ impl SanitizeHelper for WindowsSanitizeHelper {
             ));
         }
         let info = copythat_platform::windows_query_device_info(device);
-        let (model, trim) = match info {
+        let (model, trim, sanicap) = match info {
             Some(i) => {
                 let model = if i.model.is_empty() {
                     if i.vendor.is_empty() {
@@ -88,7 +88,7 @@ impl SanitizeHelper for WindowsSanitizeHelper {
                 } else {
                     format!("{} {}", i.vendor, i.model)
                 };
-                (model, i.trim_supported)
+                (model, i.trim_supported, i.nvme_sanicap)
             }
             None => {
                 // Phase 44.3 post-review (M2) — IOCTL itself failed
@@ -103,9 +103,36 @@ impl SanitizeHelper for WindowsSanitizeHelper {
                 ));
             }
         };
+        // Phase 44.4a — surface NVMe sanitize modes when SANICAP
+        // probe succeeded. The modes list stays advisory: Windows
+        // can report which modes the controller supports, but the
+        // destructive `IOCTL_STORAGE_SECURITY_PROTOCOL_OUT` path
+        // that actually invokes them is still deferred (44.4c).
+        // Surfacing the modes lets the UI tell the operator which
+        // operations would be available against this drive once
+        // the Windows destructive path lands, without changing
+        // the three-confirmation gate.
+        //
+        // Decoder returns wire-stable strings (matching the Linux
+        // helper's nvme-cli mode names); we map them to the enum
+        // here so the cross-platform `SanitizeCapabilities` shape
+        // stays uniform.
+        let modes: Vec<SsdSanitizeMode> = sanicap
+            .map(|s| {
+                copythat_platform::nvme_sanicap_modes(s)
+                    .into_iter()
+                    .filter_map(|m| match m {
+                        "nvme-sanitize-crypto" => Some(SsdSanitizeMode::NvmeSanitizeCrypto),
+                        "nvme-sanitize-block" => Some(SsdSanitizeMode::NvmeSanitizeBlock),
+                        "nvme-format" => Some(SsdSanitizeMode::NvmeFormat),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
         Ok(SanitizeCapabilities {
             trim,
-            modes: Vec::new(),
+            modes,
             bus: "windows".into(),
             model,
         })

@@ -1024,6 +1024,7 @@ sanitize-mode-nvme-sanitize-block = NVMe Sanitize — Block Erase (slow, every c
 sanitize-mode-nvme-sanitize-crypto = NVMe Sanitize — Crypto Erase (instant)
 sanitize-mode-ata-secure-erase = ATA Secure Erase (legacy SATA SSDs)
 sanitize-mode-opal-crypto-erase = TCG OPAL Crypto Erase (Self-Encrypting Drives)
+sanitize-mode-apfs-crypto-erase = APFS Crypto Erase (rotate FileVault key, macOS only)
 sanitize-confirm-1 = This destroys EVERY byte on { $device }. There is no undo.
 sanitize-confirm-2 = I understand that all partitions, all files, and all snapshots on { $device } will be permanently unreadable.
 sanitize-confirm-3 = Type the drive's model name to proceed: { $model }

@@ -76,6 +76,8 @@ mod linux_helper;
 #[cfg(target_os = "macos")]
 mod macos_helper;
 mod method;
+#[cfg(feature = "experimental-tcg-opal")]
+pub mod opal;
 mod pattern;
 mod purge;
 mod sanitize;
