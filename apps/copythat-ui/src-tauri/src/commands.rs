@@ -513,12 +513,36 @@ pub fn register_progress_channel(
 
 #[tauri::command]
 pub fn list_jobs(state: State<'_, AppState>) -> Vec<JobDto> {
-    state
+    list_jobs_impl(state.inner())
+}
+
+/// Implementation of [`list_jobs`]. Public so integration tests can
+/// exercise the legacy + registry merge without constructing a real
+/// Tauri runtime.
+pub fn list_jobs_impl(state: &AppState) -> Vec<JobDto> {
+    // Legacy default queue first — every job here surfaces with
+    // `queueId = QueueId::DEFAULT (0)`, matching the synthesised
+    // default tab the JobListTabs strip renders on top.
+    let mut out: Vec<JobDto> = state
         .queue
         .snapshot()
         .iter()
         .map(JobDto::from_job)
-        .collect()
+        .collect();
+    // Phase 45.7 follow-up — also surface registry-routed jobs so
+    // they're visible under their respective tabs in JobListTabs.
+    // Each registry-queue job's DTO carries the originating queue's
+    // id so the frontend's `visibleJobs` filter places it correctly.
+    // Phase 45.4+ runner reconciliation will execute these jobs;
+    // until then they stay `Pending` but the user can at least see
+    // they exist (previously they were enqueued and then invisible).
+    for queue in state.queues.queues() {
+        let qid = queue.id();
+        for job in queue.snapshot() {
+            out.push(JobDto::from_job_in_queue(&job, qid));
+        }
+    }
+    out
 }
 
 #[tauri::command]

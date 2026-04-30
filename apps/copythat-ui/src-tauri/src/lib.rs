@@ -93,10 +93,27 @@ pub const TRAY_ICON_ID: &str = "copythat-main-tray";
 pub const EVENT_TRAY_TARGET_CLICKED: &str = "tray-target-clicked";
 
 /// Menu-id prefix for dynamically-generated pinned-destination
-/// items. The suffix after the colon is the destination's index in
-/// `Settings::queue::pinned_destinations`; the menu-event handler
-/// parses it back to look up the row before emitting the event.
+/// items. The suffix after the colon is a stable 64-bit hash of the
+/// row's `(label, path)` content (see [`tray_target_menu_id`]). The
+/// menu-event handler decodes the hash and looks the row up in the
+/// current pinned list — content-addressed so concurrent pin
+/// reorders/removals between menu-build and click can never
+/// misroute the event to the wrong destination.
 const TRAY_TARGET_ID_PREFIX: &str = "tray-target:";
+
+/// Hash a pinned destination into the suffix used in its tray menu
+/// id. Stable for the lifetime of one process (DefaultHasher seeds
+/// per-process); we never persist these ids, so cross-run stability
+/// isn't required. 64 bits is more than enough headroom for the
+/// `MAX_PINNED_DESTINATIONS = 50` cap enforced at the IPC layer.
+fn tray_target_menu_id(p: &PinnedDestinationDto) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    p.label.hash(&mut h);
+    p.path.hash(&mut h);
+    format!("{TRAY_TARGET_ID_PREFIX}{:016x}", h.finish())
+}
 
 /// Build the main tray menu from the current pinned-destinations
 /// snapshot. Static items (`Show`, `Drop Stack`, `Quit`) anchor the
@@ -120,8 +137,8 @@ fn build_tray_menu<R: Runtime>(
     // borrow check is satisfied when assembling the final
     // `&[&dyn IsMenuItem]` slice.
     let mut pinned_items: Vec<MenuItem<R>> = Vec::with_capacity(pinned.len());
-    for (idx, p) in pinned.iter().enumerate() {
-        let id = format!("{TRAY_TARGET_ID_PREFIX}{idx}");
+    for p in pinned.iter() {
+        let id = tray_target_menu_id(p);
         // Display "Label — Path" so the user can tell two same-
         // labelled rows apart at a glance.
         let display = format!("{} — {}", p.label, p.path);
@@ -158,18 +175,23 @@ pub fn rebuild_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 }
 
 /// Resolve the menu id back to the pinned destination it was
-/// generated from. Returns `None` if the id isn't a tray-target id
-/// or the index has fallen out of range (e.g. another window
-/// removed the row in the same tick).
+/// generated from. Looks the row up by content hash, not by index,
+/// so a concurrent pin reorder/removal between menu-build and click
+/// returns `None` (the user dropped onto a stale menu — silently
+/// no-op) instead of misrouting to whichever row now occupies the
+/// old index slot.
 fn pinned_target_for_menu_id<R: Runtime>(
     app: &AppHandle<R>,
     menu_id: &str,
 ) -> Option<PinnedDestinationDto> {
-    let suffix = menu_id.strip_prefix(TRAY_TARGET_ID_PREFIX)?;
-    let idx: usize = suffix.parse().ok()?;
+    if !menu_id.starts_with(TRAY_TARGET_ID_PREFIX) {
+        return None;
+    }
     let state = app.try_state::<AppState>()?;
     let pinned = crate::queue_commands::queue_get_pinned_impl(state.inner());
-    pinned.into_iter().nth(idx)
+    pinned
+        .into_iter()
+        .find(|p| tray_target_menu_id(p) == menu_id)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

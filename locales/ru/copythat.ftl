@@ -1304,3 +1304,12 @@ tray-target-add-path = Path or backend URI  # MT
 tray-target-add = Add  # MT
 tray-target-armed-toast = Drop your next file to send it to { $label }  # MT
 tray-target-active-pill = → { $label }  # MT
+
+# Phase 45.7 follow-up — pinned-destination validation errors.  # MT
+err-pinned-destination-label-empty = Tray destination label can't be empty.  # MT
+err-pinned-destination-path-empty = Tray destination path can't be empty.  # MT
+err-pinned-destination-label-too-long = Tray destination label is too long (max 64 characters).  # MT
+err-pinned-destination-path-too-long = Tray destination path is too long (max 1024 characters).  # MT
+err-pinned-destination-label-invalid = Tray destination label contains characters that aren't allowed (newline, return, or NUL).  # MT
+err-pinned-destination-path-invalid = Tray destination path contains characters that aren't allowed (newline, return, or NUL).  # MT
+err-pinned-destination-too-many = You've reached the limit of 50 tray destinations. Remove one to add another.  # MT

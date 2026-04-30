@@ -23,6 +23,7 @@ use std::path::PathBuf;
 use copythat_core::{CopyOptions, JobKind, JobState, Queue, copy_file};
 use copythat_ui_lib::ipc::{JobDto, job_state_name};
 use copythat_ui_lib::runner::build_globals;
+use copythat_ui_lib::state::AppState;
 use tempfile::tempdir;
 use tokio::sync::mpsc;
 
@@ -50,6 +51,90 @@ fn job_dto_splits_filename_from_parent() {
     assert!(dto.subpath.as_deref().unwrap().contains("reports"));
     assert_eq!(dto.kind, "copy");
     assert_eq!(dto.state, "pending");
+}
+
+#[test]
+fn list_jobs_impl_attributes_registry_jobs_to_their_queue_ids() {
+    // Phase 45.7 follow-up — `list_jobs` previously only iterated
+    // `state.queue` (the legacy default queue), so jobs added via
+    // `queue_route_job` were invisible to the frontend. The fix:
+    // the IPC also walks every queue in `state.queues` and stamps
+    // each DTO with `queueId = originating queue's id`. The
+    // frontend's `visibleJobs` filter then routes the row under
+    // the correct JobListTabs tab.
+    let state = AppState::new();
+
+    // Legacy queue: one job. queueId should be 0 (DEFAULT).
+    let (legacy_id, _ctrl) = state.queue.add(
+        JobKind::Copy,
+        PathBuf::from("/legacy/src"),
+        Some(PathBuf::from("/legacy/dst")),
+    );
+
+    // Registry queue: route a second job. The probe is the real
+    // PlatformVolumeProbe, which yields None for non-existent
+    // paths → all routed jobs land in the registry's anonymous
+    // bucket with a non-zero queue id.
+    let (qid, _routed_id, _routed_ctrl) = state.queues.route(
+        JobKind::Copy,
+        PathBuf::from("/routed/src"),
+        Some(PathBuf::from("/routed/dst")),
+    );
+    assert_ne!(qid.as_u64(), 0, "registry queue id should be non-zero");
+
+    let dtos = copythat_ui_lib::commands::list_jobs_impl(&state);
+    assert_eq!(dtos.len(), 2, "both legacy and routed jobs surface");
+
+    // The frontend's `visibleJobs` filter discriminates rows by
+    // `queue_id`; the JobIds within a queue may also overlap with
+    // sibling queues' ids in legacy callers, so look the rows up by
+    // queue_id directly rather than by job id.
+    let legacy_dto = dtos
+        .iter()
+        .find(|d| d.queue_id == 0)
+        .expect("legacy queue job surfaces with queueId=DEFAULT");
+    assert_eq!(legacy_dto.id, legacy_id.as_u64());
+    assert_eq!(
+        legacy_dto.kind, "copy",
+        "legacy DTO carries the kind from the legacy queue's add() call",
+    );
+
+    let routed_dto = dtos
+        .iter()
+        .find(|d| d.queue_id == qid.as_u64())
+        .expect("registry-routed job surfaces with its queue_id");
+    assert!(
+        routed_dto.src.contains("routed"),
+        "routed DTO carries the routed src path: {}",
+        routed_dto.src,
+    );
+}
+
+#[test]
+fn job_ids_are_unique_across_legacy_queue_and_registry() {
+    // Phase 45.7 follow-up — the legacy `state.queue` and every
+    // registry queue must mint ids from one shared counter so a
+    // future runner reconciliation can move jobs between them
+    // without colliding on JobId. Without the wiring this test
+    // asserts, both surfaces would issue `JobId(1)` to their first
+    // adds and a runner keyed on JobId would route events to the
+    // wrong row.
+    let state = AppState::new();
+    let (legacy_id, _l_ctrl) =
+        state.queue.add(JobKind::Copy, PathBuf::from("/l/s"), Some(PathBuf::from("/l/d")));
+    let (_qid, routed_id, _r_ctrl) =
+        state.queues.route(JobKind::Copy, PathBuf::from("/r/s"), Some(PathBuf::from("/r/d")));
+    let (legacy_id_2, _l2_ctrl) =
+        state.queue.add(JobKind::Copy, PathBuf::from("/l2/s"), Some(PathBuf::from("/l2/d")));
+
+    let ids = [legacy_id.as_u64(), routed_id.as_u64(), legacy_id_2.as_u64()];
+    let mut sorted = ids;
+    sorted.sort();
+    assert_eq!(
+        sorted,
+        [1, 2, 3],
+        "expected three sequential ids drawn from one shared counter, got {ids:?}",
+    );
 }
 
 #[test]

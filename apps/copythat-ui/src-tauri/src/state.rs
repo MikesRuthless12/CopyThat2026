@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
 
-use copythat_core::{Queue, QueueRegistry};
+use copythat_core::{Queue, QueueId, QueueRegistry};
 use copythat_history::History;
 use copythat_journal::{Journal, UnfinishedJob};
 use copythat_platform::PlatformVolumeProbe;
@@ -20,6 +20,13 @@ use crate::collisions::CollisionRegistry;
 use crate::errors::ErrorRegistry;
 use crate::progress_channel::ProgressChannelRegistry;
 use crate::scan_commands::ScanRegistry;
+
+/// Broadcast channel capacity for the legacy default queue. Mirrors
+/// `copythat_core::queue::DEFAULT_BROADCAST_CAPACITY`, which is
+/// crate-private — duplicated here as a single named constant so the
+/// shared-counter wiring in [`AppState::new_with`] doesn't bake an
+/// unexplained magic 1024 into the constructor body.
+const DEFAULT_QUEUE_BROADCAST_CAPACITY: usize = 1024;
 
 /// Top-level shared state wired into Tauri.
 #[derive(Clone)]
@@ -183,8 +190,25 @@ impl AppState {
         settings_path: PathBuf,
         profiles: ProfileStore,
     ) -> Self {
+        // Phase 45.7 follow-up — share the job-id counter between
+        // the legacy default queue and the registry. Without this,
+        // both `Queue::new()` and `QueueRegistry::new()` would mint
+        // ids starting at 1 from independent counters, so the first
+        // legacy job and the first routed job would both surface as
+        // `JobId(1)` — a collision that would corrupt event-routing
+        // once Phase 45.4+ runner reconciliation moves jobs between
+        // the two surfaces. Constructing the registry first and
+        // handing its counter to `Queue::with_shared_counter` keeps
+        // every job id unique across the whole AppState.
+        let queues = QueueRegistry::new().with_probe(Arc::new(PlatformVolumeProbe));
+        let queue = Queue::with_shared_counter(
+            QueueId::DEFAULT,
+            "default",
+            DEFAULT_QUEUE_BROADCAST_CAPACITY,
+            queues.shared_job_id_counter(),
+        );
         Self {
-            queue: Queue::new(),
+            queue,
             globals: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             errors: ErrorRegistry::new(),
             collisions: CollisionRegistry::new(),
@@ -245,7 +269,10 @@ impl AppState {
             // `helpers::volume_id` (Windows VolumeSerialNumber /
             // Unix `st_dev`); spawned-queue labels read the Windows
             // drive letter and fall back to `"queue N"` on Unix.
-            queues: QueueRegistry::new().with_probe(Arc::new(PlatformVolumeProbe)),
+            // Phase 45.7 — built above (before the literal) so its
+            // shared job-id counter can flow into the legacy default
+            // queue, keeping JobIds unique across both surfaces.
+            queues,
         }
     }
 

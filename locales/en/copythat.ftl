@@ -1073,3 +1073,18 @@ tray-target-add-path = Path or backend URI
 tray-target-add = Add
 tray-target-armed-toast = Drop your next file to send it to { $label }
 tray-target-active-pill = → { $label }
+
+# Phase 45.7 follow-up — pinned-destination validation errors. The
+# `queue_pin_destination` IPC returns these Fluent keys verbatim
+# when input fails the IPC-boundary checks; the toast layer renders
+# them via `t(...)` (Toast.svelte detects kebab-case-lowercase and
+# routes through the locale table). Phase 17e's `err-path-escape` /
+# `err-destination-empty` cover the path-traversal + empty cases for
+# `queue_route_job`; the keys below are pin-specific.
+err-pinned-destination-label-empty = Tray destination label can't be empty.
+err-pinned-destination-path-empty = Tray destination path can't be empty.
+err-pinned-destination-label-too-long = Tray destination label is too long (max 64 characters).
+err-pinned-destination-path-too-long = Tray destination path is too long (max 1024 characters).
+err-pinned-destination-label-invalid = Tray destination label contains characters that aren't allowed (newline, return, or NUL).
+err-pinned-destination-path-invalid = Tray destination path contains characters that aren't allowed (newline, return, or NUL).
+err-pinned-destination-too-many = You've reached the limit of 50 tray destinations. Remove one to add another.

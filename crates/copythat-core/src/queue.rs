@@ -24,6 +24,26 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::broadcast;
 
+// Phase 45.7 follow-up — lock-poisoning policy.
+//
+// Both `Queue::inner` and `QueueRegistry::inner` previously used
+// `.expect("…poisoned")` inside every accessor. A single panic
+// holding either lock would poison it, and the next IPC call would
+// then panic the whole Tauri runtime — turning a transient mid-
+// operation crash into a hard app kill for every subsequent user
+// action.
+//
+// The data these mutexes guard is small, append-friendly Vecs of
+// plain structs (`Entry`, `RegistryEntry`); a panic mid-mutation is
+// extremely unlikely (allocator OOM aborts the process anyway in
+// every realistic config) and the worst-case cost of a recovered-
+// inconsistent snapshot is one stale `JobListTabs` paint that the
+// next event reconciles. That trade-off is favourable: keeping the
+// app responsive after an unrelated panic is more valuable than
+// fail-fast on a class of incidents that should never reach
+// production. So every accessor now recovers the inner data via
+// `.unwrap_or_else(|p| p.into_inner())`.
+
 use crate::control::CopyControl;
 use crate::error::CopyError;
 
@@ -237,7 +257,7 @@ impl Clone for Queue {
 
 impl std::fmt::Debug for Queue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let guard = self.inner.lock().expect("queue mutex poisoned");
+        let guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         f.debug_struct("Queue")
             .field("id", &self.id)
             .field("name", &&*self.name)
@@ -324,7 +344,7 @@ impl Queue {
             last_error: None,
         };
         {
-            let mut guard = self.inner.lock().expect("queue mutex poisoned");
+            let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             guard.entries.push(Entry {
                 job,
                 control: control.clone(),
@@ -343,13 +363,13 @@ impl Queue {
     /// Snapshot every queued job. Cloned data — modifications by the
     /// caller don't reach back into the queue.
     pub fn snapshot(&self) -> Vec<Job> {
-        let guard = self.inner.lock().expect("queue mutex poisoned");
+        let guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         guard.entries.iter().map(|e| e.job.clone()).collect()
     }
 
     /// Look up a single queued job by id.
     pub fn get(&self, id: JobId) -> Option<Job> {
-        let guard = self.inner.lock().expect("queue mutex poisoned");
+        let guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         guard
             .entries
             .iter()
@@ -360,7 +380,7 @@ impl Queue {
     /// Return a clone of the [`CopyControl`] handle the engine task
     /// is steering through.
     pub fn control(&self, id: JobId) -> Option<CopyControl> {
-        let guard = self.inner.lock().expect("queue mutex poisoned");
+        let guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         guard
             .entries
             .iter()
@@ -371,7 +391,7 @@ impl Queue {
     /// Pause the job's running engine (no-op if not running).
     pub fn pause_job(&self, id: JobId) {
         let control = {
-            let mut guard = self.inner.lock().expect("queue mutex poisoned");
+            let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             let Some(entry) = guard.entries.iter_mut().find(|e| e.job.id == id) else {
                 return;
             };
@@ -391,7 +411,7 @@ impl Queue {
     /// Resume a paused job. No-op for jobs in any other state.
     pub fn resume_job(&self, id: JobId) {
         let control = {
-            let mut guard = self.inner.lock().expect("queue mutex poisoned");
+            let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             let Some(entry) = guard.entries.iter_mut().find(|e| e.job.id == id) else {
                 return;
             };
@@ -415,7 +435,7 @@ impl Queue {
     /// Cancel the job. Terminal — `cancel` wins over `resume`.
     pub fn cancel_job(&self, id: JobId) {
         let control = {
-            let mut guard = self.inner.lock().expect("queue mutex poisoned");
+            let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             let Some(entry) = guard.entries.iter_mut().find(|e| e.job.id == id) else {
                 return;
             };
@@ -440,7 +460,7 @@ impl Queue {
     /// `len - 1`). No-op if the id is unknown.
     pub fn reorder(&self, id: JobId, new_index: usize) {
         let clamped = {
-            let mut guard = self.inner.lock().expect("queue mutex poisoned");
+            let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             let Some(current) = guard.entries.iter().position(|e| e.job.id == id) else {
                 return;
             };
@@ -464,7 +484,7 @@ impl Queue {
     pub fn remove(&self, id: JobId) {
         self.cancel_job(id);
         let removed = {
-            let mut guard = self.inner.lock().expect("queue mutex poisoned");
+            let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             if let Some(pos) = guard.entries.iter().position(|e| e.job.id == id) {
                 guard.entries.remove(pos);
                 true
@@ -482,7 +502,7 @@ impl Queue {
     /// Mark the job Running and stamp `started_at`. Idempotent.
     pub fn start(&self, id: JobId) {
         let changed = {
-            let mut guard = self.inner.lock().expect("queue mutex poisoned");
+            let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             let Some(entry) = guard.entries.iter_mut().find(|e| e.job.id == id) else {
                 return;
             };
@@ -512,7 +532,7 @@ impl Queue {
         files_total: u64,
     ) {
         {
-            let mut guard = self.inner.lock().expect("queue mutex poisoned");
+            let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             let Some(entry) = guard.entries.iter_mut().find(|e| e.job.id == id) else {
                 return;
             };
@@ -533,7 +553,7 @@ impl Queue {
     /// Move the job to terminal `Succeeded`. Idempotent.
     pub fn mark_completed(&self, id: JobId) {
         let changed = {
-            let mut guard = self.inner.lock().expect("queue mutex poisoned");
+            let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             let Some(entry) = guard.entries.iter_mut().find(|e| e.job.id == id) else {
                 return;
             };
@@ -557,7 +577,7 @@ impl Queue {
     /// call records the error; subsequent calls are no-ops.
     pub fn mark_failed(&self, id: JobId, err: CopyError) {
         let emit = {
-            let mut guard = self.inner.lock().expect("queue mutex poisoned");
+            let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             let Some(entry) = guard.entries.iter_mut().find(|e| e.job.id == id) else {
                 return;
             };
@@ -578,7 +598,7 @@ impl Queue {
     /// Elapsed wall-clock for a completed/running job, `None` if it
     /// hasn't started. Handy for UI callers.
     pub fn elapsed(&self, id: JobId) -> Option<Duration> {
-        let guard = self.inner.lock().expect("queue mutex poisoned");
+        let guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         let entry = guard.entries.iter().find(|e| e.job.id == id)?;
         let start = entry.job.started_at?;
         Some(entry.job.finished_at.unwrap_or_else(Instant::now) - start)
@@ -588,7 +608,7 @@ impl Queue {
     pub fn len(&self) -> usize {
         self.inner
             .lock()
-            .expect("queue mutex poisoned")
+            .unwrap_or_else(|p| p.into_inner())
             .entries
             .len()
     }
@@ -614,12 +634,12 @@ impl Queue {
             return;
         }
         let drained = {
-            let mut other_guard = other.inner.lock().expect("queue mutex poisoned");
+            let mut other_guard = other.inner.lock().unwrap_or_else(|p| p.into_inner());
             std::mem::take(&mut other_guard.entries)
         };
         let drained_ids: Vec<JobId> = drained.iter().map(|e| e.job.id).collect();
         {
-            let mut self_guard = self.inner.lock().expect("queue mutex poisoned");
+            let mut self_guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             self_guard.entries.extend(drained);
         }
         for id in drained_ids {
@@ -755,7 +775,7 @@ impl Clone for QueueRegistry {
 
 impl std::fmt::Debug for QueueRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let guard = self.inner.lock().expect("registry mutex poisoned");
+        let guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         f.debug_struct("QueueRegistry")
             .field("queues", &guard.entries.len())
             .field("auto_enqueue_next", &self.auto_enqueue_next.load(Ordering::Relaxed))
@@ -804,6 +824,18 @@ impl QueueRegistry {
         self
     }
 
+    /// Clone the shared job-id counter the registry mints
+    /// [`JobId`]s from. Wire this into a sibling [`Queue`] via
+    /// [`Queue::with_shared_counter`] when the sibling lives outside
+    /// the registry but should still draw from the same monotonic
+    /// id space — Phase 45.7 uses this to keep the legacy default
+    /// queue's ids unique with respect to every registry-spawned
+    /// queue, so Phase 45.4+ runner reconciliation can move jobs
+    /// between them without id collisions.
+    pub fn shared_job_id_counter(&self) -> Arc<AtomicU64> {
+        Arc::clone(&self.next_job_id)
+    }
+
     /// Subscribe to registry-level events.
     pub fn subscribe(&self) -> broadcast::Receiver<QueueRegistryEvent> {
         self.tx.subscribe()
@@ -812,7 +844,7 @@ impl QueueRegistry {
     /// Snapshot of every queue currently held by the registry, in
     /// insertion order.
     pub fn queues(&self) -> Vec<Queue> {
-        let guard = self.inner.lock().expect("registry mutex poisoned");
+        let guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         guard.entries.iter().map(|e| e.queue.clone()).collect()
     }
 
@@ -820,7 +852,7 @@ impl QueueRegistry {
     pub fn len(&self) -> usize {
         self.inner
             .lock()
-            .expect("registry mutex poisoned")
+            .unwrap_or_else(|p| p.into_inner())
             .entries
             .len()
     }
@@ -832,7 +864,7 @@ impl QueueRegistry {
 
     /// Look up a queue by id.
     pub fn get(&self, id: QueueId) -> Option<Queue> {
-        let guard = self.inner.lock().expect("registry mutex poisoned");
+        let guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         guard
             .entries
             .iter()
@@ -866,18 +898,19 @@ impl QueueRegistry {
 
         // 2. Probe the destination drive (and label) outside any lock —
         //    user-supplied probes may take their own locks / syscalls.
+        // `probe_path` is `Option<&Path>` — `&Path` is `Copy`, so the
+        // option is freely cloneable without `.as_deref()` (which
+        // clippy::needless_option_as_deref flags as a no-op here).
         let probe_path = dst.as_deref().map(Self::probe_path);
         let dst_drive = probe_path
-            .as_deref()
             .and_then(|p| self.probe.as_ref().and_then(|pr| pr.volume_id(p)));
         let dst_label = probe_path
-            .as_deref()
             .and_then(|p| self.probe.as_ref().and_then(|pr| pr.drive_label(p)));
 
         // 3. Find or spawn the target queue under a single critical
         //    section so racing routes don't double-create.
         let (queue, just_created) = {
-            let mut inner = self.inner.lock().expect("registry mutex poisoned");
+            let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
             let pos = inner
                 .entries
                 .iter()
@@ -932,7 +965,7 @@ impl QueueRegistry {
         // concurrent merge can't observe the half-merged state. The
         // ordering registry-mutex → queue-mutex is the same one
         // route() uses, so no deadlock.
-        let mut inner = self.inner.lock().expect("registry mutex poisoned");
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         let src_queue = inner
             .entries
             .iter()
@@ -958,8 +991,43 @@ impl QueueRegistry {
         Ok(())
     }
 
+    /// Drop every queue that currently holds zero jobs and emit a
+    /// [`QueueRegistryEvent::QueueRemoved`] for each. Returns the ids
+    /// that were removed (empty `Vec` when nothing was prunable).
+    ///
+    /// Phase 45's runner reconciliation lands in 45.4+, after which a
+    /// completed/cancelled job leaves its queue empty until the user
+    /// merges or routes new work into it. The IPC layer calls
+    /// `prune_empty()` after job-removal events so the tab strip
+    /// doesn't accumulate an ever-growing graveyard of dead queues.
+    /// Safe to call from any code path — the registry's lock-ordering
+    /// invariant (registry → queue) is upheld.
+    pub fn prune_empty(&self) -> Vec<QueueId> {
+        let removed: Vec<QueueId> = {
+            let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+            // `Queue::is_empty` takes the queue's own mutex, which we
+            // acquire while holding the registry mutex. Same ordering
+            // route() / merge_into() already use; no deadlock.
+            let drained: Vec<_> = inner
+                .entries
+                .iter()
+                .filter(|e| e.queue.is_empty())
+                .map(|e| e.queue.id())
+                .collect();
+            if drained.is_empty() {
+                return Vec::new();
+            }
+            inner.entries.retain(|e| !e.queue.is_empty());
+            drained
+        };
+        for id in &removed {
+            let _ = self.tx.send(QueueRegistryEvent::QueueRemoved { id: *id });
+        }
+        removed
+    }
+
     fn find_running_queue(&self) -> Option<Queue> {
-        let inner = self.inner.lock().expect("registry mutex poisoned");
+        let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
         for entry in &inner.entries {
             // snapshot() takes the queue's own mutex, which we acquire
             // while holding the registry mutex. The route/merge paths

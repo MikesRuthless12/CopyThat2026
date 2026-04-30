@@ -22,7 +22,6 @@
 //! - `queue_get_pinned() -> Vec<PinnedDestinationDto>` — return the
 //!   current pinned-destination list.
 
-use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 
 use copythat_core::{JobKind, JobState, QueueId, QueueRegistry, QueueRegistryEvent};
@@ -31,7 +30,24 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Runtime};
 use tokio::sync::broadcast::error::RecvError;
 
+use crate::ipc_safety::{err_string, validate_ipc_path};
 use crate::state::AppState;
+
+/// Phase 45.7 follow-up — defensive caps on the pinned-destination
+/// list. The renderer is part-trusted in the Tauri threat model, but
+/// a buggy / forged `queue_pin_destination` storm would otherwise
+/// pile up unbounded entries that the OS tray menu rebuild would
+/// dutifully render.
+const MAX_PINNED_DESTINATIONS: usize = 50;
+const MAX_PINNED_LABEL_CHARS: usize = 64;
+const MAX_PINNED_PATH_CHARS: usize = 1024;
+
+/// Reject newlines / carriage returns / NUL / U+FFFD that would
+/// corrupt OS tray menu rendering or signal a lossy
+/// WTF-16 → UTF-8 coercion (see `ipc_safety.rs:30`).
+fn pin_string_has_bad_chars(s: &str) -> bool {
+    s.chars().any(|c| matches!(c, '\n' | '\r' | '\0' | '\u{FFFD}'))
+}
 
 /// Tauri event names. Kept in one place so the JS side has a single
 /// source of truth for the strings to `listen()` on.
@@ -198,7 +214,9 @@ pub fn queue_pin_destination<R: Runtime>(
     path: String,
 ) -> Result<Vec<PinnedDestinationDto>, String> {
     let result = queue_pin_destination_impl(state.inner(), &label, &path)?;
-    let _ = crate::rebuild_tray_menu(&app);
+    if let Err(e) = crate::rebuild_tray_menu(&app) {
+        eprintln!("[queue-pin] tray menu rebuild failed: {e}");
+    }
     Ok(result)
 }
 
@@ -221,7 +239,9 @@ pub fn queue_unpin_destination<R: Runtime>(
     path: String,
 ) -> Result<Vec<PinnedDestinationDto>, String> {
     let result = queue_unpin_destination_impl(state.inner(), &label, &path)?;
-    let _ = crate::rebuild_tray_menu(&app);
+    if let Err(e) = crate::rebuild_tray_menu(&app) {
+        eprintln!("[queue-unpin] tray menu rebuild failed: {e}");
+    }
     Ok(result)
 }
 
@@ -253,6 +273,12 @@ pub fn queue_list_impl(state: &AppState) -> Vec<QueueSnapshotDto> {
 }
 
 /// Implementation of [`queue_route_job`]. Public for tests.
+///
+/// Phase 45.7 follow-up — gate `src` and `dst` through the standing
+/// Phase 17e IPC path validator (rejects `..` traversal, NUL bytes,
+/// U+FFFD-poisoned strings, and empty-after-trim). Same gate every
+/// other path-typed command flows through; matches the contract
+/// documented in `ipc_safety.rs:11`.
 pub fn queue_route_job_impl(
     state: &AppState,
     kind: &str,
@@ -260,8 +286,11 @@ pub fn queue_route_job_impl(
     dst: Option<&str>,
 ) -> Result<RoutedJobDto, String> {
     let kind = job_kind_from_wire(kind)?;
-    let src = PathBuf::from(src);
-    let dst = dst.map(PathBuf::from);
+    let src = validate_ipc_path(src).map_err(err_string)?;
+    let dst = match dst {
+        Some(d) => Some(validate_ipc_path(d).map_err(err_string)?),
+        None => None,
+    };
     let (qid, jid, _control) = state.queues.route(kind, src, dst);
     Ok(RoutedJobDto {
         queue_id: qid.as_u64(),
@@ -286,6 +315,24 @@ pub fn queue_set_f2_mode_impl(state: &AppState, enabled: bool) {
 }
 
 /// Implementation of [`queue_pin_destination`]. Public for tests.
+///
+/// Phase 45.7 follow-up — defense-in-depth at the IPC boundary:
+///   * Trim, then reject empty.
+///   * Reject control chars (`\n`, `\r`, `\0`) and U+FFFD that
+///     would corrupt OS tray menu rendering or signal a lossy
+///     UTF-16 coercion.
+///   * Cap label at [`MAX_PINNED_LABEL_CHARS`] and path at
+///     [`MAX_PINNED_PATH_CHARS`] so a forged caller can't blow out
+///     the menu width or settings.toml size.
+///   * Cap the persisted list at [`MAX_PINNED_DESTINATIONS`].
+///
+/// The path is intentionally NOT routed through
+/// [`crate::ipc_safety::validate_ipc_path`] — pinned destinations
+/// may be Phase 32 backend URIs (e.g. `s3://bucket/inbox`,
+/// `sftp://host/path`) which the lexical traversal gate would
+/// flag because of their `://` and `..`-resembling segments. The
+/// checks above cover the corruption surface without rejecting
+/// legitimate URIs.
 pub fn queue_pin_destination_impl(
     state: &AppState,
     label: &str,
@@ -299,12 +346,32 @@ pub fn queue_pin_destination_impl(
     if path.is_empty() {
         return Err("err-pinned-destination-path-empty".to_string());
     }
+    if label.chars().count() > MAX_PINNED_LABEL_CHARS {
+        return Err("err-pinned-destination-label-too-long".to_string());
+    }
+    if path.chars().count() > MAX_PINNED_PATH_CHARS {
+        return Err("err-pinned-destination-path-too-long".to_string());
+    }
+    if pin_string_has_bad_chars(&label) {
+        return Err("err-pinned-destination-label-invalid".to_string());
+    }
+    if pin_string_has_bad_chars(&path) {
+        return Err("err-pinned-destination-path-invalid".to_string());
+    }
     let entry = PinnedDestination { label, path };
+    // Recover the inner guard if the RwLock was poisoned by a prior
+    // panic — see the lock-poisoning policy comment at the top of
+    // `crates/copythat-core/src/queue.rs`. Pin/unpin keeping working
+    // after an unrelated mid-write panic is a much better outcome
+    // than every subsequent IPC call returning a stuck error.
     let mut s = state
         .settings
         .write()
-        .map_err(|_| "settings lock poisoned".to_string())?;
+        .unwrap_or_else(|p| p.into_inner());
     if !s.queue.pinned_destinations.iter().any(|p| p == &entry) {
+        if s.queue.pinned_destinations.len() >= MAX_PINNED_DESTINATIONS {
+            return Err("err-pinned-destination-too-many".to_string());
+        }
         s.queue.pinned_destinations.push(entry);
     }
     save_settings(state, &s)?;
@@ -336,10 +403,15 @@ pub fn queue_unpin_destination_impl(
     let label = label.trim().to_string();
     let path = path.trim().to_string();
     let target = PinnedDestination { label, path };
+    // Recover the inner guard if the RwLock was poisoned by a prior
+    // panic — see the lock-poisoning policy comment at the top of
+    // `crates/copythat-core/src/queue.rs`. Pin/unpin keeping working
+    // after an unrelated mid-write panic is a much better outcome
+    // than every subsequent IPC call returning a stuck error.
     let mut s = state
         .settings
         .write()
-        .map_err(|_| "settings lock poisoned".to_string())?;
+        .unwrap_or_else(|p| p.into_inner());
     s.queue.pinned_destinations.retain(|p| p != &target);
     save_settings(state, &s)?;
     Ok(s.queue

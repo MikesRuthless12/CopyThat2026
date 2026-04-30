@@ -239,3 +239,132 @@ fn route_job_with_no_dst_lands_in_default_queue() {
     assert_eq!(list[0].id, r.queue_id);
     assert_eq!(list[0].name, "default");
 }
+
+// ---------------------------------------------------------------------
+// Phase 45.7 follow-up — IPC validation hardening
+// ---------------------------------------------------------------------
+
+#[test]
+fn route_job_rejects_path_traversal() {
+    let state = fake_state();
+    // `..` in src or dst is the canonical Phase 17e signal — the
+    // standing rule routes every path-typed command through
+    // ipc_safety::validate_ipc_path. The Fluent key surfaces verbatim.
+    let err = queue_route_job_impl(&state, "copy", "/drive/A/../etc", Some("/drive/A/dst"))
+        .unwrap_err();
+    assert!(
+        err.contains("err-path-escape"),
+        "expected path-escape rejection, got {err}",
+    );
+    let err = queue_route_job_impl(&state, "copy", "/drive/A/src", Some("/drive/A/../etc"))
+        .unwrap_err();
+    assert!(err.contains("err-path-escape"));
+}
+
+#[test]
+fn route_job_rejects_empty_after_trim() {
+    let state = fake_state();
+    let err = queue_route_job_impl(&state, "copy", "   ", Some("/drive/A/d")).unwrap_err();
+    assert!(err.contains("err-destination-empty") || err.contains("empty"));
+}
+
+#[test]
+fn route_job_rejects_nul_byte_in_src_or_dst() {
+    let state = fake_state();
+    let bad_src = "/drive/A/src\0evil";
+    let err = queue_route_job_impl(&state, "copy", bad_src, Some("/drive/A/d")).unwrap_err();
+    assert!(err.contains("err-path-escape"));
+}
+
+#[test]
+fn pin_destination_rejects_control_chars_in_label() {
+    let state = fake_state();
+    // Newline in label would corrupt OS tray menu rendering.
+    let err = queue_pin_destination_impl(&state, "Inbox\nEvil", "/drive/A/inbox").unwrap_err();
+    assert!(
+        err.contains("err-pinned-destination-label-invalid"),
+        "got {err}",
+    );
+    // CR — same reason.
+    assert!(queue_pin_destination_impl(&state, "Inbox\rRow2", "/drive/A/i").is_err());
+    // NUL — also rejected by the same gate.
+    assert!(queue_pin_destination_impl(&state, "Inbox\0", "/drive/A/i").is_err());
+    assert!(queue_get_pinned_impl(&state).is_empty());
+}
+
+#[test]
+fn pin_destination_rejects_control_chars_in_path() {
+    let state = fake_state();
+    let err = queue_pin_destination_impl(&state, "Inbox", "/drive/A\nEvil").unwrap_err();
+    assert!(
+        err.contains("err-pinned-destination-path-invalid"),
+        "got {err}",
+    );
+    assert!(queue_pin_destination_impl(&state, "Inbox", "/drive/A\rEvil").is_err());
+    assert!(queue_pin_destination_impl(&state, "Inbox", "/drive/A\0Evil").is_err());
+    assert!(queue_get_pinned_impl(&state).is_empty());
+}
+
+#[test]
+fn pin_destination_rejects_replacement_char() {
+    let state = fake_state();
+    // U+FFFD signals a lossy WTF-16 → UTF-8 coercion. Reject so we
+    // don't silently store a path that drifts between renderer and
+    // engine. (Same threat addressed by `ipc_safety::InvalidEncoding`.)
+    let bad = format!("Inbox{}", '\u{FFFD}');
+    assert!(queue_pin_destination_impl(&state, &bad, "/drive/A/inbox").is_err());
+    let bad_path = format!("/drive/A/{}", '\u{FFFD}');
+    assert!(queue_pin_destination_impl(&state, "Inbox", &bad_path).is_err());
+}
+
+#[test]
+fn pin_destination_caps_label_and_path_length() {
+    let state = fake_state();
+    let long_label = "x".repeat(65);
+    let err = queue_pin_destination_impl(&state, &long_label, "/drive/A/d").unwrap_err();
+    assert!(
+        err.contains("err-pinned-destination-label-too-long"),
+        "got {err}",
+    );
+
+    let long_path = format!("/drive/A/{}", "x".repeat(1024));
+    let err = queue_pin_destination_impl(&state, "Inbox", &long_path).unwrap_err();
+    assert!(
+        err.contains("err-pinned-destination-path-too-long"),
+        "got {err}",
+    );
+
+    // The 64-char label and 1024-char path boundaries are both
+    // accepted (off-by-one guard).
+    let edge_label = "x".repeat(64);
+    let edge_path = format!("/{}", "x".repeat(1023));
+    let after =
+        queue_pin_destination_impl(&state, &edge_label, &edge_path).expect("edge accepted");
+    assert_eq!(after.len(), 1);
+}
+
+#[test]
+fn pin_destination_caps_list_size_at_max() {
+    let state = fake_state();
+    // The cap matches the public MAX_PINNED_DESTINATIONS const but
+    // the test holds it locally so a future bump in the const
+    // doesn't silently break this assertion.
+    const CAP: usize = 50;
+    for i in 0..CAP {
+        queue_pin_destination_impl(&state, &format!("L{i}"), &format!("/drive/A/p{i}"))
+            .expect("under cap");
+    }
+    assert_eq!(queue_get_pinned_impl(&state).len(), CAP);
+    let err = queue_pin_destination_impl(&state, "Overflow", "/drive/A/overflow").unwrap_err();
+    assert!(
+        err.contains("err-pinned-destination-too-many"),
+        "got {err}",
+    );
+    // List length wasn't affected by the rejected attempt.
+    assert_eq!(queue_get_pinned_impl(&state).len(), CAP);
+    // Re-pinning an existing row is still a no-op even when the
+    // list is at the cap (dedup short-circuit short-circuits the cap
+    // check too).
+    queue_pin_destination_impl(&state, "L0", "/drive/A/p0").expect("dedup at cap");
+    assert_eq!(queue_get_pinned_impl(&state).len(), CAP);
+}

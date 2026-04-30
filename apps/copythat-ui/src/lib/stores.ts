@@ -835,6 +835,22 @@ export async function refreshQueues(): Promise<void> {
   }
 }
 
+// Phase 45.7 follow-up — coalesce `queue-job-routed` into one
+// trailing IPC per ~100 ms window. A bulk shell-enqueue (CLI
+// `--enqueue` of a thousand-file selection) otherwise fires one
+// `queue-job-routed` per file and a refreshQueues IPC + store
+// update per file, which thrashes the renderer for no UX gain —
+// the badge counts only need to land on the next paint, not after
+// every single routing decision.
+let queueRouteRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleQueuesRefresh(): void {
+  if (queueRouteRefreshTimer !== null) return;
+  queueRouteRefreshTimer = setTimeout(() => {
+    queueRouteRefreshTimer = null;
+    void refreshQueues();
+  }, 100);
+}
+
 function currentSelectedQueueId(): number {
   let value = 0;
   selectedQueueIdStore.subscribe((v) => {
@@ -1093,7 +1109,7 @@ export async function initStores(): Promise<() => void> {
       void refreshQueues();
     }),
     onEvent<unknown>(EVENTS.queueJobRouted, () => {
-      void refreshQueues();
+      scheduleQueuesRefresh();
     }),
     // Phase 45.6 — user picked a pinned destination from the OS
     // tray menu. Stash it as the active drop target; the next

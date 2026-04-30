@@ -178,3 +178,55 @@ fn spawned_queue_name_is_drive_label() {
         "expected queue name to embed the drive label, got {name:?}",
     );
 }
+
+#[test]
+fn prune_empty_drops_only_jobless_queues_and_emits_events() {
+    use copythat_core::QueueRegistryEvent;
+    let reg = QueueRegistry::new().with_probe(Arc::new(FakeProbe));
+
+    // Subscribe before any state changes so we can assert the
+    // QueueRemoved events the prune emits.
+    let mut rx = reg.subscribe();
+
+    // Two queues, one job each.
+    let (qa, ja, _) = reg.route(JobKind::Copy, drive_a("s"), Some(drive_a("d")));
+    let (qb, _, _) = reg.route(JobKind::Copy, drive_b("s"), Some(drive_b("d")));
+    assert_eq!(reg.len(), 2);
+
+    // Empty out queue A by removing its only job.
+    reg.get(qa).unwrap().remove(ja);
+    assert!(reg.get(qa).unwrap().is_empty());
+    assert_eq!(reg.get(qb).unwrap().len(), 1);
+
+    // Prune. Queue A drops; queue B stays.
+    let removed = reg.prune_empty();
+    assert_eq!(removed, vec![qa]);
+    assert_eq!(reg.len(), 1);
+    assert!(reg.get(qa).is_none());
+    assert_eq!(reg.get(qb).unwrap().len(), 1);
+
+    // Re-running prune is a no-op.
+    let removed_again = reg.prune_empty();
+    assert!(removed_again.is_empty());
+
+    // The QueueRemoved event for qa should be in the broadcast log.
+    let mut saw_removed_qa = false;
+    while let Ok(evt) = rx.try_recv() {
+        if let QueueRegistryEvent::QueueRemoved { id } = evt
+            && id == qa
+        {
+            saw_removed_qa = true;
+        }
+    }
+    assert!(
+        saw_removed_qa,
+        "expected QueueRemoved event for the pruned queue",
+    );
+}
+
+#[test]
+fn prune_empty_on_empty_registry_is_noop() {
+    let reg = QueueRegistry::new().with_probe(Arc::new(FakeProbe));
+    assert!(reg.prune_empty().is_empty());
+    assert_eq!(reg.len(), 0);
+}
