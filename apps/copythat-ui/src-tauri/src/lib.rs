@@ -57,6 +57,7 @@ pub mod offload_commands;
 pub mod power;
 pub mod preview_commands;
 pub mod progress_channel;
+pub mod queue_commands;
 pub mod recovery_commands;
 pub mod reveal;
 pub mod runner;
@@ -445,6 +446,13 @@ pub fn run() {
             sanitize_commands::sanitize_capabilities_cmd,
             sanitize_commands::sanitize_run,
             sanitize_commands::sanitize_free_space_trim,
+            // Phase 45.2 — named-queue / drag-merge / F2-mode IPC.
+            queue_commands::queue_list,
+            queue_commands::queue_route_job,
+            queue_commands::queue_merge,
+            queue_commands::queue_set_f2_mode,
+            queue_commands::queue_pin_destination,
+            queue_commands::queue_get_pinned,
         ])
         .setup(move |app| {
             // Phase 44.2b — install the platform-native CoW probe so
@@ -606,6 +614,20 @@ pub fn run() {
                         .spawn_poller(probes, copythat_power::bus::DEFAULT_POLL_PERIOD)
                 });
                 let _subscriber = power::spawn_power_subscriber(app_state, app.handle().clone());
+            }
+
+            // Phase 45.2 — forward QueueRegistryEvent → Tauri events
+            // (`queue-added` / `queue-removed` / `queue-merged` /
+            // `queue-job-routed`). The handle returned by
+            // `spawn_registry_event_pump` is dropped here on purpose —
+            // the spawned task keeps itself alive while AppState is
+            // around, and the broadcast channel closes naturally on
+            // app shutdown so the loop exits cleanly.
+            if let Some(state) = app.handle().try_state::<AppState>() {
+                let _pump = queue_commands::spawn_registry_event_pump(
+                    app.handle().clone(),
+                    state.queues.clone(),
+                );
             }
 
             if let Some(action) = initial_action.lock().ok().and_then(|mut g| g.take()) {

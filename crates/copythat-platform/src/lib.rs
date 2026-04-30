@@ -94,6 +94,7 @@ pub mod sanitize;
 pub mod smb;
 pub mod sparse;
 pub mod topology;
+pub mod volume;
 pub mod wake_lock;
 
 pub use dedup::{DedupMode, DedupOptions, DedupOutcome, DedupStrategy, HardlinkPolicy, try_dedup};
@@ -113,4 +114,5 @@ pub use sanitize::{
 };
 pub use smb::{SmbCompressionAlgo, SmbCompressionState, negotiate_smb_compression};
 pub use sparse::PlatformSparseOps;
+pub use volume::PlatformVolumeProbe;
 pub use wake_lock::{WakeLock, WakeLockError, acquire_keep_awake};

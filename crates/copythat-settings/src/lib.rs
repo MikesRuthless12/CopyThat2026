@@ -133,6 +133,11 @@ pub struct Settings {
     /// `settings-recovery-non-loopback-warning`). See
     /// [`RecoverySettings`].
     pub recovery: RecoverySettings,
+    /// Phase 45 — named queues + tray destination targets. Carries
+    /// the persistent piece of the queue UX (the pinned-destination
+    /// list). Active queues themselves are runtime state owned by
+    /// the Tauri shell's `QueueRegistry`. See [`QueueSettings`].
+    pub queue: QueueSettings,
 }
 
 impl Settings {
@@ -2159,6 +2164,42 @@ impl Default for RecoverySettings {
             allow_non_loopback: false,
         }
     }
+}
+
+// ---------------------------------------------------------------------
+// Phase 45 — named queues + tray destination targets
+// ---------------------------------------------------------------------
+
+/// Persistent state for the Phase 45 queue UX:
+/// - `pinned_destinations` — the user-curated list of "drop here"
+///   targets shown under the tray icon (Subfeature D, lands fully in
+///   Phase 45.6). Phase 45.2 ships the persistence + IPC plumbing so
+///   the UI can edit the list before the tray menu renders it.
+///
+/// `auto_enqueue_next` (F2 mode) is intentionally NOT persisted — it's
+/// a transient runtime flag the user toggles per-session via the F2
+/// shortcut.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct QueueSettings {
+    /// Tray destination targets. Order is significant — the tray menu
+    /// renders them top-to-bottom in the same order. Empty by default.
+    pub pinned_destinations: Vec<PinnedDestination>,
+}
+
+/// A single "drop here" target shown under the tray icon.
+///
+/// `path` may be a local filesystem path (`C:\Users\me\Inbox`) or any
+/// Phase 32 backend URI (`s3://bucket/inbox`, `sftp://host/path`); the
+/// tray drop handler routes it through `QueueRegistry::route` exactly
+/// like any other destination.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PinnedDestination {
+    /// User-supplied label rendered in the tray menu (e.g. `"Inbox"`).
+    pub label: String,
+    /// Destination path or backend URI.
+    pub path: String,
 }
 
 // ---------------------------------------------------------------------
