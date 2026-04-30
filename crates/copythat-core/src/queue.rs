@@ -16,9 +16,10 @@
 //! (SQLite history). Queue state lives in memory for the process
 //! lifetime.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use tokio::sync::broadcast;
@@ -44,6 +45,41 @@ impl JobId {
 impl std::fmt::Display for JobId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "#{}", self.0)
+    }
+}
+
+/// Opaque identifier for a named [`Queue`].
+///
+/// A single process can host multiple queues — typically one per
+/// physical destination drive — managed by a [`QueueRegistry`]. The
+/// registry assigns ids sequentially starting at `1`; the well-known
+/// id `0` is reserved for the default queue created by
+/// [`Queue::new`] when a registry isn't in play.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct QueueId(u64);
+
+impl QueueId {
+    /// Reserved id for the default queue. Matches the value used by
+    /// [`Queue::new`] so existing single-queue callers can omit the
+    /// registry entirely and still report a stable id over IPC.
+    pub const DEFAULT: QueueId = QueueId(0);
+
+    /// Construct a [`QueueId`] from a raw `u64`. Primarily for IPC
+    /// deserialisation; in-process code should use the id returned by
+    /// [`QueueRegistry::route`] or [`Queue::id`].
+    pub const fn from_u64(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Return the inner `u64` (e.g. for IPC serialisation).
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+}
+
+impl std::fmt::Display for QueueId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Q{}", self.0)
     }
 }
 
@@ -174,9 +210,11 @@ struct Inner {
 
 /// The queue itself. Cheap to `clone` — internals are `Arc`.
 pub struct Queue {
-    inner: std::sync::Arc<Mutex<Inner>>,
+    id: QueueId,
+    name: Arc<str>,
+    inner: Arc<Mutex<Inner>>,
     tx: broadcast::Sender<QueueEvent>,
-    next_id: std::sync::Arc<AtomicU64>,
+    next_id: Arc<AtomicU64>,
 }
 
 impl Default for Queue {
@@ -188,9 +226,11 @@ impl Default for Queue {
 impl Clone for Queue {
     fn clone(&self) -> Self {
         Self {
-            inner: self.inner.clone(),
+            id: self.id,
+            name: Arc::clone(&self.name),
+            inner: Arc::clone(&self.inner),
             tx: self.tx.clone(),
-            next_id: self.next_id.clone(),
+            next_id: Arc::clone(&self.next_id),
         }
     }
 }
@@ -199,6 +239,8 @@ impl std::fmt::Debug for Queue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let guard = self.inner.lock().expect("queue mutex poisoned");
         f.debug_struct("Queue")
+            .field("id", &self.id)
+            .field("name", &&*self.name)
             .field("jobs", &guard.entries.len())
             .finish()
     }
@@ -206,6 +248,10 @@ impl std::fmt::Debug for Queue {
 
 impl Queue {
     /// Build an empty queue with the default broadcast channel capacity.
+    ///
+    /// The id and name default to [`QueueId::DEFAULT`] / `"default"`
+    /// so single-queue callers can keep using `Queue::new()` without
+    /// touching a [`QueueRegistry`].
     pub fn new() -> Self {
         Self::with_capacity(DEFAULT_BROADCAST_CAPACITY)
     }
@@ -215,14 +261,46 @@ impl Queue {
     /// start receiving `Lagged` errors and must reconcile via
     /// `snapshot`. 1024 is a generous default for GUI use.
     pub fn with_capacity(capacity: usize) -> Self {
+        Self::with_id_name_capacity(QueueId::DEFAULT, "default", capacity)
+    }
+
+    /// Construct a named queue with an explicit id and capacity. The
+    /// id and name are immutable for the lifetime of the queue.
+    pub fn with_id_name_capacity(id: QueueId, name: impl Into<Arc<str>>, capacity: usize) -> Self {
+        let next_id = Arc::new(AtomicU64::new(1));
+        Self::with_shared_counter(id, name, capacity, next_id)
+    }
+
+    /// Construct a queue that shares its job-id counter with sibling
+    /// queues. [`QueueRegistry`] uses this so [`JobId`]s remain unique
+    /// across every queue it owns — a property [`QueueRegistry::merge_into`]
+    /// relies on when transferring jobs between queues.
+    pub fn with_shared_counter(
+        id: QueueId,
+        name: impl Into<Arc<str>>,
+        capacity: usize,
+        next_id: Arc<AtomicU64>,
+    ) -> Self {
         let (tx, _rx) = broadcast::channel(capacity);
         Self {
-            inner: std::sync::Arc::new(Mutex::new(Inner {
+            id,
+            name: name.into(),
+            inner: Arc::new(Mutex::new(Inner {
                 entries: Vec::new(),
             })),
             tx,
-            next_id: std::sync::Arc::new(AtomicU64::new(1)),
+            next_id,
         }
+    }
+
+    /// Return this queue's stable id.
+    pub fn id(&self) -> QueueId {
+        self.id
+    }
+
+    /// Return this queue's human-readable name (e.g. `"D: queue"`).
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Enqueue a new job. Returns its id and a `CopyControl` clone the
@@ -518,5 +596,395 @@ impl Queue {
     /// `true` when the queue holds no jobs.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Move every entry from `other` into `self`. Emits
+    /// [`QueueEvent::JobRemoved`] on `other` and
+    /// [`QueueEvent::JobAdded`] on `self` for each transferred job.
+    ///
+    /// IDs are preserved. The caller is responsible for ensuring
+    /// `self` and `other` share a job-id counter
+    /// (see [`Queue::with_shared_counter`]); otherwise transferred
+    /// ids may collide with future ids minted by `self`.
+    ///
+    /// No-op when `self` and `other` reference the same underlying
+    /// queue (cloned from one another).
+    pub fn absorb(&self, other: &Queue) {
+        if Arc::ptr_eq(&self.inner, &other.inner) {
+            return;
+        }
+        let drained = {
+            let mut other_guard = other.inner.lock().expect("queue mutex poisoned");
+            std::mem::take(&mut other_guard.entries)
+        };
+        let drained_ids: Vec<JobId> = drained.iter().map(|e| e.job.id).collect();
+        {
+            let mut self_guard = self.inner.lock().expect("queue mutex poisoned");
+            self_guard.entries.extend(drained);
+        }
+        for id in drained_ids {
+            let _ = other.tx.send(QueueEvent::JobRemoved(id));
+            let _ = self.tx.send(QueueEvent::JobAdded(id));
+        }
+    }
+}
+
+// ============================================================
+// QueueRegistry — Phase 45.1
+// ============================================================
+
+/// Platform hook for identifying which physical drive a path lives
+/// on. Implemented by callers that have access to OS-specific volume
+/// queries (`copythat_platform::volume_id` is the canonical
+/// implementation); tests can plug in a deterministic stub.
+///
+/// `copythat-core` deliberately does not depend on `copythat-platform`
+/// (it would be a circular dep — the platform crate already depends
+/// on this one), so the probe is injected at registry-construction
+/// time.
+pub trait VolumeProbe: Send + Sync + std::fmt::Debug + 'static {
+    /// Return a stable identifier for the physical drive backing
+    /// `path`. `None` indicates the probe couldn't classify the path
+    /// (non-existent, network mount with no serial, etc.) — the
+    /// registry treats those as a single anonymous bucket.
+    fn volume_id(&self, path: &Path) -> Option<u64>;
+
+    /// Return a human-readable label for the drive backing `path`
+    /// (e.g. `"D:"` on Windows, `"/Volumes/Backup"` on macOS). Used
+    /// only for naming newly-spawned queues; `None` falls back to a
+    /// generic `"queue N"` name.
+    fn drive_label(&self, path: &Path) -> Option<String> {
+        let _ = path;
+        None
+    }
+}
+
+/// Events fired on the [`QueueRegistry`] broadcast channel.
+#[derive(Debug, Clone)]
+pub enum QueueRegistryEvent {
+    /// A new queue was spawned (typically via [`QueueRegistry::route`]
+    /// when a job targeted a previously-unseen drive).
+    QueueAdded {
+        /// Identifier assigned to the new queue.
+        id: QueueId,
+        /// Display name (e.g. `"D: queue"`).
+        name: Arc<str>,
+    },
+    /// A queue was removed (the source side of a merge).
+    QueueRemoved {
+        /// Identifier of the removed queue.
+        id: QueueId,
+    },
+    /// Two queues were merged via [`QueueRegistry::merge_into`].
+    QueueMerged {
+        /// Source queue (now removed).
+        src: QueueId,
+        /// Destination queue (absorbed `src`'s jobs).
+        dst: QueueId,
+    },
+    /// A new job was routed to a queue. Tells the UI which tab to
+    /// flash without re-snapshotting every queue.
+    JobRouted {
+        /// Queue the job ended up in.
+        queue_id: QueueId,
+        /// Identifier of the new job.
+        job_id: JobId,
+    },
+}
+
+/// Failure reason for [`QueueRegistry::merge_into`].
+#[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
+pub enum QueueMergeError {
+    /// `src` does not name a queue currently held by the registry.
+    #[error("unknown source queue: {0}")]
+    UnknownSrc(QueueId),
+    /// `dst` does not name a queue currently held by the registry.
+    #[error("unknown destination queue: {0}")]
+    UnknownDst(QueueId),
+}
+
+struct RegistryEntry {
+    queue: Queue,
+    /// Volume id the queue was spawned for; `None` for anonymous
+    /// (no-probe) queues. Multiple queues may share `None` only via
+    /// explicit insertion — [`QueueRegistry::route`] always picks the
+    /// existing anonymous queue when probing yields `None`.
+    drive_id: Option<u64>,
+}
+
+struct RegistryInner {
+    entries: Vec<RegistryEntry>,
+}
+
+/// Owns multiple [`Queue`]s, one per physical destination drive.
+///
+/// [`route`](Self::route) is the single entry point a UI / IPC layer
+/// uses to enqueue work: it picks an existing queue when the
+/// destination lives on the same drive as one already running, or
+/// spawns a new named queue when the destination is on a fresh drive.
+///
+/// Cheap to clone — internals are `Arc`-shared.
+pub struct QueueRegistry {
+    inner: Arc<Mutex<RegistryInner>>,
+    probe: Option<Arc<dyn VolumeProbe>>,
+    next_queue_id: Arc<AtomicU64>,
+    next_job_id: Arc<AtomicU64>,
+    /// F2-mode flag. When set, [`route`](Self::route) re-uses the
+    /// queue that currently owns any [`JobState::Running`] job
+    /// instead of spawning a new parallel queue. Public so the
+    /// UI / Tauri command layer can flip it directly without going
+    /// through a setter.
+    pub auto_enqueue_next: Arc<AtomicBool>,
+    tx: broadcast::Sender<QueueRegistryEvent>,
+    capacity: usize,
+}
+
+impl Clone for QueueRegistry {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            probe: self.probe.clone(),
+            next_queue_id: Arc::clone(&self.next_queue_id),
+            next_job_id: Arc::clone(&self.next_job_id),
+            auto_enqueue_next: Arc::clone(&self.auto_enqueue_next),
+            tx: self.tx.clone(),
+            capacity: self.capacity,
+        }
+    }
+}
+
+impl std::fmt::Debug for QueueRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let guard = self.inner.lock().expect("registry mutex poisoned");
+        f.debug_struct("QueueRegistry")
+            .field("queues", &guard.entries.len())
+            .field("auto_enqueue_next", &self.auto_enqueue_next.load(Ordering::Relaxed))
+            .finish()
+    }
+}
+
+impl Default for QueueRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl QueueRegistry {
+    /// Construct an empty registry with no volume probe — every dst
+    /// hashes to a single anonymous queue. Equivalent to
+    /// `QueueRegistry::new()` followed by no `with_probe` call.
+    pub fn new() -> Self {
+        Self::with_capacity(DEFAULT_BROADCAST_CAPACITY)
+    }
+
+    /// Construct an empty registry with a custom broadcast channel
+    /// capacity for [`QueueRegistryEvent`]s.
+    pub fn with_capacity(capacity: usize) -> Self {
+        let (tx, _rx) = broadcast::channel(capacity);
+        Self {
+            inner: Arc::new(Mutex::new(RegistryInner {
+                entries: Vec::new(),
+            })),
+            probe: None,
+            // Queue ids start at 1; id 0 is reserved for the
+            // backwards-compat default Queue (see QueueId::DEFAULT).
+            next_queue_id: Arc::new(AtomicU64::new(1)),
+            next_job_id: Arc::new(AtomicU64::new(1)),
+            auto_enqueue_next: Arc::new(AtomicBool::new(false)),
+            tx,
+            capacity,
+        }
+    }
+
+    /// Install a [`VolumeProbe`] used to classify destination paths
+    /// onto physical drives. Without a probe, every dst falls into a
+    /// single anonymous queue.
+    pub fn with_probe(mut self, probe: Arc<dyn VolumeProbe>) -> Self {
+        self.probe = Some(probe);
+        self
+    }
+
+    /// Subscribe to registry-level events.
+    pub fn subscribe(&self) -> broadcast::Receiver<QueueRegistryEvent> {
+        self.tx.subscribe()
+    }
+
+    /// Snapshot of every queue currently held by the registry, in
+    /// insertion order.
+    pub fn queues(&self) -> Vec<Queue> {
+        let guard = self.inner.lock().expect("registry mutex poisoned");
+        guard.entries.iter().map(|e| e.queue.clone()).collect()
+    }
+
+    /// Number of queues currently held.
+    pub fn len(&self) -> usize {
+        self.inner
+            .lock()
+            .expect("registry mutex poisoned")
+            .entries
+            .len()
+    }
+
+    /// `true` when no queues exist yet.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Look up a queue by id.
+    pub fn get(&self, id: QueueId) -> Option<Queue> {
+        let guard = self.inner.lock().expect("registry mutex poisoned");
+        guard
+            .entries
+            .iter()
+            .find(|e| e.queue.id() == id)
+            .map(|e| e.queue.clone())
+    }
+
+    /// Enqueue a new job. Picks an existing queue when `dst` lives on
+    /// a drive already covered by one (probed via [`VolumeProbe`]), or
+    /// spawns a new queue named from the drive label otherwise. When
+    /// [`auto_enqueue_next`](Self::auto_enqueue_next) is set, routes
+    /// into whichever queue currently holds a running job (F2 mode).
+    pub fn route(
+        &self,
+        kind: JobKind,
+        src: PathBuf,
+        dst: Option<PathBuf>,
+    ) -> (QueueId, JobId, CopyControl) {
+        // 1. F2 mode short-circuit.
+        if self.auto_enqueue_next.load(Ordering::Relaxed) {
+            if let Some(queue) = self.find_running_queue() {
+                let qid = queue.id();
+                let (job_id, control) = queue.add(kind, src, dst);
+                let _ = self.tx.send(QueueRegistryEvent::JobRouted {
+                    queue_id: qid,
+                    job_id,
+                });
+                return (qid, job_id, control);
+            }
+        }
+
+        // 2. Probe the destination drive (and label) outside any lock —
+        //    user-supplied probes may take their own locks / syscalls.
+        let probe_path = dst.as_deref().map(Self::probe_path);
+        let dst_drive = probe_path
+            .as_deref()
+            .and_then(|p| self.probe.as_ref().and_then(|pr| pr.volume_id(p)));
+        let dst_label = probe_path
+            .as_deref()
+            .and_then(|p| self.probe.as_ref().and_then(|pr| pr.drive_label(p)));
+
+        // 3. Find or spawn the target queue under a single critical
+        //    section so racing routes don't double-create.
+        let (queue, just_created) = {
+            let mut inner = self.inner.lock().expect("registry mutex poisoned");
+            let pos = inner
+                .entries
+                .iter()
+                .position(|e| e.drive_id == dst_drive);
+            if let Some(idx) = pos {
+                (inner.entries[idx].queue.clone(), false)
+            } else {
+                let new_qid_value = self.next_queue_id.fetch_add(1, Ordering::Relaxed);
+                let new_qid = QueueId(new_qid_value);
+                let name: Arc<str> = match (&dst_label, dst_drive) {
+                    (Some(label), _) => Arc::from(format!("{label} queue")),
+                    (None, Some(_)) => Arc::from(format!("queue {new_qid_value}")),
+                    (None, None) => Arc::from("default"),
+                };
+                let queue = Queue::with_shared_counter(
+                    new_qid,
+                    Arc::clone(&name),
+                    self.capacity,
+                    Arc::clone(&self.next_job_id),
+                );
+                inner.entries.push(RegistryEntry {
+                    queue: queue.clone(),
+                    drive_id: dst_drive,
+                });
+                (queue, true)
+            }
+        };
+
+        if just_created {
+            let _ = self.tx.send(QueueRegistryEvent::QueueAdded {
+                id: queue.id(),
+                name: Arc::from(queue.name()),
+            });
+        }
+
+        let qid = queue.id();
+        let (job_id, control) = queue.add(kind, src, dst);
+        let _ = self.tx.send(QueueRegistryEvent::JobRouted {
+            queue_id: qid,
+            job_id,
+        });
+        (qid, job_id, control)
+    }
+
+    /// Move every job from `src` queue into `dst` queue and remove
+    /// `src`. No-op when `src == dst`.
+    pub fn merge_into(&self, src: QueueId, dst: QueueId) -> Result<(), QueueMergeError> {
+        if src == dst {
+            return Ok(());
+        }
+        // Hold the registry lock through the whole operation so a
+        // concurrent merge can't observe the half-merged state. The
+        // ordering registry-mutex → queue-mutex is the same one
+        // route() uses, so no deadlock.
+        let mut inner = self.inner.lock().expect("registry mutex poisoned");
+        let src_queue = inner
+            .entries
+            .iter()
+            .find(|e| e.queue.id() == src)
+            .map(|e| e.queue.clone())
+            .ok_or(QueueMergeError::UnknownSrc(src))?;
+        let dst_queue = inner
+            .entries
+            .iter()
+            .find(|e| e.queue.id() == dst)
+            .map(|e| e.queue.clone())
+            .ok_or(QueueMergeError::UnknownDst(dst))?;
+
+        dst_queue.absorb(&src_queue);
+
+        if let Some(pos) = inner.entries.iter().position(|e| e.queue.id() == src) {
+            inner.entries.remove(pos);
+        }
+        drop(inner);
+
+        let _ = self.tx.send(QueueRegistryEvent::QueueMerged { src, dst });
+        let _ = self.tx.send(QueueRegistryEvent::QueueRemoved { id: src });
+        Ok(())
+    }
+
+    fn find_running_queue(&self) -> Option<Queue> {
+        let inner = self.inner.lock().expect("registry mutex poisoned");
+        for entry in &inner.entries {
+            // snapshot() takes the queue's own mutex, which we acquire
+            // while holding the registry mutex. The route/merge paths
+            // use the same registry → queue order; no deadlock.
+            if entry
+                .queue
+                .snapshot()
+                .iter()
+                .any(|j| j.state == JobState::Running)
+            {
+                return Some(entry.queue.clone());
+            }
+        }
+        None
+    }
+
+    /// `volume_id` accepts existing files but rejects unborn paths on
+    /// some platforms — probe the parent when the dst itself doesn't
+    /// exist yet (matches the heuristic the dispatcher / dedup paths
+    /// already use elsewhere).
+    fn probe_path(dst: &Path) -> &Path {
+        if dst.exists() {
+            dst
+        } else {
+            dst.parent().unwrap_or(dst)
+        }
     }
 }
