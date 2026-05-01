@@ -151,6 +151,12 @@ workloads.
   - **Grandfather-Father-Son (GFS)** — group versions into per-hour / per-day / per-week / per-month UTC buckets, keep the newest version in each of the most recent N buckets per tier, drop the rest. Buckets are unioned (a version that survives in any tier is retained), so a typical "24h hourly · 7 daily · 4 weekly · 12 monthly" config covers a year of history at a fraction of the disk cost of "keep everything."
 - **Engine integration is best-effort by contract**: the snapshot hook fires on a `tokio::task::spawn_blocking` worker so it doesn't stall the copy hot path; if the chunk store is unavailable, the snapshot fails, the engine logs a `tracing::warn!`, and the copy proceeds normally. A failing snapshot must NEVER abort a user copy.
 
+### WASM plugin runtime (Phase 46 — in progress; 46.1 + 46.2 shipped)
+
+- **Engine + ABI shipped.** New `copythat-plugin` workspace crate wraps a real `wasmtime::Engine` (cranelift JIT, default config). `PluginHost::load_plugin(<path>)` reads `.wasm` (or `.wat`) bytes from disk and compiles them; `PluginHandle::call_hook(kind, ctx)` dispatches through a JSON-over-linear-memory ABI — the plugin must export `memory`, `alloc(size: i32) -> i32` (returns a pointer to a fresh buffer), and `hook(ctx_ptr: i32, ctx_len: i32) -> i64` (reads the JSON `HookCtx`, returns a packed `(out_ptr << 32) | out_len` pointing at the JSON `HookOutcome` response). Each call uses a fresh `wasmtime::Store` so plugins are stateless across calls; sandbox state lands when 46.4 ships.
+- **Lifecycle hooks the engine dispatches.** `BeforeJob`, `BeforeFile`, `AfterFile`, `AfterJob`, `OnError`. Plugin response is one of `Continue`, `SkipFile`, `AbortJob`, or `Notify { message }`; the engine acts on the decoded outcome (skip the current file, abort the job, raise a tray/log notification, or proceed normally). `HookKind` serialises as snake_case and `HookOutcome` uses an internally-tagged `{"kind":"…"}` JSON shape so the ABI plugins compile against today is stable before sandbox budgets and capability gating arrive.
+- **Not yet user-accessible.** CPU + memory sandbox budgets and pruned `wasmtime` features (46.3), plugin manifest (`plugin.toml`) parsing + capability gating (`read_fs:<scope>` etc., 46.4), sample plugins `organize-by-exif` / `notify-discord` / `notify-ntfy` / `dedup-warning` (46.5), and the Settings → Plugins UI tab + install-from-file/URL flow (46.6) all land in later sub-phases. No plugins ship in the binary today, and there is no UI surface to enable them yet.
+
 ### Drag-progress-merge + named queues + F2 + tray destinations (Phase 45)
 
 - **Per-drive named queues.** `copythat-core::QueueRegistry` partitions queued jobs by physical destination drive (`copythat_platform::volume_id` on Windows VolumeSerialNumber, `st_dev` on Unix) so two transfers to the same disk share one queue and never compete for spindle / NAND head time, while transfers to *different* drives spawn parallel queues that actually run in parallel. The legacy `state.queue` stays in place as the back-compat default queue (`QueueId::DEFAULT`) so every existing entry point keeps working without changes.
@@ -324,7 +330,8 @@ CopyThat2026/
 │   ├── copythat-history/        # SQLite history
 │   ├── copythat-platform/       # OS fast paths + shell hooks
 │   ├── copythat-settings/       # TOML settings + JSON profile store
-│   └── copythat-i18n/           # Fluent loader
+│   ├── copythat-i18n/           # Fluent loader
+│   └── copythat-plugin/         # WASM plugin runtime (wasmtime-based, Phase 46)
 ├── apps/copythat-ui/            # Tauri 2.x + Svelte 5 shell
 ├── xtask/                       # workspace automation + benches
 ├── locales/<code>/copythat.ftl  # 18 Fluent locale files

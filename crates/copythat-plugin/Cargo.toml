@@ -1,0 +1,41 @@
+[package]
+name = "copythat-plugin"
+description = "Phase 46 — sandboxed WASM plugin runtime for post-copy hooks. Plugins receive lifecycle callbacks (BeforeJob / BeforeFile / AfterFile / AfterJob / OnError) and return a HookOutcome that the engine respects (Continue / SkipFile / AbortJob / Notify)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Phase 46.1 — `HookCtx` + `HookOutcome` cross the WASM ABI boundary as
+# JSON so plugins can be written in any WASM-emitting language without
+# a custom binding generator. `serde_json::Value` lets sub-phase 46.2
+# extend the schema without breaking the public type surface.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Phase 46.1 — typed plugin errors. Same crate used by every other
+# workspace member (copythat-core, copythat-recovery, …) so the
+# error-handling style stays uniform.
+thiserror = "2"
+
+# Phase 46.2 — WASM engine. Apache-2.0 WITH LLVM-exception (already
+# on the deny.toml allow list). Default features pull in cranelift +
+# wat + parallel-compilation; 46.3 prunes to a minimal feature set
+# once the sandbox boundaries are known.
+wasmtime = "44"
+
+[dev-dependencies]
+# Phase 46.1 scaffold smoke uses `#[tokio::test]` to exercise the
+# async `PluginHandle::call_hook` surface. `rt` + `macros` is the
+# minimum runtime needed for the single-threaded test executor.
+tokio = { version = "1", features = ["macros", "rt"] }
+# Phase 46.2 dispatch smoke writes the WAT plugin to a tempfile so
+# `PluginHost::load_plugin` exercises the real path-based load API.
+tempfile = "3"
