@@ -25,11 +25,30 @@ serde_json = "1"
 # error-handling style stays uniform.
 thiserror = "2"
 
-# Phase 46.2 — WASM engine. Apache-2.0 WITH LLVM-exception (already
-# on the deny.toml allow list). Default features pull in cranelift +
-# wat + parallel-compilation; 46.3 prunes to a minimal feature set
-# once the sandbox boundaries are known.
-wasmtime = "44"
+# Phase 46.4 — `plugin.toml` manifest parser. `0.9` matches every
+# other workspace consumer (copythat-cli, copythat-cloud,
+# copythat-mobile, copythat-settings, the Tauri shell) so the lock
+# graph stays single-version.
+#
+# (Wall-clock budget enforcement — `Engine::increment_epoch()` driven
+# by a 1ms ticker — uses a `std::thread` rather than a tokio task so
+# `PluginHost::new` is callable outside a tokio runtime. Wasmtime-wasi
+# is deferred until 46.5, when the shipped sample plugins start
+# importing actual WASI preview1 functions; pulling it in now would
+# add a heavy dep with no in-tree consumer.)
+toml = "0.9"
+
+# Phase 46.2 / 46.3 — WASM engine. Apache-2.0 WITH LLVM-exception
+# (already on the deny.toml allow list). 46.3 pruned to a minimal
+# feature set: `cranelift` for the JIT, `runtime` for the engine,
+# `wat` for the smoke tests, `async` so per-call sandbox budgets
+# (fuel, memory limiter) can yield cooperatively. Dropped:
+# `component-model`, `gc`, `threads`, `pooling-allocator`,
+# `parallel-compilation`, `cache`, `addr2line`, `coredump`,
+# `profiling`, `wmemcheck`, `debug-builtins` — none are needed by
+# the post-copy-hook ABI and they all add build time + binary
+# weight.
+wasmtime = { version = "44", default-features = false, features = ["cranelift", "runtime", "wat", "async"] }
 
 [dev-dependencies]
 # Phase 46.1 scaffold smoke uses `#[tokio::test]` to exercise the
