@@ -254,6 +254,47 @@ async fn memory_exceeded_when_plugin_grows_past_cap() {
     }
 }
 
+/// `hook` returns a packed pointer with `out_len = 0xFFFFFFFF`. Pre-46.7
+/// the host blindly trusted the plugin-controlled length and would
+/// `vec![0u8; 0xFFFFFFFF]` (≈4 GiB) before the subsequent
+/// `Memory::read` could fail safely — a free DoS for any plugin the
+/// user installed. 46.7's wrap pass added a clamp against
+/// `PluginConfig::max_memory_bytes`; this test pins that the clamp
+/// fires with `OutOfBounds` rather than panicking the host.
+const HUGE_OUT_LEN_WAT: &str = r#"
+(module
+  (memory (export "memory") 1)
+
+  (func (export "alloc") (param $size i32) (result i32) (i32.const 0))
+
+  ;; Always return packed (out_ptr=0, out_len=0xFFFFFFFF). The high
+  ;; 32 bits encode out_ptr; we leave them zero so the failure is
+  ;; unambiguously the length clamp tripping, not the pointer
+  ;; walking past memory.
+  (func (export "hook") (param $ctx_ptr i32) (param $ctx_len i32) (result i64)
+    (i64.const 0xFFFFFFFF))
+)
+"#;
+
+#[tokio::test]
+async fn out_len_above_memory_cap_rejected_before_allocation() {
+    let (_dir, wasm) = write_plugin(HUGE_OUT_LEN_WAT, DEFAULT_MANIFEST);
+    let host = PluginHost::new();
+    let handle = host.load_plugin(&wasm).expect("load_plugin");
+
+    let err = handle
+        .call_hook(HookKind::BeforeFile, HookCtx::default())
+        .await
+        .expect_err("4 GiB out_len must reject without OOM");
+    match err {
+        PluginError::OutOfBounds { ptr, len } => {
+            assert_eq!(ptr, 0, "out_ptr echoed verbatim from packed return");
+            assert_eq!(len, 0xFFFFFFFF, "out_len echoed verbatim from packed return");
+        }
+        other => panic!("expected OutOfBounds clamp, got {other:?}"),
+    }
+}
+
 #[tokio::test]
 async fn happy_path_still_works_with_default_sandbox_budgets() {
     // Sanity check: the default `PluginConfig` (1M fuel, 64 MiB

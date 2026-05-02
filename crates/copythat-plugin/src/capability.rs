@@ -40,9 +40,12 @@ pub enum Capability {
     /// [`Capability::ReadFs`].
     WriteFs { scope: String },
 
-    /// Outbound network access. No scope sub-grammar at 46.4 —
-    /// 46.7's wrap pass adds an allowlist (`network:<host>:<port>`)
-    /// once the sample plugins exercise it.
+    /// Outbound network access. No scope sub-grammar — host /
+    /// port allowlists are deferred until WASI preview1 wiring lands
+    /// (see [`crate::PluginHandle::call_hook`] for the current shape:
+    /// the gate today is binary, and the sample `notify-*` plugins
+    /// emit notification envelopes the engine forwards rather than
+    /// performing the HTTP POST inside the sandbox).
     Network,
 }
 

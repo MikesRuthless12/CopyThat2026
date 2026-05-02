@@ -28,8 +28,21 @@
 //! budget (`PluginConfig::wall_time_budget`, default 50 ms,
 //! enforced via `Config::epoch_interruption` + a 1ms ticker thread
 //! tied to the `PluginHost`; trips [`PluginError::WallTimeExceeded`]).
-//! `wasmtime-wasi` wiring for capability-gated file/network access
-//! lands in 46.5 with the shipped sample plugins.
+//! Sub-phase 46.5 shipped four sample plugins exercising the host
+//! ABI (organize-by-exif, notify-discord, notify-ntfy, dedup-warning)
+//! plus `xtask build-sample-plugins`. Sub-phase 46.6 layered the
+//! per-user plugin store + Settings UI in the Tauri shell. Sub-phase
+//! 46.7 wraps the round with a security audit, the cumulative end-
+//! to-end smoke under [`tests/smoke/phase_46_plugin.rs`], and the
+//! out-of-bounds pre-allocation clamp in [`PluginHandle::call_hook`]
+//! that bounds plugin-controlled response lengths to the per-call
+//! memory cap before the host allocates a buffer.
+//!
+//! `wasmtime-wasi` wiring for capability-gated file/network imports
+//! (so a `read_fs:source` grant materialises as a preopened directory
+//! handle inside the sandbox) is **deferred** — the sample plugins
+//! emit declarative envelopes instead, and the engine performs the
+//! gated I/O on their behalf.
 
 #![forbid(unsafe_code)]
 

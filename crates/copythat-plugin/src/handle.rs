@@ -246,6 +246,22 @@ impl PluginHandle {
         let out_ptr = (packed >> 32) as u32;
         let out_len = (packed & 0xffff_ffff) as u32;
 
+        // Bound `out_len` to the per-call memory cap before allocating
+        // the host-side response buffer. Without this clamp a malicious
+        // plugin can return e.g. `out_len = 0xFFFFFFFF` and force the
+        // host to attempt a ~4 GiB allocation. The subsequent
+        // `Memory::read` would catch the out-of-bounds read, but the
+        // pre-read `vec![0u8; out_len]` would already have OOM-panicked
+        // the host or starved the system. Plugin memory is itself
+        // capped at `max_memory_bytes`, so a legitimate `(out_ptr,
+        // out_len)` pair always satisfies this bound.
+        if (out_len as usize) > self.config.max_memory_bytes {
+            return Err(PluginError::OutOfBounds {
+                ptr: out_ptr,
+                len: out_len,
+            });
+        }
+
         let mut out_buf = vec![0u8; out_len as usize];
         read_memory(&memory, &store, out_ptr, &mut out_buf)?;
 
