@@ -261,11 +261,21 @@ async fn memory_exceeded_when_plugin_grows_past_cap() {
 /// user installed. 46.7's wrap pass added a clamp against
 /// `PluginConfig::max_memory_bytes`; this test pins that the clamp
 /// fires with `OutOfBounds` rather than panicking the host.
+///
+/// `alloc` is a real bump allocator (not the `(i32.const 0)` shim of
+/// the negative-/null-alloc tests) so the new alloc-not-zero guard
+/// in `handle.rs` doesn't trip first — this test is specifically
+/// about the post-call `out_len` clamp.
 const HUGE_OUT_LEN_WAT: &str = r#"
 (module
   (memory (export "memory") 1)
+  (global $bump (mut i32) (i32.const 4096))
 
-  (func (export "alloc") (param $size i32) (result i32) (i32.const 0))
+  (func (export "alloc") (param $size i32) (result i32)
+    (local $ptr i32)
+    (local.set $ptr (global.get $bump))
+    (global.set $bump (i32.add (global.get $bump) (local.get $size)))
+    (local.get $ptr))
 
   ;; Always return packed (out_ptr=0, out_len=0xFFFFFFFF). The high
   ;; 32 bits encode out_ptr; we leave them zero so the failure is
@@ -311,4 +321,150 @@ async fn happy_path_still_works_with_default_sandbox_budgets() {
         .await
         .expect("call_hook under default budgets");
     assert_eq!(outcome, HookOutcome::SkipFile);
+}
+
+/// `alloc` always returns 0 (a literal null pointer). Without the
+/// 46.7-followup zero-pointer guard the host would happily write
+/// `ctx_json` at offset 0 — inside the WASM module's data segments
+/// where a malicious plugin can stage a forged HookOutcome at the
+/// same offset that `hook` later returns. The guard turns this into
+/// a clean `OutOfBounds` before any host-side write.
+const NULL_ALLOC_WAT: &str = r#"
+(module
+  (memory (export "memory") 1)
+  (data (i32.const 1024) "{\"kind\":\"skip_file\"}")
+
+  (func (export "alloc") (param $size i32) (result i32) (i32.const 0))
+
+  ;; Returns packed (1024, 20). Without the zero-pointer guard this
+  ;; would succeed and the host would decode the SkipFile outcome
+  ;; even though `ctx_json` was just written over the data segment.
+  (func (export "hook") (param $ctx_ptr i32) (param $ctx_len i32) (result i64)
+    (i64.or
+      (i64.shl (i64.const 1024) (i64.const 32))
+      (i64.const 20)))
+)
+"#;
+
+#[tokio::test]
+async fn alloc_returning_null_pointer_is_rejected() {
+    let (_dir, wasm) = write_plugin(NULL_ALLOC_WAT, DEFAULT_MANIFEST);
+    let host = PluginHost::new();
+    let handle = host.load_plugin(&wasm).expect("load_plugin");
+
+    let err = handle
+        .call_hook(HookKind::BeforeFile, HookCtx::default())
+        .await
+        .expect_err("alloc returning 0 must reject before write_memory");
+    assert!(matches!(err, PluginError::OutOfBounds { ptr: 0, .. }), "{err:?}");
+}
+
+/// `alloc` returns -1 (`0xFFFFFFFF` reinterpreted as i32). Same
+/// guard catches it — a negative pointer would otherwise widen to
+/// `0xFFFFFFFF` and walk past every page of plugin memory before
+/// the engine's own bounds check fires.
+const NEGATIVE_ALLOC_WAT: &str = r#"
+(module
+  (memory (export "memory") 1)
+
+  (func (export "alloc") (param $size i32) (result i32) (i32.const -1))
+
+  (func (export "hook") (param $ctx_ptr i32) (param $ctx_len i32) (result i64)
+    (i64.const 0))
+)
+"#;
+
+#[tokio::test]
+async fn alloc_returning_negative_pointer_is_rejected() {
+    let (_dir, wasm) = write_plugin(NEGATIVE_ALLOC_WAT, DEFAULT_MANIFEST);
+    let host = PluginHost::new();
+    let handle = host.load_plugin(&wasm).expect("load_plugin");
+
+    let err = handle
+        .call_hook(HookKind::BeforeFile, HookCtx::default())
+        .await
+        .expect_err("negative alloc return must reject before write_memory");
+    assert!(matches!(err, PluginError::OutOfBounds { .. }), "{err:?}");
+}
+
+/// `hook` returns an `out_ptr` that walks past the end of linear
+/// memory while keeping `out_len` *under* the per-call memory cap
+/// (so the 46.7 pre-allocation length clamp doesn't fire). The
+/// `read_memory` call must catch the OOB read and surface
+/// `OutOfBounds` rather than panicking.
+const OOB_OUT_PTR_WAT: &str = r#"
+(module
+  (memory (export "memory") 1)
+  (global $bump (mut i32) (i32.const 4096))
+
+  (func (export "alloc") (param $size i32) (result i32)
+    (local $ptr i32)
+    (local.set $ptr (global.get $bump))
+    (global.set $bump (i32.add (global.get $bump) (local.get $size)))
+    (local.get $ptr))
+
+  ;; Returns packed (out_ptr=0xFFFF0000, out_len=64) — a 64-byte read
+  ;; starting near the 4 GiB mark, well past the single page of
+  ;; linear memory. `out_len` is below max_memory_bytes so the clamp
+  ;; doesn't fire; `Memory::read` must reject the read.
+  (func (export "hook") (param $ctx_ptr i32) (param $ctx_len i32) (result i64)
+    (i64.or
+      (i64.shl (i64.const 0xFFFF0000) (i64.const 32))
+      (i64.const 64)))
+)
+"#;
+
+#[tokio::test]
+async fn out_ptr_past_memory_with_small_len_rejects_via_read_clamp() {
+    let (_dir, wasm) = write_plugin(OOB_OUT_PTR_WAT, DEFAULT_MANIFEST);
+    let host = PluginHost::new();
+    let handle = host.load_plugin(&wasm).expect("load_plugin");
+
+    let err = handle
+        .call_hook(HookKind::BeforeFile, HookCtx::default())
+        .await
+        .expect_err("OOB out_ptr must reject");
+    match err {
+        PluginError::OutOfBounds { ptr, len } => {
+            assert_eq!(ptr, 0xFFFF_0000, "ptr echoed verbatim from packed return");
+            assert_eq!(len, 64, "len echoed verbatim from packed return");
+        }
+        other => panic!("expected OutOfBounds from read_memory, got {other:?}"),
+    }
+}
+
+/// `hook` returns a valid `(ptr, len)` pair pointing at non-JSON
+/// bytes. The host should surface `Outcome` (the serde_json wrapper),
+/// not panic.
+const NON_JSON_OUTCOME_WAT: &str = r#"
+(module
+  (memory (export "memory") 1)
+  ;; 8 bytes of garbage at offset 1024 — definitely not JSON.
+  (data (i32.const 1024) "garbage!")
+  (global $bump (mut i32) (i32.const 4096))
+
+  (func (export "alloc") (param $size i32) (result i32)
+    (local $ptr i32)
+    (local.set $ptr (global.get $bump))
+    (global.set $bump (i32.add (global.get $bump) (local.get $size)))
+    (local.get $ptr))
+
+  (func (export "hook") (param $ctx_ptr i32) (param $ctx_len i32) (result i64)
+    (i64.or
+      (i64.shl (i64.const 1024) (i64.const 32))
+      (i64.const 8)))
+)
+"#;
+
+#[tokio::test]
+async fn malformed_outcome_json_surfaces_as_outcome_error() {
+    let (_dir, wasm) = write_plugin(NON_JSON_OUTCOME_WAT, DEFAULT_MANIFEST);
+    let host = PluginHost::new();
+    let handle = host.load_plugin(&wasm).expect("load_plugin");
+
+    let err = handle
+        .call_hook(HookKind::BeforeFile, HookCtx::default())
+        .await
+        .expect_err("non-JSON outcome must surface as Outcome");
+    assert!(matches!(err, PluginError::Outcome(_)), "{err:?}");
 }

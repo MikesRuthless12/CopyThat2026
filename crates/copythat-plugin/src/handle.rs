@@ -237,6 +237,19 @@ impl PluginHandle {
             .call_async(&mut store, ctx_len)
             .await
             .map_err(map_engine_error)?;
+        // Reject `alloc` returning 0 (a literal null pointer that the
+        // sample-plugin ABI defines as a deliberate "size <= 0" sentinel)
+        // or a negative value. Without this check the host writes
+        // `ctx_json` at offset 0, silently corrupting the plugin's data
+        // segments — a malicious plugin can use this to misdirect the
+        // host into clobbering its own pre-baked response buffer and
+        // serve a forged outcome on the same call.
+        if ctx_ptr <= 0 {
+            return Err(PluginError::OutOfBounds {
+                ptr: ctx_ptr as u32,
+                len: ctx_len as u32,
+            });
+        }
         write_memory(&memory, &mut store, ctx_ptr, &ctx_json)?;
 
         let packed = hook_fn

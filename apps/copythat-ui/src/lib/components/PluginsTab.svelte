@@ -12,7 +12,7 @@
   //
   // The IPC layer (apps/copythat-ui/src-tauri/src/plugin_commands.rs)
   // owns the on-disk store; this component is purely a thin renderer.
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
   import { t } from "../i18n";
@@ -41,19 +41,53 @@
   let urlPreview = $state<PluginInstallPreviewDto | null>(null);
   let urlBusy = $state(false);
 
-  async function refresh() {
-    loading = true;
+  // Per-(plugin, capability) in-flight map so the user can't fire
+  // overlapping grant/revoke IPC for the same row by clicking the
+  // checkbox repeatedly. Keyed by `${name}:${capability}`.
+  let capPending = $state<Record<string, boolean>>({});
+  // Reset-form timer tracked across re-renders so onDestroy can
+  // cancel it. Without the cancel, the closure can fire against an
+  // already-unmounted component when the user navigates away from
+  // the Plugins tab during the post-install confirmation hold.
+  let resetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /// Render any thrown value into a stable string for the inline
+  /// error banner. Tauri rejects with the Rust `Result<_, String>`
+  /// payload as a plain string, but transport errors arrive as
+  /// `Error` instances and a defensive fallback covers anything
+  /// else without yielding `"[object Object]"`.
+  function formatError(e: unknown): string {
+    if (typeof e === "string") return e;
+    if (e instanceof Error) return e.message;
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return String(e);
+    }
+  }
+
+  async function refresh(showSpinner: boolean = true) {
+    if (showSpinner) loading = true;
     error = null;
     try {
       plugins = await pluginList();
     } catch (e) {
-      error = String(e);
+      error = formatError(e);
     } finally {
       loading = false;
     }
   }
 
-  onMount(refresh);
+  onMount(() => {
+    void refresh();
+  });
+
+  onDestroy(() => {
+    if (resetTimer !== null) {
+      clearTimeout(resetTimer);
+      resetTimer = null;
+    }
+  });
 
   async function onToggleEnabled(p: PluginEntryDto) {
     try {
@@ -64,11 +98,14 @@
       // list — keeps any expanded-row state stable.
       plugins = plugins.map((x) => (x.name === updated.name ? updated : x));
     } catch (e) {
-      error = String(e);
+      error = formatError(e);
     }
   }
 
   async function onToggleCapability(p: PluginEntryDto, capability: string) {
+    const key = `${p.name}:${capability}`;
+    if (capPending[key]) return;
+    capPending = { ...capPending, [key]: true };
     const granted = p.grantedCapabilities.includes(capability);
     try {
       const updated = granted
@@ -76,24 +113,31 @@
         : await pluginGrantCapability(p.name, capability);
       plugins = plugins.map((x) => (x.name === updated.name ? updated : x));
     } catch (e) {
-      error = String(e);
+      error = formatError(e);
+    } finally {
+      const next = { ...capPending };
+      delete next[key];
+      capPending = next;
     }
   }
 
   async function onInstallFromFile() {
     error = null;
     try {
-      const picked = await openDialog({
+      // `multiple: false` returns `string | null` per the
+      // @tauri-apps/plugin-dialog v2 types. The user cancelling
+      // returns null; the Array.isArray() defensive branch from
+      // the v1 typings is no longer needed.
+      const wasmPath = await openDialog({
         multiple: false,
         directory: false,
         filters: [{ name: "WASM plugin", extensions: ["wasm"] }],
       });
-      if (picked === null || picked === undefined) return;
-      const wasmPath = Array.isArray(picked) ? picked[0] : picked;
+      if (!wasmPath) return;
       await pluginInstallFromFile({ wasmPath });
-      await refresh();
+      await refresh(false);
     } catch (e) {
-      error = String(e);
+      error = formatError(e);
     }
   }
 
@@ -109,7 +153,7 @@
         expectedHash: null,
       });
     } catch (e) {
-      error = String(e);
+      error = formatError(e);
       urlPreview = null;
     } finally {
       urlBusy = false;
@@ -127,29 +171,45 @@
         expectedHash: urlPreview.hash,
       });
       urlPreview = committed;
-      await refresh();
+      await refresh(false);
       // Reset the form on success — `installed = true` keeps the
       // confirmation card visible for one render cycle so the user
       // sees the success state before the form collapses.
-      setTimeout(() => {
+      if (resetTimer !== null) clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => {
+        resetTimer = null;
         urlFormShow = false;
         urlPreview = null;
         urlWasm = "";
         urlManifest = "";
       }, 1500);
     } catch (e) {
-      error = String(e);
+      error = formatError(e);
     } finally {
       urlBusy = false;
     }
   }
 
   function cancelUrlInstall() {
+    if (resetTimer !== null) {
+      clearTimeout(resetTimer);
+      resetTimer = null;
+    }
     urlFormShow = false;
     urlPreview = null;
     urlWasm = "";
     urlManifest = "";
     error = null;
+  }
+
+  function toggleUrlForm() {
+    if (urlFormShow) {
+      cancelUrlInstall();
+    } else {
+      urlFormShow = true;
+      urlPreview = null;
+      error = null;
+    }
   }
 </script>
 
@@ -161,7 +221,7 @@
     <p>{t("settings-loading")}</p>
   {:else}
     {#if error}
-      <p class="error">{error}</p>
+      <p class="error" role="alert">{error}</p>
     {/if}
 
     {#if plugins.length === 0}
@@ -179,6 +239,7 @@
                 <input
                   type="checkbox"
                   checked={p.enabled}
+                  aria-label={`${p.name}: ${p.enabled ? t("plugin-enabled") : t("plugin-disabled")}`}
                   onchange={() => onToggleEnabled(p)}
                 />
                 <span>{p.enabled ? t("plugin-enabled") : t("plugin-disabled")}</span>
@@ -198,6 +259,8 @@
                         <input
                           type="checkbox"
                           checked={p.grantedCapabilities.includes(cap)}
+                          disabled={capPending[`${p.name}:${cap}`]}
+                          aria-label={`${p.name}: ${cap}`}
                           onchange={() => onToggleCapability(p, cap)}
                         />
                         <code>{cap}</code>
@@ -225,14 +288,7 @@
       <button type="button" class="primary" onclick={onInstallFromFile}>
         {t("plugin-install-from-file")}
       </button>
-      <button
-        type="button"
-        onclick={() => {
-          urlFormShow = !urlFormShow;
-          urlPreview = null;
-          error = null;
-        }}
-      >
+      <button type="button" onclick={toggleUrlForm}>
         {t("plugin-install-from-url")}
       </button>
     </div>
@@ -245,6 +301,7 @@
             type="url"
             bind:value={urlWasm}
             required
+            disabled={urlPreview !== null}
             placeholder="https://example.com/my-plugin.wasm"
           />
         </label>
@@ -254,6 +311,7 @@
             type="url"
             bind:value={urlManifest}
             required
+            disabled={urlPreview !== null}
             placeholder="https://example.com/plugin.toml"
           />
         </label>
@@ -289,7 +347,7 @@
               </span>
             </p>
             {#if urlPreview.installed}
-              <p class="preview-success">✓</p>
+              <p class="preview-success" role="status">{t("plugin-enabled")}</p>
             {:else}
               <div class="form-actions">
                 <button
@@ -320,15 +378,15 @@
   }
   .hint {
     margin: 0;
-    color: var(--fg-dim, #5f5f5f);
+    color: var(--fg-dim, var(--muted, #5f5f5f));
     font-size: 12px;
   }
   .empty {
-    color: var(--color-muted, #666);
+    color: var(--muted, #666);
     font-style: italic;
   }
   .error {
-    color: var(--color-error, #a00);
+    color: var(--error, #a00);
   }
   .plugin-list {
     list-style: none;
@@ -343,9 +401,9 @@
     flex-direction: column;
     gap: 6px;
     padding: 12px;
-    border: 1px solid var(--color-border, #d0d0d0);
+    border: 1px solid var(--border, #d0d0d0);
     border-radius: 6px;
-    background: var(--color-surface, #f8f8f8);
+    background: var(--surface, #f8f8f8);
   }
   .plugin-row .head {
     display: flex;
@@ -359,9 +417,9 @@
     align-items: baseline;
   }
   .version {
-    color: var(--color-muted, #666);
+    color: var(--muted, #666);
     font-size: 0.85em;
-    font-family: var(--font-mono, ui-monospace, monospace);
+    font-family: var(--mono, ui-monospace, monospace);
   }
   .enabled-toggle {
     display: flex;
@@ -380,7 +438,7 @@
   .meta-label {
     font-weight: 600;
     font-size: 0.85em;
-    color: var(--color-muted, #666);
+    color: var(--muted, #666);
   }
   .meta-value {
     font-size: 0.9em;
@@ -404,7 +462,7 @@
   }
   .path code {
     font-size: 0.8em;
-    color: var(--color-muted, #666);
+    color: var(--muted, #666);
     word-break: break-all;
   }
   .install-actions {
@@ -416,7 +474,7 @@
     flex-direction: column;
     gap: 8px;
     padding: 12px;
-    border: 1px solid var(--color-border, #d0d0d0);
+    border: 1px solid var(--border, #d0d0d0);
     border-radius: 6px;
   }
   .url-form label {
@@ -433,7 +491,7 @@
   .preview-card {
     padding: 10px;
     background: var(--surface-2, rgba(128, 128, 128, 0.05));
-    border-left: 3px solid var(--color-accent, #4a90e2);
+    border-left: 3px solid var(--accent, #4a90e2);
     border-radius: 4px;
     display: flex;
     flex-direction: column;
@@ -452,7 +510,7 @@
     padding: 8px;
     background: rgba(0, 128, 0, 0.08);
     border-left: 3px solid #1a6b1a;
-    color: var(--color-ok, #1a6b1a);
+    color: var(--ok, #1a6b1a);
     font-size: 0.9em;
   }
   .hash {

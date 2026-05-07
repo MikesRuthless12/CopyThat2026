@@ -60,6 +60,7 @@ impl PluginManifest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawManifest {
     name: String,
     version: String,
@@ -67,6 +68,17 @@ struct RawManifest {
     #[serde(default)]
     capabilities: Vec<String>,
 }
+
+/// Hard cap on the number of capabilities one manifest may declare.
+/// Prevents a hostile plugin.toml with millions of entries from
+/// allocating an unbounded `Vec<Capability>` (and from rendering an
+/// infinite list in the Settings UI).
+const MAX_MANIFEST_CAPABILITIES: usize = 64;
+
+/// Hard cap on the length of a single capability scope string.
+/// `read_fs:<scope>` / `write_fs:<scope>` declarations are rejected
+/// past this bound.
+const MAX_CAPABILITY_SCOPE_LEN: usize = 256;
 
 impl RawManifest {
     fn validate(self) -> Result<PluginManifest, PluginError> {
@@ -91,8 +103,22 @@ impl RawManifest {
         hooks.sort_by_key(|h| *h as u8);
         hooks.dedup();
 
+        if self.capabilities.len() > MAX_MANIFEST_CAPABILITIES {
+            return Err(PluginError::Manifest(format!(
+                "`capabilities`: too many entries ({}; max {})",
+                self.capabilities.len(),
+                MAX_MANIFEST_CAPABILITIES
+            )));
+        }
         let mut capabilities = Vec::with_capacity(self.capabilities.len());
         for raw_cap in &self.capabilities {
+            if raw_cap.len() > MAX_CAPABILITY_SCOPE_LEN {
+                return Err(PluginError::Manifest(format!(
+                    "`capabilities`: entry too long ({} chars; max {})",
+                    raw_cap.len(),
+                    MAX_CAPABILITY_SCOPE_LEN
+                )));
+            }
             let cap = Capability::parse(raw_cap)
                 .map_err(|e| PluginError::Manifest(format!("`capabilities`: {e}")))?;
             if !capabilities.contains(&cap) {
@@ -259,5 +285,65 @@ hooks = ["before_job", "before_job", "after_job"]
 "#;
         let m = PluginManifest::parse(src).expect("must parse");
         assert_eq!(m.hooks, vec![HookKind::BeforeJob, HookKind::AfterJob]);
+    }
+
+    #[test]
+    fn unknown_top_level_keys_are_rejected() {
+        // Pre-46.7 a typo'd `capabilites` (missing `i`) parsed
+        // successfully with zero capabilities. With
+        // `deny_unknown_fields` the parser surfaces the typo so the
+        // user can correct the manifest before the runtime decides
+        // an unintentionally-empty grant means "no host I/O needed".
+        let src = r#"
+name = "x"
+version = "0.1.0"
+hooks = ["before_job"]
+capabilites = ["read_fs:source"]
+"#;
+        let err = PluginManifest::parse(src).expect_err("typo'd key must reject");
+        assert!(matches!(err, PluginError::Manifest(_)), "{err:?}");
+    }
+
+    #[test]
+    fn capability_count_above_cap_is_rejected() {
+        let mut caps = String::from("[");
+        for i in 0..MAX_MANIFEST_CAPABILITIES + 1 {
+            if i > 0 {
+                caps.push(',');
+            }
+            caps.push_str(&format!("\"read_fs:scope{i}\""));
+        }
+        caps.push(']');
+        let src = format!(
+            r#"
+name = "x"
+version = "0.1.0"
+hooks = ["before_job"]
+capabilities = {caps}
+"#
+        );
+        let err = PluginManifest::parse(&src).expect_err("oversized cap list must reject");
+        assert!(
+            matches!(err, PluginError::Manifest(ref m) if m.contains("too many")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn capability_scope_above_cap_is_rejected() {
+        let long = "x".repeat(MAX_CAPABILITY_SCOPE_LEN + 1);
+        let src = format!(
+            r#"
+name = "x"
+version = "0.1.0"
+hooks = ["before_job"]
+capabilities = ["read_fs:{long}"]
+"#
+        );
+        let err = PluginManifest::parse(&src).expect_err("oversized scope must reject");
+        assert!(
+            matches!(err, PluginError::Manifest(ref m) if m.contains("too long")),
+            "{err:?}"
+        );
     }
 }

@@ -30,7 +30,7 @@
   import ProvenanceTab from "./ProvenanceTab.svelte";
   import RemotesTab from "./RemotesTab.svelte";
   import SanitizeTab from "./SanitizeTab.svelte";
-  import PluginsTab from "../settings/PluginsTab.svelte";
+  import PluginsTab from "./PluginsTab.svelte";
   import { i18nVersion, locale, setLocale, t } from "../i18n";
   import {
     closeSettings,

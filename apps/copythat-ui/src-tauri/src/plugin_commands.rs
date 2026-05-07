@@ -48,26 +48,37 @@
 //!
 //! 1. **Preview** — caller passes `expected_hash = None`. The host
 //!    downloads the .wasm + plugin.toml, parses + validates the
-//!    manifest, computes BLAKE3 of the wasm bytes, and returns a
-//!    `PluginInstallPreviewDto` *without* writing to the plugin
-//!    store. The frontend renders `name` / `version` / `hash` /
-//!    `capabilities` so the user can decide whether to proceed.
+//!    manifest, computes the BLAKE3 *bundle* hash (a domain-separated
+//!    digest covering the wasm bytes AND the manifest bytes — see
+//!    [`bundle_hash`]), and returns a `PluginInstallPreviewDto`
+//!    *without* writing to the plugin store. The frontend renders
+//!    `name` / `version` / `hash` / `capabilities` so the user can
+//!    decide whether to proceed.
 //! 2. **Commit** — caller passes the same args plus
 //!    `expected_hash = Some(<hex from preview>)`. The host
-//!    re-downloads, recomputes the hash, fails if the actual hash
-//!    no longer matches the pinned value (fetch races / mutated
-//!    upstream artefacts), and on match copies the staged files
-//!    into the plugin store.
+//!    re-downloads, recomputes the bundle hash, fails if the actual
+//!    hash no longer matches the pinned value (fetch races / mutated
+//!    upstream artefacts; **including manifest tampering** that
+//!    would otherwise let an attacker swap the destination plugin
+//!    name or escalate the declared capability set between phases)
+//!    and on match copies the staged files into the plugin store.
 //!
 //! Hash-pinning across two distinct fetches gives the gate teeth —
 //! the user's "yes, install this" decision applies to a specific
-//! BLAKE3, not to whatever content happens to be at the URL when
-//! the install command runs.
+//! (wasm, manifest) pair, not to whatever content happens to be at
+//! the URLs when the install command runs.
+//!
+//! Only `https://` URLs are accepted (HTTP would let a network MITM
+//! defeat the integrity guarantee on first preview). Redirects are
+//! capped at five hops.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use copythat_plugin::{Capability, PluginManifest};
 use serde::{Deserialize, Serialize};
+
+use crate::ipc_safety;
 
 /// Subdirectory under the OS config dir where plugins live. Mirrors
 /// the literal in [`default_plugins_root`] — kept as a named constant
@@ -105,6 +116,16 @@ const MAX_MANIFEST_BYTES: usize = 64 * 1024;
 /// enough for slow links + large wasm bodies but short enough that a
 /// hung URL doesn't permanently wedge the Settings → Plugins panel.
 const HTTP_TIMEOUT_SECS: u64 = 30;
+
+/// Hard cap on follow-redirect hops for the install fetch. Five is
+/// generous for legitimate CDN routing and short enough that a
+/// hostile chain can't fan out into arbitrary internal hosts.
+const HTTP_REDIRECT_LIMIT: usize = 5;
+
+/// Domain-separation prefix for [`bundle_hash`]. Bumping the version
+/// suffix invalidates every previously-pinned hash; do not change
+/// the byte string without coordinating with the Settings UI.
+const BUNDLE_HASH_DOMAIN: &[u8] = b"copythat-plugin-bundle-v1\x00";
 
 // ---------------------------------------------------------------------------
 // Wire DTOs
@@ -234,11 +255,36 @@ pub fn default_plugins_root() -> Option<PathBuf> {
         .map(|d| d.config_dir().join(PLUGINS_SUBDIR))
 }
 
+/// Case-insensitive Windows reserved device names. A directory whose
+/// last segment matches one of these (with or without an extension)
+/// resolves to a console / printer / serial device on Windows
+/// regardless of where it sits in the filesystem tree, so we reject
+/// the manifest's `name` ever taking one of these values.
+const WINDOWS_RESERVED_DEVICE_NAMES: &[&str] = &[
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+    "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];
+
 /// Validate a name as safe to use as a directory name on every
-/// supported OS. Forbids path separators, `.` / `..`, and the small
-/// set of Windows-reserved characters. The manifest's own `name`
-/// validation is permissive — it only rejects empty + whitespace —
-/// so we tighten here at the filesystem boundary.
+/// supported OS.
+///
+/// Rejection rules (any failure returns a descriptive error string):
+/// - empty / over 128 chars
+/// - leading or trailing whitespace (so `"  notify-discord"` can't
+///   masquerade as `"notify-discord"` to the user)
+/// - leading or trailing `.` (Windows trims trailing `.`; leading
+///   `.` makes the directory hidden on Unix without the manifest
+///   author saying so)
+/// - reserved tokens `.` / `..`
+/// - path separators + Windows-illegal characters
+/// - control characters / NUL
+/// - Windows reserved device names (CON / PRN / AUX / NUL / COM1-9
+///   / LPT1-9), case-insensitive, with or without extension
+///
+/// The manifest's own `name` validation is permissive (it only
+/// rejects empty + whitespace), so we tighten at the filesystem
+/// boundary where the name becomes a directory under
+/// `<config_dir>/plugins/`.
 fn validate_plugin_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err("plugin name must not be empty".into());
@@ -248,6 +294,12 @@ fn validate_plugin_name(name: &str) -> Result<(), String> {
     }
     if name == "." || name == ".." {
         return Err("plugin name reserved".into());
+    }
+    if name.starts_with(char::is_whitespace) || name.ends_with(char::is_whitespace) {
+        return Err("plugin name must not start or end with whitespace".into());
+    }
+    if name.starts_with('.') || name.ends_with('.') {
+        return Err("plugin name must not start or end with `.`".into());
     }
     for c in name.chars() {
         // Reject path separators + characters Windows refuses in
@@ -263,6 +315,33 @@ fn validate_plugin_name(name: &str) -> Result<(), String> {
         if c.is_control() {
             return Err("plugin name contains control character".into());
         }
+    }
+    let stem = name.split_once('.').map(|(s, _)| s).unwrap_or(name);
+    let stem_upper = stem.to_ascii_uppercase();
+    if WINDOWS_RESERVED_DEVICE_NAMES
+        .iter()
+        .any(|reserved| reserved.eq_ignore_ascii_case(&stem_upper))
+    {
+        return Err(format!(
+            "plugin name `{name}` matches a Windows reserved device name"
+        ));
+    }
+    Ok(())
+}
+
+/// Reject install URLs that aren't `https://`. HTTP would let a
+/// network MITM swap the plugin payload before the user ever sees
+/// the preview hash, defeating the bundle-hash gate on the very
+/// first round-trip.
+fn validate_install_url(raw: &str) -> Result<(), String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("install URL must not be empty".into());
+    }
+    if !trimmed.starts_with("https://") {
+        return Err(format!(
+            "install URL must use `https://` scheme (got `{trimmed}`)"
+        ));
     }
     Ok(())
 }
@@ -362,7 +441,7 @@ fn hook_kind_str(h: copythat_plugin::HookKind) -> &'static str {
 
 /// Enumerate every plugin under `root`. Missing root → empty list
 /// (a fresh install has nothing to enumerate); per-entry parse
-/// failures are skipped with an `eprintln` so a single malformed
+/// failures are skipped with a `tracing::warn!` so a single malformed
 /// plugin doesn't make the whole panel error out.
 pub fn list_entries(root: &Path) -> Vec<PluginEntryDto> {
     let mut out = Vec::new();
@@ -377,9 +456,11 @@ pub fn list_entries(root: &Path) -> Vec<PluginEntryDto> {
         match read_entry(&entry.path()) {
             Ok(dto) => out.push(dto),
             Err(e) => {
-                eprintln!(
-                    "[plugins] skipping {}: {e}",
-                    entry.path().display()
+                tracing::warn!(
+                    target: "copythat::plugins",
+                    path = %entry.path().display(),
+                    error = %e,
+                    "skipping malformed plugin directory"
                 );
             }
         }
@@ -440,10 +521,13 @@ pub fn revoke(root: &Path, name: &str, capability: &str) -> Result<PluginEntryDt
 
 /// Copy a wasm + manifest pair into the plugin store. Either source
 /// path may live on a different volume than `<config_dir>` so we
-/// always use `std::fs::copy` (atomic intra-volume rename + cross-
-/// volume tolerance) rather than `rename`. Existing entries with the
-/// same name get *overwritten* — installing a new version of an
-/// already-installed plugin is the dominant upgrade path.
+/// always read into memory then write fresh rather than `rename`.
+/// Existing entries with the same name get *overwritten* — installing
+/// a new version of an already-installed plugin is the dominant
+/// upgrade path. State-toml handling matches [`install_from_bytes`]:
+/// the enable bit survives a same-capabilities reinstall, the grant
+/// list is reset on a capability-set change so the user must
+/// re-approve.
 pub fn install_from_disk(
     root: &Path,
     wasm_src: &Path,
@@ -451,12 +535,30 @@ pub fn install_from_disk(
 ) -> Result<PluginEntryDto, String> {
     let manifest_text = std::fs::read_to_string(manifest_src)
         .map_err(|e| format!("read manifest from disk: {e}"))?;
-    let manifest = PluginManifest::parse(&manifest_text)
-        .map_err(|e| format!("validate manifest: {e}"))?;
-    let dir = plugin_dir(root, &manifest.name)?;
-    std::fs::create_dir_all(&dir).map_err(|e| format!("create plugin dir: {e}"))?;
-
     let wasm_bytes = std::fs::read(wasm_src).map_err(|e| format!("read wasm from disk: {e}"))?;
+    install_from_bytes(root, &wasm_bytes, &manifest_text)
+}
+
+/// Install a plugin straight from in-memory bytes — used by both
+/// [`install_from_disk`] (after reading from disk) and
+/// [`plugin_install_from_url`] (after the bundle-hash check).
+///
+/// State-toml policy on overwrite:
+/// - Existing dir + identical manifest capability set → preserve
+///   `state.toml` (legitimate same-version reinstall keeps the
+///   user's prior grants + enable bit).
+/// - Existing dir + different manifest capability set → reset
+///   `granted_capabilities` to the empty list so the user must
+///   re-approve under the new manifest. The `enabled` bit is
+///   preserved; a deliberate disable-on-update would surprise
+///   users running auto-update flows.
+/// - Fresh install → write a default `state.toml` (disabled, no
+///   grants).
+pub fn install_from_bytes(
+    root: &Path,
+    wasm_bytes: &[u8],
+    manifest_text: &str,
+) -> Result<PluginEntryDto, String> {
     if wasm_bytes.len() > MAX_WASM_BYTES {
         return Err(format!(
             "wasm too large ({} bytes; cap is {})",
@@ -464,28 +566,95 @@ pub fn install_from_disk(
             MAX_WASM_BYTES
         ));
     }
-    atomic_write(&wasm_path(&dir), &wasm_bytes)
+    let new_manifest = PluginManifest::parse(manifest_text)
+        .map_err(|e| format!("validate manifest: {e}"))?;
+    let dir = plugin_dir(root, &new_manifest.name)?;
+
+    // Capture the existing manifest's capability set before we write
+    // the new one, so we can decide whether the user's existing
+    // grants are still valid under the new manifest.
+    let existing_capabilities: Option<BTreeSet<String>> = if dir.exists() {
+        std::fs::read_to_string(manifest_path(&dir))
+            .ok()
+            .and_then(|s| PluginManifest::parse(&s).ok())
+            .map(|m| {
+                m.capabilities
+                    .iter()
+                    .map(Capability::as_str)
+                    .collect::<BTreeSet<String>>()
+            })
+    } else {
+        None
+    };
+
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create plugin dir: {e}"))?;
+    atomic_write(&wasm_path(&dir), wasm_bytes)
         .map_err(|e| format!("write wasm into store: {e}"))?;
     atomic_write(&manifest_path(&dir), manifest_text.as_bytes())
         .map_err(|e| format!("write manifest into store: {e}"))?;
 
-    // Preserve any existing user state (re-installing a plugin keeps
-    // its grants + enable bit) but make sure the file exists for a
-    // first install so a subsequent state-load is a clean read.
     let st_path = state_path(&dir);
-    if !st_path.exists() {
+    let new_capabilities: BTreeSet<String> = new_manifest
+        .capabilities
+        .iter()
+        .map(Capability::as_str)
+        .collect();
+    let identity_changed = existing_capabilities
+        .as_ref()
+        .map(|prev| prev != &new_capabilities)
+        .unwrap_or(false);
+
+    if identity_changed {
+        // Preserve the enable bit but force the user to re-approve
+        // capabilities under the new manifest. `read_entry`'s strip
+        // pass already filters grants outside the new manifest set,
+        // but explicitly resetting here means the on-disk state
+        // matches the wire response and a subsequent legitimate
+        // grant won't trip on a stale entry.
+        let mut state = PluginState::load(&st_path);
+        state.granted_capabilities.clear();
+        state.save(&st_path)?;
+    } else if !st_path.exists() {
         PluginState::default().save(&st_path)?;
     }
 
     read_entry(&dir)
 }
 
-/// Compute the BLAKE3 hex digest of `bytes`. Wrapped so callers
-/// don't have to know whether we use `blake3::hash` directly or
-/// thread bytes through a hasher (the indirection makes the future
-/// switch to streaming hashing trivial).
+/// Compute the BLAKE3 hex digest of `bytes`. Used for the legacy
+/// per-bytes digest exposed via the smoke harness; the install
+/// pipeline pins on [`bundle_hash`] (which folds the manifest into
+/// the same digest) so manifest tampering between preview and commit
+/// can't smuggle a different plugin past the user's confirmation.
 pub fn blake3_hex(bytes: &[u8]) -> String {
     blake3::hash(bytes).to_hex().to_string()
+}
+
+/// Compute the BLAKE3 hex digest of the (wasm, manifest) install
+/// bundle. Domain-separated and length-prefixed so neither component
+/// can be shifted into the other:
+///
+/// ```text
+/// H = BLAKE3("copythat-plugin-bundle-v1\0"
+///         || u64_le(wasm_len)     || wasm_bytes
+///         || u64_le(manifest_len) || manifest_bytes)
+/// ```
+///
+/// The preview phase of [`plugin_install_from_url`] returns this
+/// digest to the user; the commit phase recomputes it and refuses
+/// the install on mismatch. Pinning both bytes streams together
+/// closes the Phase 46.7 audit's manifest-tampering hole — pre-fix,
+/// only the wasm hash was pinned and an attacker could swap the
+/// manifest's `name` field between phases to overwrite a different
+/// already-installed plugin's directory while inheriting its grants.
+pub fn bundle_hash(wasm_bytes: &[u8], manifest_bytes: &[u8]) -> String {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(BUNDLE_HASH_DOMAIN);
+    hasher.update(&(wasm_bytes.len() as u64).to_le_bytes());
+    hasher.update(wasm_bytes);
+    hasher.update(&(manifest_bytes.len() as u64).to_le_bytes());
+    hasher.update(manifest_bytes);
+    hasher.finalize().to_hex().to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -521,6 +690,12 @@ async fn fetch_with_cap(client: &reqwest::Client, url: &str, cap: usize) -> Resu
 fn build_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(HTTP_TIMEOUT_SECS))
+        .redirect(reqwest::redirect::Policy::limited(HTTP_REDIRECT_LIMIT))
+        // `https_only` rejects any request whose final URL (after
+        // redirects) is HTTP. Combined with `validate_install_url`
+        // checking the *initial* URL is HTTPS, this closes the
+        // chain: a hostile redirector can't downgrade to plaintext.
+        .https_only(true)
         .build()
         .map_err(|e| format!("build http client: {e}"))
 }
@@ -533,21 +708,30 @@ fn build_client() -> Result<reqwest::Client, String> {
 #[tauri::command]
 pub async fn plugin_list() -> Result<Vec<PluginEntryDto>, String> {
     let root = default_plugins_root().ok_or_else(|| "config dir unavailable".to_string())?;
-    Ok(list_entries(&root))
+    // `read_dir` + per-entry parse is cheap (a handful of TOML files)
+    // but is still synchronous I/O; spawn_blocking keeps the runtime
+    // responsive on slow disks.
+    tokio::task::spawn_blocking(move || Ok(list_entries(&root)))
+        .await
+        .map_err(|e| format!("plugin_list join: {e}"))?
 }
 
 /// `plugin_enable` — flip a plugin's `enabled` bit on.
 #[tauri::command]
 pub async fn plugin_enable(name: String) -> Result<PluginEntryDto, String> {
     let root = default_plugins_root().ok_or_else(|| "config dir unavailable".to_string())?;
-    set_enabled(&root, &name, true)
+    tokio::task::spawn_blocking(move || set_enabled(&root, &name, true))
+        .await
+        .map_err(|e| format!("plugin_enable join: {e}"))?
 }
 
 /// `plugin_disable` — flip a plugin's `enabled` bit off.
 #[tauri::command]
 pub async fn plugin_disable(name: String) -> Result<PluginEntryDto, String> {
     let root = default_plugins_root().ok_or_else(|| "config dir unavailable".to_string())?;
-    set_enabled(&root, &name, false)
+    tokio::task::spawn_blocking(move || set_enabled(&root, &name, false))
+        .await
+        .map_err(|e| format!("plugin_disable join: {e}"))?
 }
 
 /// `plugin_grant_capability` — add a capability to the per-plugin
@@ -558,7 +742,9 @@ pub async fn plugin_grant_capability(
     capability: String,
 ) -> Result<PluginEntryDto, String> {
     let root = default_plugins_root().ok_or_else(|| "config dir unavailable".to_string())?;
-    grant(&root, &name, &capability)
+    tokio::task::spawn_blocking(move || grant(&root, &name, &capability))
+        .await
+        .map_err(|e| format!("plugin_grant_capability join: {e}"))?
 }
 
 /// `plugin_revoke_capability` — remove a capability from the
@@ -569,7 +755,9 @@ pub async fn plugin_revoke_capability(
     capability: String,
 ) -> Result<PluginEntryDto, String> {
     let root = default_plugins_root().ok_or_else(|| "config dir unavailable".to_string())?;
-    revoke(&root, &name, &capability)
+    tokio::task::spawn_blocking(move || revoke(&root, &name, &capability))
+        .await
+        .map_err(|e| format!("plugin_revoke_capability join: {e}"))?
 }
 
 /// `plugin_install_from_file` — copy a wasm + manifest pair from
@@ -577,34 +765,43 @@ pub async fn plugin_revoke_capability(
 /// `manifest_path` is omitted the host reads `plugin.toml` from the
 /// directory next to the wasm (the same on-disk shape the runtime's
 /// `PluginHost::load_plugin` expects).
+///
+/// Both paths flow through [`ipc_safety::validate_ipc_path`] (the
+/// same lexical gate every other path-typed IPC command uses) so a
+/// frontend XSS / forged invocation can't smuggle a `..`-traversal
+/// or NUL-byte path past the install code.
 #[tauri::command]
 pub async fn plugin_install_from_file(
     args: PluginInstallFromFileArgs,
 ) -> Result<PluginEntryDto, String> {
     let root = default_plugins_root().ok_or_else(|| "config dir unavailable".to_string())?;
-    let wasm = PathBuf::from(&args.wasm_path);
+    let wasm = ipc_safety::validate_ipc_path(&args.wasm_path).map_err(ipc_safety::err_string)?;
     let manifest = match args.manifest_path {
-        Some(p) => PathBuf::from(p),
+        Some(p) => ipc_safety::validate_ipc_path(&p).map_err(ipc_safety::err_string)?,
         None => wasm
             .parent()
             .map(|p| p.join(MANIFEST_FILENAME))
             .ok_or_else(|| "wasm path has no parent directory".to_string())?,
     };
-    install_from_disk(&root, &wasm, &manifest)
+    tokio::task::spawn_blocking(move || install_from_disk(&root, &wasm, &manifest))
+        .await
+        .map_err(|e| format!("plugin_install_from_file join: {e}"))?
 }
 
 /// `plugin_install_from_url` — preview-or-commit URL install.
 ///
 /// See the module docstring for the two-phase contract: a
-/// `expected_hash = None` call returns the computed BLAKE3 + parsed
-/// manifest *without* writing to the plugin store; a follow-up call
-/// with the same URLs and `expected_hash = Some(<hex>)` re-fetches,
-/// verifies the hash, and installs.
+/// `expected_hash = None` call returns the computed bundle hash +
+/// parsed manifest *without* writing to the plugin store; a
+/// follow-up call with the same URLs and `expected_hash = Some(<hex>)`
+/// re-fetches, verifies the hash, and installs.
 #[tauri::command]
 pub async fn plugin_install_from_url(
     args: PluginInstallFromUrlArgs,
 ) -> Result<PluginInstallPreviewDto, String> {
     let root = default_plugins_root().ok_or_else(|| "config dir unavailable".to_string())?;
+    validate_install_url(&args.wasm_url)?;
+    validate_install_url(&args.manifest_url)?;
     let client = build_client()?;
     let wasm_bytes = fetch_with_cap(&client, &args.wasm_url, MAX_WASM_BYTES).await?;
     let manifest_bytes = fetch_with_cap(&client, &args.manifest_url, MAX_MANIFEST_BYTES).await?;
@@ -613,7 +810,11 @@ pub async fn plugin_install_from_url(
     let manifest =
         PluginManifest::parse(&manifest_text).map_err(|e| format!("validate manifest: {e}"))?;
 
-    let actual_hash = blake3_hex(&wasm_bytes);
+    // Bundle hash covers BOTH the wasm bytes AND the manifest bytes
+    // (length-prefixed + domain-separated). The user's preview-phase
+    // confirmation pins this digest; the commit-phase recompute
+    // catches any drift in either component.
+    let actual_hash = bundle_hash(&wasm_bytes, manifest_text.as_bytes());
     let capabilities: Vec<String> =
         manifest.capabilities.iter().map(Capability::as_str).collect();
     let hooks: Vec<String> = manifest
@@ -623,10 +824,10 @@ pub async fn plugin_install_from_url(
         .collect();
 
     if let Some(expected) = args.expected_hash.as_deref() {
-        // Constant-time-ish compare. The hash comes back from the user's
-        // own confirmation dialog (not an adversary-controlled channel),
-        // so a naive `==` is fine — but we lowercase both sides so the
-        // UI can echo our hex in any case without a spurious mismatch.
+        // The hash comes back from the user's own confirmation
+        // dialog (not an adversary-controlled channel), so a naive
+        // `==` is fine — but we lowercase both sides so the UI can
+        // echo our hex in any case without a spurious mismatch.
         let actual_lc = actual_hash.to_ascii_lowercase();
         let expected_lc = expected.to_ascii_lowercase();
         if actual_lc != expected_lc {
@@ -634,20 +835,21 @@ pub async fn plugin_install_from_url(
                 "hash mismatch: expected `{expected_lc}`, got `{actual_lc}`"
             ));
         }
-        // Commit phase — write into the plugin store.
-        let dir = plugin_dir(&root, &manifest.name)?;
-        std::fs::create_dir_all(&dir).map_err(|e| format!("create plugin dir: {e}"))?;
-        atomic_write(&wasm_path(&dir), &wasm_bytes)
-            .map_err(|e| format!("write wasm into store: {e}"))?;
-        atomic_write(&manifest_path(&dir), manifest_text.as_bytes())
-            .map_err(|e| format!("write manifest into store: {e}"))?;
-        let st_path = state_path(&dir);
-        if !st_path.exists() {
-            PluginState::default().save(&st_path)?;
-        }
+        // Commit phase — write into the plugin store. Sync I/O
+        // (atomic writes + state.toml read/write) goes through
+        // `spawn_blocking` so the runtime stays responsive while
+        // the (up to 64 MiB) wasm hits disk.
+        let install_root = root.clone();
+        let install_text = manifest_text.clone();
+        let install_bytes = wasm_bytes.clone();
+        let entry = tokio::task::spawn_blocking(move || {
+            install_from_bytes(&install_root, &install_bytes, &install_text)
+        })
+        .await
+        .map_err(|e| format!("plugin_install_from_url commit join: {e}"))??;
         return Ok(PluginInstallPreviewDto {
-            name: manifest.name,
-            version: manifest.version,
+            name: entry.name,
+            version: entry.version,
             hash: actual_hash,
             hooks,
             capabilities,
@@ -836,6 +1038,164 @@ capabilities = ["read_fs:source", "write_fs:dest"]
         assert!(validate_plugin_name("a\\b").is_err());
         assert!(validate_plugin_name("").is_err());
         assert!(validate_plugin_name("ok-name_v2").is_ok());
+    }
+
+    #[test]
+    fn validate_plugin_name_rejects_oversize() {
+        let too_long = "x".repeat(129);
+        assert!(validate_plugin_name(&too_long).is_err());
+        let just_long = "x".repeat(128);
+        assert!(validate_plugin_name(&just_long).is_ok());
+    }
+
+    #[test]
+    fn validate_plugin_name_rejects_nul_and_controls() {
+        assert!(validate_plugin_name("a\0b").is_err());
+        assert!(validate_plugin_name("a\nb").is_err());
+        assert!(validate_plugin_name("a\tb").is_err());
+    }
+
+    #[test]
+    fn validate_plugin_name_rejects_windows_illegal_chars() {
+        for c in ['*', '?', '"', '<', '>', '|', ':'] {
+            let n = format!("a{c}b");
+            assert!(
+                validate_plugin_name(&n).is_err(),
+                "expected reject for {c:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_plugin_name_rejects_windows_reserved_names() {
+        // Bare reserved names — case-insensitive, with or without
+        // extension. Pre-46.7 these slipped past `validate_plugin_name`
+        // because the rule set only blocked path separators + `..`.
+        for name in ["CON", "con", "PRN", "AUX", "NUL", "COM1", "lpt9"] {
+            assert!(
+                validate_plugin_name(name).is_err(),
+                "bare `{name}` must reject"
+            );
+        }
+        // With extension — Windows resolves these to the same device.
+        for name in ["CON.wasm", "lpt1.txt"] {
+            assert!(
+                validate_plugin_name(name).is_err(),
+                "`{name}` (with extension) must reject"
+            );
+        }
+        // Names that *contain* a reserved token but aren't equal to
+        // it should still pass.
+        assert!(validate_plugin_name("connector").is_ok());
+        assert!(validate_plugin_name("not-con").is_ok());
+        assert!(validate_plugin_name("auxiliary").is_ok());
+    }
+
+    #[test]
+    fn validate_plugin_name_rejects_leading_trailing_whitespace_and_dot() {
+        assert!(validate_plugin_name(" notify-discord").is_err());
+        assert!(validate_plugin_name("notify-discord ").is_err());
+        assert!(validate_plugin_name(".notify").is_err());
+        assert!(validate_plugin_name("notify.").is_err());
+    }
+
+    #[test]
+    fn validate_install_url_rejects_non_https() {
+        assert!(validate_install_url("http://example.com/p.wasm").is_err());
+        assert!(validate_install_url("file:///etc/passwd").is_err());
+        assert!(validate_install_url("ftp://example.com/p.wasm").is_err());
+        assert!(validate_install_url("").is_err());
+        assert!(validate_install_url("   ").is_err());
+        assert!(validate_install_url("https://example.com/p.wasm").is_ok());
+    }
+
+    #[test]
+    fn bundle_hash_is_deterministic_and_domain_separated() {
+        let h1 = bundle_hash(b"\0asm", b"name = \"a\"");
+        let h2 = bundle_hash(b"\0asm", b"name = \"a\"");
+        assert_eq!(h1, h2, "bundle hash must be deterministic");
+        assert_eq!(h1.len(), 64);
+        // A different manifest yields a different digest — this is
+        // the entire point of folding the manifest into the hash.
+        let h3 = bundle_hash(b"\0asm", b"name = \"b\"");
+        assert_ne!(h1, h3);
+        // A different wasm yields a different digest.
+        let h4 = bundle_hash(b"\0wasm-other", b"name = \"a\"");
+        assert_ne!(h1, h4);
+        // Domain separation: the bundle hash is NOT equal to the raw
+        // BLAKE3 of the concatenated bytes, so a future change of
+        // protocol can't be confused with a legacy raw hash.
+        let mut concat = Vec::new();
+        concat.extend_from_slice(b"\0asm");
+        concat.extend_from_slice(b"name = \"a\"");
+        let raw = blake3_hex(&concat);
+        assert_ne!(h1, raw, "bundle hash must be domain-separated from raw");
+    }
+
+    #[test]
+    fn bundle_hash_is_unambiguous_under_byte_shift() {
+        // Without length-prefixing, splitting the same byte stream
+        // at a different point would yield the same hash. With
+        // length-prefixing, ("ab", "c") != ("a", "bc").
+        let h1 = bundle_hash(b"ab", b"c");
+        let h2 = bundle_hash(b"a", b"bc");
+        assert_ne!(h1, h2, "length-prefixing must distinguish split points");
+    }
+
+    #[test]
+    fn install_from_bytes_resets_grants_on_capability_change() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path();
+        // First install with two capabilities, both granted.
+        let v1 = SAMPLE_MANIFEST;
+        install_from_bytes(store, b"\0asm", v1).unwrap();
+        set_enabled(store, "exif-rename", true).unwrap();
+        grant(store, "exif-rename", "read_fs:source").unwrap();
+        grant(store, "exif-rename", "write_fs:dest").unwrap();
+        let pre = read_entry(&store.join("exif-rename")).unwrap();
+        assert_eq!(pre.granted_capabilities.len(), 2);
+        assert!(pre.enabled);
+
+        // Reinstall with a manifest that drops one capability and
+        // adds a new one. The grant set must reset (user must
+        // re-approve under the new manifest); the enable bit must
+        // survive (deliberate disable-on-update would surprise
+        // auto-update flows).
+        let v2 = r#"
+name = "exif-rename"
+version = "0.2.0"
+hooks = ["after_file"]
+capabilities = ["network", "read_fs:source"]
+"#;
+        let dto = install_from_bytes(store, b"\0asm-v2", v2).unwrap();
+        assert!(dto.enabled, "enable bit must survive capability change");
+        assert!(
+            dto.granted_capabilities.is_empty(),
+            "grants must reset on capability set change, got: {:?}",
+            dto.granted_capabilities
+        );
+    }
+
+    #[test]
+    fn install_from_bytes_preserves_grants_when_capabilities_unchanged() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path();
+        install_from_bytes(store, b"\0asm", SAMPLE_MANIFEST).unwrap();
+        set_enabled(store, "exif-rename", true).unwrap();
+        grant(store, "exif-rename", "read_fs:source").unwrap();
+
+        // Same capability set, new wasm bytes — a vanilla
+        // version-bump-with-no-cap-changes upgrade. The grant must
+        // survive.
+        let v2 = r#"
+name = "exif-rename"
+version = "0.2.0"
+hooks = ["after_file"]
+capabilities = ["read_fs:source", "write_fs:dest"]
+"#;
+        let dto = install_from_bytes(store, b"\0asm-v2", v2).unwrap();
+        assert!(dto.enabled);
+        assert_eq!(dto.granted_capabilities, vec!["read_fs:source"]);
     }
 
     #[test]
