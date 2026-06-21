@@ -34,10 +34,11 @@ pub struct HookCtx {
 }
 
 /// What the plugin tells the engine to do next.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum HookOutcome {
     /// Engine continues normally.
+    #[default]
     Continue,
     /// Engine skips the current file (only meaningful for
     /// [`HookKind::BeforeFile`] and [`HookKind::AfterFile`]).
@@ -46,10 +47,4 @@ pub enum HookOutcome {
     AbortJob,
     /// Engine emits a notification with the given text and continues.
     Notify { message: String },
-}
-
-impl Default for HookOutcome {
-    fn default() -> Self {
-        HookOutcome::Continue
-    }
 }

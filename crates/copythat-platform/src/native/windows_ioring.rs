@@ -476,6 +476,9 @@ unsafe fn do_ioring_copy(
     let src_ref = make_handle_ref_index(0);
     let dst_ref = make_handle_ref_index(1);
 
+    // `slot` is a semantic IORING slot id used by value (pack_userdata /
+    // make_buffer_ref_registered), not merely an index into slot_states.
+    #[allow(clippy::needless_range_loop)]
     for slot in 0..n_slots {
         if bytes_remaining == 0 {
             break;
@@ -518,6 +521,7 @@ unsafe fn do_ioring_copy(
         // Cancel-pending check between completions.
         if ctrl.is_cancelled() {
             // Best-effort cancel of every in-flight slot's last op.
+            #[allow(clippy::needless_range_loop)] // slot id used by value in pack_userdata
             for slot in 0..n_slots {
                 let is_write = matches!(slot_states[slot], SlotState::Writing { .. });
                 let target = if is_write { dst_ref } else { src_ref };
