@@ -306,53 +306,6 @@ pub(crate) fn validate_opal_psid(psid: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn validate_opal_psid_accepts_32_alphanumeric() {
-        assert!(validate_opal_psid("ABCDEFGHIJKLMNOPQRSTUVWXYZ012345").is_ok());
-        assert!(validate_opal_psid("0123456789abcdefghijklmnopqrstuv").is_ok());
-    }
-
-    #[test]
-    fn validate_opal_psid_rejects_empty() {
-        assert!(validate_opal_psid("").is_err());
-    }
-
-    #[test]
-    fn validate_opal_psid_rejects_too_short() {
-        assert!(validate_opal_psid("ABCDEFG").is_err());
-        assert!(validate_opal_psid("ABCDEFG1234567890").is_err());
-    }
-
-    #[test]
-    fn validate_opal_psid_rejects_too_long() {
-        assert!(validate_opal_psid("A".repeat(33).as_str()).is_err());
-        assert!(validate_opal_psid("A".repeat(64).as_str()).is_err());
-    }
-
-    #[test]
-    fn validate_opal_psid_rejects_non_alphanumeric() {
-        assert!(validate_opal_psid("ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 ").is_err());
-        assert!(validate_opal_psid("ABCDEFGHIJKLMNOPQRSTUVWXYZ01234;").is_err());
-        assert!(validate_opal_psid("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n").is_err());
-    }
-
-    #[test]
-    fn parse_decimal_or_hex_handles_both_forms() {
-        assert_eq!(parse_decimal_or_hex("7"), Some(7));
-        assert_eq!(parse_decimal_or_hex("0x7"), Some(7));
-        assert_eq!(parse_decimal_or_hex("0X7"), Some(7));
-        assert_eq!(parse_decimal_or_hex(" 0x7 "), Some(7));
-        assert_eq!(parse_decimal_or_hex("0xff"), Some(255));
-        assert_eq!(parse_decimal_or_hex("65535"), Some(65_535));
-        assert_eq!(parse_decimal_or_hex("0xZZ"), None);
-        assert_eq!(parse_decimal_or_hex(""), None);
-    }
-}
-
 /// Phase 44.1 post-review (Vuln 1) — accept a device path only if
 /// it looks like a real block-device path. Rejects leading-dash
 /// paths that getopt would parse as flags, paths containing `..`
@@ -587,4 +540,51 @@ fn hdparm_security_supported(device: &Path) -> Result<bool, String> {
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     Ok(stdout.contains("SECURITY") && stdout.contains("supported"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_opal_psid_accepts_32_alphanumeric() {
+        assert!(validate_opal_psid("ABCDEFGHIJKLMNOPQRSTUVWXYZ012345").is_ok());
+        assert!(validate_opal_psid("0123456789abcdefghijklmnopqrstuv").is_ok());
+    }
+
+    #[test]
+    fn validate_opal_psid_rejects_empty() {
+        assert!(validate_opal_psid("").is_err());
+    }
+
+    #[test]
+    fn validate_opal_psid_rejects_too_short() {
+        assert!(validate_opal_psid("ABCDEFG").is_err());
+        assert!(validate_opal_psid("ABCDEFG1234567890").is_err());
+    }
+
+    #[test]
+    fn validate_opal_psid_rejects_too_long() {
+        assert!(validate_opal_psid("A".repeat(33).as_str()).is_err());
+        assert!(validate_opal_psid("A".repeat(64).as_str()).is_err());
+    }
+
+    #[test]
+    fn validate_opal_psid_rejects_non_alphanumeric() {
+        assert!(validate_opal_psid("ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 ").is_err());
+        assert!(validate_opal_psid("ABCDEFGHIJKLMNOPQRSTUVWXYZ01234;").is_err());
+        assert!(validate_opal_psid("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n").is_err());
+    }
+
+    #[test]
+    fn parse_decimal_or_hex_handles_both_forms() {
+        assert_eq!(parse_decimal_or_hex("7"), Some(7));
+        assert_eq!(parse_decimal_or_hex("0x7"), Some(7));
+        assert_eq!(parse_decimal_or_hex("0X7"), Some(7));
+        assert_eq!(parse_decimal_or_hex(" 0x7 "), Some(7));
+        assert_eq!(parse_decimal_or_hex("0xff"), Some(255));
+        assert_eq!(parse_decimal_or_hex("65535"), Some(65_535));
+        assert_eq!(parse_decimal_or_hex("0xZZ"), None);
+        assert_eq!(parse_decimal_or_hex(""), None);
+    }
 }
