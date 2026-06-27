@@ -132,7 +132,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path release-staging | Out-Null
           Get-ChildItem -Recurse `
-            "apps/copythat-ui/src-tauri/target/${{ matrix.target.rust-target }}/release/bundle" `
+            "target/${{ matrix.target.rust-target }}/release/bundle" `
             -Include *.msi,*.exe,*.zip,*.sig,latest.json `
             -ErrorAction SilentlyContinue |
             ForEach-Object { Copy-Item $_.FullName -Destination release-staging }
@@ -146,7 +146,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p release-staging
-          find "apps/copythat-ui/src-tauri/target/${{ matrix.target.rust-target }}/release/bundle" \
+          find "target/${{ matrix.target.rust-target }}/release/bundle" \
             -type f \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.sig" -o -name "latest.json" \) \
             -exec cp {} release-staging/ \; || true
           # Per-target manifest name so the four runners don't collide on
@@ -158,7 +158,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p release-staging
-          find "apps/copythat-ui/src-tauri/target/${{ matrix.target.rust-target }}/release/bundle" \
+          find "target/${{ matrix.target.rust-target }}/release/bundle" \
             -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.tar.gz" -o -name "*.sig" -o -name "latest.json" \) \
             -exec cp {} release-staging/ \; || true
           # Per-target manifest name so the four runners don't collide on
