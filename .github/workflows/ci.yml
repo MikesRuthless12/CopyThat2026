@@ -154,6 +154,15 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      # The clippy(--all-targets) + test(--workspace) debug compiles fill the
+      # ubuntu runner's ~14 GB free disk and abort the Test step with "No space
+      # left on device". Reclaim ~25 GB of preinstalled SDKs we never use.
+      - name: Free disk space (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune --all --force || true
+          df -h /
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       # `cargo test --workspace` picks up every per-phase smoke via

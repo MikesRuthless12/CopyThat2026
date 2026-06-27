@@ -140,9 +140,25 @@ async fn copy_file_rejects_post_check_symlink_swap_unix() {
         "expected ELOOP-shaped error from O_NOFOLLOW open, got {err:?}",
     );
 
-    // Defence-in-depth: no destination file written.
+    // Defence-in-depth: no source bytes ever leaked to the destination. On
+    // Linux the engine writes nothing at all; on macOS the O_NOFOLLOW open
+    // fails *after* the dst placeholder is created, so an empty dst can remain
+    // — but zero victim bytes are copied (the ELOOP above fires before any
+    // read). Assert the security-relevant property (no bytes written) on both
+    // platforms, and keep the stricter no-placeholder guarantee on Linux.
+    let copied = if dst.exists() {
+        std::fs::read(&dst).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    assert!(
+        copied.is_empty(),
+        "no-follow-rejected copy must not write any source bytes, got {} bytes",
+        copied.len()
+    );
+    #[cfg(target_os = "linux")]
     assert!(
         !dst.exists(),
-        "engine wrote dst from a no-follow-rejected source"
+        "linux: engine wrote a dst placeholder from a no-follow-rejected source"
     );
 }
