@@ -55,7 +55,13 @@ jobs:
             label: macos-aarch64
             rust-target: aarch64-apple-darwin
             bundles: app,dmg
-          - os: macos-13
+          # Cross-compile the Intel build on the Apple Silicon runner instead
+          # of the chronically-scarce macos-13 runner (it sat 12 h queued on the
+          # first release attempt). rustup installs the x86_64-apple-darwin std
+          # below, so `tauri build --target x86_64-apple-darwin` produces the
+          # Intel .app/.dmg on the reliable macos-latest host — full Intel +
+          # Apple Silicon coverage with no runner-scarcity hang.
+          - os: macos-latest
             label: macos-x86_64
             rust-target: x86_64-apple-darwin
             bundles: app,dmg

@@ -175,10 +175,7 @@ jobs:
       # below; install / uninstall round-trip runs against the tagged
       # release artifacts per docs/RELEASE_CHECKLIST.md, not here.
       - name: Test
-        # --no-fail-fast: run every test binary even after one fails, so a
-        # cross-OS test divergence surfaces ALL failures in one run instead of
-        # one per ~10-min CI cycle.
-        run: cargo test --workspace --no-fail-fast
+        run: cargo test --workspace
 
   tauri-build:
     name: Tauri debug build (${{ matrix.os }})
