@@ -267,11 +267,16 @@ fn escape_path(src_root: &std::path::Path) -> String {
 /// plus kind. Falls back to the kind when the dst_root is empty or
 /// root-like.
 fn job_label_from_summary(dst_root: &std::path::Path, kind: &str) -> String {
-    let name = dst_root
-        .file_name()
-        .and_then(|os| os.to_str())
-        .map(|s| s.to_owned())
-        .unwrap_or_default();
+    // Take the last path component, splitting on BOTH separators. The history
+    // DB stores native paths from whichever OS ran the copy (typically Windows,
+    // e.g. `C:\dst\archive`); relying on `Path::file_name` returns the whole
+    // string on a unix host — backslashes aren't separators there — and
+    // mislabels the node. Mirrors `escape_path`'s OS-independent handling above.
+    let raw = dst_root.to_string_lossy();
+    let name = raw
+        .rsplit(['/', '\\'])
+        .find(|s| !s.is_empty())
+        .unwrap_or("");
     if name.is_empty() {
         kind.to_owned()
     } else {

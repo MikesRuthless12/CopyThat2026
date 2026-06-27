@@ -433,7 +433,11 @@ fn enumerate_dir_into(dir: &Path, queue: &mut DebounceQueue, now: Instant) {
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if default_filter(&path).is_dropped(false) {
+        // Apply the same temp/dropped suppression the per-event Modify handler
+        // uses, so a macOS FSEvents directory-coalesce rescan doesn't leak
+        // `Modified(*.tmp)` for atomic-save staging files the live path hides.
+        let class = default_filter(&path);
+        if class.is_dropped(false) || matches!(class, PathFilter::KnownTemp) {
             continue;
         }
         // Skip symlinks: a directory symlink whose target is
@@ -495,7 +499,10 @@ fn rescan_into(root: &Path, queue: &mut DebounceQueue, now: Instant) {
         };
         for entry in entries.flatten() {
             let path = entry.path();
-            if default_filter(&path).is_dropped(false) {
+            // Match the Modify handler: also drop KnownTemp staging files so an
+            // overflow/coalesce rescan doesn't leak `Modified(*.tmp)` events.
+            let class = default_filter(&path);
+            if class.is_dropped(false) || matches!(class, PathFilter::KnownTemp) {
                 continue;
             }
             let ftype = match entry.file_type() {
