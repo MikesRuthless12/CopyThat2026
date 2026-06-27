@@ -128,11 +128,12 @@ jobs:
   clippy-test:
     name: clippy + test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # Earlier Phase 3+4 runs hit GitHub's default 6-hour job timeout on every
-    # OS — almost certainly a runner glitch rather than a real test deadlock.
-    # Cap at 30 min so a true hang fails fast and we can investigate, instead
-    # of burning a runner for hours.
-    timeout-minutes: 30
+    # This job does two full workspace compiles (clippy --all-targets, then
+    # cargo test --workspace --no-fail-fast) plus the heavy phase_18_e2e suite,
+    # so it legitimately runs ~30-40 min. Cap at 50 so a genuine hang still
+    # fails fast without killing a healthy run — the old 30-min cap was right at
+    # the real workload's edge and was timing the job out.
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
