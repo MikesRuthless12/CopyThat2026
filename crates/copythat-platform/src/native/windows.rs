@@ -321,6 +321,15 @@ pub(crate) async fn try_native_copy(
     // env escape hatch.
     strategy: copythat_core::CopyStrategy,
 ) -> NativeOutcome {
+    // Phase 13c — an explicit `ParallelChunks` selection is an expert
+    // override: skip the IoRing + overlapped fast paths entirely so
+    // control reaches the parallel-chunk block below (otherwise the
+    // auto-overlapped path `return`s first on the very multi-queue
+    // topologies a user would force parallel chunks for). `Auto` and
+    // every other strategy are unaffected — they keep the existing
+    // IoRing → overlapped → auto-overlapped → parallel ordering.
+    let force_parallel = matches!(strategy, copythat_core::CopyStrategy::ParallelChunks);
+
     // Phase 47 — opt-in IoRing fast path (Win 11 22000+).
     // Gate behind `COPYTHAT_IORING_IO=1`. When the env var is set
     // and the file is ≥256 MiB, attempt the IoRing path. If the
@@ -328,7 +337,7 @@ pub(crate) async fn try_native_copy(
     // `try_ioring_copy` returns `Unsupported` and we fall through
     // to the IOCP overlapped / CopyFileExW pathways below. See
     // `windows_ioring.rs` for capability detection.
-    if super::windows_ioring::requested(total).is_some() {
+    if !force_parallel && super::windows_ioring::requested(total).is_some() {
         match super::windows_ioring::try_ioring_copy(
             src.clone(),
             dst.clone(),
@@ -351,7 +360,7 @@ pub(crate) async fn try_native_copy(
     // the default `CopyFileExW` path on NVMe / Dev Drive hardware
     // without risking the default path until numbers prove it
     // universally wins.
-    if super::windows_overlapped::requested(total).is_some() {
+    if !force_parallel && super::windows_overlapped::requested(total).is_some() {
         return super::windows_overlapped::try_overlapped_copy(src, dst, total, ctrl, events).await;
     }
 
@@ -393,7 +402,8 @@ pub(crate) async fn try_native_copy(
     } else {
         dst_topo.auto_overlapped_threshold(is_cross_volume(&src, &dst))
     };
-    if let Some(threshold) = auto_overlapped_threshold
+    if !force_parallel
+        && let Some(threshold) = auto_overlapped_threshold
         && total >= threshold
     {
         // Per-bus slot/buffer/QD picker per the swarm-research table:
@@ -1196,6 +1206,23 @@ mod tests {
         // Below the 1 GiB floor, even a parallel-friendly array stays off.
         let small = crate::native::parallel::MIN_FILE_FOR_PARALLEL - 1;
         assert_eq!(auto_parallel_chunks(small, &topo(BusType::Raid)), None);
+    }
+
+    #[test]
+    fn auto_parallel_chunks_off_for_unknown_or_probe_failure_topology() {
+        // A failed/unrecognized topology probe falls back to
+        // `conservative_default()` (BusType::Other). Auto must NOT engage
+        // parallel chunks there: an undetectable disk (no RAID, no known
+        // type) safely uses the default single-stream path.
+        let big = crate::native::parallel::MIN_FILE_FOR_PARALLEL;
+        assert_eq!(
+            auto_parallel_chunks(
+                big,
+                &crate::topology::VolumeTopology::conservative_default()
+            ),
+            None,
+            "unknown / probe-failure topology must fall back to the default"
+        );
     }
 
     #[test]
