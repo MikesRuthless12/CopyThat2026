@@ -705,6 +705,17 @@ pub enum CopyStrategy {
     /// Useful when the user has observed reflink overhead on a particular
     /// filesystem (rare, but documented for parity with TeraCopy).
     NoReflink,
+    /// EXPERT / manual only — split a single large copy into N concurrent
+    /// offset chunks. `Auto` **never** selects this on a single-spindle
+    /// SSD / NVMe, where it regresses (measured −25 % C→C / −76 % C→E:
+    /// an NVMe namespace is already internally parallel behind one queue,
+    /// so extra host read handles only add seek / cache contention).
+    /// Engage it deliberately only on striped / multi-spindle (RAID-0) or
+    /// network destinations, where the N streams map onto independent
+    /// hardware queues. `Auto` reaches the parallel path only via the
+    /// topology gate (RAID / SMB / iSCSI / file-backed virtual); this
+    /// variant is the manual override that engages it regardless.
+    ParallelChunks,
 }
 
 /// Outcome a [`FastCopyHook`] reports back to the engine.
