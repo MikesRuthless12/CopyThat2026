@@ -1,0 +1,5 @@
+# Shell scripts must stay LF even on Windows checkouts (autocrlf=true
+# would otherwise rewrite them to CRLF and break the `#!/usr/bin/env`
+# shebang when run via Git Bash / WSL). Scoped to *.sh only — all other
+# files keep the repo's existing per-file line endings.
+*.sh text eol=lf
