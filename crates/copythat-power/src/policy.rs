@@ -231,6 +231,14 @@ impl PowerAction {
             Self::Pause { reason } | Self::Cap { reason, .. } => Some(*reason),
         }
     }
+
+    /// The stricter of two actions (`Pause` > `Cap` > `Continue`; the
+    /// lower cap wins when both are caps). Public wrapper over the
+    /// internal `combine` so the runner can fold the scoped actions
+    /// — e.g. to pick the single action for the UI status badge.
+    pub fn stricter(self, other: PowerAction) -> PowerAction {
+        combine(self, other)
+    }
 }
 
 /// Take the stricter of two actions. `Pause` dominates `Cap` (which
@@ -276,39 +284,48 @@ fn combine(a: PowerAction, b: PowerAction) -> PowerAction {
 /// doesn't affect the final answer (combine is commutative-enough
 /// under the strictness ordering) but it's stable so tie-breaks are
 /// deterministic.
-pub fn compute_action(state: &PowerState, policies: &PowerPolicies) -> PowerAction {
-    let mut out = PowerAction::Continue;
+/// Power-driven actions split by *scope*.
+///
+/// `global` applies to **every** job: battery, presentation,
+/// fullscreen, and thermal are machine-wide concerns — a local
+/// disk-to-disk copy still drains the battery, contends with a
+/// presentation/game, and adds heat, so those rules pause/cap it just
+/// like a network transfer.
+///
+/// `network` applies **only to network-bound transfers** (cloud /
+/// SFTP / SMB). Metered / cellular cost data only when bytes cross the
+/// wire, so a local copy must NOT be paused just because the active
+/// *connection* is metered. The runner is responsible for classifying
+/// each job and applying `network` to the network-bound ones only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScopedActions {
+    /// Applies to all jobs (battery / presentation / fullscreen / thermal).
+    pub global: PowerAction,
+    /// Applies only to network-bound jobs (metered / cellular).
+    pub network: PowerAction,
+}
 
+/// Resolve the power-driven actions, split into the machine-wide
+/// (`global`) action and the network-only (`network`) action. The
+/// runner applies `global` to every job and `network` only to
+/// network-bound transfers. See [`ScopedActions`].
+pub fn compute_scoped_actions(state: &PowerState, policies: &PowerPolicies) -> ScopedActions {
+    let mut global = PowerAction::Continue;
     if state.on_battery {
-        out = combine(
-            out,
+        global = combine(
+            global,
             policy_to_action(policies.battery, PowerReason::OnBattery),
         );
     }
-    match state.network_class {
-        NetworkClass::Metered => {
-            out = combine(
-                out,
-                policy_to_action(policies.metered, PowerReason::MeteredNetwork),
-            );
-        }
-        NetworkClass::Cellular => {
-            out = combine(
-                out,
-                policy_to_action(policies.cellular, PowerReason::CellularNetwork),
-            );
-        }
-        NetworkClass::Unmetered => {}
-    }
     if state.presenting {
-        out = combine(
-            out,
+        global = combine(
+            global,
             presentation_to_action(policies.presentation, PowerReason::Presenting),
         );
     }
     if state.fullscreen {
-        out = combine(
-            out,
+        global = combine(
+            global,
             fullscreen_to_action(policies.fullscreen, PowerReason::Fullscreen),
         );
     }
@@ -318,10 +335,25 @@ pub fn compute_action(state: &PowerState, policies: &PowerPolicies) -> PowerActi
         // don't know that here — surface a sentinel `0` cap and let
         // the runner interpret it (documented in Shape::set_rate
         // docs). `Pause` / `Continue` pass through cleanly.
-        out = combine(out, thermal_to_action(policies.thermal));
+        global = combine(global, thermal_to_action(policies.thermal));
     }
 
-    out
+    let network = match state.network_class {
+        NetworkClass::Metered => policy_to_action(policies.metered, PowerReason::MeteredNetwork),
+        NetworkClass::Cellular => policy_to_action(policies.cellular, PowerReason::CellularNetwork),
+        NetworkClass::Unmetered => PowerAction::Continue,
+    };
+
+    ScopedActions { global, network }
+}
+
+/// Resolve the single most-restrictive power-driven action across all
+/// dimensions (machine-wide + network). Equivalent to combining both
+/// halves of [`compute_scoped_actions`]; kept for callers/tests that
+/// want one directive without the scope split.
+pub fn compute_action(state: &PowerState, policies: &PowerPolicies) -> PowerAction {
+    let scoped = compute_scoped_actions(state, policies);
+    combine(scoped.global, scoped.network)
 }
 
 fn policy_to_action<P: Copy + Into<PolicyAction>>(policy: P, reason: PowerReason) -> PowerAction {
@@ -416,6 +448,55 @@ mod tests {
             battery: BatteryPolicy::Pause,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn metered_alone_leaves_global_continue() {
+        // Only metered is active — nothing machine-wide. Local copies
+        // must NOT pause, so `global` stays Continue while `network`
+        // pauses (the runner applies it to network-bound jobs only).
+        let policies = PowerPolicies {
+            metered: NetworkPolicy::Pause,
+            ..Default::default()
+        };
+        let state = PowerState {
+            network_class: NetworkClass::Metered,
+            ..Default::default()
+        };
+        let scoped = compute_scoped_actions(&state, &policies);
+        assert_eq!(scoped.global, PowerAction::Continue);
+        assert!(scoped.network.is_pause());
+        // The combined (legacy) action still surfaces the pause.
+        assert!(compute_action(&state, &policies).is_pause());
+    }
+
+    #[test]
+    fn scoped_split_separates_global_from_network() {
+        // Metered + presenting both active: presentation is machine-wide
+        // (lands in `global`), metered is network-only (lands in `network`).
+        let policies = PowerPolicies {
+            metered: NetworkPolicy::Pause,
+            presentation: PresentationPolicy::Pause,
+            ..Default::default()
+        };
+        let state = PowerState {
+            network_class: NetworkClass::Metered,
+            presenting: true,
+            ..Default::default()
+        };
+        let scoped = compute_scoped_actions(&state, &policies);
+        assert!(matches!(
+            scoped.global,
+            PowerAction::Pause {
+                reason: PowerReason::Presenting
+            }
+        ));
+        assert!(matches!(
+            scoped.network,
+            PowerAction::Pause {
+                reason: PowerReason::MeteredNetwork
+            }
+        ));
     }
 
     #[test]

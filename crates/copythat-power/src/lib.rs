@@ -38,7 +38,8 @@ pub use bus::{PowerBus, PowerBusError, PowerSubscriber};
 pub use event::{NetworkClass, PowerEvent, ThermalKind};
 pub use policy::{
     BatteryPolicy, FullscreenPolicy, NetworkPolicy, PowerAction, PowerPolicies, PowerReason,
-    PowerState, PresentationPolicy, ThermalPolicy, apply_event, compute_action,
+    PowerState, PresentationPolicy, ScopedActions, ThermalPolicy, apply_event, compute_action,
+    compute_scoped_actions,
 };
 pub use source::{
     BatteryProbe, BatterySnapshot, FullscreenProbe, NullProbes, PresentationProbe, ProbeSet,

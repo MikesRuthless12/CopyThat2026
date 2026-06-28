@@ -11,12 +11,15 @@
 //! initiated pause. If the user manually paused via `pause_all`
 //! while the bus was also pausing, the manual pause wins on resume.
 
+use std::collections::HashSet;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use copythat_core::{Job, JobId};
 use copythat_power::{
     NetworkClass, PowerAction, PowerBus, PowerEvent, PowerPolicies, PowerReason, PowerState,
-    apply_event, compute_action,
+    ScopedActions, apply_event, compute_action, compute_scoped_actions,
 };
 use copythat_settings::{PowerPoliciesSettings, PowerRuleChoice, ThermalRuleChoice};
 use copythat_shape::{ByteRate, Shape};
@@ -144,10 +147,13 @@ pub struct PowerSubscriberHandle {
 /// unpause / un-cap cleanly.
 #[derive(Debug, Default)]
 struct Bookkeeping {
-    /// `true` if the subscriber is currently owning the pause state
-    /// (i.e. we called `pause_all` due to a power event). On
-    /// transition to `Continue`, we resume.
-    power_owned_pause: bool,
+    /// The set of jobs *we* (the power policy) paused. We resume
+    /// exactly these on a later transition, so we never step on a job
+    /// the user paused manually. Global rules (battery / presentation /
+    /// fullscreen / thermal) add every job; the metered/cellular rule
+    /// adds only network-bound jobs — a local disk-to-disk copy never
+    /// crosses the metered link, so it keeps running.
+    power_paused_jobs: HashSet<JobId>,
     /// Last applied bus-driven cap (in bytes/sec). `None` when the
     /// bus isn't capping; `Some(_)` stays set until we revert to the
     /// user's configured rate via `apply_network_settings_to_shape`.
@@ -179,7 +185,10 @@ pub fn spawn_power_subscriber(state: AppState, app: AppHandle) -> PowerSubscribe
         tokio::spawn(async move {
             let power_state = Arc::new(Mutex::new(PowerState::default()));
             let book = Arc::new(Mutex::new(Bookkeeping::default()));
-            let mut last_action = PowerAction::Continue;
+            let mut last_scoped = ScopedActions {
+                global: PowerAction::Continue,
+                network: PowerAction::Continue,
+            };
 
             loop {
                 if stop_for_task.load(Ordering::SeqCst) {
@@ -202,7 +211,7 @@ pub fn spawn_power_subscriber(state: AppState, app: AppHandle) -> PowerSubscribe
                 if !snap.power.enabled {
                     // Power policies disabled — release any power-owned
                     // pause/cap and stop processing.
-                    release_power_owned(&state, &app, &book, &snap, &mut last_action);
+                    release_power_owned(&state, &app, &book, &snap, &mut last_scoped);
                     continue;
                 }
                 let policies = policies_from_settings(&snap.power);
@@ -212,13 +221,13 @@ pub fn spawn_power_subscriber(state: AppState, app: AppHandle) -> PowerSubscribe
                     apply_event(&mut ps, &ev);
                 }
                 let current_state = *power_state.lock().expect("power_state lock");
-                let action = compute_action(&current_state, &policies);
+                let scoped = compute_scoped_actions(&current_state, &policies);
 
-                if action == last_action {
+                if scoped == last_scoped {
                     continue;
                 }
-                apply_action(&state, &app, &book, &snap, &action);
-                last_action = action;
+                apply_scoped(&state, &app, &book, &snap, &scoped);
+                last_scoped = scoped;
             }
         })
     });
@@ -226,78 +235,126 @@ pub fn spawn_power_subscriber(state: AppState, app: AppHandle) -> PowerSubscribe
     PowerSubscriberHandle { join, stop }
 }
 
-/// Perform the side-effects implied by transitioning to `action`.
-fn apply_action(
+/// Apply the scoped power actions: `global` (battery / presentation /
+/// fullscreen / thermal) to every job, `network` (metered / cellular)
+/// to network-bound jobs only. Reconciles the set of jobs *we* paused
+/// so a transition resumes exactly those — never a job the user paused
+/// manually.
+fn apply_scoped(
     state: &AppState,
     app: &AppHandle,
     book: &Arc<Mutex<Bookkeeping>>,
     snap: &copythat_settings::Settings,
-    action: &PowerAction,
+    scoped: &ScopedActions,
 ) {
     let mut b = book.lock().expect("bookkeeping lock");
-    match action {
-        PowerAction::Continue => {
-            if b.power_owned_pause {
-                // Release the power-owned pause.
-                for job in state.queue.snapshot() {
-                    state.queue.resume_job(job.id);
-                }
-                b.power_owned_pause = false;
-            }
-            if b.power_owned_cap.is_some() {
-                // Restore user-configured rate.
-                crate::state::apply_network_settings_to_shape(&state.shape, &snap.network);
-                b.power_owned_cap = None;
-            }
+
+    // The shape (rate cap) is a single global limiter, so a network
+    // *Cap* can't be applied per-job — fold a (rare, hand-edited)
+    // network cap into the global action for the shape. A network
+    // *Pause* stays scoped to network-bound jobs in the loop below.
+    let global = match scoped.network {
+        PowerAction::Cap { .. } => scoped.global.stricter(scoped.network),
+        _ => scoped.global,
+    };
+    let global_pauses = global.is_pause();
+    let network_pauses = scoped.network.is_pause();
+
+    // Per-job pause reconciliation: a job is power-paused when a global
+    // rule pauses, OR a network rule pauses and the job is network-bound.
+    let mut desired: HashSet<JobId> = HashSet::new();
+    for job in state.queue.snapshot() {
+        if global_pauses || (network_pauses && is_network_bound(&job)) {
+            desired.insert(job.id);
         }
-        PowerAction::Pause { .. } => {
-            if !b.power_owned_pause {
-                for job in state.queue.snapshot() {
-                    state.queue.pause_job(job.id);
-                }
-                b.power_owned_pause = true;
-            }
-            // Clear cap bookkeeping — pause dominates.
-            if b.power_owned_cap.is_some() {
-                b.power_owned_cap = None;
-            }
+    }
+    for &id in &desired {
+        // `insert` returns true the first time we take this job's pause.
+        if b.power_paused_jobs.insert(id) {
+            state.queue.pause_job(id);
         }
+    }
+    let stale: Vec<JobId> = b
+        .power_paused_jobs
+        .iter()
+        .copied()
+        .filter(|id| !desired.contains(id))
+        .collect();
+    for id in stale {
+        state.queue.resume_job(id);
+        b.power_paused_jobs.remove(&id);
+    }
+
+    // Global shape cap (driven by the global/folded action only).
+    match global {
         PowerAction::Cap {
             bytes_per_second,
             reason,
         } => {
-            // Thermal cap uses the sentinel `0` to mean "consult the
-            // live shape and scale by the policy's percent". Anything
-            // else is an absolute bytes/sec cap.
-            let resolved_bps =
-                if *bytes_per_second == 0 && matches!(reason, PowerReason::ThermalThrottling) {
-                    let percent = match snap.power.thermal {
-                        ThermalRuleChoice::CapPercent { percent } => percent.min(100) as u64,
-                        _ => 50,
-                    };
-                    let current = state
-                        .shape
-                        .current_rate()
-                        .map(|r| r.bytes_per_second())
-                        .unwrap_or(u64::MAX);
-                    current.saturating_mul(percent) / 100
-                } else {
-                    *bytes_per_second
-                };
-            if b.power_owned_pause {
-                // Moving from Pause → Cap: resume jobs, then set rate.
-                for job in state.queue.snapshot() {
-                    state.queue.resume_job(job.id);
-                }
-                b.power_owned_pause = false;
+            let resolved = resolve_cap_bps(state, snap, bytes_per_second, reason);
+            apply_shape_cap(&state.shape, resolved);
+            b.power_owned_cap = Some(resolved);
+        }
+        PowerAction::Continue | PowerAction::Pause { .. } => {
+            if b.power_owned_cap.take().is_some() {
+                crate::state::apply_network_settings_to_shape(&state.shape, &snap.network);
             }
-            apply_shape_cap(&state.shape, resolved_bps);
-            b.power_owned_cap = Some(resolved_bps);
         }
     }
     drop(b);
-    let dto = PowerActionDto::from(action);
+
+    // UI badge: the single most-restrictive action across both scopes.
+    let badge = scoped.global.stricter(scoped.network);
+    let dto = PowerActionDto::from(&badge);
     let _ = app.emit(EVENT_POWER_ACTION, dto);
+}
+
+/// Expand a cap's bytes/sec, resolving the thermal `0` sentinel
+/// ("percent of the live shape rate") against the current shape state.
+fn resolve_cap_bps(
+    state: &AppState,
+    snap: &copythat_settings::Settings,
+    bytes_per_second: u64,
+    reason: PowerReason,
+) -> u64 {
+    if bytes_per_second == 0 && matches!(reason, PowerReason::ThermalThrottling) {
+        let percent = match snap.power.thermal {
+            ThermalRuleChoice::CapPercent { percent } => percent.min(100) as u64,
+            _ => 50,
+        };
+        let current = state
+            .shape
+            .current_rate()
+            .map(|r| r.bytes_per_second())
+            .unwrap_or(u64::MAX);
+        current.saturating_mul(percent) / 100
+    } else {
+        bytes_per_second
+    }
+}
+
+/// A queue job is "network-bound" when its source or destination is a
+/// network share (UNC path). The metered/cellular power rule pauses
+/// these; a local disk-to-disk copy is left running since it never
+/// crosses the metered link. Cloud transfers (S3 / SFTP / WebDAV) run
+/// on a separate path — see `cloud_commands` — and are handled there.
+fn is_network_bound(job: &Job) -> bool {
+    is_network_path(&job.src) || job.dst.as_deref().is_some_and(is_network_path)
+}
+
+/// `true` when `p` is a UNC network-share path (`\\server\share` or
+/// the verbatim `\\?\UNC\…` form). Local drive paths (`C:\…`,
+/// `\\?\C:\…`) and relative paths are not network shares. On non-
+/// Windows hosts no path carries a UNC prefix, so this is always
+/// `false` there (network mounts live at arbitrary paths the runner
+/// can't classify; cloud transfers are handled separately).
+fn is_network_path(p: &Path) -> bool {
+    use std::path::{Component, Prefix};
+    matches!(
+        p.components().next(),
+        Some(Component::Prefix(pre))
+            if matches!(pre.kind(), Prefix::UNC(..) | Prefix::VerbatimUNC(..))
+    )
 }
 
 fn release_power_owned(
@@ -305,20 +362,21 @@ fn release_power_owned(
     app: &AppHandle,
     book: &Arc<Mutex<Bookkeeping>>,
     snap: &copythat_settings::Settings,
-    last_action: &mut PowerAction,
+    last_scoped: &mut ScopedActions,
 ) {
     let mut b = book.lock().expect("bookkeeping lock");
-    if b.power_owned_pause {
-        for job in state.queue.snapshot() {
-            state.queue.resume_job(job.id);
-        }
-        b.power_owned_pause = false;
+    let paused: Vec<JobId> = b.power_paused_jobs.drain().collect();
+    for id in paused {
+        state.queue.resume_job(id);
     }
     if b.power_owned_cap.take().is_some() {
         crate::state::apply_network_settings_to_shape(&state.shape, &snap.network);
     }
     drop(b);
-    *last_action = PowerAction::Continue;
+    *last_scoped = ScopedActions {
+        global: PowerAction::Continue,
+        network: PowerAction::Continue,
+    };
     let dto = PowerActionDto::from(&PowerAction::Continue);
     let _ = app.emit(EVENT_POWER_ACTION, dto);
 }
@@ -437,3 +495,28 @@ pub fn compute_action_for_state(state: &AppState, observed: &PowerState) -> Powe
 // the linter can't see from inside this module.
 #[allow(dead_code)]
 fn _require_bus_type(_bus: &PowerBus) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn unc_shares_are_network_bound() {
+        // A UNC share — and its verbatim form — is a network path, so
+        // the metered/cellular rule pauses copies to/from it.
+        assert!(is_network_path(Path::new(r"\\server\share\file.bin")));
+        assert!(is_network_path(Path::new(r"\\?\UNC\server\share\file.bin")));
+    }
+
+    #[test]
+    fn local_and_relative_paths_are_not_network_bound() {
+        // Local drives + relative paths are never a network share, so a
+        // local disk-to-disk copy keeps running on a metered connection.
+        // (On non-Windows these parse as non-prefixed paths — also
+        // correctly `false`.)
+        assert!(!is_network_path(Path::new("relative/file.bin")));
+        assert!(!is_network_path(Path::new(r"C:\Users\me\file.bin")));
+        assert!(!is_network_path(Path::new(r"\\?\C:\Users\me\file.bin")));
+    }
+}
