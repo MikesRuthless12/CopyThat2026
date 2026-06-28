@@ -206,6 +206,41 @@ impl NetworkProbe for StubNetworkProbe {
     }
 }
 
+/// Windows network probe — real metering / cellular detection via
+/// [`copythat_platform::network`] (WinRT `NetworkInformation`). Maps the
+/// platform cost class onto the engine's [`NetworkClass`] so the
+/// "on metered" / "on cellular" power rules fire on real connections.
+#[cfg(target_os = "windows")]
+pub struct RealNetworkProbe;
+
+#[cfg(target_os = "windows")]
+impl NetworkProbe for RealNetworkProbe {
+    fn class(&self) -> NetworkClass {
+        use copythat_platform::network::NetworkCostClass;
+        match copythat_platform::network::current_cost_class() {
+            NetworkCostClass::Unmetered => NetworkClass::Unmetered,
+            NetworkCostClass::Metered => NetworkClass::Metered,
+            NetworkCostClass::Cellular => NetworkClass::Cellular,
+        }
+    }
+}
+
+/// Non-Windows network probe — the per-OS metering bridges
+/// (`NWPathMonitor` on macOS, NetworkManager DBus on Linux) are
+/// deferred, so reuse the stub's `Unmetered` answer. Defined as a unit
+/// struct (not a type alias) so `RealNetworkProbe` is usable as a value
+/// constructor in [`ProbeSet::production`] uniformly across targets
+/// (mirrors [`RealThermalProbe`]).
+#[cfg(not(target_os = "windows"))]
+pub struct RealNetworkProbe;
+
+#[cfg(not(target_os = "windows"))]
+impl NetworkProbe for RealNetworkProbe {
+    fn class(&self) -> NetworkClass {
+        StubNetworkProbe.class()
+    }
+}
+
 // ---------------------------------------------------------------------
 // x86 thermal probe via raw-cpuid (optional, cfg-gated)
 // ---------------------------------------------------------------------
@@ -290,16 +325,17 @@ impl ProbeSet {
     /// stub via the `RealPresentationProbe` / `RealFullscreenProbe`
     /// type aliases (see their definition for why the Linux DBus probe
     /// was pulled — a Phase 31c follow-up), so this is safe everywhere.
-    /// Network metering stays stubbed (`Unmetered`) until the per-OS
-    /// bridges (`INetworkCostManager` / `NWPathMonitor` / NetworkManager
-    /// DBus) land — the remaining Phase 31b work.
+    /// Network metering is real on **Windows** (WinRT `NetworkInformation`
+    /// via `copythat_platform::network`); macOS / Linux / other targets
+    /// defer to the stub (`NWPathMonitor` / NetworkManager DBus bridges
+    /// are a follow-up).
     pub fn production() -> Self {
         Self {
             battery: Arc::new(RealBatteryProbe),
             presentation: Arc::new(RealPresentationProbe),
             fullscreen: Arc::new(RealFullscreenProbe),
             thermal: Arc::new(RealThermalProbe),
-            network: Arc::new(StubNetworkProbe),
+            network: Arc::new(RealNetworkProbe),
         }
     }
 }

@@ -84,6 +84,7 @@ mod helpers;
 mod hook;
 pub mod meta;
 mod native;
+pub mod network;
 pub mod os;
 mod outcome;
 pub mod presence;

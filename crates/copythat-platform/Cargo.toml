@@ -103,6 +103,14 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Pipes",
     "Win32_System_SystemServices",
 ] }
+# Phase 31b — WinRT `NetworkInformation` for the active-connection
+# metering class (metered / cellular) read by the power policy's network
+# rules. MIT OR Apache-2.0. Coexists with `windows-sys` above (raw
+# Win32); the `windows` crate carries the WinRT projections.
+windows = { version = "0.58", features = [
+    "Networking_Connectivity",
+    "Win32_System_Com",
+] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Phase 37 follow-up #2 — IOPMAssertionCreateWithName for the
