@@ -316,11 +316,21 @@ fn apply_options(
             preserve_resource_forks: settings.transfer.preserve_resource_forks,
             appledouble_fallback: settings.transfer.appledouble_fallback,
         },
-        strategy: match settings.transfer.reflink {
-            copythat_settings::ReflinkPreference::Prefer => copythat_core::CopyStrategy::Auto,
-            copythat_settings::ReflinkPreference::Avoid => copythat_core::CopyStrategy::NoReflink,
-            copythat_settings::ReflinkPreference::Disabled => {
-                copythat_core::CopyStrategy::AlwaysAsync
+        // Phase 13c — an explicit "parallel multi-chunk" opt-in
+        // (Settings → Transfer) overrides the reflink-derived strategy
+        // with the expert ParallelChunks path. Default off → the
+        // reflink mapping stands.
+        strategy: if settings.transfer.force_parallel_chunks {
+            copythat_core::CopyStrategy::ParallelChunks
+        } else {
+            match settings.transfer.reflink {
+                copythat_settings::ReflinkPreference::Prefer => copythat_core::CopyStrategy::Auto,
+                copythat_settings::ReflinkPreference::Avoid => {
+                    copythat_core::CopyStrategy::NoReflink
+                }
+                copythat_settings::ReflinkPreference::Disabled => {
+                    copythat_core::CopyStrategy::AlwaysAsync
+                }
             }
         },
         on_locked: match settings.transfer.on_locked {

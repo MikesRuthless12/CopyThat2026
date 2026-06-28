@@ -377,6 +377,8 @@ settings-preserve-permissions = 권한 보존
 settings-preserve-acls = ACL 보존 (Phase 14)
 settings-preserve-sparseness = 희소 파일 보존
 settings-preserve-sparseness-hint = 희소 파일(VM 디스크, 데이터베이스 파일)의 할당된 익스텐트만 복사하여 대상의 디스크상 크기가 원본과 동일하게 유지되도록 합니다.
+settings-force-parallel-chunks = 병렬 멀티 청크 복사 (RAID/어레이 전용)
+settings-force-parallel-chunks-hint = 큰 복사를 동시 청크로 분할합니다. 스트라이프/RAID/네트워크 대상에서만 도움이 되며 단일 SSD/NVMe는 느려집니다(-25%~-76%). 대상이 다중 디스크 어레이가 아니면 꺼 두세요.
 
 # Shell tab
 settings-context-menu = 셸 컨텍스트 메뉴 항목 사용

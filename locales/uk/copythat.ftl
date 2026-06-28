@@ -377,6 +377,8 @@ settings-preserve-permissions = Зберігати дозволи
 settings-preserve-acls = Зберігати ACL (Phase 14)
 settings-preserve-sparseness = Зберігати розріджені файли
 settings-preserve-sparseness-hint = Копіювати лише виділені екстенти розріджених файлів (диски ВМ, файли баз даних), щоб призначення мало той самий розмір на диску, що й джерело.
+settings-force-parallel-chunks = Паралельне багатоблокове копіювання (лише RAID / масиви)
+settings-force-parallel-chunks-hint = Розбиває кожне велике копіювання на паралельні блоки. Корисно лише для черезсмугових/RAID/мережевих призначень; СПОВІЛЬНЮЄ одиночний SSD/NVMe (-25%…-76%). Залиште вимкненим, якщо призначення не є масивом із кількох дисків.
 
 # Shell tab
 settings-context-menu = Увімкнути пункти контекстного меню оболонки

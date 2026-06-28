@@ -377,6 +377,8 @@ settings-preserve-permissions = Preserve permissions
 settings-preserve-acls = Preserve ACLs (Phase 14)
 settings-preserve-sparseness = Preserve sparse files
 settings-preserve-sparseness-hint = Copy only the allocated extents of sparse files (VM disks, database files) so the destination stays the same on-disk size as the source.
+settings-force-parallel-chunks = Parallel multi-chunk copy (RAID / arrays only)
+settings-force-parallel-chunks-hint = Splits each large copy into concurrent chunks. Helps only striped/RAID/network destinations; it SLOWS a single SSD/NVMe (-25% to -76%). Leave off unless your destination is a multi-disk array.
 
 # Shell tab
 settings-context-menu = Enable shell context menu entries

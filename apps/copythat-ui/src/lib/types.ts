@@ -500,6 +500,8 @@ export interface TransferSettingsDto {
   onLocked: LockedFilePolicyWire;
   /// Phase 23 — preserve source sparseness on the destination.
   preserveSparseness: boolean;
+  /// Phase 13c — force the parallel multi-chunk copy path (RAID/arrays).
+  forceParallelChunks: boolean;
   /// Phase 24 — master toggle for security-metadata preservation.
   preserveSecurityMetadata: boolean;
   /// Phase 24 — preserve Mark-of-the-Web (Zone.Identifier ADS).

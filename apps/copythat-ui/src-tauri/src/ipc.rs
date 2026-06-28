@@ -1193,6 +1193,11 @@ pub struct TransferDto {
     /// (older builds) fall through serde-default to `true`.
     #[serde(default = "default_true")]
     pub preserve_sparseness: bool,
+    /// Phase 13c — force the parallel multi-chunk copy path (Windows).
+    /// Default `false`; older frontends without this key fall through
+    /// serde-default to `false` (the engine's topology gate decides).
+    #[serde(default)]
+    pub force_parallel_chunks: bool,
     /// Phase 24 — master toggle for security-metadata preservation
     /// (NTFS ADS / xattrs / ACLs / SELinux / resource forks).
     #[serde(default = "default_true")]
@@ -1738,6 +1743,7 @@ impl From<&copythat_settings::Settings> for SettingsDto {
                 preserve_acls: s.transfer.preserve_acls,
                 on_locked: s.transfer.on_locked.as_str().to_string(),
                 preserve_sparseness: s.transfer.preserve_sparseness,
+                force_parallel_chunks: s.transfer.force_parallel_chunks,
                 preserve_security_metadata: s.transfer.preserve_security_metadata,
                 preserve_motw: s.transfer.preserve_motw,
                 preserve_posix_acls: s.transfer.preserve_posix_acls,
@@ -1945,6 +1951,7 @@ impl SettingsDto {
         s.transfer.preserve_acls = self.transfer.preserve_acls;
         s.transfer.on_locked = LockedFilePolicyChoice::from_wire(&self.transfer.on_locked);
         s.transfer.preserve_sparseness = self.transfer.preserve_sparseness;
+        s.transfer.force_parallel_chunks = self.transfer.force_parallel_chunks;
         s.transfer.preserve_security_metadata = self.transfer.preserve_security_metadata;
         s.transfer.preserve_motw = self.transfer.preserve_motw;
         s.transfer.preserve_posix_acls = self.transfer.preserve_posix_acls;

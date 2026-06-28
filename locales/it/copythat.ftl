@@ -377,6 +377,8 @@ settings-preserve-permissions = Mantieni le autorizzazioni
 settings-preserve-acls = Mantieni gli ACL (Phase 14)
 settings-preserve-sparseness = Mantieni i file sparsi
 settings-preserve-sparseness-hint = Copia solo gli extent allocati dei file sparsi (dischi di VM, file di database) in modo che la destinazione mantenga su disco la stessa dimensione dell'origine.
+settings-force-parallel-chunks = Copia parallela multi-blocco (solo RAID / array)
+settings-force-parallel-chunks-hint = Divide ogni copia di grandi dimensioni in blocchi concorrenti. Aiuta solo destinazioni in striping/RAID/rete; RALLENTA un singolo SSD/NVMe (-25% a -76%). Lascia disattivato a meno che la destinazione non sia un array multidisco.
 
 # Shell tab
 settings-context-menu = Abilita le voci del menu contestuale della shell

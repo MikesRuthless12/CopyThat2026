@@ -377,6 +377,8 @@ settings-preserve-permissions = Giữ quyền truy cập
 settings-preserve-acls = Giữ ACL (Phase 14)
 settings-preserve-sparseness = Giữ tệp thưa
 settings-preserve-sparseness-hint = Chỉ sao chép các vùng đã cấp phát của tệp thưa (đĩa máy ảo, tệp cơ sở dữ liệu) để ổ đích giữ cùng kích thước trên đĩa như nguồn.
+settings-force-parallel-chunks = Sao chép song song nhiều khối (chỉ RAID / mảng đĩa)
+settings-force-parallel-chunks-hint = Chia mỗi lần sao chép lớn thành các khối đồng thời. Chỉ có lợi cho đích phân dải/RAID/mạng; LÀM CHẬM một SSD/NVMe đơn (-25% đến -76%). Hãy tắt trừ khi đích là mảng nhiều đĩa.
 
 # Shell tab
 settings-context-menu = Bật mục menu ngữ cảnh của shell

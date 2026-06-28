@@ -377,6 +377,8 @@ settings-preserve-permissions = Zachowuj uprawnienia
 settings-preserve-acls = Zachowuj listy ACL (faza 14)
 settings-preserve-sparseness = Zachowuj pliki rzadkie
 settings-preserve-sparseness-hint = Kopiuj tylko przydzielone obszary plików rzadkich (dyski maszyn wirtualnych, pliki baz danych), aby cel zajmował na dysku tyle samo miejsca co źródło.
+settings-force-parallel-chunks = Równoległe kopiowanie wieloblokowe (tylko RAID / macierze)
+settings-force-parallel-chunks-hint = Dzieli każdą dużą kopię na równoległe bloki. Pomaga tylko w przypadku celów rozłożonych/RAID/sieciowych; SPOWALNIA pojedynczy dysk SSD/NVMe (-25% do -76%). Pozostaw wyłączone, chyba że celem jest macierz wielodyskowa.
 
 # Shell tab
 settings-context-menu = Włącz wpisy menu kontekstowego powłoki

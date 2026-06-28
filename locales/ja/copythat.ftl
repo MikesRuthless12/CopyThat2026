@@ -377,6 +377,8 @@ settings-preserve-permissions = アクセス権を保持
 settings-preserve-acls = ACL を保持（Phase 14）
 settings-preserve-sparseness = スパースファイルを保持
 settings-preserve-sparseness-hint = スパースファイル（VM ディスク、データベースファイル）の割り当て済みエクステントのみをコピーし、コピー先のディスク上サイズがソースと同じになるようにします。
+settings-force-parallel-chunks = 並列マルチチャンクコピー（RAID/アレイのみ）
+settings-force-parallel-chunks-hint = 大きなコピーを並行チャンクに分割します。ストライプ/RAID/ネットワーク宛先でのみ有効で、単一の SSD/NVMe では遅くなります（-25%〜-76%）。宛先が複数ディスクのアレイでない限りオフのままにしてください。
 
 # Shell tab
 settings-context-menu = シェルのコンテキストメニュー項目を有効化

@@ -377,6 +377,8 @@ settings-preserve-permissions = الحفاظ على الأذونات
 settings-preserve-acls = الحفاظ على قوائم ACL (المرحلة 14)
 settings-preserve-sparseness = الحفاظ على الملفات المتفرّقة
 settings-preserve-sparseness-hint = نسخ المقاطع المخصّصة فقط من الملفات المتفرّقة (أقراص الأجهزة الافتراضية، ملفات قواعد البيانات) بحيث تبقى الوجهة بنفس الحجم على القرص كالمصدر.
+settings-force-parallel-chunks = نسخ متوازٍ متعدد الأجزاء (RAID/المصفوفات فقط)
+settings-force-parallel-chunks-hint = يقسّم كل نسخة كبيرة إلى أجزاء متزامنة. يفيد فقط مع وجهات التوزيع/RAID/الشبكة؛ ويُبطئ قرص SSD/NVMe الواحد (-25% إلى -76%). اتركه معطّلاً ما لم تكن الوجهة مصفوفة أقراص متعددة.
 
 # Shell tab
 settings-context-menu = تمكين إدخالات قائمة سياق الصدفة

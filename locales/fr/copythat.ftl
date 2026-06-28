@@ -377,6 +377,8 @@ settings-preserve-permissions = Préserver les autorisations
 settings-preserve-acls = Préserver les ACL (Phase 14)
 settings-preserve-sparseness = Préserver les fichiers creux
 settings-preserve-sparseness-hint = Copie uniquement les extents alloués des fichiers creux (disques de VM, fichiers de base de données) afin que la destination conserve la même taille sur disque que la source.
+settings-force-parallel-chunks = Copie parallèle multi-blocs (RAID / matrices uniquement)
+settings-force-parallel-chunks-hint = Divise chaque copie volumineuse en blocs simultanés. N'aide que pour les destinations en bandes/RAID/réseau ; RALENTIT un SSD/NVMe unique (-25 % à -76 %). Laissez désactivé sauf si la destination est une matrice multidisque.
 
 # Shell tab
 settings-context-menu = Activer les entrées du menu contextuel du shell

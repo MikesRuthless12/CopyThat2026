@@ -377,6 +377,8 @@ settings-preserve-permissions = Pertahankan izin
 settings-preserve-acls = Pertahankan ACL (Fase 14)
 settings-preserve-sparseness = Pertahankan berkas sparse
 settings-preserve-sparseness-hint = Salin hanya extent yang teralokasi dari berkas sparse (disk VM, berkas basis data) agar ukuran tujuan di disk tetap sama dengan sumber.
+settings-force-parallel-chunks = Salinan multi-chunk paralel (hanya RAID / larik)
+settings-force-parallel-chunks-hint = Membagi setiap salinan besar menjadi potongan serentak. Hanya membantu tujuan striped/RAID/jaringan; MEMPERLAMBAT satu SSD/NVMe (-25% hingga -76%). Biarkan nonaktif kecuali tujuan Anda adalah larik multi-disk.
 
 # Shell tab
 settings-context-menu = Aktifkan entri menu konteks shell

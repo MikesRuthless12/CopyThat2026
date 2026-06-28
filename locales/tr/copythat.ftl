@@ -377,6 +377,8 @@ settings-preserve-permissions = İzinleri koru
 settings-preserve-acls = ACL'leri koru (Aşama 14)
 settings-preserve-sparseness = Seyrek dosyaları koru
 settings-preserve-sparseness-hint = Yalnızca seyrek dosyaların (VM diskleri, veritabanı dosyaları) ayrılmış bölümlerini kopyala; böylece hedef, diskte kaynakla aynı boyutta kalır.
+settings-force-parallel-chunks = Paralel çok parçalı kopyalama (yalnızca RAID / diziler)
+settings-force-parallel-chunks-hint = Her büyük kopyalamayı eşzamanlı parçalara böler. Yalnızca şeritli/RAID/ağ hedeflerinde yardımcı olur; tek bir SSD/NVMe'yi YAVAŞLATIR (-%25 ila -%76). Hedef çok diskli bir dizi değilse kapalı bırakın.
 
 # Shell tab
 settings-context-menu = Kabuk bağlam menüsü girişlerini etkinleştir

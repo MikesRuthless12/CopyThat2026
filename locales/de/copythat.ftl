@@ -377,6 +377,8 @@ settings-preserve-permissions = Berechtigungen beibehalten
 settings-preserve-acls = ACLs beibehalten (Phase 14)
 settings-preserve-sparseness = Sparse-Dateien beibehalten
 settings-preserve-sparseness-hint = Kopiert nur die belegten Bereiche von Sparse-Dateien (VM-Festplatten, Datenbankdateien), sodass das Ziel dieselbe Größe auf dem Datenträger behält wie die Quelle.
+settings-force-parallel-chunks = Paralleles Mehrfach-Chunk-Kopieren (nur RAID / Arrays)
+settings-force-parallel-chunks-hint = Teilt jede große Kopie in gleichzeitige Chunks auf. Hilft nur bei Striped-/RAID-/Netzwerkzielen; verlangsamt eine einzelne SSD/NVMe (-25% bis -76%). Lassen Sie es aus, sofern das Ziel kein Array aus mehreren Datenträgern ist.
 
 # Shell tab
 settings-context-menu = Einträge im Shell-Kontextmenü aktivieren

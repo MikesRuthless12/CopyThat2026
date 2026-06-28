@@ -377,6 +377,16 @@ pub struct TransferSettings {
     /// destination to be fully allocated (e.g. latency-sensitive VM
     /// disks where on-demand allocation hurts first-write cost).
     pub preserve_sparseness: bool,
+    /// Phase 13c — force the parallel multi-chunk copy path (Windows).
+    ///
+    /// `false` (the default) leaves strategy selection to the engine's
+    /// topology gate: parallel chunks auto-engage only on multi-queue
+    /// arrays (RAID / SMB / iSCSI), never on a single SSD/NVMe. `true`
+    /// forces `CopyStrategy::ParallelChunks` for every copy — an EXPERT
+    /// override for striped / RAID / network destinations; it REGRESSES
+    /// a single SSD/NVMe (−25%/−76%), so it stays off unless opted in.
+    #[serde(default)]
+    pub force_parallel_chunks: bool,
     /// Phase 24 — security-metadata preservation. Master toggle for
     /// the entire metadata pass; when `false`, none of the per-stream
     /// flags below have any effect because the engine never enters
@@ -484,6 +494,7 @@ impl Default for TransferSettings {
             reserve_free_space_bytes: 0,
             on_locked: LockedFilePolicyChoice::default(),
             preserve_sparseness: true,
+            force_parallel_chunks: false,
             preserve_security_metadata: true,
             preserve_motw: true,
             preserve_posix_acls: true,

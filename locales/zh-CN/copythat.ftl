@@ -377,6 +377,8 @@ settings-preserve-permissions = 保留权限
 settings-preserve-acls = 保留 ACL（第 14 阶段）
 settings-preserve-sparseness = 保留稀疏文件
 settings-preserve-sparseness-hint = 仅复制稀疏文件（虚拟机磁盘、数据库文件）已分配的区段，使目标在磁盘上的占用大小与源保持一致。
+settings-force-parallel-chunks = 并行多块复制（仅限 RAID/阵列）
+settings-force-parallel-chunks-hint = 将每个大文件复制拆分为并发块。仅对条带化/RAID/网络目标有益；会拖慢单个 SSD/NVMe（-25% 至 -76%）。除非目标是多磁盘阵列，否则请保持关闭。
 
 # Shell tab
 settings-context-menu = 启用 shell 右键菜单项

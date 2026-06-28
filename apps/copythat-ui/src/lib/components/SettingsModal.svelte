@@ -825,6 +825,15 @@
                 <span class="label">{t("settings-preserve-sparseness")}</span>
               </label>
 
+              <label class="row check" title={t("settings-force-parallel-chunks-hint")}>
+                <input
+                  type="checkbox"
+                  bind:checked={settings.transfer.forceParallelChunks}
+                  onchange={pushSettings}
+                />
+                <span class="label">{t("settings-force-parallel-chunks")}</span>
+              </label>
+
               <!-- Phase 24 — Security-metadata subsection (5 toggles) -->
               <div class="meta-subsection">
                 <label
