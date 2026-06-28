@@ -1,15 +1,16 @@
 //! Phase 31b smoke test — real OS power probes.
 //!
-//! Closes the deferred Phase 31b items by wiring real
-//! `RealPresentationProbe` / `RealFullscreenProbe` types backed by
-//! per-OS calls:
+//! Wires the real `RealPresentationProbe` / `RealFullscreenProbe`
+//! types backed by per-OS calls:
 //!
 //! - **Windows** — `SHQueryUserNotificationState` from Shell32 via
-//!   `copythat_platform::presence`.
-//! - **Linux** — `org.freedesktop.ScreenSaver.GetActive` over DBus
-//!   via `zbus::blocking`.
-//! - **macOS** — keeps the stub for now; the IOPMAssertion read
-//!   needs a macOS dev box to confirm the assertion-name match.
+//!   `copythat_platform::presence` (presentation and fullscreen are
+//!   distinct `QUNS_*` states).
+//! - **Linux / macOS / other** — deferred to the cross-platform stub
+//!   for now (`Real*Probe` are type aliases to the stub there). The
+//!   Linux GNOME DBus probe was pulled — it blocked inside the tokio
+//!   poller and over-fired on any idle-inhibit; a non-blocking rework
+//!   validated on real Linux is a Phase 31c follow-up.
 //!
 //! Coverage:
 //! 1. `is_in_presentation_mode()` + `is_in_fullscreen_mode()` are
@@ -24,17 +25,17 @@
 
 use copythat_power::source::{FullscreenProbe, PresentationProbe};
 
-// On Windows / Linux the `Real*Probe` names are unit structs that can
-// be used as value literals; on macOS and other platforms they are
-// type aliases to the cross-platform stub structs (see
+// On Windows the `Real*Probe` names are unit structs that can be used
+// as value literals; on Linux / macOS / other platforms they are type
+// aliases to the cross-platform stub structs (see
 // `copythat_power::source`). A type alias can't be used as a value
 // literal, so the probe-construction helpers below build the trait
 // object from whichever concrete unit struct is in scope on the host.
 // Importing each set only where it's used keeps the unused-import
 // lint quiet under `-D warnings`.
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(target_os = "windows")]
 use copythat_power::source::{RealFullscreenProbe, RealPresentationProbe};
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(not(target_os = "windows"))]
 use copythat_power::source::{StubFullscreenProbe, StubPresentationProbe};
 
 #[test]
@@ -72,26 +73,26 @@ fn real_fullscreen_probe_responds_without_panic() {
     let _ = probe.is_fullscreen();
 }
 
-// Construct the host's real presentation probe as a trait object.
-// On Windows / Linux the `Real*Probe` alias is a unit struct; on
-// macOS / other platforms it's a type alias to the stub unit struct,
-// which has to be named directly to be used as a value.
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+// Construct the host's presentation probe as a trait object. On
+// Windows the `Real*Probe` name is a unit struct; on Linux / macOS /
+// other it's a type alias to the stub unit struct, which has to be
+// named directly to be used as a value.
+#[cfg(target_os = "windows")]
 fn make_presentation_probe() -> Box<dyn PresentationProbe> {
     Box::new(RealPresentationProbe)
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(not(target_os = "windows"))]
 fn make_presentation_probe() -> Box<dyn PresentationProbe> {
     Box::new(StubPresentationProbe)
 }
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(target_os = "windows")]
 fn make_fullscreen_probe() -> Box<dyn FullscreenProbe> {
     Box::new(RealFullscreenProbe)
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(not(target_os = "windows"))]
 fn make_fullscreen_probe() -> Box<dyn FullscreenProbe> {
     Box::new(StubFullscreenProbe)
 }
@@ -116,13 +117,4 @@ fn windows_presence_uses_quns_state_classification() {
     for s in states {
         assert!(seen.insert(format!("{s:?}")));
     }
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn linux_dbus_probe_falls_back_safely_without_session() {
-    // A CI runner without a DBus session should produce
-    // "not presenting" (false) rather than an error.
-    let probe = RealPresentationProbe;
-    assert!(!probe.is_presenting() || probe.is_presenting());
 }

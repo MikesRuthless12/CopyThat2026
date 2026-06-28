@@ -135,10 +135,12 @@ impl FullscreenProbe for StubFullscreenProbe {
 /// Windows presentation probe — routes through
 /// [`copythat_platform::presence::is_in_presentation_mode`] so the
 /// raw `SHQueryUserNotificationState` FFI call lives in the only
-/// crate where unsafe is allowed. Returns `true` when the OS
-/// reports `QUNS_PRESENTATION_MODE` or
-/// `QUNS_RUNNING_D3D_FULL_SCREEN` — the two states the Phase 31
-/// `PresentationPolicy::Pause` default acts on.
+/// crate where unsafe is allowed. Returns `true` only when the OS
+/// reports `QUNS_PRESENTATION_MODE` (slideshow / focus-assist /
+/// Do-Not-Disturb) — the state the Phase 31 `PresentationPolicy::Pause`
+/// default acts on. Fullscreen Direct3D (games / fullscreen video) is
+/// the separate [`RealFullscreenProbe`] signal and no longer trips the
+/// presentation rule.
 #[cfg(target_os = "windows")]
 pub struct RealPresentationProbe;
 
@@ -161,94 +163,24 @@ impl FullscreenProbe for RealFullscreenProbe {
     }
 }
 
-/// Linux presentation probe — queries `org.gnome.SessionManager`'s
-/// `IsInhibited(flags)` method to detect when any application has
-/// asked the session to suppress idle/screensaver actions (the
-/// signal Zoom, OBS, video players use when the user is actively
-/// presenting / watching content). Flag `8` is "Inhibit the session
-/// being marked as idle" per the GNOME API.
+/// Non-Windows targets (Linux, macOS, and everything else) defer the
+/// presentation + fullscreen signals to the stub for now.
 ///
-/// The earlier shape called `org.freedesktop.ScreenSaver.GetActive`,
-/// which returns *the screensaver itself is currently displayed* —
-/// i.e. the user is AFK. That's the inverse of the policy intent:
-/// we want to detect *user is busy and shouldn't be interrupted*,
-/// not *user has stepped away*. `GetActive` would surface true
-/// exactly when it's safe to copy aggressively, and false when we
-/// should pause.
-///
-/// On non-GNOME desktops `IsInhibited` will fail to resolve and the
-/// probe returns `false` (no signal — fail-safe to "not presenting"
-/// which mirrors macOS's stub default). Per-DE coverage (KDE
-/// PowerDevil, sway/Wayland inhibit) is a Phase 31c follow-up.
-///
-/// Uses zbus's `blocking` API surface so the probe call site
-/// doesn't need to thread a tokio runtime through to keep
-/// parity with the unit-struct constructors of the other
-/// `Real*Probe` types.
-#[cfg(target_os = "linux")]
-pub struct RealPresentationProbe;
-
-#[cfg(target_os = "linux")]
-impl PresentationProbe for RealPresentationProbe {
-    fn is_presenting(&self) -> bool {
-        let conn = match zbus::blocking::Connection::session() {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
-        let proxy = match zbus::blocking::Proxy::new(
-            &conn,
-            "org.gnome.SessionManager",
-            "/org/gnome/SessionManager",
-            "org.gnome.SessionManager",
-        ) {
-            Ok(p) => p,
-            Err(_) => return false,
-        };
-        // Flag 8 — "Inhibit the session being marked as idle". This is
-        // what GNOME apps raise during fullscreen video / presentations
-        // / screen sharing.
-        proxy
-            .call::<_, _, bool>("IsInhibited", &(8u32))
-            .unwrap_or(false)
-    }
-}
-
-/// Linux fullscreen probe — same inhibit-aware DBus call as
-/// presentation. The distinction (presentation vs fullscreen) is
-/// meaningful on Windows where `SHQueryUserNotificationState`
-/// separates the two; on Linux any session-idle inhibit covers
-/// both signal cases.
-#[cfg(target_os = "linux")]
-pub struct RealFullscreenProbe;
-
-#[cfg(target_os = "linux")]
-impl FullscreenProbe for RealFullscreenProbe {
-    fn is_fullscreen(&self) -> bool {
-        RealPresentationProbe.is_presenting()
-    }
-}
-
-/// macOS presentation probe — keeps the stub for now. The Apple
-/// equivalent is `IOPMAssertionCopyProperties` filtering for the
-/// `kIOPMAssertionTypeNoDisplaySleep` family; the FFI is documented
-/// at <https://developer.apple.com/documentation/iokit/iopmassertion>
-/// and the pure-Rust binding lives in `core-foundation` (already a
-/// workspace dep via Phase 37 follow-up #2's `copythat-mobile`).
-/// Wiring the real probe lands in a Phase 31c follow-up where a
-/// macOS dev box is on hand to confirm the assertion-name match.
-#[cfg(target_os = "macos")]
+/// The earlier Linux GNOME `org.gnome.SessionManager.IsInhibited` DBus
+/// probe was removed: it called the **blocking** zbus API from inside
+/// the tokio poller task ([`crate::bus`]'s `sample`), which panics with
+/// "cannot start a runtime from within a runtime" and took the whole
+/// poller down — disabling *all* power throttling on Linux — and it
+/// reported `true` on *any* idle-inhibit (e.g. a playing video), which
+/// is not "presenting". A non-blocking probe that distinguishes
+/// presentation from fullscreen, validated on a real Linux/GNOME
+/// session, is a Phase 31c follow-up; the macOS `IOPMAssertion` reads
+/// land the same way. Until then battery + thermal still drive
+/// throttling on these targets (the poller no longer panics).
+#[cfg(not(target_os = "windows"))]
 pub type RealPresentationProbe = StubPresentationProbe;
 
-#[cfg(target_os = "macos")]
-pub type RealFullscreenProbe = StubFullscreenProbe;
-
-/// Other platforms (FreeBSD, OpenBSD, etc.) fall through to the
-/// stub. Adding a real probe is a per-OS body fill against the
-/// same trait.
-#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
-pub type RealPresentationProbe = StubPresentationProbe;
-
-#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+#[cfg(not(target_os = "windows"))]
 pub type RealFullscreenProbe = StubFullscreenProbe;
 
 /// Thermal probe stub — always reports "not throttling, unknown
@@ -263,13 +195,9 @@ impl ThermalProbe for StubThermalProbe {
     }
 }
 
-/// Network probe stub — reports `NetworkClass::Unmetered`. Wraps the
-/// Phase 21 stub (`copythat_shape::current_network_class`). The real
-/// per-OS metering bridges — `INetworkCostManager` (Windows),
-/// `NWPathMonitor` (macOS), NetworkManager DBus (Linux) — are the
-/// remaining Phase 31b work (deferred: each is a sizeable per-OS
-/// FFI / DBus effort); until then the metered/cellular power rules
-/// simply never fire.
+/// Network probe stub — returns `copythat_shape::current_network_class()`
+/// (a Phase 21 stub that always reports `Unmetered`). Used on targets
+/// without a real per-OS metering probe.
 pub struct StubNetworkProbe;
 
 impl NetworkProbe for StubNetworkProbe {
@@ -356,11 +284,12 @@ pub struct ProbeSet {
 
 impl ProbeSet {
     /// Default production probe set: real `battery` + `raw-cpuid`
-    /// thermal (on x86) + the real per-OS presentation/fullscreen
-    /// probes (Phase 31b — Windows `SHQueryUserNotificationState` FFI,
-    /// Linux GNOME `IsInhibited` DBus; macOS / other targets fall
-    /// through to the stub via the `RealPresentationProbe` /
-    /// `RealFullscreenProbe` type aliases, so this is safe everywhere).
+    /// thermal (on x86) + the real **Windows** presentation/fullscreen
+    /// probes (Phase 31b — `SHQueryUserNotificationState` FFI). Linux,
+    /// macOS, and other targets defer presentation/fullscreen to the
+    /// stub via the `RealPresentationProbe` / `RealFullscreenProbe`
+    /// type aliases (see their definition for why the Linux DBus probe
+    /// was pulled — a Phase 31c follow-up), so this is safe everywhere.
     /// Network metering stays stubbed (`Unmetered`) until the per-OS
     /// bridges (`INetworkCostManager` / `NWPathMonitor` / NetworkManager
     /// DBus) land — the remaining Phase 31b work.

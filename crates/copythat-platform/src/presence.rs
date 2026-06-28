@@ -5,11 +5,13 @@
 //! API answers two questions the power policy needs:
 //!
 //! - **`is_in_presentation_mode()`** — the user has explicitly
-//!   asked the OS to suppress notifications (slideshow, focus
-//!   assist, fullscreen game). Pause long copies — we don't want
-//!   the engine's I/O blowing the user's frame budget.
+//!   asked the OS to suppress notifications (slideshow / focus
+//!   assist / Do-Not-Disturb). The power policy pauses long copies
+//!   here so the engine's I/O doesn't interrupt a presentation.
 //! - **`is_in_fullscreen_mode()`** — Direct3D fullscreen specifically
-//!   (games, fullscreen video). Same policy default.
+//!   (games, fullscreen video). A *distinct* signal from presentation
+//!   (a different `QUNS_*` state), so a fullscreen game/video drives
+//!   the fullscreen rule, not the presentation rule.
 //!
 //! Linux + macOS + every other target return `false` here; the
 //! Linux DBus screensaver query and the macOS `IOPMAssertion`
@@ -18,8 +20,10 @@
 
 #![allow(unsafe_code)]
 
-/// Returns `true` when the OS reports the user is presenting or
-/// the foreground process is in fullscreen Direct3D mode.
+/// Returns `true` only when the OS reports `QUNS_PRESENTATION_MODE`
+/// (slideshow / focus-assist / Do-Not-Disturb). Fullscreen Direct3D
+/// is reported separately by [`is_in_fullscreen_mode`], so a
+/// fullscreen game or video does **not** read as "presenting".
 /// `false` on any error (the Phase 31 policy machine treats
 /// "unknown" the same as "not presenting" — fail-safe).
 ///
@@ -33,15 +37,11 @@
 pub fn is_in_presentation_mode() -> bool {
     #[cfg(target_os = "windows")]
     {
-        // Single query — calling SHQueryUserNotificationState twice
-        // and OR-ing the results would let the OS-reported state flip
-        // between the two reads, producing a torn classification (the
-        // first call could report Presentation while the second
-        // reports AcceptsNotifications).
-        matches!(
-            windows_impl::query(),
-            Some(QunsState::Presentation) | Some(QunsState::RunningD3dFullScreen)
-        )
+        // Match only the explicit presentation state. Fullscreen
+        // Direct3D is a separate `QUNS_*` value handled by
+        // `is_in_fullscreen_mode`, so a fullscreen game/video doesn't
+        // also trip the presentation rule.
+        windows_impl::query() == Some(QunsState::Presentation)
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -50,9 +50,10 @@ pub fn is_in_presentation_mode() -> bool {
 }
 
 /// Returns `true` when the foreground process is in fullscreen
-/// Direct3D mode specifically. Subset of presentation mode; useful
-/// for the policy machine when the user's preference is "pause on
-/// fullscreen but not presentation".
+/// Direct3D mode specifically (`QUNS_RUNNING_D3D_FULL_SCREEN`).
+/// A distinct signal from [`is_in_presentation_mode`] (a different
+/// `QUNS_*` state), so the policy machine can pause on presentation
+/// while still copying through a fullscreen game/video, or vice-versa.
 ///
 /// Same best-effort caveat as [`is_in_presentation_mode`] — the
 /// foreground app can exit fullscreen between this probe and the
