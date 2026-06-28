@@ -202,6 +202,9 @@ collision-modal-destination = コピー先
 collision-modal-size = サイズ
 collision-modal-modified = 更新日時
 collision-modal-hash-check = クイックハッシュ（SHA-256）
+collision-modal-hash-computing = 計算中…
+collision-modal-hash-identical = 一致
+collision-modal-hash-different = 不一致
 collision-modal-rename-placeholder = 新しいファイル名
 collision-modal-confirm-rename = リネーム
 

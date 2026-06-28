@@ -202,6 +202,9 @@ collision-modal-destination = गंतव्य
 collision-modal-size = आकार
 collision-modal-modified = संशोधित
 collision-modal-hash-check = त्वरित हैश (SHA-256)
+collision-modal-hash-computing = हैश हो रहा है…
+collision-modal-hash-identical = समान
+collision-modal-hash-different = भिन्न
 collision-modal-rename-placeholder = नया फ़ाइलनाम
 collision-modal-confirm-rename = नाम बदलें
 

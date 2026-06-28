@@ -202,6 +202,9 @@ collision-modal-destination = 대상
 collision-modal-size = 크기
 collision-modal-modified = 수정한 날짜
 collision-modal-hash-check = 빠른 해시 (SHA-256)
+collision-modal-hash-computing = 계산 중…
+collision-modal-hash-identical = 동일
+collision-modal-hash-different = 다름
 collision-modal-rename-placeholder = 새 파일 이름
 collision-modal-confirm-rename = 이름 변경
 

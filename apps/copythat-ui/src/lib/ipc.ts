@@ -366,6 +366,13 @@ export async function thumbnailFor(
   return invoke<ThumbnailDto>("thumbnail_for", { path, maxDim });
 }
 
+/** Phase 8 follow-up — compute the SHA-256 of one side of a collision
+ *  so the user can decide overwrite-vs-skip on content, not just
+ *  metadata. Returns the lowercase hex digest. */
+export async function quickHashForCollision(path: string): Promise<string> {
+  return invoke<string>("quick_hash_for_collision", { path });
+}
+
 /** Append one pattern → resolution rule to a running job's live
  *  rule set. Subsequent collisions matching `pattern` auto-resolve
  *  without surfacing another prompt. Returns the new rule count. */

@@ -35,6 +35,7 @@
   import {
     addConflictRule,
     currentConflictRules,
+    quickHashForCollision,
     resolveCollision,
     saveConflictProfile,
     thumbnailFor,
@@ -68,6 +69,10 @@
   // right-pane re-renders don't re-invoke the IPC. Small (one
   // entry per rendered conflict) so no eviction needed.
   let thumbs = $state<Record<string, ThumbnailDto>>({});
+  // Phase 8 follow-up — SHA-256 quick-hash for the selected conflict.
+  // Cached by path like `thumbs`, so re-selecting a row is free.
+  let hashes = $state<Record<string, string>>({});
+  let hashBusy = $state(false);
 
   // Derivations off the store.
   const rows = $derived($conflictBatch);
@@ -79,6 +84,13 @@
     rows.filter((r) => r.state.phase === "pending").length,
   );
   const resolvedCount = $derived(rows.length - pendingCount);
+  // Identical / different verdict for the selected pair, once both
+  // digests are known (null = not yet hashed or still hashing).
+  const selectedHashVerdict = $derived<boolean | null>(
+    selected && hashes[selected.src] && hashes[selected.dst]
+      ? hashes[selected.src] === hashes[selected.dst]
+      : null,
+  );
 
   // ---- Helpers ----
 
@@ -136,6 +148,31 @@
         });
     });
   });
+
+  // Compute SHA-256 for both sides of `row` on demand. Runs the two
+  // hashes concurrently and caches by path; errors surface as a toast
+  // and leave the cache untouched so the user can retry.
+  async function computeHashes(row: ConflictBatchRow): Promise<void> {
+    if (hashBusy) return;
+    hashBusy = true;
+    try {
+      const [s, d] = await Promise.all([
+        hashes[row.src] ?? quickHashForCollision(row.src),
+        hashes[row.dst] ?? quickHashForCollision(row.dst),
+      ]);
+      hashes = { ...hashes, [row.src]: s, [row.dst]: d };
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    } finally {
+      hashBusy = false;
+    }
+  }
+
+  /// Shorten a 64-char hex digest for display; full value goes in `title`.
+  function shortHash(hex: string | undefined): string {
+    if (!hex) return "—";
+    return hex.length > 28 ? `${hex.slice(0, 12)}…${hex.slice(-12)}` : hex;
+  }
 
   // ---- Per-row actions ----
 
@@ -336,6 +373,7 @@
 
   onDestroy(() => {
     thumbs = {};
+    hashes = {};
   });
 </script>
 
@@ -466,6 +504,38 @@
                   </dl>
                 </div>
               </div>
+
+              <div class="hash-check">
+                <button
+                  type="button"
+                  class="btn"
+                  disabled={hashBusy}
+                  onclick={() => selected && computeHashes(selected)}
+                >{t("collision-modal-hash-check")}</button>
+                {#if hashBusy}
+                  <span class="hash-verdict">{t("collision-modal-hash-computing")}</span>
+                {:else if selectedHashVerdict !== null}
+                  <span
+                    class="hash-verdict"
+                    class:identical={selectedHashVerdict}
+                    class:different={!selectedHashVerdict}
+                  >{selectedHashVerdict
+                    ? t("collision-modal-hash-identical")
+                    : t("collision-modal-hash-different")}</span>
+                {/if}
+              </div>
+              {#if hashes[selected.src] || hashes[selected.dst]}
+                <dl class="hash-digests">
+                  <dt>{t("conflict-batch-source-label")}</dt>
+                  <dd title={hashes[selected.src] ?? ""}>
+                    <code>{shortHash(hashes[selected.src])}</code>
+                  </dd>
+                  <dt>{t("conflict-batch-destination-label")}</dt>
+                  <dd title={hashes[selected.dst] ?? ""}>
+                    <code>{shortHash(hashes[selected.dst])}</code>
+                  </dd>
+                </dl>
+              {/if}
 
               {#if selected.state.phase === "pending"}
                 <div class="row-actions" aria-label={t("conflict-batch-state-pending")}>
@@ -856,6 +926,39 @@
     flex-wrap: wrap;
     margin-top: 14px;
     justify-content: flex-end;
+  }
+  .hash-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .hash-verdict {
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .hash-verdict.identical {
+    color: var(--ok, #3faf6a);
+  }
+  .hash-verdict.different {
+    color: var(--warn, #e4a040);
+  }
+  .hash-digests {
+    margin: 8px 0 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 10px;
+    row-gap: 2px;
+    font-size: 11px;
+  }
+  .hash-digests dt {
+    color: var(--fg-dim, #6a6a6a);
+  }
+  .hash-digests dd {
+    margin: 0;
+  }
+  .hash-digests code {
+    font-family: var(--mono, ui-monospace, monospace);
   }
   .bulk-bar {
     display: flex;

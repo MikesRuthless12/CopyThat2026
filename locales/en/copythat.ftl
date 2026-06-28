@@ -202,6 +202,9 @@ collision-modal-destination = Destination
 collision-modal-size = Size
 collision-modal-modified = Modified
 collision-modal-hash-check = Quick hash (SHA-256)
+collision-modal-hash-computing = Hashing…
+collision-modal-hash-identical = Identical
+collision-modal-hash-different = Different
 collision-modal-rename-placeholder = New filename
 collision-modal-confirm-rename = Rename
 

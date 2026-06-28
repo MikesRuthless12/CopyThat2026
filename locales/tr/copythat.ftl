@@ -202,6 +202,9 @@ collision-modal-destination = Hedef
 collision-modal-size = Boyut
 collision-modal-modified = Değiştirilme
 collision-modal-hash-check = Hızlı karma (SHA-256)
+collision-modal-hash-computing = Hesaplanıyor…
+collision-modal-hash-identical = Aynı
+collision-modal-hash-different = Farklı
 collision-modal-rename-placeholder = Yeni dosya adı
 collision-modal-confirm-rename = Yeniden adlandır
 

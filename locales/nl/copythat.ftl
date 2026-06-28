@@ -202,6 +202,9 @@ collision-modal-destination = Bestemming
 collision-modal-size = Grootte
 collision-modal-modified = Gewijzigd
 collision-modal-hash-check = Snelle hash (SHA-256)
+collision-modal-hash-computing = Berekenen…
+collision-modal-hash-identical = Identiek
+collision-modal-hash-different = Verschillend
 collision-modal-rename-placeholder = Nieuwe bestandsnaam
 collision-modal-confirm-rename = Hernoemen
 

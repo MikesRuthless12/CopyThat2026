@@ -10,7 +10,10 @@
 //! 2. **SHA-256 quick-hash button.** New `quick_hash_for_collision`
 //!    IPC computes a SHA-256 digest for either side of a
 //!    collision so the user can decide overwrite-vs-skip with
-//!    content evidence.
+//!    content evidence. Phase 8(b) follow-up wires this into the
+//!    active `ConflictBatchModal.svelte` (button + identical /
+//!    different verdict + truncated digests), backed by the three
+//!    `collision-modal-hash-{computing,identical,different}` keys.
 //! 3. **Drawer-mode toggle.** Already shipped end-to-end through
 //!    `GeneralSettings::error_display_mode`. This smoke confirms
 //!    the wire shape is stable + the locale strings are present.
@@ -143,4 +146,36 @@ fn collision_modal_hash_check_locale_key_is_present() {
     // it's still in the source-of-truth locale.
     let body = std::fs::read_to_string(repo_root().join("locales/en/copythat.ftl")).unwrap();
     assert!(body.contains("collision-modal-hash-check"));
+}
+
+#[test]
+fn collision_quick_hash_result_keys_present_in_every_locale() {
+    // Phase 8(b) — the wired-up quick-hash button renders a result
+    // state (computing / identical / different) beside the digests.
+    // Those three keys must exist in every locale so the verdict
+    // renders worldwide. i18n-lint enforces parity too; this is the
+    // phase-local tripwire matching the drawer-mode test above.
+    let root = repo_root();
+    let locales = std::fs::read_dir(root.join("locales")).unwrap();
+    let mut count = 0;
+    for entry in locales.flatten() {
+        let ftl = entry.path().join("copythat.ftl");
+        if !ftl.exists() {
+            continue;
+        }
+        let body = std::fs::read_to_string(&ftl).unwrap();
+        for required in [
+            "collision-modal-hash-computing",
+            "collision-modal-hash-identical",
+            "collision-modal-hash-different",
+        ] {
+            assert!(
+                body.contains(required),
+                "locale {} missing {required}",
+                entry.path().display(),
+            );
+        }
+        count += 1;
+    }
+    assert_eq!(count, 18);
 }

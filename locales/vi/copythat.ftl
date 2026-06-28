@@ -202,6 +202,9 @@ collision-modal-destination = Đích
 collision-modal-size = Kích thước
 collision-modal-modified = Sửa đổi
 collision-modal-hash-check = Băm nhanh (SHA-256)
+collision-modal-hash-computing = Đang băm…
+collision-modal-hash-identical = Giống nhau
+collision-modal-hash-different = Khác nhau
 collision-modal-rename-placeholder = Tên tệp mới
 collision-modal-confirm-rename = Đổi tên
 

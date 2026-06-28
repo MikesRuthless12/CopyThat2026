@@ -202,6 +202,9 @@ collision-modal-destination = Призначення
 collision-modal-size = Розмір
 collision-modal-modified = Змінено
 collision-modal-hash-check = Швидкий хеш (SHA-256)
+collision-modal-hash-computing = Обчислення…
+collision-modal-hash-identical = Ідентичні
+collision-modal-hash-different = Відрізняються
 collision-modal-rename-placeholder = Нова назва файлу
 collision-modal-confirm-rename = Перейменувати
 

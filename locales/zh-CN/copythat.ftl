@@ -202,6 +202,9 @@ collision-modal-destination = 目标
 collision-modal-size = 大小
 collision-modal-modified = 修改时间
 collision-modal-hash-check = 快速哈希（SHA-256）
+collision-modal-hash-computing = 正在计算…
+collision-modal-hash-identical = 相同
+collision-modal-hash-different = 不同
 collision-modal-rename-placeholder = 新文件名
 collision-modal-confirm-rename = 重命名
 

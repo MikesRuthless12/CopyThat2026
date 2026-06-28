@@ -202,6 +202,9 @@ collision-modal-destination = Tujuan
 collision-modal-size = Ukuran
 collision-modal-modified = Diubah
 collision-modal-hash-check = Hash cepat (SHA-256)
+collision-modal-hash-computing = Menghitung…
+collision-modal-hash-identical = Identik
+collision-modal-hash-different = Berbeda
 collision-modal-rename-placeholder = Nama berkas baru
 collision-modal-confirm-rename = Ganti nama
 
