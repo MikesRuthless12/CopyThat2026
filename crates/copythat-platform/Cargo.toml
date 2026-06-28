@@ -49,6 +49,9 @@ tokio = { version = "1", features = [
     "fs",
     "io-util",
     "macros",
+    # Phase 17d — `net` pulls in the Windows named-pipe types
+    # (`NamedPipeServer`) the secure-pipe server returns.
+    "net",
     "rt",
     "rt-multi-thread",
     "sync",
@@ -93,6 +96,12 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_SystemInformation",
     "Win32_System_LibraryLoader",
     "Win32_System_Ioctl",
+    # Phase 17d — secure named-pipe server for the elevated-helper
+    # handshake: CreateNamedPipeW + PIPE_* (Pipes), SECURITY_DESCRIPTOR_
+    # REVISION (SystemServices). DACL types live in Win32_Security
+    # (already enabled above).
+    "Win32_System_Pipes",
+    "Win32_System_SystemServices",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

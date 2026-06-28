@@ -91,6 +91,10 @@ pub mod presence;
 pub mod process;
 mod reflink_path;
 pub mod sanitize;
+/// Phase 17d — secure DACL-restricted named-pipe server for the
+/// privilege-escalation helper handshake (Windows only).
+#[cfg(windows)]
+pub mod secure_pipe;
 pub mod smb;
 pub mod sparse;
 pub mod topology;
@@ -112,6 +116,8 @@ pub use sanitize::{
     WindowsDeviceInfo, nvme_sanicap_modes, windows_enumerate_physical_drives,
     windows_query_device_info,
 };
+#[cfg(windows)]
+pub use secure_pipe::create_secure_named_pipe_server;
 pub use smb::{SmbCompressionAlgo, SmbCompressionState, negotiate_smb_compression};
 pub use sparse::PlatformSparseOps;
 pub use volume::PlatformVolumeProbe;
