@@ -1638,7 +1638,9 @@ pub enum ThermalRuleChoice {
     Continue,
     #[default]
     Pause,
-    CapPercent { percent: u8 },
+    CapPercent {
+        percent: u8,
+    },
 }
 
 impl ThermalRuleChoice {
