@@ -276,22 +276,42 @@ mod tests {
         let handle = std::thread::spawn(move || {
             let opts = VolumeWatchOptions {
                 poll_interval: Duration::from_millis(20),
-                max_run_time: Some(Duration::from_secs(2)),
+                max_run_time: Some(Duration::from_secs(15)),
             };
             watch_volumes(&roots_for_loop, opts, cancel_for_loop, probe, move |evt| {
                 observed_for_loop.lock().unwrap().push(evt);
             })
         });
 
-        // Tick 0: empty -> no event.
+        // Tick 0: empty -> no event (give the watcher a moment to start).
         std::thread::sleep(Duration::from_millis(60));
-        // Make the root "appear" and wait long enough for two
-        // poll intervals to fire.
+        // Make the root "appear", then poll (bounded, up to ~5s) for the
+        // Arrival rather than a fixed sleep: a loaded CI runner can starve
+        // the watcher thread well past a couple poll intervals, which
+        // flaked this test on macOS ("no Arrival event observed: []").
         present.lock().unwrap().push(root.clone());
-        std::thread::sleep(Duration::from_millis(120));
-        // Make it "disappear".
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while std::time::Instant::now() < deadline
+            && !observed
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|e| matches!(e, VolumeEvent::Arrival { .. }))
+        {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        // Make it "disappear", then poll (bounded) for the Departure.
         present.lock().unwrap().clear();
-        std::thread::sleep(Duration::from_millis(120));
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while std::time::Instant::now() < deadline
+            && !observed
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|e| matches!(e, VolumeEvent::Departure { .. }))
+        {
+            std::thread::sleep(Duration::from_millis(20));
+        }
         cancel.cancel();
 
         let result = handle.join().unwrap();
