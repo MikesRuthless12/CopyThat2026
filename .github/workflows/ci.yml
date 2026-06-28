@@ -247,3 +247,27 @@ jobs:
         # See the Linux subset step above — `--no-bundle` keeps this a
         # compile-only check, so no signing key is needed here.
         run: pnpm tauri build --debug --no-bundle
+
+  # Phase 7 follow-up — REAL Nautilus-runtime load test for the GNOME
+  # Files extension. Runs inside ubuntu:20.04, which ships the Nautilus
+  # 3.0 GIR typelib the extension targets (`gi.require_version("Nautilus",
+  # "3.0")`); ubuntu-latest has 4.x and would fail the require_version.
+  # This closes the runtime-discoverability gap the static
+  # tests/smoke/phase_07_shell_linux.sh check deliberately punts on —
+  # it imports the extension against the live typelib, instantiates the
+  # provider, and verifies the two menu items. See tests/smoke/nautilus/.
+  nautilus-runtime:
+    name: nautilus runtime load (GNOME Files extension)
+    runs-on: ubuntu-latest
+    container: ubuntu:20.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nautilus 3.0 typelib + PyGObject
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            python3 python3-gi gir1.2-nautilus-3.0
+      - name: Load the extension against the real Nautilus typelib
+        env:
+          COPYTHAT_NAUTILUS_DIR: packaging/linux/nautilus
+        run: python3 tests/smoke/nautilus/nautilus_runtime_check.py
