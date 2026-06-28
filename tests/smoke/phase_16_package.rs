@@ -171,7 +171,7 @@ fn tauri_conf_uses_ad_hoc_codesign() {
     // pubkey so a stray edit (or a regression back to a placeholder /
     // a foreign key) fails the build rather than shipping a mismatched
     // updater that silently refuses every signed download.
-    const UPDATER_PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU5MDE4NTMxMTFEQkM1RTAKUldUZ3hkc1JNWVVCV1NHQU5IUEppbnVsNDFZakVDOUpGUmpidGhYMWViblpIUUhmekxUTFpVV0YK";
+    const UPDATER_PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMwNUExOTc5MzUzMzI3RUQKUldUdEp6TTFlUmxhd0dHUURMSGxEcmcwdnV6N2dhQm4wT2xaOFdNcThKTmcxTWpLM2c4OHRyUjgK";
     assert!(
         content.contains(UPDATER_PUBKEY),
         "tauri.conf.json must carry the configured updater pubkey ({UPDATER_PUBKEY}); got:\n{content}"
