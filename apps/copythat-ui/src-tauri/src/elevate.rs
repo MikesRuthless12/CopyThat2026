@@ -115,22 +115,26 @@ async fn elevated_retry_unix(src: &Path, dst: &Path) -> Result<Response, Elevate
     use std::os::unix::fs::PermissionsExt;
     use tokio::net::UnixListener;
 
-    // A dedicated 0700 dir under $XDG_RUNTIME_DIR (fallback: temp) so the
-    // socket isn't world-reachable; the basename is the random pipe name.
+    // macOS `sun_path` is only ~104 bytes, so the socket path must stay
+    // short. Bind in $XDG_RUNTIME_DIR when set (already a 0700 per-user
+    // dir — /run/user/<uid> on Linux), else /tmp (short on both Linux and
+    // macOS; NOT $TMPDIR, which is a long /var/folders path on macOS that
+    // overflows SUN_LEN). No intermediate dir: the 64-hex random basename
+    // is the unguessable moat (an attacker can't discover the path to race
+    // our listener before the helper dials in, and even a winning race
+    // yields no privilege — the racer can't perform the elevated copy), and
+    // we tighten the socket node to 0600 once it exists.
     let sock_name = generate_pipe_name("copythat-helper-")
         .map_err(|e| ElevateError::Unavailable(format!("socket name: {e}")))?;
     let base = std::env::var("XDG_RUNTIME_DIR")
         .ok()
         .filter(|d| !d.is_empty())
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir);
-    let dir = base.join(format!("ct-elev-{sock_name}"));
-    std::fs::create_dir_all(&dir)
-        .and_then(|()| std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)))
-        .map_err(|e| ElevateError::Unavailable(format!("socket dir: {e}")))?;
-    let sock_path = dir.join(&sock_name);
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+    let sock_path = base.join(&sock_name);
     let listener = UnixListener::bind(&sock_path)
         .map_err(|e| ElevateError::Unavailable(format!("bind: {e}")))?;
+    let _ = std::fs::set_permissions(&sock_path, std::fs::Permissions::from_mode(0o600));
 
     let helper = sibling_helper()?;
     let sock_str = sock_path.to_string_lossy().into_owned();
@@ -148,8 +152,8 @@ async fn elevated_retry_unix(src: &Path, dst: &Path) -> Result<Response, Elevate
         .await
         .map_err(|_| ElevateError::Unavailable("accept timed out (consent cancelled?)".into()))?
         .map_err(|e| ElevateError::Unavailable(format!("accept: {e}")))?;
-    // Best-effort: drop the socket + dir once the helper has connected.
-    let _ = std::fs::remove_dir_all(&dir);
+    // Best-effort: drop the socket node once the helper has connected.
+    let _ = std::fs::remove_file(&sock_path);
 
     run_handshake(stream, src, dst).await
 }

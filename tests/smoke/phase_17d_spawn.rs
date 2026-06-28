@@ -61,10 +61,13 @@ async fn connect_helper(caps: &str) -> (impl AsyncRead + AsyncWrite, std::proces
 
 #[cfg(all(unix, not(windows)))]
 async fn connect_helper(caps: &str) -> (impl AsyncRead + AsyncWrite, std::process::Child) {
-    // tempfile::tempdir() is mode 0700 on Unix; bind the socket inside it.
-    let dir = tempfile::tempdir().unwrap();
+    // macOS sun_path is ~104 bytes and $TMPDIR is a long /var/folders/...
+    // path, so a socket under tempfile::tempdir() overflows SUN_LEN there
+    // ("path must be shorter than SUN_LEN"). Bind directly under /tmp
+    // (short on both Linux + macOS); the 64-hex random basename keeps the
+    // path unguessable.
     let name = generate_pipe_name("copythat-helper-").unwrap();
-    let sock = dir.path().join(&name);
+    let sock = std::path::Path::new("/tmp").join(&name);
     let listener = tokio::net::UnixListener::bind(&sock).unwrap();
     let child = Command::new(HELPER)
         .arg(format!("--socket={}", sock.display()))
@@ -75,8 +78,9 @@ async fn connect_helper(caps: &str) -> (impl AsyncRead + AsyncWrite, std::proces
         .await
         .expect("helper did not connect in time")
         .expect("socket accept failed");
-    // Keep the tempdir (and thus the socket path) alive for the test.
-    std::mem::forget(dir);
+    // Connection established; the on-disk socket node is no longer needed
+    // (removing it doesn't affect the live stream).
+    let _ = std::fs::remove_file(&sock);
     (stream, child)
 }
 
