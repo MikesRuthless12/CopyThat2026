@@ -1780,6 +1780,7 @@ version = "0.19.84"
 dependencies = [
  "copythat-core",
  "copythat-hash",
+ "copythat-platform",
  "getrandom 0.3.4",
  "hex",
  "serde",
