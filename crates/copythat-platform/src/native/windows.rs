@@ -1149,6 +1149,55 @@ pub(crate) fn filesystem_name(path: &Path) -> Option<String> {
 mod tests {
     use super::*;
 
+    use crate::topology::{BusType, MediaClass, VolumeTopology};
+
+    fn topo(bus: BusType) -> VolumeTopology {
+        VolumeTopology {
+            bus_type: bus,
+            media_class: MediaClass::Ssd,
+            bytes_per_physical_sector: 4096,
+        }
+    }
+
+    // Phase 13c — `Auto` must engage parallel chunks ONLY on multi-queue
+    // topologies, never on a single SSD / NVMe / SATA / USB spindle
+    // (where it regresses −25%/−76%).
+    #[test]
+    fn auto_parallel_chunks_off_for_single_spindle_classes() {
+        let big = crate::native::parallel::MIN_FILE_FOR_PARALLEL;
+        for bus in [BusType::Nvme, BusType::Sata, BusType::Usb, BusType::Other] {
+            assert_eq!(
+                auto_parallel_chunks(big, &topo(bus)),
+                None,
+                "single-spindle {bus:?} must NOT auto-engage parallel chunks"
+            );
+        }
+    }
+
+    #[test]
+    fn auto_parallel_chunks_on_for_array_and_network_classes() {
+        let big = crate::native::parallel::MIN_FILE_FOR_PARALLEL;
+        for bus in [
+            BusType::Raid,
+            BusType::Smb,
+            BusType::Iscsi,
+            BusType::FileBackedVirtual,
+        ] {
+            assert_eq!(
+                auto_parallel_chunks(big, &topo(bus)),
+                Some(crate::native::parallel::DEFAULT_NUM_CHUNKS),
+                "{bus:?} should auto-engage parallel chunks"
+            );
+        }
+    }
+
+    #[test]
+    fn auto_parallel_chunks_respects_the_1gib_floor() {
+        // Below the 1 GiB floor, even a parallel-friendly array stays off.
+        let small = crate::native::parallel::MIN_FILE_FOR_PARALLEL - 1;
+        assert_eq!(auto_parallel_chunks(small, &topo(BusType::Raid)), None);
+    }
+
     #[test]
     fn wide_terminates_with_nul() {
         let w = wide(Path::new("C:/foo"));
