@@ -177,11 +177,32 @@ impl FullscreenProbe for RealFullscreenProbe {
 /// session, is a Phase 31c follow-up; the macOS `IOPMAssertion` reads
 /// land the same way. Until then battery + thermal still drive
 /// throttling on these targets (the poller no longer panics).
+///
+/// Defined as unit structs that delegate to the stub (NOT `type`
+/// aliases) so `RealPresentationProbe` / `RealFullscreenProbe` are
+/// usable as value constructors in [`ProbeSet::production`] uniformly
+/// across targets (mirrors [`RealThermalProbe`] / [`RealNetworkProbe`]).
+/// A type alias names only a type, so `Arc::new(RealPresentationProbe)`
+/// would be `error[E0423]: expected value, found type alias`.
 #[cfg(not(target_os = "windows"))]
-pub type RealPresentationProbe = StubPresentationProbe;
+pub struct RealPresentationProbe;
 
 #[cfg(not(target_os = "windows"))]
-pub type RealFullscreenProbe = StubFullscreenProbe;
+impl PresentationProbe for RealPresentationProbe {
+    fn is_presenting(&self) -> bool {
+        StubPresentationProbe.is_presenting()
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub struct RealFullscreenProbe;
+
+#[cfg(not(target_os = "windows"))]
+impl FullscreenProbe for RealFullscreenProbe {
+    fn is_fullscreen(&self) -> bool {
+        StubFullscreenProbe.is_fullscreen()
+    }
+}
 
 /// Thermal probe stub — always reports "not throttling, unknown
 /// kind". Phase 31 ships the x86 `raw-cpuid` hook behind the
