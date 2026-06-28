@@ -1627,22 +1627,18 @@ impl PowerRuleChoice {
     }
 }
 
-/// Thermal-specific policy — caps as a *percent of current shape
-/// rate* rather than an absolute bytes-per-second, so cooling down
-/// works across bandwidth settings. Default matches the brief's
-/// "cap to 50 %" when throttling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// Thermal-specific policy. The `CapPercent` variant caps to a
+/// *percent of the current shape rate* and is kept for back-compat /
+/// `settings.toml` round-trip, but the UI offers only Continue /
+/// Pause and the default is `Pause` — pause copies while the CPU is
+/// thermal-throttling so the engine's I/O isn't adding to the heat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum ThermalRuleChoice {
     Continue,
+    #[default]
     Pause,
     CapPercent { percent: u8 },
-}
-
-impl Default for ThermalRuleChoice {
-    fn default() -> Self {
-        Self::CapPercent { percent: 50 }
-    }
 }
 
 impl ThermalRuleChoice {
@@ -1677,8 +1673,8 @@ pub struct PowerPoliciesSettings {
     pub presentation: PowerRuleChoice,
     /// "When any app is fullscreen" rule. Default `Continue`.
     pub fullscreen: PowerRuleChoice,
-    /// "When CPU is thermal-throttling" rule. Default
-    /// `CapPercent(50)` per the Phase 31 brief.
+    /// "When CPU is thermal-throttling" rule. Default `Pause`
+    /// (the cap option was removed from the UI — see `ThermalRuleChoice`).
     pub thermal: ThermalRuleChoice,
 }
 

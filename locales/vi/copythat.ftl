@@ -1129,5 +1129,5 @@ settings-power-fullscreen = Khi toàn màn hình
 settings-power-thermal = Khi giảm tốc do nhiệt
 settings-power-continue = Tiếp tục
 settings-power-pause = Tạm dừng
-settings-power-cap = Giới hạn tốc độ
-settings-power-thermal-cap = Giới hạn tốc độ
+err-server-not-implemented = Chế độ máy chủ chưa khả dụng.
+err-webhook-not-implemented = Việc gửi webhook chưa khả dụng.

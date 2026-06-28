@@ -1129,5 +1129,5 @@ settings-power-fullscreen = फ़ुलस्क्रीन में
 settings-power-thermal = थर्मल-थ्रॉटलिंग के समय
 settings-power-continue = जारी रखें
 settings-power-pause = रोकें
-settings-power-cap = गति सीमित करें
-settings-power-thermal-cap = गति सीमित करें
+err-server-not-implemented = सर्वर मोड अभी उपलब्ध नहीं है।
+err-webhook-not-implemented = वेबहुक डिलीवरी अभी उपलब्ध नहीं है।

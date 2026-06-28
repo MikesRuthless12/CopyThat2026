@@ -1129,5 +1129,5 @@ settings-power-fullscreen = In volledig scherm
 settings-power-thermal = Bij thermische throttling
 settings-power-continue = Doorgaan
 settings-power-pause = Pauzeren
-settings-power-cap = Snelheid beperken
-settings-power-thermal-cap = Snelheid beperken
+err-server-not-implemented = De servermodus is nog niet beschikbaar.
+err-webhook-not-implemented = Webhook-bezorging is nog niet beschikbaar.

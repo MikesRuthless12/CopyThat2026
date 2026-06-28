@@ -1129,5 +1129,5 @@ settings-power-fullscreen = Saat layar penuh
 settings-power-thermal = Saat throttling termal
 settings-power-continue = Lanjutkan
 settings-power-pause = Jeda
-settings-power-cap = Batasi kecepatan
-settings-power-thermal-cap = Batasi kecepatan
+err-server-not-implemented = Mode server belum tersedia.
+err-webhook-not-implemented = Pengiriman webhook belum tersedia.

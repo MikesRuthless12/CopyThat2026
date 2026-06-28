@@ -1536,21 +1536,16 @@
                       if (!settings) return;
                       const kind = (e.currentTarget as HTMLSelectElement).value as
                         | "continue"
-                        | "pause"
-                        | "cap";
-                      const next = kind === "cap"
-                        ? { kind: "cap" as const, bytesPerSecond: 10 * 1024 * 1024 }
-                        : ({ kind } as { kind: "continue" | "pause" });
+                        | "pause";
                       settings = {
                         ...settings,
-                        power: { ...settings.power, [field]: next },
+                        power: { ...settings.power, [field]: { kind } },
                       };
                       void pushSettings();
                     }}
                   >
                     <option value="continue">{t("settings-power-continue")}</option>
                     <option value="pause">{t("settings-power-pause")}</option>
-                    <option value="cap">{t("settings-power-cap")}</option>
                   </select>
                 </label>
               {/each}
@@ -1564,21 +1559,16 @@
                     if (!settings) return;
                     const kind = (e.currentTarget as HTMLSelectElement).value as
                       | "continue"
-                      | "pause"
-                      | "capPercent";
-                    const next = kind === "capPercent"
-                      ? { kind: "capPercent" as const, percent: 50 }
-                      : ({ kind } as { kind: "continue" | "pause" });
+                      | "pause";
                     settings = {
                       ...settings,
-                      power: { ...settings.power, thermal: next },
+                      power: { ...settings.power, thermal: { kind } },
                     };
                     void pushSettings();
                   }}
                 >
                   <option value="continue">{t("settings-power-continue")}</option>
                   <option value="pause">{t("settings-power-pause")}</option>
-                  <option value="capPercent">{t("settings-power-thermal-cap")}</option>
                 </select>
               </label>
             {:else if activeTab === "remotes"}

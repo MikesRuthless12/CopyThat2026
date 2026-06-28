@@ -1129,5 +1129,5 @@ settings-power-fullscreen = 全画面時
 settings-power-thermal = サーマルスロットリング時
 settings-power-continue = 続行
 settings-power-pause = 一時停止
-settings-power-cap = 速度を制限
-settings-power-thermal-cap = 速度を制限
+err-server-not-implemented = サーバーモードはまだ利用できません。
+err-webhook-not-implemented = Webhook の配信はまだ利用できません。

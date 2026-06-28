@@ -1129,5 +1129,5 @@ settings-power-fullscreen = У повноекранному режимі
 settings-power-thermal = При тепловому тротлінгу
 settings-power-continue = Продовжити
 settings-power-pause = Пауза
-settings-power-cap = Обмежити швидкість
-settings-power-thermal-cap = Обмежити швидкість
+err-server-not-implemented = Режим сервера ще недоступний.
+err-webhook-not-implemented = Доставка вебхуків ще недоступна.

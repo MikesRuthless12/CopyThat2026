@@ -1129,5 +1129,5 @@ settings-power-fullscreen = في وضع ملء الشاشة
 settings-power-thermal = عند الخفض الحراري
 settings-power-continue = متابعة
 settings-power-pause = إيقاف مؤقت
-settings-power-cap = تحديد السرعة
-settings-power-thermal-cap = تحديد السرعة
+err-server-not-implemented = وضع الخادم غير متاح بعد.
+err-webhook-not-implemented = تسليم الـ Webhook غير متاح بعد.

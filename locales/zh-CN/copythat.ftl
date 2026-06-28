@@ -1129,5 +1129,5 @@ settings-power-fullscreen = 全屏时
 settings-power-thermal = 热降频时
 settings-power-continue = 继续
 settings-power-pause = 暂停
-settings-power-cap = 限制速度
-settings-power-thermal-cap = 限制速度
+err-server-not-implemented = 服务器模式尚不可用。
+err-webhook-not-implemented = Webhook 投递尚不可用。

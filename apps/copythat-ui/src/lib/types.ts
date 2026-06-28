@@ -589,17 +589,11 @@ export interface UpdaterSettingsDto {
   checkIntervalSecs: number;
 }
 
-/** Phase 31 — power-policy rule: continue / pause / cap to a byte/s rate. */
-export type PowerRuleDto =
-  | { kind: "continue" }
-  | { kind: "pause" }
-  | { kind: "cap"; bytesPerSecond: number };
+/** Phase 31 — power-policy rule: continue or pause. */
+export type PowerRuleDto = { kind: "continue" } | { kind: "pause" };
 
-/** Phase 31 — thermal rule: continue / pause / cap to a percent of rate. */
-export type ThermalRuleDto =
-  | { kind: "continue" }
-  | { kind: "pause" }
-  | { kind: "capPercent"; percent: number };
+/** Phase 31 — thermal rule: continue or pause. */
+export type ThermalRuleDto = { kind: "continue" } | { kind: "pause" };
 
 /** Phase 31 — power-aware throttling policy (mirrors PowerPoliciesDto). */
 export interface PowerPoliciesDto {

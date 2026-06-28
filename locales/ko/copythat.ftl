@@ -1129,5 +1129,5 @@ settings-power-fullscreen = 전체 화면일 때
 settings-power-thermal = 열 스로틀링 시
 settings-power-continue = 계속
 settings-power-pause = 일시중지
-settings-power-cap = 속도 제한
-settings-power-thermal-cap = 속도 제한
+err-server-not-implemented = 서버 모드는 아직 사용할 수 없습니다.
+err-webhook-not-implemented = 웹훅 전송은 아직 사용할 수 없습니다.

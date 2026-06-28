@@ -1129,5 +1129,5 @@ settings-power-fullscreen = Tam ekranda
 settings-power-thermal = Termal kısıtlamada
 settings-power-continue = Devam et
 settings-power-pause = Duraklat
-settings-power-cap = Hızı sınırla
-settings-power-thermal-cap = Hızı sınırla
+err-server-not-implemented = Sunucu modu henüz kullanılamıyor.
+err-webhook-not-implemented = Webhook teslimi henüz kullanılamıyor.
