@@ -66,6 +66,8 @@ use crate::repo_root;
 /// `--skip-tests` if a fast inner loop matters.
 const WORKSPACE_CRATES: &[&str] = &[
     "copythat-core",
+    "copythat-diag",
+    "copythat-server",
     "copythat-hash",
     "copythat-secure-delete",
     "copythat-history",

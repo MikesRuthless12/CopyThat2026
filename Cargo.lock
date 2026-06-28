@@ -1756,6 +1756,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "copythat-diag"
+version = "0.19.84"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "copythat-hash"
 version = "0.19.84"
 dependencies = [
@@ -1984,6 +1992,15 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "walkdir",
+]
+
+[[package]]
+name = "copythat-server"
+version = "0.19.84"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
