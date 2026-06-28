@@ -116,7 +116,6 @@ impl ServerError {
 /// stable contract the real implementation will keep.
 pub fn serve(config: ServerConfig) -> Result<ServerHandle, ServerError> {
     let protocol = config.protocols.first().copied().unwrap_or(Protocol::Http);
-    let _ = ServerHandle { config }; // shape check; real path constructs + returns this
     Err(ServerError::NotImplemented { protocol })
 }
 
