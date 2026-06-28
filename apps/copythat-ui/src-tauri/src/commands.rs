@@ -785,20 +785,16 @@ pub fn error_log_export(
 /// permissions" button.
 ///
 /// The error registry holds a pending prompt at `id`; we look up
-/// its `(src, dst)` and route the request through the
-/// `copythat-helper` request handler. Today the helper runs in-
-/// process (the unprivileged main app dispatches `handle_request`
-/// directly); the actual UAC / sudo / polkit spawn ceremony
-/// reuses Phase 19b's `Start-Process -Verb RunAs` pattern and
-/// lands when the per-OS spawn helpers are wired in
-/// `crates/copythat-helper/src/spawn.rs`.
-///
-/// This wiring is a meaningful step forward from the prior stub:
-/// the helper's path-safety bar, capability gate, and error-key
-/// mapping all run; a click that previously surfaced
-/// `retry-elevated-unavailable` now surfaces the actual class of
-/// failure (`err-permission-denied` if the OS still refuses,
-/// `err-path-escape` if the registry held a tainted path, etc.).
+/// its `(src, dst)` and runs a two-tier retry: first the copy is
+/// attempted in-process at the current (unprivileged) token via
+/// `handle_request` — a transient lock or a since-relaxed ACL may
+/// already let it through. If that is refused with a genuine
+/// `err-permission-denied`, `elevate::elevated_retry` spawns the
+/// `copythat-helper` ELEVATED through the OS consent flow (UAC /
+/// `pkexec` / `osascript`) and re-runs the copy over a DACL-
+/// restricted pipe. Other failures (tainted path, missing source)
+/// can't be fixed by elevation, so they surface as-is without a
+/// consent prompt. The real UAC dialog is verified manually.
 #[tauri::command]
 pub async fn retry_elevated(id: u64, state: State<'_, AppState>) -> Result<u64, String> {
     use copythat_helper::capability::Capability;
@@ -810,18 +806,37 @@ pub async fn retry_elevated(id: u64, state: State<'_, AppState>) -> Result<u64, 
         .pending_paths(id)
         .ok_or_else(|| "err-helper-unknown-prompt".to_string())?;
 
-    // Run the helper dispatch on the blocking pool. `handle_request`
-    // performs `std::fs::open` + a synchronous byte loop in
-    // `copy_no_follow`; in a future phase it will block on a UAC /
-    // sudo / polkit consent prompt for seconds at a time. Doing
-    // that on the Tauri runtime thread would freeze every other
-    // IPC command pinned to the same worker.
+    // Tier 1 — try the copy in-process on the blocking pool at the
+    // current (unprivileged) token. `handle_request` runs the Phase
+    // 17a path-safety bar + capability gate + a synchronous
+    // `copy_no_follow`; doing that on the Tauri runtime thread would
+    // freeze every other IPC command pinned to the same worker.
+    let (src_in, dst_in) = (src.clone(), dst.clone());
     let resp = tokio::task::spawn_blocking(move || {
         let granted = vec![Capability::ElevatedRetry];
-        handle_request(&Request::ElevatedRetry { src, dst }, &granted)
+        handle_request(
+            &Request::ElevatedRetry {
+                src: src_in,
+                dst: dst_in,
+            },
+            &granted,
+        )
     })
     .await
     .map_err(|e| format!("err-helper-join:{e}"))?;
+
+    // Tier 2 — only a genuine permission denial is worth a consent
+    // prompt; escalate via the elevated helper. Any spawn / handshake
+    // failure (incl. a cancelled UAC dialog) maps to the existing
+    // `retry-elevated-unavailable` key so the UI never hangs.
+    let resp = if copythat_helper::should_escalate(&resp) {
+        crate::elevate::elevated_retry(&src, &dst)
+            .await
+            .map_err(|_| "retry-elevated-unavailable".to_string())?
+    } else {
+        resp
+    };
+
     match resp {
         Response::ElevatedRetryOk { bytes } => Ok(bytes),
         Response::ElevatedRetryFailed { localized_key, .. } => Err(localized_key),
