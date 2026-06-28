@@ -28,6 +28,7 @@ workloads.
 - **Symlink preserve + graceful degrade** — clones symlinks when the process has privilege (or Windows Developer Mode is on); falls back to copying the target contents as a regular file so nothing is lost.
 - **Access-denied tolerance** — `$RECYCLE.BIN\S-1-5-*`, `System Volume Information`, `Config.Msi`, etc. are skipped and counted, not fatal.
 - **Collision policy** picked up-front in the drop dialog: *Keep both* (`foo.txt` → `foo_2.txt`, `foo_3.txt`, …), *Skip*, *Overwrite*, *Overwrite only if newer*, *Ask each time*.
+- **Per-conflict content check** — the aggregate conflict dialog has a *Quick hash (SHA-256)* button that hashes both sides on demand and shows an *Identical* / *Different* verdict, so overwrite-vs-skip is a content decision, not just a size/date guess.
 - **Error policy** per-job: *Ask*, *Skip*, *Abort*, or *Retry N times*.
 - **Error prompt style** — blocking modal or non-blocking corner drawer; user-configurable in Settings → General.
 - **Pause / resume / cancel** on every job, plus pause-all / resume-all / cancel-all.
