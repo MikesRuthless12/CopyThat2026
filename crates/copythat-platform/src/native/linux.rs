@@ -46,6 +46,9 @@ pub(crate) async fn try_native_copy(
     // callback so this is a no-op here. Threading it through keeps the
     // dispatcher's invocation site uniform across platforms.
     _disable_callback: bool,
+    // Phase 13c — accepted for API parity; Linux has no parallel-chunk
+    // path yet, so the chosen strategy is a no-op here.
+    _strategy: copythat_core::CopyStrategy,
 ) -> NativeOutcome {
     super::emit_started(&src, &dst, total, &events).await;
 

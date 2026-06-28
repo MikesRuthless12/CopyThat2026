@@ -20,6 +20,10 @@ pub enum ChosenStrategy {
     /// Linux `sendfile(2)` (used as fallback when `copy_file_range`
     /// returns `EXDEV` / `EINVAL` and the source is <2 GiB).
     Sendfile,
+    /// Windows Phase 13c parallel multi-chunk copy — N concurrent
+    /// offset streams (expert/manual override, or RAID / SMB / iSCSI /
+    /// file-backed-virtual auto-gated).
+    ParallelChunks,
     /// The Phase 1 [`copythat_core::copy_file`] async loop.
     AsyncFallback,
 }
@@ -33,6 +37,7 @@ impl ChosenStrategy {
             ChosenStrategy::Copyfile => "copyfile",
             ChosenStrategy::CopyFileRange => "copy_file_range",
             ChosenStrategy::Sendfile => "sendfile",
+            ChosenStrategy::ParallelChunks => "parallel-chunks",
             ChosenStrategy::AsyncFallback => "async-fallback",
         }
     }

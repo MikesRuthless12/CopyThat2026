@@ -286,6 +286,20 @@ unsafe extern "system" fn progress_routine(
     PROGRESS_CONTINUE
 }
 
+/// Phase 13c — `Auto`-strategy gate for parallel multi-chunk copy.
+/// Engages ONLY on topologies where N concurrent streams map onto
+/// independent hardware queues (RAID / SMB / iSCSI / file-backed
+/// virtual). Returns `None` on single-spindle SSD / NVMe / SATA / USB,
+/// where parallel chunks regress (Phase 13c −25%/−76% measurements).
+/// A future belt-and-suspenders `same_physical_disk` probe
+/// (`IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS`) could additionally guard the
+/// distinct-disk case, but `parallel_chunk_friendly()` already keeps the
+/// path off for every single-spindle bus class, so it's deferred.
+fn auto_parallel_chunks(total: u64, dst_topo: &crate::topology::VolumeTopology) -> Option<usize> {
+    (total >= super::parallel::MIN_FILE_FOR_PARALLEL && dst_topo.parallel_chunk_friendly())
+        .then_some(super::parallel::DEFAULT_NUM_CHUNKS)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn try_native_copy(
     src: PathBuf,
@@ -301,6 +315,11 @@ pub(crate) async fn try_native_copy(
     // its bar. Saves a kernel→user thread crossing per kernel chunk
     // (~tens of thousands on multi-GB copies).
     disable_callback: bool,
+    // Phase 13c — selects the parallel multi-chunk path. `ParallelChunks`
+    // forces it (expert override); any other strategy uses the
+    // topology-gated `auto_parallel_chunks` + the `COPYTHAT_PARALLEL_CHUNKS`
+    // env escape hatch.
+    strategy: copythat_core::CopyStrategy,
 ) -> NativeOutcome {
     // Phase 47 — opt-in IoRing fast path (Win 11 22000+).
     // Gate behind `COPYTHAT_IORING_IO=1`. When the env var is set
@@ -402,12 +421,26 @@ pub(crate) async fn try_native_copy(
         .await;
     }
 
-    // Phase 13c — opt-in parallel multi-chunk copy for large files.
-    // Gate behind `COPYTHAT_PARALLEL_CHUNKS=<N>` env var so users
-    // can A/B test it against the single-stream `CopyFileExW` path
-    // without risking default-path regressions until the numbers
-    // prove it's universally better.
-    if let Some(n) = super::parallel::requested_chunks(total) {
+    // Phase 13c — parallel multi-chunk copy for large files. Two ways in:
+    //   * `CopyStrategy::ParallelChunks` — explicit expert override:
+    //     engages on ANY topology ≥ the 1 GiB floor (honours an explicit
+    //     `COPYTHAT_PARALLEL_CHUNKS=<N>` count, else `DEFAULT_NUM_CHUNKS`).
+    //   * any other strategy (incl. `Auto`) — the `COPYTHAT_PARALLEL_CHUNKS`
+    //     env escape hatch still works for A/B testing; otherwise
+    //     `auto_parallel_chunks` engages ONLY where the N streams map onto
+    //     independent hardware queues (RAID / SMB / iSCSI / file-backed
+    //     virtual). It NEVER auto-fires on a single SSD / NVMe / SATA /
+    //     USB spindle, where it regresses (Phase 13c −25%/−76%).
+    let parallel_chunks = match strategy {
+        copythat_core::CopyStrategy::ParallelChunks => super::parallel::requested_chunks(total)
+            .or_else(|| {
+                (total >= super::parallel::MIN_FILE_FOR_PARALLEL)
+                    .then_some(super::parallel::DEFAULT_NUM_CHUNKS)
+            }),
+        _ => super::parallel::requested_chunks(total)
+            .or_else(|| auto_parallel_chunks(total, &dst_topo)),
+    };
+    if let Some(n) = parallel_chunks {
         return super::parallel::parallel_chunk_copy(src, dst, total, n, ctrl, events).await;
     }
 

@@ -176,6 +176,7 @@ pub async fn fast_copy(
             ctrl.clone(),
             events.clone(),
             opts.disable_progress_callback,
+            opts.strategy,
         )
         .await
         {

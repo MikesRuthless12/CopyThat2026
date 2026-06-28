@@ -80,7 +80,7 @@ pub(crate) const MIN_FILE_FOR_PARALLEL: u64 = 1024 * 1024 * 1024; // 1 GiB
 // stays put as the regression-marker. Removing the constant would
 // silently break that smoke test on the next CI run.
 #[allow(dead_code)]
-const DEFAULT_NUM_CHUNKS: usize = 4;
+pub(crate) const DEFAULT_NUM_CHUNKS: usize = 4;
 
 /// Floor for the per-chunk read buffer. Small enough to keep the
 /// syscall rate sane even when the total memory budget is tight
@@ -332,7 +332,9 @@ pub(crate) async fn parallel_chunk_copy(
     }
 
     NativeOutcome::Done {
-        strategy: ChosenStrategy::CopyFileExW, // Same native strategy class; the dispatcher records "fast" regardless of chunked vs single-stream.
+        // Phase 13c — distinct telemetry so benchmarks can attribute the
+        // parallel multi-chunk path apart from single-stream CopyFileExW.
+        strategy: ChosenStrategy::ParallelChunks,
         bytes: total,
     }
 }
