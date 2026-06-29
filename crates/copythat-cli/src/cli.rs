@@ -127,8 +127,36 @@ pub enum Cmd {
     /// Phase 48 — run CopyThat headless as a WebDAV / HTTP file server
     /// with a Prometheus `/metrics` endpoint.
     Serve(ServeArgs),
+    /// Phase 50 — migrate another tool's repository INTO a CDR-0 repo.
+    Migrate(MigrateArgs),
+    /// Phase 50 — export a CDR-0 repository OUT to another tool's format.
+    Export(ExportArgs),
     /// Emit a shell-completion script for bash / zsh / fish / pwsh.
     Completions(CompletionsArgs),
+}
+
+/// `copythat migrate <from-tool> <from-repo> <to-cdr-repo>` — Phase 50
+/// cross-tool import. Only `cdr` is implemented today; `restic` / `borg`
+/// / `kopia` report exactly what a full importer needs.
+#[derive(Args, Debug)]
+pub struct MigrateArgs {
+    /// Source tool / format: `cdr` | `restic` | `borg` | `kopia`.
+    pub from: String,
+    /// Source repository path.
+    pub src: PathBuf,
+    /// Destination CDR-0 repository path (created if absent).
+    pub dst: PathBuf,
+}
+
+/// `copythat export <cdr-repo> <to-tool> <to-repo>` — Phase 50 inverse.
+#[derive(Args, Debug)]
+pub struct ExportArgs {
+    /// Source CDR-0 repository path.
+    pub src: PathBuf,
+    /// Target tool / format: `restic` | `borg` | `kopia`.
+    pub to: String,
+    /// Destination repository path.
+    pub dst: PathBuf,
 }
 
 /// `copythat serve <…>` — Phase 48 headless server mode.

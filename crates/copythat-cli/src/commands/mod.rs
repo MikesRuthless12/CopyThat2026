@@ -6,6 +6,7 @@ pub(crate) mod completions;
 pub(crate) mod config;
 pub(crate) mod copy;
 pub(crate) mod history;
+pub(crate) mod migrate;
 pub(crate) mod mount;
 pub(crate) mod plan;
 pub(crate) mod provenance;

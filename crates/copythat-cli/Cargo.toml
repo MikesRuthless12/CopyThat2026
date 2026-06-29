@@ -50,6 +50,9 @@ tokio = { version = "1", features = [
 copythat-core = { path = "../copythat-core", version = "0.19" }
 # Phase 48 — `copythat serve` headless WebDAV/HTTP server mode.
 copythat-server = { path = "../copythat-server", version = "0.19" }
+# Phase 50 — `copythat migrate` / `export` use the CDR-0 reference
+# implementation + repository-format detector.
+copythat-chunk = { path = "../copythat-chunk", version = "0.19" }
 copythat-hash = { path = "../copythat-hash", version = "0.19" }
 # Phase 39 — attach `PlatformFastCopyHook` so the CLI's `copy`
 # subcommand uses the same `CopyFileExW` + parallel-chunk + reflink

@@ -280,22 +280,48 @@ backward compatible).
 
 ---
 
-## 11. Migration & compliance tooling (planned)
+## 11. Migration & compliance tooling
 
-These are part of the CDR-0 ecosystem but are **not** required for a tool to be
-a compliant *reader/writer*:
+CopyThat ships the migration **framework + repository detector**; full importers
+for the other tools are gated on the constraints below.
 
-- `copythat migrate <restic|borg|kopia> <src-repo> <cdr-repo>` — translate the
-  source tool's manifests into CDR-0, **reusing the source chunk files via
-  reflink** (hard-copy fallback) so migration is near-instant and
-  dedup-preserving.
-- `copythat export <cdr-repo> <restic|borg|kopia> <dst-repo>` — the inverse.
+**Implemented** (`copythat-chunk::migrate`, `copythat migrate` / `export` CLI):
+- `RepoFormat::detect()` recognises restic / Borg / Kopia / CDR-0 repositories
+  from their on-disk markers — no decryption, no new dependencies.
+- `copythat migrate cdr <src> <cdr-repo>` — copy / re-home a CDR-0 repository
+  (the reference path; exercises the whole pipeline end to end).
+- `copythat migrate <restic|borg|kopia> …` — returns a typed, actionable error
+  naming exactly what a full importer needs. It does **not** silently emit a
+  wrong migration.
+- `copythat export <cdr-repo> <tool> <dst>` — the inverse entry point; writing a
+  foreign tool's on-disk format is not yet implemented.
+
+**Why the foreign importers are blocked.** Enumerating even `path → (chunkID,
+length)` from another tool's repository is not a plaintext parse:
+
+| Tool | Passphrase required to enumerate? | Crypto / codec needed |
+| ---- | -------------------------------- | --------------------- |
+| restic | **Yes, always** (index, snapshots, trees all encrypted) | AES-256-CTR + Poly1305-AES + scrypt |
+| Borg `repokey*` / `keyfile*` (default) + all 2.0 | **Yes** | AES-256-CTR + HMAC + PBKDF2 (1.x) / AEAD + Argon2 (2.0); **MessagePack** |
+| Borg `none` / `authenticated` (non-default) | No | still needs a **MessagePack** parser |
+| Kopia | **Yes, always** (even content IDs are keyed hashes) | AES-256-GCM + HKDF + scrypt + keyed-BLAKE2b |
+
+None of those crypto primitives (nor a MessagePack codec) are in this
+workspace's dependency tree, and Phase 50's rule is **no new crates** — so a
+correct importer cannot land without (a) relaxing that rule to add the codec +
+crypto crates, and (b) real source repositories to validate against (shipping
+untested decryption would risk silently corrupting a migration). Chunk identity
+is in any case **not portable across tools**: each uses a per-repo random CDC
+parameter and most key the chunk-ID hash with a per-repo secret, so migration
+translates *manifests*, never chunk IDs.
+
+**Planned ecosystem items:**
 - `cdr-py` — a reference parser on PyPI, published from a sibling repository
   with a "spec compliance" README.
-- Upstream engagement: tracking issues/PRs proposing CDR-0 adoption to restic,
-  Borg, and Kopia.
+- Upstream engagement: issues / PRs proposing CDR-0 adoption to restic, Borg,
+  and Kopia.
 
-Status of these items is tracked in [`docs/ROADMAP.md`](../ROADMAP.md).
+Status tracked in [`docs/ROADMAP.md`](../ROADMAP.md).
 
 ---
 

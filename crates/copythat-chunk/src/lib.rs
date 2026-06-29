@@ -56,6 +56,7 @@ pub mod cdr;
 pub mod chunker;
 pub mod error;
 pub mod manifest;
+pub mod migrate;
 pub mod repository;
 pub mod sink;
 pub mod store;
@@ -65,6 +66,7 @@ pub use cdr::{CDR_ALGO, CDR_SPEC_VERSION, CdrChunkRef, CdrError, CdrManifest, en
 pub use chunker::{Chunker, DEFAULT_AVG, DEFAULT_MAX, DEFAULT_MIN};
 pub use error::{ChunkStoreError, Result};
 pub use manifest::{IngestStats, delta_plan, ingest_bytes, ingest_file, materialise_file};
+pub use migrate::{MigrateError, MigrateReport, RepoFormat, migrate, write_cdr_descriptor};
 pub use repository::{
     FileEntry, FileSnapshot, GcReport, RepoStats, Repository, Snapshot, SnapshotId, SnapshotKind,
     UnifiedSnapshot,

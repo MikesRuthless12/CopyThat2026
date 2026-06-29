@@ -1671,6 +1671,7 @@ dependencies = [
  "chrono",
  "clap",
  "clap_complete",
+ "copythat-chunk",
  "copythat-core",
  "copythat-hash",
  "copythat-history",
