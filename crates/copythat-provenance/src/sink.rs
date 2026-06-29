@@ -26,7 +26,12 @@ use copythat_core::{OutboardEncoder, ProvenanceSink};
 use ed25519_dalek::Signer;
 
 use crate::encoder::{BaoOutboardEncoder, RootOnlyEncoder};
-use crate::error::{ProvenanceError, ProvenanceErrorKind};
+use crate::error::ProvenanceError;
+// `ProvenanceErrorKind` is only referenced by the `cfg(not(tsa))` stub
+// `request_timestamp` (and its test); importing it unconditionally is an
+// unused import under `--features tsa`.
+#[cfg(not(feature = "tsa"))]
+use crate::error::ProvenanceErrorKind;
 use crate::manifest::{
     FileRecord, ProvenanceManifest, Rfc3161Token, Signature, manifest_root_blake3,
     manifest_signing_bytes, validate_rel_path, write_manifest_cbor,
@@ -49,7 +54,7 @@ pub struct SinkConfig {
     /// this URL during `finalize_to_path`. The `tsa` Cargo feature
     /// must be enabled at compile time for the request to actually
     /// fire; otherwise `finalize_to_path` returns
-    /// [`ProvenanceErrorKind::TsaFeatureDisabled`].
+    /// [`crate::error::ProvenanceErrorKind::TsaFeatureDisabled`].
     pub tsa_url: Option<String>,
     /// Encoder mode for per-file outboards. `true` (the default)
     /// uses [`BaoOutboardEncoder`]; `false` uses [`RootOnlyEncoder`]

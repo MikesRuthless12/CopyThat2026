@@ -201,9 +201,7 @@ fn check_signature(
 
 #[cfg(feature = "tsa")]
 fn check_timestamp(manifest: &ProvenanceManifest) -> Option<bool> {
-    let Some(token) = manifest.timestamp.as_ref() else {
-        return None;
-    };
+    let token = manifest.timestamp.as_ref()?;
     Some(crate::timestamp::verify(token, manifest).is_ok())
 }
 
