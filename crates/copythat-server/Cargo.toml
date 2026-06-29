@@ -1,6 +1,6 @@
 [package]
 name = "copythat-server"
-description = "Phase 48 — server mode + observability (scaffold). Ships the stable public surface for serving CopyThat over WebDAV / SFTP / HTTP / S3 plus a Prometheus `/metrics` endpoint, OpenTelemetry export, and webhook sinks (Slack / Discord / ntfy / Pushover) — with the pure, network-free first-slice logic (webhook payload formatting + Prometheus text exposition) real now and the protocol listeners + delivery deferred behind `ServerError::NotImplemented` until the heavy deps land."
+description = "Phase 48 — server mode + observability. Runs CopyThat headless over WebDAV (and the HTTP/S3 file surface) on an axum/hyper listener with a Prometheus `/metrics` endpoint, bearer/basic auth, and read-only mode; webhook sinks (Slack / Discord / ntfy / Pushover), an SFTP transport, and OpenTelemetry export land in follow-up increments."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -19,6 +19,51 @@ workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+
+# Phase 48 — server mode. axum/hyper/tower are already resolved in the
+# workspace (Phase 39 recovery UI); we mirror its loopback-server pattern.
+tokio = { version = "1", features = [
+    "rt",
+    "rt-multi-thread",
+    "net",
+    "fs",
+    "io-util",
+    "sync",
+    "macros",
+    "time",
+] }
+axum = { version = "0.8", default-features = false, features = [
+    "tokio",
+    "http1",
+] }
+tower = { version = "0.5", default-features = false }
+hyper = { version = "1", default-features = false, features = ["server"] }
+http = "1"
+http-body-util = "0.1"
+bytes = "1"
+futures-util = { version = "0.3", default-features = false }
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+# WebDAV protocol — local-filesystem backend + hyper request/response
+# integration so the handler mounts on the same axum/hyper stack as the
+# `/metrics` endpoint. Apache-2.0.
+dav-server = { version = "0.11", default-features = false, features = [
+    "localfs",
+    "hyper",
+] }
+# Bearer / basic auth tokens kept in a `SecretString` so they don't leak
+# through `Debug`, matching the Phase 39 recovery server.
+secrecy = "0.10"
+# HTTP Basic credential decode. Already resolved in the workspace; MIT.
+base64 = "0.22"
+
+[dev-dependencies]
+# Smoke round-trips the public types through JSON.
+serde_json = "1"
+# Phase 48 smoke — drive a real WebDAV PUT/GET + scrape /metrics over a
+# loopback HTTP client. All already resolved in the workspace tree.
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+reqwest = { version = "0.12", default-features = false }
+tempfile = "3"
 
 # Phase 48 scaffold smoke lives at the workspace root (mirrors the
 # convention set by the other phase smoke tests).
