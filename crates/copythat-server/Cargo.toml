@@ -95,9 +95,13 @@ russh-sftp = "2"
 # russh). MIT / Apache-2.0.
 rand = "0.10"
 # Phase 48 follow-up — OpenTelemetry trace export. OTLP over HTTP/protobuf
-# (the `reqwest-client` path), NOT grpc-tonic: the async reqwest exporter
-# reuses the in-tree reqwest 0.12 + rustls stack instead of pulling
-# tonic/h2/grpc. `rt-tokio` gives the batch span processor a tokio-driven
+# via the `reqwest-rustls` path, NOT grpc-tonic. otlp 0.32 pulls reqwest
+# **0.13** (distinct from the webhook/sftp reqwest 0.12) and `reqwest-rustls`
+# enables reqwest's `default-tls` = rustls with the aws-lc-rs crypto provider.
+# A bare `reqwest-client` leaves reqwest 0.13's `__rustls` on with NO provider
+# under the workspace feature union, so building the exporter panics
+# "No provider set" — `reqwest-rustls` installs the provider and avoids that.
+# `rt-tokio` gives the batch span processor a tokio-driven
 # background runtime so buffered spans flush on the engine's runtime;
 # `tracing-opentelemetry` bridges the engine's `tracing` spans into the OTel
 # pipeline; the `registry` subscriber layer is the install surface
@@ -116,7 +120,14 @@ opentelemetry_sdk = { version = "0.32", features = [
 opentelemetry-otlp = { version = "0.32", default-features = false, features = [
     "trace",
     "http-proto",
+    # `reqwest-client` registers reqwest as the exporter's HTTP client;
+    # `reqwest-rustls` adds reqwest's `default-tls` = rustls + aws-lc-rs
+    # provider. BOTH are needed — `reqwest-client` alone leaves reqwest 0.13's
+    # `__rustls` without a provider (panics "No provider set" under the
+    # workspace feature union); `reqwest-rustls` alone wires no client
+    # ("no http client specified").
     "reqwest-client",
+    "reqwest-rustls",
 ] }
 tracing-opentelemetry = "0.33"
 tracing-subscriber = { version = "0.3", default-features = false, features = [
