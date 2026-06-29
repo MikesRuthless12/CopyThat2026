@@ -16,22 +16,19 @@
 //!   dependencies).
 //! - **restic / Borg / Kopia → CDR-0**: returns a typed
 //!   [`MigrateError::SourceUnsupported`] that names exactly what a full
-//!   importer needs. These are **not** silently stubbed, because a
+//!   importer needs. These are **not** silently stubbed — a
 //!   wrong-but-successful importer would corrupt a migration. The
-//!   blockers are concrete (and documented in `docs/spec/CDR-0.md §11`):
-//!   1. **Every default repo of all three tools is encrypted** — even
-//!      enumerating `path → chunks` requires the passphrase and each
-//!      tool's exact crypto (restic: AES-256-CTR + Poly1305-AES, scrypt;
-//!      Borg: AES-256-CTR + HMAC, PBKDF2 / 2.0 AEAD + Argon2; Kopia:
-//!      AES-256-GCM + HKDF + scrypt + keyed-BLAKE2b). None of those
-//!      primitives are in this workspace's dependency tree.
-//!   2. Borg additionally needs a **MessagePack** parser for its
-//!      archive/item streams.
-//!   The Phase 50 spec mandates **no new crates**, so a correct importer
-//!      cannot be added without first relaxing that rule (and obtaining
-//!      real source repositories to validate against). Borg's
-//!      non-default `none` / `authenticated` modes are the one
-//!      unencrypted case, still gated on the MessagePack dependency.
+//!   blockers are concrete (see `docs/spec/CDR-0.md §11`): every default
+//!   repo of all three tools is encrypted, so even enumerating
+//!   `path → chunks` needs the passphrase and each tool's exact crypto
+//!   (restic: AES-256-CTR + Poly1305-AES + scrypt; Borg: AES-256-CTR +
+//!   HMAC + PBKDF2, or 2.0 AEAD + Argon2; Kopia: AES-256-GCM + HKDF +
+//!   scrypt + keyed-BLAKE2b) — none of which are in this workspace's
+//!   dependency tree — and Borg additionally needs a MessagePack parser.
+//!   Phase 50 mandates **no new crates**, so a correct importer cannot
+//!   land without relaxing that rule (and obtaining real source repos to
+//!   validate against). Borg's non-default `none` / `authenticated`
+//!   modes are the one unencrypted case, still gated on MessagePack.
 
 use std::path::{Path, PathBuf};
 
@@ -358,7 +355,10 @@ mod tests {
         std::fs::create_dir_all(restic.join("snapshots")).unwrap();
         std::fs::write(restic.join("config"), b"x").unwrap();
         let err = migrate(RepoFormat::Restic, &restic, &tmp.path().join("out")).unwrap_err();
-        assert!(matches!(err, MigrateError::SourceUnsupported { tool: "restic", .. }));
+        assert!(matches!(
+            err,
+            MigrateError::SourceUnsupported { tool: "restic", .. }
+        ));
 
         // Format mismatch: ask for borg, point at a restic layout.
         let err = migrate(RepoFormat::Borg, &restic, &tmp.path().join("out2")).unwrap_err();

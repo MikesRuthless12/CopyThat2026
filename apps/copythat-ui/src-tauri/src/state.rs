@@ -320,10 +320,7 @@ impl AppState {
     /// Phase 49 — attach an opened [`copythat_chunk::Repository`] handle
     /// (or `None` if it failed to open). Builder-shaped to chain after
     /// `new_with`, mirroring [`Self::with_journal`].
-    pub fn with_repository(
-        mut self,
-        repository: Option<Arc<copythat_chunk::Repository>>,
-    ) -> Self {
+    pub fn with_repository(mut self, repository: Option<Arc<copythat_chunk::Repository>>) -> Self {
         self.repository = repository;
         self
     }
