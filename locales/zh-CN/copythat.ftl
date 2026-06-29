@@ -1131,3 +1131,17 @@ settings-power-continue = 继续
 settings-power-pause = 暂停
 err-server-not-implemented = 服务器模式尚不可用。
 err-webhook-not-implemented = Webhook 投递尚不可用。
+
+# Phase 47 — "why is this slow?" diagnostics (bottleneck badge + tooltip).
+bottleneck-source-io = 源 I/O
+bottleneck-dest-io = 目标 I/O
+bottleneck-network = 网络
+bottleneck-antivirus = 杀毒软件
+bottleneck-cpu = CPU
+bottleneck-thermal = 热降频
+bottleneck-unknown = 未知
+diag-aria = 瓶颈：{ $cause }
+diag-tooltip = 受限于 { $cause } · { $rate }
+diag-spark-aria = 最近一分钟的吞吐量
+diag-keeping-up = 速度正常
+diag-label = 诊断

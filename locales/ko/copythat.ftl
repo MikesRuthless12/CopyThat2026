@@ -1131,3 +1131,17 @@ settings-power-continue = 계속
 settings-power-pause = 일시중지
 err-server-not-implemented = 서버 모드는 아직 사용할 수 없습니다.
 err-webhook-not-implemented = 웹훅 전송은 아직 사용할 수 없습니다.
+
+# Phase 47 — "why is this slow?" diagnostics (bottleneck badge + tooltip).
+bottleneck-source-io = 원본 I/O
+bottleneck-dest-io = 대상 I/O
+bottleneck-network = 네트워크
+bottleneck-antivirus = 백신
+bottleneck-cpu = CPU
+bottleneck-thermal = 발열
+bottleneck-unknown = 알 수 없음
+diag-aria = 병목: { $cause }
+diag-tooltip = { $cause }에 의해 제한 · { $rate }
+diag-spark-aria = 지난 1분간 처리량
+diag-keeping-up = 정상 속도
+diag-label = 진단

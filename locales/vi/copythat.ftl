@@ -1131,3 +1131,17 @@ settings-power-continue = Tiếp tục
 settings-power-pause = Tạm dừng
 err-server-not-implemented = Chế độ máy chủ chưa khả dụng.
 err-webhook-not-implemented = Việc gửi webhook chưa khả dụng.
+
+# Phase 47 — "why is this slow?" diagnostics (bottleneck badge + tooltip).
+bottleneck-source-io = Nguồn I/O
+bottleneck-dest-io = Đích I/O
+bottleneck-network = Mạng
+bottleneck-antivirus = Diệt vi-rút
+bottleneck-cpu = CPU
+bottleneck-thermal = Nhiệt
+bottleneck-unknown = Không xác định
+diag-aria = Điểm nghẽn: { $cause }
+diag-tooltip = Bị giới hạn bởi { $cause } · { $rate }
+diag-spark-aria = Thông lượng trong phút vừa qua
+diag-keeping-up = Đang theo kịp
+diag-label = Chẩn đoán

@@ -1131,3 +1131,17 @@ settings-power-continue = متابعة
 settings-power-pause = إيقاف مؤقت
 err-server-not-implemented = وضع الخادم غير متاح بعد.
 err-webhook-not-implemented = تسليم الـ Webhook غير متاح بعد.
+
+# Phase 47 — "why is this slow?" diagnostics (bottleneck badge + tooltip).
+bottleneck-source-io = المصدر I/O
+bottleneck-dest-io = الوجهة I/O
+bottleneck-network = الشبكة
+bottleneck-antivirus = مكافح الفيروسات
+bottleneck-cpu = CPU
+bottleneck-thermal = حراري
+bottleneck-unknown = غير معروف
+diag-aria = عنق الزجاجة: { $cause }
+diag-tooltip = مقيَّد بـ { $cause } · { $rate }
+diag-spark-aria = الإنتاجية خلال الدقيقة الأخيرة
+diag-keeping-up = مواكب
+diag-label = التشخيص

@@ -214,6 +214,28 @@
   // Only surface a cause when one is actually identified (not "unknown").
   let diagCause = $derived(diag && diag.bottleneck !== "unknown" ? diag : null);
 
+  // Map a serialized `Bottleneck` (snake_case) to its Fluent cause-name
+  // key. A pure helper so the `t()` calls stay in the template and
+  // re-localize with the rest of the header on a language switch.
+  function causeKey(b: string): string {
+    switch (b) {
+      case "source_io":
+        return "bottleneck-source-io";
+      case "dest_io":
+        return "bottleneck-dest-io";
+      case "network":
+        return "bottleneck-network";
+      case "antivirus":
+        return "bottleneck-antivirus";
+      case "cpu":
+        return "bottleneck-cpu";
+      case "thermal":
+        return "bottleneck-thermal";
+      default:
+        return "bottleneck-unknown";
+    }
+  }
+
   // Compact sparkline path over the recent throughput history.
   let sparkPath = $derived.by(() => {
     if (diagHistory.length < 2) return "";
@@ -262,10 +284,13 @@
         {#if diagCause}
           <span
             class="metric diag"
-            title={`${diagCause.causeLabel} — ${formatRate(
-              diagCause.snapshot.instant_throughput,
-            )}`}
-            aria-label={`Bottleneck: ${diagCause.causeLabel}`}
+            title={t("diag-tooltip", {
+              cause: t(causeKey(diagCause.bottleneck)),
+              rate: formatRate(diagCause.snapshot.instant_throughput),
+            })}
+            aria-label={t("diag-aria", {
+              cause: t(causeKey(diagCause.bottleneck)),
+            })}
           >
             <span class="diag-emoji" aria-hidden="true">{diagCause.causeEmoji}</span>
             {#if sparkPath}

@@ -1131,3 +1131,17 @@ settings-power-continue = Lanjutkan
 settings-power-pause = Jeda
 err-server-not-implemented = Mode server belum tersedia.
 err-webhook-not-implemented = Pengiriman webhook belum tersedia.
+
+# Phase 47 — "why is this slow?" diagnostics (bottleneck badge + tooltip).
+bottleneck-source-io = Sumber I/O
+bottleneck-dest-io = Tujuan I/O
+bottleneck-network = Jaringan
+bottleneck-antivirus = Antivirus
+bottleneck-cpu = CPU
+bottleneck-thermal = Termal
+bottleneck-unknown = Tidak diketahui
+diag-aria = Hambatan: { $cause }
+diag-tooltip = Dibatasi oleh { $cause } · { $rate }
+diag-spark-aria = Throughput dalam satu menit terakhir
+diag-keeping-up = Mengimbangi
+diag-label = Diagnostik

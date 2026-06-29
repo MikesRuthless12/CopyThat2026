@@ -1131,3 +1131,17 @@ settings-power-continue = Продовжити
 settings-power-pause = Пауза
 err-server-not-implemented = Режим сервера ще недоступний.
 err-webhook-not-implemented = Доставка вебхуків ще недоступна.
+
+# Phase 47 — "why is this slow?" diagnostics (bottleneck badge + tooltip).
+bottleneck-source-io = Джерело I/O
+bottleneck-dest-io = Призначення I/O
+bottleneck-network = Мережа
+bottleneck-antivirus = Антивірус
+bottleneck-cpu = CPU
+bottleneck-thermal = Перегрів
+bottleneck-unknown = Невідомо
+diag-aria = Вузьке місце: { $cause }
+diag-tooltip = Обмежено: { $cause } · { $rate }
+diag-spark-aria = Пропускна здатність за останню хвилину
+diag-keeping-up = Встигає
+diag-label = Діагностика

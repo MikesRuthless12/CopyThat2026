@@ -1131,3 +1131,17 @@ settings-power-continue = Kontynuuj
 settings-power-pause = Wstrzymaj
 err-server-not-implemented = Tryb serwera nie jest jeszcze dostępny.
 err-webhook-not-implemented = Dostarczanie webhooków nie jest jeszcze dostępne.
+
+# Phase 47 — "why is this slow?" diagnostics (bottleneck badge + tooltip).
+bottleneck-source-io = Źródło I/O
+bottleneck-dest-io = Cel I/O
+bottleneck-network = Sieć
+bottleneck-antivirus = Antywirus
+bottleneck-cpu = CPU
+bottleneck-thermal = Termiczne
+bottleneck-unknown = Nieznane
+diag-aria = Wąskie gardło: { $cause }
+diag-tooltip = Ograniczone przez { $cause } · { $rate }
+diag-spark-aria = Przepustowość z ostatniej minuty
+diag-keeping-up = Nadąża
+diag-label = Diagnostyka

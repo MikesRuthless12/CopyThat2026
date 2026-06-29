@@ -1131,3 +1131,17 @@ settings-power-continue = Devam et
 settings-power-pause = Duraklat
 err-server-not-implemented = Sunucu modu henüz kullanılamıyor.
 err-webhook-not-implemented = Webhook teslimi henüz kullanılamıyor.
+
+# Phase 47 — "why is this slow?" diagnostics (bottleneck badge + tooltip).
+bottleneck-source-io = Kaynak I/O
+bottleneck-dest-io = Hedef I/O
+bottleneck-network = Ağ
+bottleneck-antivirus = Antivirüs
+bottleneck-cpu = CPU
+bottleneck-thermal = Termal
+bottleneck-unknown = Bilinmiyor
+diag-aria = Darboğaz: { $cause }
+diag-tooltip = { $cause } ile sınırlı · { $rate }
+diag-spark-aria = Son bir dakikadaki aktarım hızı
+diag-keeping-up = Yetişiyor
+diag-label = Tanılama

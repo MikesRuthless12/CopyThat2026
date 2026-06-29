@@ -1131,3 +1131,17 @@ settings-power-continue = 続行
 settings-power-pause = 一時停止
 err-server-not-implemented = サーバーモードはまだ利用できません。
 err-webhook-not-implemented = Webhook の配信はまだ利用できません。
+
+# Phase 47 — "why is this slow?" diagnostics (bottleneck badge + tooltip).
+bottleneck-source-io = コピー元 I/O
+bottleneck-dest-io = コピー先 I/O
+bottleneck-network = ネットワーク
+bottleneck-antivirus = ウイルス対策
+bottleneck-cpu = CPU
+bottleneck-thermal = サーマル
+bottleneck-unknown = 不明
+diag-aria = ボトルネック: { $cause }
+diag-tooltip = { $cause } により制限 · { $rate }
+diag-spark-aria = 直近1分間のスループット
+diag-keeping-up = 順調
+diag-label = 診断

@@ -1131,3 +1131,21 @@ settings-power-continue = Continue
 settings-power-pause = Pause
 err-server-not-implemented = Server mode is not available yet.
 err-webhook-not-implemented = Webhook delivery is not available yet.
+
+# Phase 47 — "why is this slow?" diagnostics. The header bottleneck badge
+# uses `diag-aria` + `diag-tooltip` with a `bottleneck-*` cause name; the
+# `bottleneck-*` keys are also the cause labels for the planned per-row
+# diagnostics expander, which additionally uses `diag-label`,
+# `diag-keeping-up`, and `diag-spark-aria`.
+bottleneck-source-io = Source I/O
+bottleneck-dest-io = Destination I/O
+bottleneck-network = Network
+bottleneck-antivirus = Antivirus
+bottleneck-cpu = CPU
+bottleneck-thermal = Thermal
+bottleneck-unknown = Unknown
+diag-aria = Bottleneck: { $cause }
+diag-tooltip = Bottlenecked by { $cause } · { $rate }
+diag-spark-aria = Throughput over the last minute
+diag-keeping-up = Keeping up
+diag-label = Diagnostics
