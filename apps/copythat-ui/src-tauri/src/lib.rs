@@ -41,6 +41,7 @@ pub mod cloud_commands;
 pub mod collisions;
 pub mod commands;
 pub mod crypt_commands;
+pub mod diag_sampler;
 pub mod dropstack;
 // Phase 17d — live UAC/pkexec/osascript privilege escalation: the
 // caller-side spawner + JSON-RPC handshake to the elevated
@@ -777,6 +778,11 @@ pub fn run() {
                         .power_bus
                         .spawn_poller(probes, copythat_power::bus::DEFAULT_POLL_PERIOD)
                 });
+                // Phase 47 — diagnostics sampler: 1 Hz system + throughput
+                // sampling -> classified bottleneck -> EVENT_JOB_DIAG while a
+                // copy runs, feeding the live speed-graph annotations.
+                let _diag =
+                    diag_sampler::spawn_diag_sampler(app_state.clone(), app.handle().clone());
                 let _subscriber = power::spawn_power_subscriber(app_state, app.handle().clone());
             }
 

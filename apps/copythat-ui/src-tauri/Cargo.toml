@@ -49,6 +49,10 @@ copythat-watch = { path = "../../../crates/copythat-watch", version = "0.19" }
 # subscriber task maps PowerEvent into pause_all / resume_all / shape
 # cap directives driven by the user's PowerPoliciesSettings.
 copythat-power = { path = "../../../crates/copythat-power", version = "0.19" }
+# Phase 47 — "why is this slow?" diagnostics. The diag_sampler task uses
+# copythat-diag's SystemSampler + classify_snapshot to emit job-diag
+# events for the live speed-graph annotations.
+copythat-diag = { path = "../../../crates/copythat-diag", version = "0.19" }
 # Phase 32 — cloud backend matrix via OpenDAL. AppState owns the
 # BackendRegistry + keychain-backed Credentials; IPC commands in
 # cloud_commands.rs surface list/add/remove/test-connection.

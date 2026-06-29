@@ -2094,6 +2094,7 @@ dependencies = [
  "copythat-cloud",
  "copythat-core",
  "copythat-crypt",
+ "copythat-diag",
  "copythat-hash",
  "copythat-helper",
  "copythat-history",
