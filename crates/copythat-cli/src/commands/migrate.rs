@@ -30,7 +30,11 @@ pub(crate) async fn run(
         ));
         return ExitCode::ConfigInvalid;
     };
-    match migrate(from, &args.src, &args.dst) {
+    let pw = args
+        .password
+        .clone()
+        .or_else(|| std::env::var("RESTIC_PASSWORD").ok());
+    match migrate(from, &args.src, &args.dst, pw.as_deref()) {
         Ok(report) => {
             let _ = writer.human(&format!(
                 "Migrated {} snapshot(s) / {} file(s) into the CDR-0 repository at {}",
@@ -67,6 +71,7 @@ pub(crate) async fn run_export(
                 from: "cdr".to_string(),
                 src: args.src,
                 dst: args.dst,
+                password: None,
             },
             writer,
         )

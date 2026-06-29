@@ -1,34 +1,27 @@
 //! Phase 50 (moonshot) — cross-tool repository migration for CDR-0.
 //!
 //! The CDR-0 promise (see [`docs/spec/CDR-0.md`]) is that migrating *in*
-//! from another deduplicating-backup tool is a one-shot manifest
-//! translation that reuses the source's chunks, not a multi-day
-//! re-ingest. This module is the migration entry point + the source
-//! detector.
+//! from another deduplicating-backup tool reuses the source's chunks
+//! rather than re-ingesting terabytes. This module is the migration
+//! entry point, the source detector, and the per-tool importers.
 //!
-//! # What is implemented vs. blocked
+//! # Status
 //!
-//! - **CDR-0 → CDR-0** ([`RepoFormat::Cdr`]): fully implemented +
-//!   tested — used to copy / re-home a repository and to exercise the
-//!   pipeline end to end.
-//! - **[`RepoFormat::detect`]**: recognises restic / Borg / Kopia / CDR
-//!   repositories from their on-disk marker files (no decryption, no new
-//!   dependencies).
-//! - **restic / Borg / Kopia → CDR-0**: returns a typed
-//!   [`MigrateError::SourceUnsupported`] that names exactly what a full
-//!   importer needs. These are **not** silently stubbed — a
-//!   wrong-but-successful importer would corrupt a migration. The
-//!   blockers are concrete (see `docs/spec/CDR-0.md §11`): every default
-//!   repo of all three tools is encrypted, so even enumerating
-//!   `path → chunks` needs the passphrase and each tool's exact crypto
-//!   (restic: AES-256-CTR + Poly1305-AES + scrypt; Borg: AES-256-CTR +
-//!   HMAC + PBKDF2, or 2.0 AEAD + Argon2; Kopia: AES-256-GCM + HKDF +
-//!   scrypt + keyed-BLAKE2b) — none of which are in this workspace's
-//!   dependency tree — and Borg additionally needs a MessagePack parser.
-//!   Phase 50 mandates **no new crates**, so a correct importer cannot
-//!   land without relaxing that rule (and obtaining real source repos to
-//!   validate against). Borg's non-default `none` / `authenticated`
-//!   modes are the one unencrypted case, still gated on MessagePack.
+//! - **CDR-0 → CDR-0** ([`RepoFormat::Cdr`]) and **restic → CDR-0**
+//!   ([`RepoFormat::Restic`]) are implemented + tested (restic against a
+//!   real `restic 0.17.3` v2 fixture). restic chunk IDs aren't portable
+//!   (per-repo polynomial + SHA-256 of plaintext), so the importer
+//!   reconstructs file bytes and lets the CDR store re-chunk with its own
+//!   FastCDC + BLAKE3 — a faithful content migration.
+//! - **[`RepoFormat::detect`]** recognises restic / Borg / Kopia / CDR-0
+//!   from on-disk markers (no decryption).
+//! - **Borg / Kopia → CDR-0** return a typed
+//!   [`MigrateError::SourceUnsupported`]. Kopia's crypto is in-tree but
+//!   its keyed-hash index + object format is a separate build-out; Borg
+//!   additionally needs a MessagePack codec (the one genuinely-new
+//!   dependency). See `docs/spec/CDR-0.md §11`.
+
+mod restic;
 
 use std::path::{Path, PathBuf};
 
@@ -80,15 +73,12 @@ impl RepoFormat {
     /// no secrets and decrypts nothing — purely a layout probe.
     #[must_use]
     pub fn detect(root: &Path) -> Self {
-        // CDR-0: our descriptor or the catalog db.
         if root.join("cdr.toml").is_file() || root.join("repository.redb").is_file() {
             return Self::Cdr;
         }
-        // Kopia: the well-known format blob.
         if root.join("kopia.repository").is_file() {
             return Self::Kopia;
         }
-        // restic: `config` + `data/` + `snapshots/` directories.
         if root.join("config").is_file()
             && root.join("data").is_dir()
             && root.join("snapshots").is_dir()
@@ -139,6 +129,26 @@ pub enum MigrateError {
         path: PathBuf,
     },
 
+    /// This (encrypted) source tool needs a passphrase that wasn't given.
+    #[error("{tool} repositories are encrypted — pass the repository passphrase to migrate")]
+    NeedsPassphrase {
+        /// The source tool.
+        tool: &'static str,
+    },
+
+    /// Decryption / MAC verification failed (wrong passphrase or
+    /// corruption).
+    #[error("decryption failed: {0}")]
+    Decrypt(String),
+
+    /// A base64 / JSON / zstd / structural decode failed.
+    #[error("decode error: {0}")]
+    Decode(String),
+
+    /// The source repository's structure was not as expected.
+    #[error("unexpected repository structure: {0}")]
+    Format(String),
+
     /// A real importer for this tool is not implemented; the message
     /// names the concrete blocker.
     #[error("migrating from {tool} is not yet supported: {reason}")]
@@ -173,15 +183,12 @@ pub fn write_cdr_descriptor(root: &Path) -> std::result::Result<(), MigrateError
 
 /// Migrate a source repository at `src` into a CDR-0 repository at
 /// `dst_root` (created if absent). `from` must match the format detected
-/// at `src`.
-///
-/// Only [`RepoFormat::Cdr`] is implemented; the other tools return a
-/// [`MigrateError::SourceUnsupported`] documenting the blocker (see the
-/// module docs).
+/// at `src`. `passphrase` is required for encrypted sources (restic).
 pub fn migrate(
     from: RepoFormat,
     src: &Path,
     dst_root: &Path,
+    passphrase: Option<&str>,
 ) -> std::result::Result<MigrateReport, MigrateError> {
     let detected = RepoFormat::detect(src);
     if detected == RepoFormat::Unknown {
@@ -196,14 +203,10 @@ pub fn migrate(
     }
     match from {
         RepoFormat::Cdr => migrate_cdr_to_cdr(src, dst_root),
-        RepoFormat::Restic => Err(MigrateError::SourceUnsupported {
-            tool: "restic",
-            reason: "restic repos are always encrypted; enumeration needs the passphrase \
-                     plus AES-256-CTR + Poly1305-AES + scrypt (none in-tree). Adding a \
-                     decryptor requires relaxing the Phase 50 'no new crates' rule and \
-                     real test repos. See docs/spec/CDR-0.md §11."
-                .to_string(),
-        }),
+        RepoFormat::Restic => {
+            let pw = passphrase.ok_or(MigrateError::NeedsPassphrase { tool: "restic" })?;
+            restic::import_restic(src, pw, dst_root)
+        }
         RepoFormat::Borg => Err(MigrateError::SourceUnsupported {
             tool: "borg",
             reason: "Borg needs a MessagePack parser for its archive/item streams (new \
@@ -213,9 +216,8 @@ pub fn migrate(
         }),
         RepoFormat::Kopia => Err(MigrateError::SourceUnsupported {
             tool: "kopia",
-            reason: "Kopia repos are always encrypted; even content IDs are keyed hashes. \
-                     Enumeration needs the passphrase plus AES-256-GCM + HKDF + scrypt + \
-                     keyed-BLAKE2b (none in-tree). See docs/spec/CDR-0.md §11."
+            reason: "Kopia's crypto is in-tree, but its keyed-hash index (v1/v2 binary) + \
+                     object/indirect format is a separate build-out. See docs/spec/CDR-0.md §11."
                 .to_string(),
         }),
         RepoFormat::Unknown => Err(MigrateError::Unrecognized(src.to_path_buf())),
@@ -238,7 +240,6 @@ fn migrate_cdr_to_cdr(
         let Some(snap) = source.snapshot(SnapshotId(summary.id))? else {
             continue;
         };
-        // Reconstruct each file's bytes from the source chunk store.
         let mut materialised: Vec<(String, Vec<u8>)> = Vec::with_capacity(snap.files.len());
         for entry in &snap.files {
             let mut bytes = Vec::with_capacity(entry.manifest.size as usize);
@@ -280,7 +281,6 @@ mod tests {
     fn detect_cdr_repository() {
         let tmp = tempfile::tempdir().unwrap();
         let _repo = Repository::open(tmp.path()).unwrap();
-        // Repository::open created repository.redb → detected as CDR.
         assert_eq!(RepoFormat::detect(tmp.path()), RepoFormat::Cdr);
     }
 
@@ -316,7 +316,6 @@ mod tests {
         let src = tmp.path().join("src");
         let dst = tmp.path().join("dst");
 
-        // Seed the source repo with one snapshot.
         let bytes = {
             let repo = Repository::open(&src).unwrap();
             let mut b = vec![0u8; 1024 * 1024];
@@ -330,12 +329,11 @@ mod tests {
             b
         };
 
-        let report = migrate(RepoFormat::Cdr, &src, &dst).unwrap();
+        let report = migrate(RepoFormat::Cdr, &src, &dst, None).unwrap();
         assert_eq!(report.snapshots, 1);
         assert_eq!(report.files, 1);
         assert!(dst.join("cdr.toml").is_file());
 
-        // The destination has the snapshot and restores byte-identically.
         let dest = Repository::open(&dst).unwrap();
         let list = dest.snapshots().unwrap();
         assert_eq!(list.len(), 1);
@@ -347,27 +345,38 @@ mod tests {
     }
 
     #[test]
-    fn migrate_unsupported_tools_error_clearly() {
+    fn migrate_errors_are_typed() {
         let tmp = tempfile::tempdir().unwrap();
-        // restic layout.
+        // restic layout, no passphrase → NeedsPassphrase.
         let restic = tmp.path().join("restic");
         std::fs::create_dir_all(restic.join("data")).unwrap();
         std::fs::create_dir_all(restic.join("snapshots")).unwrap();
         std::fs::write(restic.join("config"), b"x").unwrap();
-        let err = migrate(RepoFormat::Restic, &restic, &tmp.path().join("out")).unwrap_err();
+        let err = migrate(RepoFormat::Restic, &restic, &tmp.path().join("o1"), None).unwrap_err();
         assert!(matches!(
             err,
-            MigrateError::SourceUnsupported { tool: "restic", .. }
+            MigrateError::NeedsPassphrase { tool: "restic" }
         ));
 
-        // Format mismatch: ask for borg, point at a restic layout.
-        let err = migrate(RepoFormat::Borg, &restic, &tmp.path().join("out2")).unwrap_err();
+        // borg layout still unsupported.
+        let borg = tmp.path().join("borg");
+        std::fs::create_dir_all(borg.join("data")).unwrap();
+        std::fs::write(borg.join("README"), b"borg").unwrap();
+        std::fs::write(borg.join("config"), b"[repository]").unwrap();
+        let err = migrate(RepoFormat::Borg, &borg, &tmp.path().join("o2"), None).unwrap_err();
+        assert!(matches!(
+            err,
+            MigrateError::SourceUnsupported { tool: "borg", .. }
+        ));
+
+        // Format mismatch: ask for borg, point at restic.
+        let err = migrate(RepoFormat::Borg, &restic, &tmp.path().join("o3"), None).unwrap_err();
         assert!(matches!(err, MigrateError::FormatMismatch { .. }));
 
         // Nothing there.
         let empty = tmp.path().join("empty");
         std::fs::create_dir_all(&empty).unwrap();
-        let err = migrate(RepoFormat::Cdr, &empty, &tmp.path().join("out3")).unwrap_err();
+        let err = migrate(RepoFormat::Cdr, &empty, &tmp.path().join("o4"), None).unwrap_err();
         assert!(matches!(err, MigrateError::Unrecognized(_)));
     }
 }

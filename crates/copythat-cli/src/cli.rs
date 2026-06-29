@@ -146,6 +146,10 @@ pub struct MigrateArgs {
     pub src: PathBuf,
     /// Destination CDR-0 repository path (created if absent).
     pub dst: PathBuf,
+    /// Passphrase for an encrypted source repository (restic). Falls
+    /// back to the `RESTIC_PASSWORD` environment variable.
+    #[arg(long)]
+    pub password: Option<String>,
 }
 
 /// `copythat export <cdr-repo> <to-tool> <to-repo>` — Phase 50 inverse.

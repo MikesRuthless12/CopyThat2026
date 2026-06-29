@@ -36,6 +36,22 @@ serde_json = "1"
 # byte strings instead of arrays of integers.
 ciborium = "0.2"
 serde_bytes = "0.11"
+# Phase 50 importers (user-authorized relaxation of the "no new crates"
+# rule). Every crate below is ALREADY resolved in the workspace lockfile
+# via `age` / dalek, so these only declare existing in-tree crates as
+# direct deps — no deny.toml change and no new compilation. Used by the
+# restic importer: scrypt KDF + AES-256-CTR + Poly1305-AES + base64 +
+# zstd (restic repo-format v2 compression).
+aes = "0.8"
+base64 = "0.21"
+cipher = "0.4"
+ctr = "0.9"
+poly1305 = "0.8"
+scrypt = "0.11"
+zstd = "0.13"
+# RFC 3339 snapshot timestamps from restic / kopia metadata. In-tree
+# via history / sync / audit; parsing only (no clock feature).
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 thiserror = "2"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 # Pack-id generation. `uuid` is already workspace-direct from Phase 25.
@@ -61,3 +77,9 @@ path = "../../tests/smoke/phase_49_repo.rs"
 [[test]]
 name = "phase_50_portability"
 path = "../../tests/smoke/phase_50_portability.rs"
+
+# Phase 50 smoke — restic importer against a committed restic v2 fixture
+# (decrypt + parse + re-ingest; byte-identical restore). No restic binary.
+[[test]]
+name = "phase_50b_restic"
+path = "../../tests/smoke/phase_50b_restic.rs"
