@@ -24,7 +24,7 @@
 //! Validated against a real `restic 0.17.3` v2 repository fixture
 //! (`tests/fixtures/restic-repo`, passphrase `testpass`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
@@ -34,9 +34,11 @@ use aes::cipher::{BlockEncrypt, KeyInit, KeyIvInit, StreamCipher};
 use base64::Engine as _;
 use ctr::Ctr128BE;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 use super::{MigrateError, MigrateReport};
-use crate::repository::{Repository, SnapshotKind};
+use crate::chunker::Chunker;
+use crate::repository::{FileEntry, Repository, SnapshotKind};
 
 type Aes256Ctr = Ctr128BE<aes::Aes256>;
 
@@ -86,6 +88,10 @@ struct SnapshotJson {
 struct IndexJson {
     #[serde(default)]
     packs: Vec<IndexPack>,
+    /// IDs of the index files this one replaces. restic's prune/repack
+    /// rewrites the index and lists the obsolete index IDs here.
+    #[serde(default)]
+    supersedes: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -154,6 +160,15 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
+/// restic object IDs are 64-char lowercase hex (SHA-256). Validate one
+/// before using it to build a filesystem path — this rejects path
+/// traversal (`..`, slashes) and any non-ASCII byte from a malicious
+/// index (which would also panic the `[..2]` slice on a multi-byte
+/// char boundary).
+fn is_hex_id(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
 /// Decrypt one restic AEAD unit (`IV || ciphertext || MAC`), verifying
 /// the Poly1305-AES tag before returning the AES-256-CTR plaintext.
 fn restic_decrypt(key: &ResticKey, data: &[u8]) -> Result<Vec<u8>, MigrateError> {
@@ -200,21 +215,47 @@ fn decrypt_repo_file(key: &ResticKey, data: &[u8]) -> Result<Vec<u8>, MigrateErr
     }
 }
 
-/// scrypt the passphrase to the KEK, unwrap the keyfile, and return the
-/// repository master key.
+/// scrypt the passphrase against **every** key in `keys/` and return the
+/// master key from the first that unwraps. restic repositories can hold
+/// several keys (one per password added with `restic key add`), in
+/// arbitrary filesystem order, so trying only the first would reject a
+/// valid passphrase that happens to match a later key.
 fn load_master_key(repo: &Path, password: &str) -> Result<ResticKey, MigrateError> {
     let keys_dir = repo.join("keys");
-    let entry = std::fs::read_dir(&keys_dir)
-        .map_err(|e| MigrateError::Io {
-            path: keys_dir.clone(),
-            source: e,
-        })?
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .find(|p| p.is_file())
-        .ok_or_else(|| MigrateError::Format("no keys/* file in restic repo".into()))?;
-    let raw = std::fs::read(&entry).map_err(|e| MigrateError::Io {
-        path: entry.clone(),
+    let mut tried = 0u32;
+    let mut last_err: Option<MigrateError> = None;
+    for entry in std::fs::read_dir(&keys_dir).map_err(|e| MigrateError::Io {
+        path: keys_dir.clone(),
+        source: e,
+    })? {
+        let path = entry
+            .map_err(|e| MigrateError::Io {
+                path: keys_dir.clone(),
+                source: e,
+            })?
+            .path();
+        if !path.is_file() {
+            continue;
+        }
+        tried += 1;
+        match try_keyfile(&path, password) {
+            Ok(key) => return Ok(key),
+            Err(e) => last_err = Some(e),
+        }
+    }
+    if tried == 0 {
+        return Err(MigrateError::Format("no keys/* file in restic repo".into()));
+    }
+    Err(last_err
+        .unwrap_or_else(|| MigrateError::Decrypt("no restic key matched the passphrase".into())))
+}
+
+/// Try to unwrap a single restic keyfile with `password`: scrypt → KEK →
+/// decrypt the wrapped master key. A wrong passphrase fails the keyfile's
+/// Poly1305-AES MAC and returns `Decrypt`.
+fn try_keyfile(path: &Path, password: &str) -> Result<ResticKey, MigrateError> {
+    let raw = std::fs::read(path).map_err(|e| MigrateError::Io {
+        path: path.to_path_buf(),
         source: e,
     })?;
     let kf: KeyFile = serde_json::from_slice(&raw).map_err(|e| dec_err("keyfile json", e))?;
@@ -265,13 +306,21 @@ fn load_master_key(repo: &Path, password: &str) -> Result<ResticKey, MigrateErro
     })
 }
 
-/// Build `blob id → location` by decrypting every `index/*` file.
+/// Build `blob id → location` from every **current** `index/*` file.
+/// restic's prune/repack rewrites the index and lists the obsolete index
+/// IDs in `supersedes`; honoring that avoids resolving a blob to a pack
+/// that prune has already deleted (which would abort an otherwise-valid
+/// migration).
 fn load_index(repo: &Path, key: &ResticKey) -> Result<HashMap<String, BlobLoc>, MigrateError> {
     let dir = repo.join("index");
     let mut map = HashMap::new();
     if !dir.is_dir() {
         return Ok(map);
     }
+    // First pass: parse every index, keyed by its own ID (the filename),
+    // and union the set of index IDs they declare superseded.
+    let mut parsed: Vec<(String, IndexJson)> = Vec::new();
+    let mut superseded: HashSet<String> = HashSet::new();
     for e in std::fs::read_dir(&dir).map_err(|e| MigrateError::Io {
         path: dir.clone(),
         source: e,
@@ -285,12 +334,27 @@ fn load_index(repo: &Path, key: &ResticKey) -> Result<HashMap<String, BlobLoc>, 
         if !p.is_file() {
             continue;
         }
+        let own_id = p
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_string();
         let raw = std::fs::read(&p).map_err(|e| MigrateError::Io {
             path: p.clone(),
             source: e,
         })?;
         let json = decrypt_repo_file(key, &raw)?;
         let idx: IndexJson = serde_json::from_slice(&json).map_err(|e| dec_err("index json", e))?;
+        for s in &idx.supersedes {
+            superseded.insert(s.clone());
+        }
+        parsed.push((own_id, idx));
+    }
+    // Second pass: only non-superseded indexes contribute blob locations.
+    for (own_id, idx) in parsed {
+        if superseded.contains(&own_id) {
+            continue;
+        }
         for pack in idx.packs {
             for b in pack.blobs {
                 map.insert(
@@ -318,8 +382,11 @@ fn read_blob(
     let loc = index
         .get(id)
         .ok_or_else(|| MigrateError::Format(format!("blob {id} not found in index")))?;
-    if loc.pack_id.len() < 2 {
-        return Err(MigrateError::Format(format!("bad pack id {}", loc.pack_id)));
+    if !is_hex_id(&loc.pack_id) {
+        return Err(MigrateError::Format(format!(
+            "invalid restic pack id {:?} (expected 64-char lowercase hex)",
+            loc.pack_id
+        )));
     }
     let pack_path = repo.join("data").join(&loc.pack_id[..2]).join(&loc.pack_id);
     let mut f = std::fs::File::open(&pack_path).map_err(|e| MigrateError::Io {
@@ -337,43 +404,77 @@ fn read_blob(
         source: e,
     })?;
     let pt = restic_decrypt(key, &buf)?;
-    if loc.uncompressed_length.is_some() {
-        zstd::stream::decode_all(&pt[..]).map_err(|e| dec_err("blob zstd", e))
+    let plaintext = if loc.uncompressed_length.is_some() {
+        zstd::stream::decode_all(&pt[..]).map_err(|e| dec_err("blob zstd", e))?
     } else {
-        Ok(pt)
+        pt
+    };
+    // A restic blob ID is the SHA-256 of its plaintext. Verify it (as
+    // restic does on every load) so an index/pack inconsistency surfaces
+    // as an error instead of silently migrating the wrong content.
+    let digest: [u8; 32] = Sha256::digest(&plaintext).into();
+    if crate::types::hex_of(&digest) != id {
+        return Err(MigrateError::Decrypt(format!(
+            "restic blob {id} failed its SHA-256 integrity check (index/pack mismatch)"
+        )));
     }
+    Ok(plaintext)
 }
 
-/// Recursively reconstruct every file under `tree_id`, accumulating
-/// `(logical path, bytes)` into `out`.
+/// Maximum tree-recursion depth. Guards against a corrupt or malicious
+/// repo whose tree blobs form a cycle, which would otherwise overflow
+/// the stack; real filesystem trees never approach this.
+const MAX_TREE_DEPTH: u32 = 512;
+
+/// Read-only context shared across a single import.
+struct ImportCtx<'a> {
+    repo: &'a Path,
+    key: &'a ResticKey,
+    index: &'a HashMap<String, BlobLoc>,
+    dest: &'a Repository,
+    chunker: Chunker,
+}
+
+/// Recursively reconstruct every file under `tree_id`, **ingesting each
+/// file into the destination store as it is reconstructed** (so only one
+/// file is ever held in memory, never the whole snapshot) and pushing the
+/// resulting [`FileEntry`] into `out`. `skipped` counts nodes that carry
+/// no chunk content (symlinks, devices, FIFOs, empty dirs) rather than
+/// dropping them silently.
 fn walk_tree(
-    repo: &Path,
-    key: &ResticKey,
-    index: &HashMap<String, BlobLoc>,
+    ctx: &ImportCtx,
     tree_id: &str,
     prefix: &str,
-    out: &mut Vec<(String, Vec<u8>)>,
+    depth: u32,
+    out: &mut Vec<FileEntry>,
+    skipped: &mut u64,
 ) -> Result<(), MigrateError> {
-    let tree_bytes = read_blob(repo, key, index, tree_id)?;
+    if depth > MAX_TREE_DEPTH {
+        return Err(MigrateError::Format(format!(
+            "restic tree nests deeper than {MAX_TREE_DEPTH} (cycle or corruption?)"
+        )));
+    }
+    let tree_bytes = read_blob(ctx.repo, ctx.key, ctx.index, tree_id)?;
     let tree: TreeJson =
         serde_json::from_slice(&tree_bytes).map_err(|e| dec_err("tree json", e))?;
     for node in tree.nodes {
         let path = format!("{prefix}/{}", node.name);
         match node.typ.as_str() {
-            "dir" => {
-                if let Some(sub) = node.subtree.as_deref() {
-                    walk_tree(repo, key, index, sub, &path, out)?;
-                }
-            }
+            "dir" => match node.subtree.as_deref() {
+                Some(sub) => walk_tree(ctx, sub, &path, depth + 1, out, skipped)?,
+                None => *skipped += 1, // empty directory — no content to store
+            },
             "file" => {
                 let mut bytes = Vec::new();
                 for cid in node.content.iter().flatten() {
-                    bytes.extend_from_slice(&read_blob(repo, key, index, cid)?);
+                    bytes.extend_from_slice(&read_blob(ctx.repo, ctx.key, ctx.index, cid)?);
                 }
-                out.push((path, bytes));
+                let manifest =
+                    crate::manifest::chunk_into_store(ctx.dest.store(), &ctx.chunker, &bytes)?.1;
+                out.push(FileEntry { path, manifest });
             }
-            // symlinks / devices / etc. carry no chunk content — skip.
-            _ => {}
+            // symlinks / devices / FIFOs carry no chunk content.
+            _ => *skipped += 1,
         }
     }
     Ok(())
@@ -391,14 +492,20 @@ pub(super) fn import_restic(
 
     let dest = Repository::open(dst_root)?;
     super::write_cdr_descriptor(dst_root)?;
+    let ctx = ImportCtx {
+        repo,
+        key: &key,
+        index: &index,
+        dest: &dest,
+        chunker: Chunker::default(),
+    };
 
     let snaps_dir = repo.join("snapshots");
     let mut report = MigrateReport::default();
-    let entries = std::fs::read_dir(&snaps_dir).map_err(|e| MigrateError::Io {
+    for e in std::fs::read_dir(&snaps_dir).map_err(|e| MigrateError::Io {
         path: snaps_dir.clone(),
         source: e,
-    })?;
-    for e in entries {
+    })? {
         let p = e
             .map_err(|e| MigrateError::Io {
                 path: snaps_dir.clone(),
@@ -416,8 +523,8 @@ pub(super) fn import_restic(
         let snap: SnapshotJson =
             serde_json::from_slice(&json).map_err(|e| dec_err("snapshot json", e))?;
 
-        let mut files: Vec<(String, Vec<u8>)> = Vec::new();
-        walk_tree(repo, &key, &index, &snap.tree, "", &mut files)?;
+        let mut entries: Vec<FileEntry> = Vec::new();
+        walk_tree(&ctx, &snap.tree, "", 0, &mut entries, &mut report.skipped)?;
 
         let created_at_ms = chrono::DateTime::parse_from_rfc3339(snap.time.trim())
             .map(|dt| dt.timestamp_millis())
@@ -427,13 +534,10 @@ pub(super) fn import_restic(
         } else {
             format!("restic: {} ({})", snap.paths.join(", "), snap.hostname)
         };
-        let refs: Vec<(&str, &[u8])> = files
-            .iter()
-            .map(|(path, b)| (path.as_str(), b.as_slice()))
-            .collect();
-        dest.snapshot_bytes(SnapshotKind::Backup, &label, created_at_ms, &refs)?;
+        let n = entries.len() as u64;
+        dest.record(SnapshotKind::Backup, &label, created_at_ms, entries)?;
         report.snapshots += 1;
-        report.files += files.len() as u64;
+        report.files += n;
     }
     Ok(report)
 }

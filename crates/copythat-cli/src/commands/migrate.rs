@@ -2,8 +2,8 @@
 //! migration entry points.
 //!
 //! `migrate <from-tool> <src> <dst>` imports another tool's repository
-//! INTO a CDR-0 repository. Only `cdr` is implemented today; `restic` /
-//! `borg` / `kopia` print exactly what a full importer needs (see
+//! INTO a CDR-0 repository. `cdr` and `restic` are implemented; `borg` /
+//! `kopia` print exactly what a full importer still needs (see
 //! `docs/spec/CDR-0.md §11`) and exit non-zero rather than guessing —
 //! a wrong-but-successful import would corrupt the migration.
 //!
@@ -36,10 +36,19 @@ pub(crate) async fn run(
         .or_else(|| std::env::var("RESTIC_PASSWORD").ok());
     match migrate(from, &args.src, &args.dst, pw.as_deref()) {
         Ok(report) => {
+            let skipped = if report.skipped > 0 {
+                format!(
+                    " ({} non-content node(s) skipped: symlinks / devices / empty dirs)",
+                    report.skipped
+                )
+            } else {
+                String::new()
+            };
             let _ = writer.human(&format!(
-                "Migrated {} snapshot(s) / {} file(s) into the CDR-0 repository at {}",
+                "Migrated {} snapshot(s) / {} file(s){} into the CDR-0 repository at {}",
                 report.snapshots,
                 report.files,
+                skipped,
                 args.dst.display(),
             ));
             ExitCode::Success

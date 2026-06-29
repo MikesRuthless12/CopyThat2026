@@ -9,17 +9,17 @@
 //! - `repository_snapshots()` — the unified snapshot timeline
 //!   (copy / sync / version / backup), oldest first.
 //!
-//! Both return a typed `"repository-unavailable"` error string when the
-//! repository failed to open at startup (the Library tab renders its
-//! empty/unavailable state). The repository's `redb` reads are blocking,
-//! so each command hops to a `spawn_blocking` worker rather than stalling
-//! the async runtime — the same discipline the history commands use.
-
-use std::sync::Arc;
+//! Each command opens the default repository **transiently** for the
+//! duration of one read, then drops it. We deliberately do NOT cache a
+//! process-lifetime handle: redb takes an exclusive file lock, and the
+//! recovery web UI + mount features open the same default store on demand
+//! — a persistent handle would block them. An open failure (no catalog
+//! yet, or momentarily locked by another feature) surfaces as the typed
+//! `"repository-unavailable"` string the Library tab keys its empty state
+//! on. The reads are blocking, so each command hops to a `spawn_blocking`
+//! worker rather than stalling the async runtime.
 
 use serde::Serialize;
-
-use crate::state::AppState;
 
 /// Wire shape for [`copythat_chunk::RepoStats`] plus the derived
 /// `saved_ratio` (so the front end doesn't recompute it).
@@ -58,27 +58,24 @@ pub struct RepoSnapshotDto {
     pub total_size: u64,
 }
 
-/// Clone the shared `Repository` handle, or surface the typed
-/// unavailable error the Library tab keys its empty state on.
-fn require_repository(
-    state: &tauri::State<'_, AppState>,
-) -> Result<Arc<copythat_chunk::Repository>, String> {
-    state
-        .inner()
-        .repository
-        .clone()
-        .ok_or_else(|| "repository-unavailable".to_string())
+/// Open the default repository transiently, mapping any open failure to
+/// the typed `"repository-unavailable"` string (so the Library tab shows
+/// its empty/unavailable state rather than a raw error). Must be called
+/// from inside `spawn_blocking` — the open + reads are blocking.
+fn open_repository() -> Result<copythat_chunk::Repository, String> {
+    copythat_chunk::Repository::open_default().map_err(|_| "repository-unavailable".to_string())
 }
 
 /// `repository_stats()` — the dedup overview for the Library header
 /// "hero" readout.
 #[tauri::command]
-pub async fn repository_stats(state: tauri::State<'_, AppState>) -> Result<RepoStatsDto, String> {
-    let repo = require_repository(&state)?;
-    let stats = tokio::task::spawn_blocking(move || repo.stats())
-        .await
-        .map_err(|e| format!("repository stats task: {e}"))?
-        .map_err(|e| format!("repository stats: {e}"))?;
+pub async fn repository_stats() -> Result<RepoStatsDto, String> {
+    let stats = tokio::task::spawn_blocking(|| {
+        let repo = open_repository()?;
+        repo.stats().map_err(|e| format!("repository stats: {e}"))
+    })
+    .await
+    .map_err(|e| format!("repository stats task: {e}"))??;
     Ok(RepoStatsDto {
         stored_bytes: stats.stored_bytes,
         unique_bytes: stats.unique_bytes,
@@ -92,14 +89,14 @@ pub async fn repository_stats(state: tauri::State<'_, AppState>) -> Result<RepoS
 /// `repository_snapshots()` — the unified snapshot timeline, oldest
 /// first. Reads the lightweight summaries index (no chunk manifests).
 #[tauri::command]
-pub async fn repository_snapshots(
-    state: tauri::State<'_, AppState>,
-) -> Result<Vec<RepoSnapshotDto>, String> {
-    let repo = require_repository(&state)?;
-    let snaps = tokio::task::spawn_blocking(move || repo.snapshots())
-        .await
-        .map_err(|e| format!("repository snapshots task: {e}"))?
-        .map_err(|e| format!("repository snapshots: {e}"))?;
+pub async fn repository_snapshots() -> Result<Vec<RepoSnapshotDto>, String> {
+    let snaps = tokio::task::spawn_blocking(|| {
+        let repo = open_repository()?;
+        repo.snapshots()
+            .map_err(|e| format!("repository snapshots: {e}"))
+    })
+    .await
+    .map_err(|e| format!("repository snapshots task: {e}"))??;
     Ok(snaps
         .into_iter()
         .map(|s| RepoSnapshotDto {

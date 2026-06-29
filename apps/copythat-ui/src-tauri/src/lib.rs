@@ -331,18 +331,12 @@ pub fn run() {
         }
     };
 
-    // Phase 49 — open the unified chunk repository at the default
-    // chunk-store path. Non-fatal: on failure the Library tab renders
-    // its "unavailable" state. Safe to open here — the app holds no
-    // persistent chunk-store handle (recovery + mount open transient
-    // stores on demand), so there is no redb lock contention at boot.
-    let app_state = match copythat_chunk::Repository::open_default() {
-        Ok(r) => app_state.with_repository(Some(std::sync::Arc::new(r))),
-        Err(e) => {
-            eprintln!("copythat: repository open failed: {e}");
-            app_state
-        }
-    };
+    // Phase 49 — the Library tab's `repository_*` commands open the
+    // unified chunk repository transiently per call (see
+    // `repository_commands.rs`). We deliberately do NOT hold a
+    // process-lifetime handle here: redb takes an exclusive file lock,
+    // and the recovery web UI + mount features open the same default
+    // store on demand — a persistent handle would block them.
 
     // Post-Phase-12 — system-wide paste hotkey. The plugin registers
     // no combos at build time; `global_paste::register_paste_shortcut`

@@ -167,6 +167,10 @@ pub struct MigrateReport {
     pub snapshots: u64,
     /// File entries copied across all snapshots.
     pub files: u64,
+    /// Non-content nodes (symlinks, devices, FIFOs, empty dirs) that
+    /// carry no chunk data — counted, not silently dropped, so the
+    /// caller can surface "N skipped" rather than reporting clean.
+    pub skipped: u64,
 }
 
 /// Write the CDR-0 repository descriptor (`cdr.toml`, spec §9) into
@@ -231,16 +235,30 @@ fn migrate_cdr_to_cdr(
     src: &Path,
     dst_root: &Path,
 ) -> std::result::Result<MigrateReport, MigrateError> {
+    // Refuse migrating a repository onto itself — opening the same redb
+    // files twice would otherwise fail with an opaque "Database already
+    // open".
+    if let (Ok(s), Ok(d)) = (src.canonicalize(), dst_root.canonicalize()) {
+        if s == d {
+            return Err(MigrateError::Format(
+                "source and destination are the same repository".into(),
+            ));
+        }
+    }
+
     let source = Repository::open(src)?;
     let dest = Repository::open(dst_root)?;
     write_cdr_descriptor(dst_root)?;
+    let chunker = crate::chunker::Chunker::default();
 
     let mut report = MigrateReport::default();
     for summary in source.snapshots()? {
         let Some(snap) = source.snapshot(SnapshotId(summary.id))? else {
             continue;
         };
-        let mut materialised: Vec<(String, Vec<u8>)> = Vec::with_capacity(snap.files.len());
+        // Re-ingest each file independently so peak memory is one file,
+        // not the whole snapshot.
+        let mut entries: Vec<crate::repository::FileEntry> = Vec::with_capacity(snap.files.len());
         for entry in &snap.files {
             let mut bytes = Vec::with_capacity(entry.manifest.size as usize);
             for chunk in &entry.manifest.chunks {
@@ -251,14 +269,14 @@ fn migrate_cdr_to_cdr(
                 })?;
                 bytes.extend_from_slice(&data);
             }
-            materialised.push((entry.path.clone(), bytes));
+            let manifest = crate::manifest::chunk_into_store(dest.store(), &chunker, &bytes)?.1;
+            entries.push(crate::repository::FileEntry {
+                path: entry.path.clone(),
+                manifest,
+            });
             report.files += 1;
         }
-        let refs: Vec<(&str, &[u8])> = materialised
-            .iter()
-            .map(|(p, b)| (p.as_str(), b.as_slice()))
-            .collect();
-        dest.snapshot_bytes(snap.kind, &snap.label, snap.created_at_ms, &refs)?;
+        dest.record(snap.kind, &snap.label, snap.created_at_ms, entries)?;
         report.snapshots += 1;
     }
     Ok(report)

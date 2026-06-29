@@ -80,11 +80,6 @@ pub struct AppState {
     /// the runner skips checkpointing in that case but otherwise
     /// works unchanged.
     pub journal: Option<Journal>,
-    /// Phase 49 — the unified content-addressed chunk repository
-    /// (snapshot timeline + dedup stats). `None` when `index.redb`
-    /// could not be opened; the Library tab renders its "unavailable"
-    /// empty state in that case.
-    pub repository: Option<Arc<copythat_chunk::Repository>>,
     /// Phase 20 — unfinished jobs detected at app start. The
     /// frontend's `ResumePromptModal` reads this once via
     /// `pending_resumes()`, then this slot stays as the canonical
@@ -237,7 +232,6 @@ impl AppState {
             clipboard_watcher: Arc::new(Mutex::new(None)),
             scans: ScanRegistry::new(),
             journal: None,
-            repository: None,
             startup_unfinished: Arc::new(Mutex::new(Vec::new())),
             // Default-unlimited Shape; the lib.rs startup hook calls
             // `apply_network_settings_to_shape` to honour the persisted
@@ -314,14 +308,6 @@ impl AppState {
     pub fn with_journal(mut self, journal: Journal, unfinished: Vec<UnfinishedJob>) -> Self {
         self.journal = Some(journal);
         self.startup_unfinished = Arc::new(Mutex::new(unfinished));
-        self
-    }
-
-    /// Phase 49 — attach an opened [`copythat_chunk::Repository`] handle
-    /// (or `None` if it failed to open). Builder-shaped to chain after
-    /// `new_with`, mirroring [`Self::with_journal`].
-    pub fn with_repository(mut self, repository: Option<Arc<copythat_chunk::Repository>>) -> Self {
-        self.repository = repository;
         self
     }
 

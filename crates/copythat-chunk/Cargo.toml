@@ -48,6 +48,7 @@ cipher = "0.4"
 ctr = "0.9"
 poly1305 = "0.8"
 scrypt = "0.11"
+sha2 = "0.10"
 zstd = "0.13"
 # RFC 3339 snapshot timestamps from restic / kopia metadata. In-tree
 # via history / sync / audit; parsing only (no clock feature).

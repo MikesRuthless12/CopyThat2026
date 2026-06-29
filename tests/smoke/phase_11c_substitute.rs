@@ -306,6 +306,17 @@ fn canned_args(key: &str) -> HashMap<&'static str, String> {
             m.insert("cause", "Source I/O".to_string());
             m.insert("rate", "184 MB/s".to_string());
         }
+        // Phase 49 — Library drawer dedup-hero + snapshot counts.
+        "library-hero-empty" => {
+            m.insert("chunks", "31 256".to_string());
+        }
+        "library-hero-savings" => {
+            m.insert("effective", "2.1 GiB".to_string());
+            m.insert("pct", "63".to_string());
+        }
+        "library-snapshot-files" => {
+            m.insert("n", "248".to_string());
+        }
         _ => {}
     }
     m
