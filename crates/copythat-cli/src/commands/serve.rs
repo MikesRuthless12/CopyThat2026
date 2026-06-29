@@ -64,6 +64,15 @@ pub(crate) async fn run(
                 "CopyThat serving [{}]{ro} on http://{addr}  (metrics: http://{addr}/metrics)",
                 protocols.join(", ")
             ));
+            // Loud warning if exposed to the network with no auth.
+            if copythat_server::exposes_unauthenticated(&addr, &handle.config().auth) {
+                let access = if readonly { "read-only" } else { "read/write" };
+                eprintln!(
+                    "copythat: WARNING — serving on {addr} with NO authentication; any host \
+                     that can reach this address has {access} access to the served directory. \
+                     Pass --token or --user/--password to require auth."
+                );
+            }
             let _ = writer.human("Press Ctrl-C to stop.");
             if tokio::signal::ctrl_c().await.is_err() {
                 eprintln!("copythat: failed to install Ctrl-C handler; shutting down");

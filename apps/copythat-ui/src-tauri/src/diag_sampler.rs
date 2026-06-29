@@ -22,7 +22,7 @@ use copythat_power::ThermalProbe;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use crate::runner::{build_globals_for_state, first_running_job_paths};
+use crate::runner::{build_globals_for_state, sole_running_job_paths};
 use crate::state::AppState;
 
 /// Tauri event carrying one diagnostics sample. The front-end listens to
@@ -75,6 +75,12 @@ pub fn spawn_diag_sampler(
         let mut peak_rate: f64 = 0.0;
         loop {
             tokio::time::sleep(DIAG_INTERVAL).await;
+            // Keep the disk-busy rate-counter baseline fresh even while idle,
+            // so the first sample of a new copy differences io_ticks / PDH
+            // `% Disk Time` over ~1 s rather than the whole idle interval.
+            if let Some(ds) = disk_sampler.as_mut() {
+                ds.tick();
+            }
             let g = build_globals_for_state(&state);
             if g.active_jobs == 0 {
                 // No copy running — reset the throughput baseline so the
@@ -95,21 +101,17 @@ pub fn spawn_diag_sampler(
             // even when the power *policy* is disabled — the diagnostic is
             // independent of whether we act on it.
             let throttling = thermal.is_throttling().0;
-            // Per-volume disk-busy %, attributed to the running job's
-            // source / destination volumes. UNC / network paths return
-            // `None` (the classifier treats those via its network signal).
-            let disks = match disk_sampler.as_mut() {
-                Some(ds) => {
-                    ds.tick();
-                    match first_running_job_paths(&state) {
-                        Some((src, dst)) => DiskBusy {
-                            src_pct: ds.busy_pct_for_path(&src),
-                            dst_pct: dst.as_deref().and_then(|d| ds.busy_pct_for_path(d)),
-                        },
-                        None => DiskBusy::default(),
-                    }
-                }
-                None => DiskBusy::default(),
+            // Per-volume disk-busy %, attributed only when exactly ONE job is
+            // running — otherwise the global throughput and a single job's
+            // disk readings would refer to different work and mislabel the
+            // bottleneck. UNC / network paths return `None` (handled via the
+            // network signal).
+            let disks = match (disk_sampler.as_ref(), sole_running_job_paths(&state)) {
+                (Some(ds), Some((src, dst))) => DiskBusy {
+                    src_pct: ds.busy_pct_for_path(&src),
+                    dst_pct: dst.as_deref().and_then(|d| ds.busy_pct_for_path(d)),
+                },
+                _ => DiskBusy::default(),
             };
             let snapshot = sampler.snapshot(throughput, throttling, disks);
             let bottleneck = classify_snapshot(&snapshot, peak_rate);

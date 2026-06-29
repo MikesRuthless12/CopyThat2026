@@ -92,21 +92,34 @@ fn prometheus_exposition_is_well_formed() {
     }
 }
 
-/// An SFTP-only config has no HTTP-family protocol to serve, so `serve`
-/// reports the SFTP listener as not-yet-implemented (its SSH transport
-/// lands in a later increment).
+/// SFTP (own SSH transport) and S3 (a distinct REST/XML API) aren't served
+/// yet, so `serve` reports them as not-yet-implemented rather than silently
+/// downgrading an advertised protocol to the WebDAV subset.
 #[tokio::test]
-async fn sftp_only_is_deferred() {
-    let cfg = ServerConfig {
+async fn unsupported_protocols_are_deferred() {
+    for proto in [Protocol::Sftp, Protocol::S3] {
+        let cfg = ServerConfig {
+            bind_addr: "127.0.0.1:0".into(),
+            protocols: vec![proto],
+            ..Default::default()
+        };
+        match serve(cfg).await {
+            Err(ServerError::NotImplemented { protocol }) => assert_eq!(protocol, proto),
+            other => panic!("expected NotImplemented for {proto}, got {other:?}"),
+        }
+    }
+    // A mix advertising an unsupported protocol is rejected, not silently
+    // downgraded to the served subset.
+    let mixed = ServerConfig {
         bind_addr: "127.0.0.1:0".into(),
-        protocols: vec![Protocol::Sftp],
+        protocols: vec![Protocol::WebDav, Protocol::S3],
         ..Default::default()
     };
-    match serve(cfg).await {
+    match serve(mixed).await {
         Err(ServerError::NotImplemented {
-            protocol: Protocol::Sftp,
+            protocol: Protocol::S3,
         }) => {}
-        other => panic!("expected SFTP NotImplemented, got {other:?}"),
+        other => panic!("expected S3 NotImplemented for mixed config, got {other:?}"),
     }
 }
 

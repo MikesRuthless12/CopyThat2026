@@ -50,11 +50,14 @@ dav-server = { version = "0.11", default-features = false, features = [
     "localfs",
     "hyper",
 ] }
-# Bearer / basic auth tokens kept in a `SecretString` so they don't leak
-# through `Debug`, matching the Phase 39 recovery server.
-secrecy = "0.10"
 # HTTP Basic credential decode. Already resolved in the workspace; MIT.
 base64 = "0.22"
+# Constant-time credential compare — the workspace's shared primitive
+# (also used by copythat-audit / -recovery / -mobile). Already in-tree.
+subtle = "2"
+# `http_body::Body` for the byte-counting request-body wrapper; already
+# resolved transitively via hyper/axum. MIT.
+http-body = "1"
 # Webhook delivery (Slack / Discord / ntfy / Pushover are HTTPS endpoints).
 # rustls-tls reuses the workspace's existing rustls stack — no OpenSSL, no
 # new TLS backend. Already resolved in-tree (Phase 32/42 cloud + mobile).

@@ -379,11 +379,16 @@ mod imp {
             let (Some(mount_point), Some(source)) = (fields.get(4), fields.get(dash + 2)) else {
                 continue;
             };
-            if target.starts_with(mount_point) {
+            // mountinfo octal-escapes space/tab/newline/backslash; decode
+            // before path-matching so a mount point containing a space still
+            // matches the canonicalized target.
+            let mount_point = unescape_mountinfo(mount_point);
+            if target.starts_with(&mount_point) {
                 let len = mount_point.len();
                 if best.as_ref().is_none_or(|(b, _)| len > *b) {
                     // /dev/sda1 -> sda1
-                    let dev = source.rsplit('/').next().unwrap_or(source).to_string();
+                    let source = unescape_mountinfo(source);
+                    let dev = source.rsplit('/').next().unwrap_or(&source).to_string();
                     best = Some((len, dev));
                 }
             }
@@ -391,19 +396,84 @@ mod imp {
         best.map(|(_, dev)| dev)
     }
 
-    /// "nvme0n1p2" -> "nvme0n1"; "sda1" -> "sda".
-    fn whole_disk(dev: &str) -> String {
-        if dev.starts_with("nvme") {
-            // Strip a trailing "pN" partition suffix.
-            if let Some(idx) = dev.rfind('p') {
-                if dev[idx + 1..].chars().all(|c| c.is_ascii_digit()) {
-                    return dev[..idx].to_string();
+    /// Decode `/proc/self/mountinfo` octal escapes (`\040` space, `\011`
+    /// tab, `\012` newline, `\134` backslash) back to literal bytes. The
+    /// escaped characters are all ASCII, so surrounding UTF-8 is preserved.
+    fn unescape_mountinfo(s: &str) -> String {
+        if !s.contains('\\') {
+            return s.to_string();
+        }
+        let bytes = s.as_bytes();
+        let mut out = Vec::with_capacity(bytes.len());
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'\\'
+                && i + 4 <= bytes.len()
+                && bytes[i + 1..i + 4]
+                    .iter()
+                    .all(|b| (b'0'..=b'7').contains(b))
+            {
+                if let Some(b) = std::str::from_utf8(&bytes[i + 1..i + 4])
+                    .ok()
+                    .and_then(|o| u8::from_str_radix(o, 8).ok())
+                {
+                    out.push(b);
+                    i += 4;
+                    continue;
                 }
             }
-            dev.to_string()
-        } else {
-            dev.trim_end_matches(|c: char| c.is_ascii_digit())
-                .to_string()
+            out.push(bytes[i]);
+            i += 1;
+        }
+        String::from_utf8(out).unwrap_or_else(|_| s.to_string())
+    }
+
+    /// Whole-disk name for a partition: "nvme0n1p2" / "mmcblk0p1" -> base;
+    /// "sda1" -> "sda". Idempotent on whole-disk names ("nvme0n1" stays
+    /// "nvme0n1", "sda" stays "sda").
+    fn whole_disk(dev: &str) -> String {
+        // Device classes whose base name ends in a digit use a `pN` partition
+        // suffix (nvme0n1 -> nvme0n1p2, mmcblk0 -> mmcblk0p1); the rest append
+        // the partition number directly (sda -> sda1). For the former, strip
+        // only a real `pN` (base ends in a digit, so the `p` in "loop0" is not
+        // mistaken for a separator) and otherwise return the name unchanged —
+        // never trimming the base digit.
+        const P_SEP_CLASSES: &[&str] = &["nvme", "mmcblk", "loop", "nbd", "md", "dm-"];
+        if P_SEP_CLASSES.iter().any(|c| dev.starts_with(c)) {
+            if let Some(idx) = dev.rfind('p') {
+                let (base, suffix) = dev.split_at(idx);
+                let part = &suffix[1..];
+                if !part.is_empty()
+                    && part.bytes().all(|b| b.is_ascii_digit())
+                    && base.bytes().next_back().is_some_and(|b| b.is_ascii_digit())
+                {
+                    return base.to_string();
+                }
+            }
+            return dev.to_string();
+        }
+        dev.trim_end_matches(|c: char| c.is_ascii_digit())
+            .to_string()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{unescape_mountinfo, whole_disk};
+
+        #[test]
+        fn whole_disk_handles_pn_and_plain_partitions() {
+            assert_eq!(whole_disk("nvme0n1p2"), "nvme0n1");
+            assert_eq!(whole_disk("mmcblk0p1"), "mmcblk0");
+            assert_eq!(whole_disk("sda1"), "sda");
+            assert_eq!(whole_disk("sda"), "sda");
+            assert_eq!(whole_disk("nvme0n1"), "nvme0n1");
+        }
+
+        #[test]
+        fn unescape_decodes_octal() {
+            assert_eq!(unescape_mountinfo("/mnt/My\\040Disk"), "/mnt/My Disk");
+            assert_eq!(unescape_mountinfo("/home/user"), "/home/user");
+            assert_eq!(unescape_mountinfo("/a\\134b"), "/a\\b");
         }
     }
 }

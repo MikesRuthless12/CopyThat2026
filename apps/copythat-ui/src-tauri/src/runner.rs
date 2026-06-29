@@ -1161,17 +1161,23 @@ pub fn build_globals_for_state(state: &AppState) -> GlobalsDto {
     build_globals_from_jobs(&jobs)
 }
 
-/// Source + destination of the first running job across all queues, for
-/// the Phase 47 diagnostics sampler's per-volume disk attribution.
-/// `None` when nothing is running.
-pub fn first_running_job_paths(state: &AppState) -> Option<(PathBuf, Option<PathBuf>)> {
+/// Source + destination of the *sole* running job across all queues, for
+/// the Phase 47 diagnostics sampler's per-volume disk attribution. Returns
+/// `None` unless exactly one job is running — with several concurrent
+/// copies, per-volume disk readings can't be correlated against the global
+/// throughput, so the sampler leaves the disk fields unset instead.
+pub fn sole_running_job_paths(state: &AppState) -> Option<(PathBuf, Option<PathBuf>)> {
     let mut jobs = state.queue.snapshot();
     for q in state.queues.queues() {
         jobs.extend(q.snapshot());
     }
-    jobs.into_iter()
-        .find(|j| j.state == JobState::Running)
-        .map(|j| (j.src, j.dst))
+    let mut running = jobs.into_iter().filter(|j| j.state == JobState::Running);
+    let first = running.next()?;
+    // More than one running job → ambiguous attribution.
+    if running.next().is_some() {
+        return None;
+    }
+    Some((first.src, first.dst))
 }
 
 fn build_globals_from_jobs(jobs: &[Job]) -> GlobalsDto {

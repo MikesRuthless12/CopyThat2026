@@ -55,10 +55,12 @@ impl Protocol {
         }
     }
 
-    /// Whether this protocol is served over the shared axum/hyper HTTP
-    /// listener (vs. its own transport, like SFTP's SSH channel).
+    /// Whether this protocol is served today over the shared axum/hyper
+    /// listener. WebDAV and plain HTTP map onto the same file handler; S3
+    /// (a distinct REST/XML API) and SFTP (its own SSH transport) are not
+    /// yet implemented and are rejected by [`serve`].
     pub fn is_http_family(self) -> bool {
-        matches!(self, Self::WebDav | Self::Http | Self::S3)
+        matches!(self, Self::WebDav | Self::Http)
     }
 }
 
@@ -71,7 +73,7 @@ impl std::fmt::Display for Protocol {
 /// How the server authenticates clients. mTLS is intentionally omitted —
 /// the loopback / homelab deployment terminates TLS at a reverse proxy;
 /// the server itself speaks plaintext to that proxy or to localhost.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum AuthMode {
     /// Open access on the bind address (loopback-only by default).
@@ -81,6 +83,22 @@ pub enum AuthMode {
     Bearer { token: String },
     /// HTTP Basic — `Authorization: Basic base64(user:password)`.
     Basic { user: String, password: String },
+}
+
+// Manual `Debug` that redacts the secret material, so it never leaks
+// through `ServerConfig` / `ServerHandle`'s derived `Debug` (a stray
+// `tracing::debug!(?config)` or a panic backtrace). The username is not a
+// secret; the token / password are.
+impl std::fmt::Debug for AuthMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => f.write_str("None"),
+            Self::Bearer { .. } => f.write_str(r#"Bearer { token: "<redacted>" }"#),
+            Self::Basic { user, .. } => {
+                write!(f, r#"Basic {{ user: {user:?}, password: "<redacted>" }}"#)
+            }
+        }
+    }
 }
 
 /// Server configuration.
@@ -196,6 +214,14 @@ impl ServerError {
     }
 }
 
+/// Whether a server bound to `addr` with `auth` exposes the served
+/// directory to the network with no authentication — a non-loopback bind
+/// plus [`AuthMode::None`]. Used to emit a startup security warning; shared
+/// so the CLI and the library agree on the exact condition.
+pub fn exposes_unauthenticated(addr: &SocketAddr, auth: &AuthMode) -> bool {
+    !addr.ip().is_loopback() && matches!(auth, AuthMode::None)
+}
+
 /// Start the server.
 ///
 /// Binds the HTTP listener on [`ServerConfig::bind_addr`] (a port-in-use
@@ -212,9 +238,9 @@ pub async fn serve(config: ServerConfig) -> Result<ServerHandle, ServerError> {
     if config.protocols.is_empty() {
         return Err(ServerError::NoProtocols);
     }
-    if !config.protocols.iter().any(|p| p.is_http_family()) {
-        // The only configured protocols are non-HTTP (SFTP) — not wired yet.
-        let protocol = config.protocols[0];
+    // S3 (a distinct REST/XML API) and SFTP (its own SSH transport) aren't
+    // served yet — reject rather than silently ignore an advertised protocol.
+    if let Some(&protocol) = config.protocols.iter().find(|p| !p.is_http_family()) {
         return Err(ServerError::NotImplemented { protocol });
     }
 
@@ -233,6 +259,24 @@ pub async fn serve(config: ServerConfig) -> Result<ServerHandle, ServerError> {
         addr: config.bind_addr.clone(),
         message: e.to_string(),
     })?;
+
+    // Security advisory: a non-loopback bind with no authentication exposes
+    // the served root to every host that can reach this address (read/write
+    // unless `readonly`). Loud-warn rather than refuse — a trusted LAN or a
+    // reverse proxy terminating auth in front is a legitimate deployment.
+    if exposes_unauthenticated(&local_addr, &config.auth) {
+        let access = if config.readonly {
+            "read-only"
+        } else {
+            "read/write"
+        };
+        tracing::warn!(
+            %local_addr,
+            "serving with NO authentication on a non-loopback address: any host that \
+             can reach it has {access} access to the served directory — set bearer or \
+             basic auth, or bind a loopback address"
+        );
+    }
 
     let metrics = Arc::new(MetricsRegistry::default());
     let router = http::build_router(&config, metrics.clone());
@@ -404,5 +448,46 @@ impl Metrics {
             self.active_jobs
         ));
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unauthenticated_exposure_needs_nonloopback_and_no_auth() {
+        let loopback: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let any: SocketAddr = "0.0.0.0:8080".parse().unwrap();
+        let lan: SocketAddr = "192.168.1.10:8080".parse().unwrap();
+        let bearer = AuthMode::Bearer { token: "t".into() };
+
+        // No auth + reachable from the network → exposed.
+        assert!(exposes_unauthenticated(&any, &AuthMode::None));
+        assert!(exposes_unauthenticated(&lan, &AuthMode::None));
+        // Loopback is safe even with no auth.
+        assert!(!exposes_unauthenticated(&loopback, &AuthMode::None));
+        // Non-loopback WITH auth is fine.
+        assert!(!exposes_unauthenticated(&any, &bearer));
+        assert!(!exposes_unauthenticated(&lan, &bearer));
+    }
+
+    #[test]
+    fn metrics_registry_counts_writes() {
+        let m = MetricsRegistry::default();
+        m.record_copy(100);
+        m.record_copy(50);
+        m.record_error();
+        m.inc_active();
+        m.inc_active();
+        m.dec_active();
+        m.dec_active();
+        m.dec_active(); // saturating — must not underflow
+        let snap = m.snapshot();
+        assert_eq!(snap.jobs_total, 2);
+        assert_eq!(snap.files_copied_total, 2);
+        assert_eq!(snap.bytes_copied_total, 150);
+        assert_eq!(snap.errors_total, 1);
+        assert_eq!(snap.active_jobs, 0);
     }
 }

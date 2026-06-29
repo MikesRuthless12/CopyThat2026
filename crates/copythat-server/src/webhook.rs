@@ -58,12 +58,19 @@ pub async fn send_webhook(
     url: &str,
     payload: &serde_json::Value,
 ) -> Result<(), ServerError> {
-    let resp = client
-        .post(url)
-        .json(payload)
-        .send()
-        .await
-        .map_err(|e| ServerError::Webhook(e.to_string()))?;
+    let resp = client.post(url).json(payload).send().await.map_err(|e| {
+        // Never surface `e.to_string()`: reqwest embeds the full URL, and
+        // the webhook URL *is* the secret (the token lives in its path).
+        // Report only the host + error category.
+        let kind = if e.is_timeout() {
+            "timed out"
+        } else if e.is_connect() {
+            "connection failed"
+        } else {
+            "request failed"
+        };
+        ServerError::Webhook(format!("{} {kind}", url_host(url)))
+    })?;
     if resp.status().is_success() {
         Ok(())
     } else {
