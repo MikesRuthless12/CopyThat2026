@@ -123,12 +123,24 @@ workloads.
 
 ### `copythat` CLI (Phase 36)
 
-- **`copythat <SUBCOMMAND>`** — a real command-line interface suitable for CI/CD pipelines, automation scripts, and headless servers. Top-level commands: `copy`, `move`, `sync`, `shred`, `verify`, `history`, `stack`, `remote`, `mount`, `audit`, `plan`, `apply`, `version`, `config`, and `completions`.
+- **`copythat <SUBCOMMAND>`** — a real command-line interface suitable for CI/CD pipelines, automation scripts, and headless servers. Top-level commands: `copy`, `move`, `sync`, `shred`, `verify`, `history`, `stack`, `remote`, `mount`, `audit`, `plan`, `apply`, `version`, `config`, `serve` (Phase 48 — headless WebDAV/HTTP server), and `completions`.
 - **Stable JSON-Lines output** via `--json` — one tagged JSON object per line on `stdout` with twelve canonical event kinds (`job_started` / `job_progress` / `job_completed` / `job_failed` / `plan_action` / `plan_summary` / `version` / `config_value` / `verify_ok` / `verify_failed` / `info` / `error`). Every line carries a UTC `ts` field, so `jq -r 'select(.kind=="job_progress")' < log.ndjson` pipes work out of the box.
 - **Nine documented exit codes** — `0` success, `1` generic error, `2` pending actions (plan), `3` collisions unresolved, `4` verify failed, `5` network unreachable, `6` permission denied, `7` disk full, `8` user canceled, `9` config invalid. Surfaced as a `#[repr(u8)]` enum so the numeric values cannot drift between releases.
 - **Declarative TOML jobspec** drives `plan` (no-mutation; reports the action list and exits 2 with pending) and `apply` (runs the same plan; idempotent — re-runs on a finished tree exit 0 with zero new actions). Spec layout: `[job] kind / source / destination / verify / shape / preserve / collisions`, plus `[retry]` and an optional `[schedule]`.
 - **Shell completions** for bash / zsh / fish / pwsh / elvish via `copythat completions <SHELL>`. Redirect `stdout` to the shell's per-user completion location; the CLI itself never writes files.
 - **Stub commands for cross-cutting features** (sync / shred / stack / remote / mount / audit) accept the same flag surface the GUI uses so scripts written today don't break when the wiring lands in a follow-up phase. Each stub exits `1` and emits a clearly-labelled `cli-info-stub-deferred` JSON event.
+
+### "Why is this slow?" diagnostics (Phase 47)
+
+- **Live bottleneck badge** in the header while a copy runs: a 1 Hz sampler classifies the dominant limiter — source disk, destination disk, network, antivirus, CPU, or thermal throttling — and pins a cause emoji next to a 60-sample throughput sparkline, with a localized tooltip ("Bottlenecked by Destination I/O · 184 MB/s"). It surfaces *why* a transfer dipped, not just *that* it did. The classifier only attributes a cause when the copy is actually below its expected rate.
+- **Real per-OS signals**: per-volume disk-busy % (Windows PDH `\LogicalDisk(*)\% Disk Time`; Linux `/proc/diskstats` `io_ticks` attributed to the backing device via `/proc/self/mountinfo`; macOS deferred), overall CPU via `sysinfo`, and the live Phase 31 thermal-throttle probe — attributed to the running job's source / destination volumes. The bottleneck cause names are localized across all 18 locales.
+
+### Server mode + observability (Phase 48)
+
+- **`copythat serve`** runs CopyThat headless as a **WebDAV** (plus plain-HTTP / S3-style) file server over a directory: `copythat serve --webdav --bind 127.0.0.1:8080 --root /data --token s3cr3t`. Backed by `dav-server`'s local filesystem, with `--readonly` (write methods → `403` before touching disk) and optional **bearer** or **HTTP Basic** auth (constant-time credential compare; `/metrics` stays open for scrapers).
+- **Prometheus `/metrics`** endpoint exposes `copythat_jobs_total`, `copythat_files_copied_total`, `copythat_bytes_copied_total`, `copythat_errors_total`, and a `copythat_active_jobs` gauge in text-exposition format; writes increment the counters live.
+- **Webhook notifications** to Slack / Discord / ntfy.sh / Pushover — `WebhookSink::deliver` formats a job notification into each service's JSON shape and POSTs it over rustls TLS (Pushover token + user injected from config).
+- SFTP transport, full S3 (sigv4 + bucket listing), OpenTelemetry export, and a Settings → Server GUI panel are scoped follow-ups; the CLI + WebDAV / HTTP / `/metrics` / webhook surface is functional and tested on Windows and Linux today.
 
 ### SMB compression + cloud-VM offload helper (Phase 40)
 
