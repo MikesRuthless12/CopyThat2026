@@ -55,6 +55,13 @@ dav-server = { version = "0.11", default-features = false, features = [
 secrecy = "0.10"
 # HTTP Basic credential decode. Already resolved in the workspace; MIT.
 base64 = "0.22"
+# Webhook delivery (Slack / Discord / ntfy / Pushover are HTTPS endpoints).
+# rustls-tls reuses the workspace's existing rustls stack — no OpenSSL, no
+# new TLS backend. Already resolved in-tree (Phase 32/42 cloud + mobile).
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "json",
+] }
 
 [dev-dependencies]
 # Smoke round-trips the public types through JSON.

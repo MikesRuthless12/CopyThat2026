@@ -30,6 +30,9 @@ use thiserror::Error;
 use tokio::sync::oneshot;
 
 mod http;
+pub mod webhook;
+
+pub use webhook::{PushoverCreds, WebhookSink, send_webhook};
 
 /// Protocols the server can expose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
