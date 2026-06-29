@@ -220,3 +220,162 @@ pub struct NoopDiagSink;
 impl DiagSink for NoopDiagSink {
     fn on_sample(&self, _sample: &PhaseSample, _classification: Bottleneck) {}
 }
+
+/// A point-in-time snapshot of system-resource pressure during a copy —
+/// the live-telemetry counterpart to [`PhaseSample`]'s per-window copy
+/// timing. Where `PhaseSample` records where *this copy's* time went,
+/// `DiagSnapshot` records what the *whole system* is doing, so a stall can
+/// be attributed to an external cause (a saturated disk, an antivirus
+/// sweep, a pegged CPU, a slow network leg) the copy loop's own timing
+/// can't see.
+///
+/// DEFERRED (next increment): the per-OS sampling that POPULATES this —
+/// Windows WMI `Win32_PerfRawData_PerfDisk_*` / `MSFT_AVProvider`, Linux
+/// `/proc/diskstats` + `/sys/class/net`, macOS `iostat`/`netstat`, with
+/// `sysinfo` for the cross-platform CPU/disk parts — lands later. This
+/// ships the stable type + classifier first, the same scaffold-first
+/// pattern [`PhaseSample`]/[`classify`] used.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct DiagSnapshot {
+    /// Instantaneous copy throughput, bytes/second.
+    pub instant_throughput: f64,
+    /// Source-volume busy percent (`0.0..=100.0`); `None` if unsampled.
+    pub src_disk_busy_pct: Option<f32>,
+    /// Destination-volume busy percent (`0.0..=100.0`); `None` if unsampled.
+    pub dst_disk_busy_pct: Option<f32>,
+    /// Round-trip latency to a network destination, ms; `None` for local.
+    pub network_rtt_ms: Option<f32>,
+    /// Network packet-loss percent (`0.0..=100.0`); `None` if unsampled.
+    pub network_loss_pct: Option<f32>,
+    /// Overall CPU utilisation percent (`0.0..=100.0`).
+    pub cpu_pct: f32,
+    /// A real-time antivirus scan is active; `None` if undeterminable.
+    pub av_scan_active: Option<bool>,
+    /// Thermal throttling detected (the Phase 31 signal).
+    pub thermal_throttling: bool,
+}
+
+/// A copy sustaining at least this fraction of its expected rate isn't
+/// "slow", so [`classify_snapshot`] returns [`Bottleneck::Unknown`] —
+/// there's nothing to blame when the copy is keeping up.
+const SLOW_FRACTION: f64 = 0.8;
+
+/// A resource at or above this busy percent is treated as the limiter.
+const BUSY_PCT_THRESHOLD: f32 = 85.0;
+
+/// Classify the dominant bottleneck from a live [`DiagSnapshot`], given
+/// the throughput the copy *should* be sustaining (`expected_rate`,
+/// bytes/second). Returns [`Bottleneck::Unknown`] when the copy is
+/// keeping up (within [`SLOW_FRACTION`] of `expected_rate`) — nothing to
+/// explain. Otherwise explicit signals win first (thermal, then a live
+/// antivirus scan), then the most-saturated local resource above
+/// [`BUSY_PCT_THRESHOLD`], then a slow network leg.
+pub fn classify_snapshot(snap: &DiagSnapshot, expected_rate: f64) -> Bottleneck {
+    // Only attribute a cause when the copy is actually running slow.
+    if expected_rate <= 0.0 || snap.instant_throughput >= expected_rate * SLOW_FRACTION {
+        return Bottleneck::Unknown;
+    }
+    if snap.thermal_throttling {
+        return Bottleneck::Thermal;
+    }
+    if snap.av_scan_active == Some(true) {
+        return Bottleneck::Antivirus;
+    }
+    // The most-saturated local resource, if any is above the threshold.
+    let candidates = [
+        (Bottleneck::SourceIo, snap.src_disk_busy_pct.unwrap_or(0.0)),
+        (Bottleneck::DestIo, snap.dst_disk_busy_pct.unwrap_or(0.0)),
+        (Bottleneck::Cpu, snap.cpu_pct),
+    ];
+    let (kind, pct) = candidates
+        .iter()
+        .copied()
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .expect("candidates is never empty");
+    if pct >= BUSY_PCT_THRESHOLD {
+        return kind;
+    }
+    // No local resource saturated but still slow with a network leg in
+    // play (latency known, or measurable loss) → network-bound.
+    if snap.network_rtt_ms.is_some() || snap.network_loss_pct.unwrap_or(0.0) > 0.0 {
+        return Bottleneck::Network;
+    }
+    Bottleneck::Unknown
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn window_classify_dominant_and_overrides() {
+        // Read-dominated window → SourceIo; with an AV signal → Antivirus.
+        let read_heavy = PhaseSample {
+            elapsed_ns: 1_000,
+            read_wait_ns: 900,
+            write_wait_ns: 50,
+            ..PhaseSample::default()
+        };
+        assert_eq!(classify(&read_heavy), Bottleneck::SourceIo);
+        let with_av = PhaseSample {
+            av_suspected: true,
+            ..read_heavy
+        };
+        assert_eq!(classify(&with_av), Bottleneck::Antivirus);
+        // No clear majority → Unknown.
+        let even = PhaseSample {
+            elapsed_ns: 1_000,
+            read_wait_ns: 500,
+            write_wait_ns: 500,
+            ..PhaseSample::default()
+        };
+        assert_eq!(classify(&even), Bottleneck::Unknown);
+    }
+
+    #[test]
+    fn snapshot_keeping_up_is_unknown() {
+        // Sustaining 95% of expected, even with a busy disk → nothing to blame.
+        let snap = DiagSnapshot {
+            instant_throughput: 95.0,
+            dst_disk_busy_pct: Some(99.0),
+            ..DiagSnapshot::default()
+        };
+        assert_eq!(classify_snapshot(&snap, 100.0), Bottleneck::Unknown);
+    }
+
+    #[test]
+    fn snapshot_explicit_signals_win_first() {
+        let thermal = DiagSnapshot {
+            instant_throughput: 10.0,
+            thermal_throttling: true,
+            cpu_pct: 99.0,
+            ..DiagSnapshot::default()
+        };
+        assert_eq!(classify_snapshot(&thermal, 100.0), Bottleneck::Thermal);
+        let av = DiagSnapshot {
+            instant_throughput: 10.0,
+            av_scan_active: Some(true),
+            src_disk_busy_pct: Some(99.0),
+            ..DiagSnapshot::default()
+        };
+        assert_eq!(classify_snapshot(&av, 100.0), Bottleneck::Antivirus);
+    }
+
+    #[test]
+    fn snapshot_saturated_resource_then_network() {
+        let dest = DiagSnapshot {
+            instant_throughput: 10.0,
+            dst_disk_busy_pct: Some(96.0),
+            ..DiagSnapshot::default()
+        };
+        assert_eq!(classify_snapshot(&dest, 100.0), Bottleneck::DestIo);
+        // Slow, nothing local saturated, but a high-latency network dest.
+        let net = DiagSnapshot {
+            instant_throughput: 10.0,
+            cpu_pct: 20.0,
+            network_rtt_ms: Some(120.0),
+            ..DiagSnapshot::default()
+        };
+        assert_eq!(classify_snapshot(&net, 100.0), Bottleneck::Network);
+    }
+}
