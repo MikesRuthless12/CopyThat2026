@@ -11,6 +11,7 @@ pub(crate) mod plan;
 pub(crate) mod provenance;
 pub(crate) mod remote;
 pub(crate) mod schedule;
+pub(crate) mod serve;
 pub(crate) mod shred;
 pub(crate) mod stack;
 pub(crate) mod sync;

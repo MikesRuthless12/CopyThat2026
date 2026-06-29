@@ -124,8 +124,50 @@ pub enum Cmd {
     Config(ConfigArgs),
     /// Phase 43 — forensic chain-of-custody manifest tooling.
     Provenance(ProvenanceArgs),
+    /// Phase 48 — run CopyThat headless as a WebDAV / HTTP file server
+    /// with a Prometheus `/metrics` endpoint.
+    Serve(ServeArgs),
     /// Emit a shell-completion script for bash / zsh / fish / pwsh.
     Completions(CompletionsArgs),
+}
+
+/// `copythat serve <…>` — Phase 48 headless server mode.
+///
+/// Example: `copythat serve --webdav --bind 127.0.0.1:8080 --root /data
+/// --auth bearer --token s3cr3t`.
+#[derive(Args, Debug, Clone)]
+pub struct ServeArgs {
+    /// Expose the root over WebDAV (the default if no protocol is given).
+    #[arg(long)]
+    pub webdav: bool,
+    /// Expose the root over plain HTTP (GET / PUT).
+    #[arg(long)]
+    pub http: bool,
+    /// Expose an S3-compatible object endpoint over the same listener.
+    #[arg(long)]
+    pub s3: bool,
+    /// Expose the root over SFTP (its SSH transport is a follow-up; a
+    /// lone `--sftp` currently errors).
+    #[arg(long)]
+    pub sftp: bool,
+    /// Address to bind, e.g. `127.0.0.1:8080`. Port `0` = OS-assigned.
+    #[arg(long, default_value = "127.0.0.1:8080", value_name = "ADDR")]
+    pub bind: String,
+    /// Directory to serve.
+    #[arg(long, default_value = ".", value_name = "PATH")]
+    pub root: PathBuf,
+    /// Refuse write methods — serve the tree read-only.
+    #[arg(long)]
+    pub readonly: bool,
+    /// Require this bearer token on every request (except `/metrics`).
+    #[arg(long, value_name = "TOKEN", conflicts_with_all = ["user", "password"])]
+    pub token: Option<String>,
+    /// HTTP Basic username (requires `--password`).
+    #[arg(long, value_name = "USER", requires = "password")]
+    pub user: Option<String>,
+    /// HTTP Basic password (requires `--user`).
+    #[arg(long, value_name = "PASSWORD", requires = "user")]
+    pub password: Option<String>,
 }
 
 /// `copythat provenance <…>` — Phase 43 forensic chain-of-custody.

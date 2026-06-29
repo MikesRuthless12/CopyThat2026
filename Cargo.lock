@@ -1674,6 +1674,7 @@ dependencies = [
  "copythat-history",
  "copythat-platform",
  "copythat-provenance",
+ "copythat-server",
  "copythat-settings",
  "copythat-shape",
  "predicates",
