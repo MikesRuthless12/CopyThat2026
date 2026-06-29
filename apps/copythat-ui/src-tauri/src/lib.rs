@@ -69,6 +69,7 @@ pub mod reveal;
 pub mod runner;
 pub mod sanitize_commands;
 pub mod scan_commands;
+pub mod server_commands;
 pub mod shell;
 pub mod state;
 pub mod sync_commands;
@@ -558,6 +559,10 @@ pub fn run() {
             recovery_commands::recovery_status,
             recovery_commands::recovery_apply,
             recovery_commands::recovery_rotate_token,
+            // Phase 48 — server mode + observability (Settings → Server).
+            server_commands::server_status,
+            server_commands::server_start,
+            server_commands::server_stop,
             // Phase 40 Part B — SMB compression probe + cloud-VM
             // offload-template wizard.
             offload_commands::smb_compression_state,

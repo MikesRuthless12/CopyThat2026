@@ -686,6 +686,11 @@ pub struct SettingsDto {
     /// them.
     #[serde(default)]
     pub recovery: RecoveryDto,
+    /// Phase 48 — server mode + observability (Settings → Server).
+    /// Off by default. Marked `#[serde(default)]` so older persisted
+    /// settings round-trip cleanly when a newer UI reads them.
+    #[serde(default)]
+    pub server: ServerDto,
 }
 
 /// Phase 39 — wire form of `copythat_settings::RecoverySettings`.
@@ -729,6 +734,116 @@ impl From<RecoveryDto> for copythat_settings::RecoverySettings {
             port: d.port,
             token: d.token,
             allow_non_loopback: d.allow_non_loopback,
+        }
+    }
+}
+
+/// Phase 48 — wire form of `copythat_settings::ServerSettings`.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerDto {
+    pub webdav: bool,
+    pub http: bool,
+    pub s3: bool,
+    pub sftp: bool,
+    pub bind_addr: String,
+    pub root: String,
+    pub readonly: bool,
+    pub auth: ServerAuthDto,
+    pub otel_endpoint: String,
+    pub webhooks: Vec<WebhookDto>,
+}
+
+/// Phase 48 — wire form of `copythat_settings::ServerAuthSettings`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerAuthDto {
+    /// `"none" | "bearer" | "basic"`.
+    pub mode: String,
+    pub token: String,
+    pub user: String,
+    pub password: String,
+}
+
+impl Default for ServerAuthDto {
+    fn default() -> Self {
+        Self {
+            mode: "none".to_string(),
+            token: String::new(),
+            user: String::new(),
+            password: String::new(),
+        }
+    }
+}
+
+/// Phase 48 — wire form of `copythat_settings::WebhookSettings`.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebhookDto {
+    pub target: String,
+    pub url: String,
+    pub pushover_token: String,
+    pub pushover_user: String,
+}
+
+impl From<copythat_settings::ServerSettings> for ServerDto {
+    fn from(s: copythat_settings::ServerSettings) -> Self {
+        Self {
+            webdav: s.webdav,
+            http: s.http,
+            s3: s.s3,
+            sftp: s.sftp,
+            bind_addr: s.bind_addr,
+            root: s.root,
+            readonly: s.readonly,
+            auth: ServerAuthDto {
+                mode: s.auth.mode,
+                token: s.auth.token,
+                user: s.auth.user,
+                password: s.auth.password,
+            },
+            otel_endpoint: s.otel_endpoint,
+            webhooks: s
+                .webhooks
+                .into_iter()
+                .map(|w| WebhookDto {
+                    target: w.target,
+                    url: w.url,
+                    pushover_token: w.pushover_token,
+                    pushover_user: w.pushover_user,
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<ServerDto> for copythat_settings::ServerSettings {
+    fn from(d: ServerDto) -> Self {
+        Self {
+            webdav: d.webdav,
+            http: d.http,
+            s3: d.s3,
+            sftp: d.sftp,
+            bind_addr: d.bind_addr,
+            root: d.root,
+            readonly: d.readonly,
+            auth: copythat_settings::ServerAuthSettings {
+                mode: d.auth.mode,
+                token: d.auth.token,
+                user: d.auth.user,
+                password: d.auth.password,
+            },
+            otel_endpoint: d.otel_endpoint,
+            webhooks: d
+                .webhooks
+                .into_iter()
+                .map(|w| copythat_settings::WebhookSettings {
+                    target: w.target,
+                    url: w.url,
+                    pushover_token: w.pushover_token,
+                    pushover_user: w.pushover_user,
+                })
+                .collect(),
         }
     }
 }
@@ -1862,6 +1977,7 @@ impl From<&copythat_settings::Settings> for SettingsDto {
             crypt: s.crypt.clone().into(),
             mobile: s.mobile.clone().into(),
             recovery: s.recovery.clone().into(),
+            server: s.server.clone().into(),
         }
     }
 }
@@ -2077,6 +2193,7 @@ impl SettingsDto {
         s.crypt = self.crypt.into();
         s.mobile = self.mobile.into();
         s.recovery = self.recovery.into();
+        s.server = self.server.into();
 
         s
     }

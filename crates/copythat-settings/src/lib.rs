@@ -138,6 +138,15 @@ pub struct Settings {
     /// list). Active queues themselves are runtime state owned by
     /// the Tauri shell's `QueueRegistry`. See [`QueueSettings`].
     pub queue: QueueSettings,
+    /// Phase 48 — server mode + observability. Which protocols to
+    /// expose, the bind address / served root / read-only flag, the
+    /// auth mode, the OpenTelemetry endpoint, and the webhook
+    /// destinations. Off by default (no protocols, loopback bind, no
+    /// auth) — a fresh install opens no port until the user enables a
+    /// protocol and clicks Start in Settings → Server. The live
+    /// `ServerHandle` is runtime state owned by the Tauri shell's
+    /// `ServerRegistry`. See [`ServerSettings`].
+    pub server: ServerSettings,
 }
 
 impl Settings {
@@ -2212,6 +2221,117 @@ pub struct PinnedDestination {
 }
 
 // ---------------------------------------------------------------------
+// Phase 48 — server mode + observability (ServerSettings)
+// ---------------------------------------------------------------------
+
+/// Persisted server-mode + observability preferences (Phase 48).
+///
+/// Mirrors the live `copythat_server::ServerConfig` / `WebhookSink` /
+/// `OtelConfig` at the settings boundary so this crate stays free of
+/// the `copythat-server` dep (axum / russh / opentelemetry); the Tauri
+/// shell translates these into the live types when it calls `serve()`.
+///
+/// Off by default: no protocols enabled, loopback bind, no auth — a
+/// fresh install opens no port until the user toggles a protocol on and
+/// clicks Start in Settings → Server. The enum-shaped pieces
+/// (`auth.mode`, `webhooks[].target`) are kebab-case strings for the
+/// same reason `audit.format` / `crypt.encryption_mode` are: it keeps
+/// this crate a pure preference layer with no server dependency.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct ServerSettings {
+    /// Expose WebDAV (read/write file access over HTTP). HTTP-family —
+    /// shares the listener with `http` + the `/metrics` endpoint.
+    pub webdav: bool,
+    /// Expose the plain-HTTP file surface (shares the WebDAV handler).
+    pub http: bool,
+    /// Expose the S3-compatible REST API (its own axum router).
+    pub s3: bool,
+    /// Expose SFTP (its own SSH transport).
+    pub sftp: bool,
+    /// Bind address, e.g. `"127.0.0.1:8080"`.
+    pub bind_addr: String,
+    /// Filesystem root the server exposes. Empty = the process working
+    /// directory (`"."`), resolved by the Tauri shell at start time.
+    pub root: String,
+    /// Refuse write methods (PUT / DELETE / MKCOL / MOVE / COPY / …).
+    pub readonly: bool,
+    /// How clients authenticate.
+    pub auth: ServerAuthSettings,
+    /// OTLP/HTTP traces endpoint (full path, e.g.
+    /// `"http://localhost:4318/v1/traces"`). Empty = OpenTelemetry
+    /// export disabled.
+    pub otel_endpoint: String,
+    /// Webhook destinations notified on job lifecycle events.
+    pub webhooks: Vec<WebhookSettings>,
+}
+
+impl Default for ServerSettings {
+    fn default() -> Self {
+        Self {
+            webdav: false,
+            http: false,
+            s3: false,
+            sftp: false,
+            bind_addr: "127.0.0.1:8080".to_string(),
+            root: String::new(),
+            readonly: false,
+            auth: ServerAuthSettings::default(),
+            otel_endpoint: String::new(),
+            webhooks: Vec::new(),
+        }
+    }
+}
+
+/// Server client-authentication preferences (Phase 48). Mirrors
+/// `copythat_server::AuthMode` as flat strings. `mode` is
+/// `"none" | "bearer" | "basic"`; the relevant secret field is read
+/// per-mode (`token` for bearer, `user` + `password` for basic).
+/// Unknown `mode` values fall back to `"none"` at the IPC boundary so
+/// an older binary reading a newer settings file never panics.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct ServerAuthSettings {
+    /// `"none" | "bearer" | "basic"`.
+    pub mode: String,
+    /// Bearer token — read only when `mode == "bearer"`.
+    pub token: String,
+    /// Basic-auth username — read only when `mode == "basic"`.
+    pub user: String,
+    /// Basic-auth password — read only when `mode == "basic"`.
+    pub password: String,
+}
+
+impl Default for ServerAuthSettings {
+    fn default() -> Self {
+        Self {
+            mode: "none".to_string(),
+            token: String::new(),
+            user: String::new(),
+            password: String::new(),
+        }
+    }
+}
+
+/// One persisted webhook destination (Phase 48). Mirrors
+/// `copythat_server::WebhookSink`. `target` is
+/// `"slack" | "discord" | "ntfy" | "pushover"`; `pushover_token` /
+/// `pushover_user` are read only when `target == "pushover"` (the
+/// other services authenticate via the secret baked into `url`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct WebhookSettings {
+    /// `"slack" | "discord" | "ntfy" | "pushover"`.
+    pub target: String,
+    /// Full webhook URL (or the ntfy topic URL / Pushover endpoint).
+    pub url: String,
+    /// Pushover application token — only used when `target == "pushover"`.
+    pub pushover_token: String,
+    /// Pushover user key — only used when `target == "pushover"`.
+    pub pushover_user: String,
+}
+
+// ---------------------------------------------------------------------
 // Convenience surface
 // ---------------------------------------------------------------------
 
@@ -2661,5 +2781,78 @@ log-level = "debug"
         s.save_to(&path).unwrap();
         let back = Settings::load_from(&path).unwrap();
         assert_eq!(back.remotes, s.remotes);
+    }
+
+    #[test]
+    fn server_defaults_are_all_off() {
+        let s = ServerSettings::default();
+        assert!(!s.webdav && !s.http && !s.s3 && !s.sftp);
+        assert_eq!(s.bind_addr, "127.0.0.1:8080");
+        assert!(s.root.is_empty());
+        assert!(!s.readonly);
+        assert_eq!(s.auth.mode, "none");
+        assert!(s.otel_endpoint.is_empty());
+        assert!(s.webhooks.is_empty());
+        // The top-level default carries the same all-off server block.
+        assert_eq!(Settings::default().server, ServerSettings::default());
+    }
+
+    #[test]
+    fn server_round_trips_via_toml() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = tmp.path().join("settings.toml");
+        let s = Settings {
+            server: ServerSettings {
+                webdav: true,
+                http: true,
+                s3: false,
+                sftp: false,
+                bind_addr: "0.0.0.0:9000".to_string(),
+                root: "/srv/share".to_string(),
+                readonly: true,
+                auth: ServerAuthSettings {
+                    mode: "bearer".to_string(),
+                    token: "s3cr3t".to_string(),
+                    user: String::new(),
+                    password: String::new(),
+                },
+                otel_endpoint: "http://localhost:4318/v1/traces".to_string(),
+                webhooks: vec![
+                    WebhookSettings {
+                        target: "slack".to_string(),
+                        url: "https://hooks.slack.com/services/T/B/X".to_string(),
+                        pushover_token: String::new(),
+                        pushover_user: String::new(),
+                    },
+                    WebhookSettings {
+                        target: "pushover".to_string(),
+                        url: "https://api.pushover.net/1/messages.json".to_string(),
+                        pushover_token: "app-tok".to_string(),
+                        pushover_user: "user-key".to_string(),
+                    },
+                ],
+            },
+            ..Settings::default()
+        };
+        s.save_to(&path).unwrap();
+        let back = Settings::load_from(&path).unwrap();
+        assert_eq!(back.server, s.server);
+    }
+
+    #[test]
+    fn server_toml_uses_kebab_case_keys() {
+        let mut s = Settings::default();
+        s.server.webdav = true;
+        s.server.otel_endpoint = "http://localhost:4318/v1/traces".to_string();
+        let dumped = toml::to_string(&s).unwrap();
+        assert!(dumped.contains("webdav = true"), "{dumped}");
+        assert!(
+            dumped.contains(r#"bind-addr = "127.0.0.1:8080""#),
+            "{dumped}"
+        );
+        assert!(
+            dumped.contains(r#"otel-endpoint = "http://localhost:4318/v1/traces""#),
+            "{dumped}"
+        );
     }
 }

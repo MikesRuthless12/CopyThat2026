@@ -1392,6 +1392,9 @@ fn diff_setting_groups(
     if before.audit != after.audit {
         groups.push("audit");
     }
+    if before.server != after.server {
+        groups.push("server");
+    }
     if groups.is_empty() {
         "unchanged".to_string()
     } else {

@@ -294,6 +294,10 @@ fn canned_args(key: &str) -> HashMap<&'static str, String> {
         "tray-target-active-pill" | "tray-target-armed-toast" => {
             m.insert("label", "Backup Drive".to_string());
         }
+        // Phase 48 — server-mode status line carries the bound address.
+        "server-status-running" => {
+            m.insert("addr", "127.0.0.1:8080".to_string());
+        }
         // Phase 47 — diagnostics bottleneck badge placeables.
         "diag-aria" => {
             m.insert("cause", "Source I/O".to_string());

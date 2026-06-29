@@ -157,6 +157,12 @@ pub struct AppState {
     /// is off. `recovery_commands::recovery_apply` is the only
     /// writer.
     pub recovery: crate::recovery_commands::RecoveryRegistry,
+    /// Phase 48 — server mode + observability. Holds the live
+    /// `copythat_server::ServerHandle` while the user has a server
+    /// running from Settings → Server; `None` when stopped.
+    /// `server_commands::{server_start, server_stop}` are the only
+    /// writers.
+    pub server: crate::server_commands::ServerRegistry,
     /// Phase 45 — multi-queue registry keyed by physical destination
     /// drive. The single-queue `queue` field above stays as the
     /// process-wide default for back-compat (`QueueId::DEFAULT`); the
@@ -271,6 +277,9 @@ impl AppState {
             // boot (and on every `update_settings`) flips this to
             // `Some` when the user has the toggle on.
             recovery: crate::recovery_commands::RecoveryRegistry::new(),
+            // Phase 48 — idle server registry. `server_start` flips this
+            // to `Some` when the user clicks Start in Settings → Server.
+            server: crate::server_commands::ServerRegistry::new(),
             // Phase 45 — registry seeded with the platform volume
             // probe. Routing decisions go through
             // `helpers::volume_id` (Windows VolumeSerialNumber /

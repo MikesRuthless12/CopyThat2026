@@ -822,6 +822,36 @@ export async function queueSetF2Mode(enabled: boolean): Promise<void> {
 }
 
 // ---------------------------------------------------------------------
+// Phase 48 — server mode + observability (Settings → Server).
+// ---------------------------------------------------------------------
+
+/** Status snapshot for the Settings → Server panel. `metricsUrl` is set
+ *  only while running with an HTTP-family protocol (WebDAV / HTTP). */
+export interface ServerStatusDto {
+  running: boolean;
+  boundAddr: string | null;
+  metricsUrl: string | null;
+}
+
+/** Build a server from the saved `ServerSettings` and start it. Throws
+ *  with an `err-server-*` Fluent key on failure (no protocols, bind
+ *  error, …). The panel persists the form via `update_settings` before
+ *  calling this. */
+export async function serverStart(): Promise<ServerStatusDto> {
+  return invoke<ServerStatusDto>("server_start");
+}
+
+/** Stop the running server (idempotent). */
+export async function serverStop(): Promise<ServerStatusDto> {
+  return invoke<ServerStatusDto>("server_stop");
+}
+
+/** Read-only snapshot — running? bound address? metrics URL? */
+export async function serverStatus(): Promise<ServerStatusDto> {
+  return invoke<ServerStatusDto>("server_status");
+}
+
+// ---------------------------------------------------------------------
 // Phase 46.6 — Settings → Plugins UI.
 // ---------------------------------------------------------------------
 

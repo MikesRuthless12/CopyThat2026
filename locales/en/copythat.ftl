@@ -1149,3 +1149,36 @@ diag-tooltip = Bottlenecked by { $cause } · { $rate }
 diag-spark-aria = Throughput over the last minute
 diag-keeping-up = Keeping up
 diag-label = Diagnostics
+
+# Phase 48 — server mode + observability (Settings → Server). The panel
+# edits `settings.server.*` through the standard update path; the
+# Start / Stop control drives the live server via the `server_*` IPC
+# commands. `server-status-running` carries the bound `{ $addr }`.
+settings-tab-server = Server
+server-hint = Run Copy That as a headless file server. Pick the protocols to expose, set the address and the folder to serve, and optionally require authentication.
+server-protocols = Protocols
+server-bind-addr = Bind address
+server-root = Served folder
+server-readonly = Read-only (refuse uploads and deletions)
+server-auth-mode = Authentication
+server-auth-none = None
+server-auth-bearer = Bearer token
+server-auth-basic = Basic (username + password)
+server-auth-token = Token
+server-auth-user = Username
+server-auth-password = Password
+otel-endpoint = OpenTelemetry endpoint
+webhook-section = Webhooks
+webhook-url = Webhook URL
+webhook-add = Add webhook
+webhook-remove = Remove
+webhook-empty = No webhooks configured.
+webhook-pushover-token = Pushover token
+webhook-pushover-user = Pushover user
+server-start = Start server
+server-stop = Stop server
+server-status-running = Running on { $addr }
+server-status-stopped = Stopped
+server-metrics-url = Metrics
+err-server-no-protocols = Select at least one protocol before starting the server.
+err-server-bind = Could not bind the server address. It may already be in use.

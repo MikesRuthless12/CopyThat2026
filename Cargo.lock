@@ -2134,6 +2134,7 @@ dependencies = [
  "copythat-power",
  "copythat-recovery",
  "copythat-secure-delete",
+ "copythat-server",
  "copythat-settings",
  "copythat-shape",
  "copythat-snapshot",

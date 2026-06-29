@@ -51,15 +51,20 @@
     queueUnpinDestination,
     resetSettings,
     saveProfile,
+    serverStart,
+    serverStatus,
+    serverStop,
     updateSettings,
     updaterCheckNow,
     updaterDismissVersion,
   } from "../ipc";
+  import type { ServerStatusDto } from "../ipc";
   import type {
     PinnedDestinationDto,
     ProfileInfoDto,
     SettingsDto,
     UpdateCheckDto,
+    WebhookDto,
   } from "../types";
 
   type TabId =
@@ -77,6 +82,7 @@
     | "provenance"
     | "sanitize"
     | "plugins"
+    | "server"
     | "profiles";
 
   let activeTab: TabId = $state("general");
@@ -463,6 +469,100 @@
     const d = new Date(unixSecs * 1000);
     return d.toLocaleString();
   }
+
+  // ---- Phase 48 — Settings → Server ---------------------------------
+  // The form binds to `settings.server.*` and persists through the
+  // standard `pushSettings()` path; the Start / Stop control drives the
+  // live `ServerHandle` via the dedicated `server_*` IPC commands. The
+  // status line + metrics URL come from `serverStatus`.
+  let serverState = $state<ServerStatusDto | null>(null);
+  let serverBusy = $state(false);
+
+  // Pull the live status the first time the Server tab is opened.
+  $effect(() => {
+    if (activeTab === "server" && serverState === null) {
+      void refreshServerStatus();
+    }
+  });
+
+  async function refreshServerStatus() {
+    try {
+      serverState = await serverStatus();
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onServerStart() {
+    serverBusy = true;
+    try {
+      // Persist the form first so `server_start` builds its config from
+      // the values the user just edited.
+      await pushSettings();
+      serverState = await serverStart();
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    } finally {
+      serverBusy = false;
+    }
+  }
+
+  async function onServerStop() {
+    serverBusy = true;
+    try {
+      serverState = await serverStop();
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    } finally {
+      serverBusy = false;
+    }
+  }
+
+  function onAddWebhook() {
+    if (!settings) return;
+    const next: WebhookDto = {
+      target: "slack",
+      url: "",
+      pushoverToken: "",
+      pushoverUser: "",
+    };
+    settings = {
+      ...settings,
+      server: {
+        ...settings.server,
+        webhooks: [...settings.server.webhooks, next],
+      },
+    };
+    void pushSettings();
+  }
+
+  function onRemoveWebhook(index: number) {
+    if (!settings) return;
+    settings = {
+      ...settings,
+      server: {
+        ...settings.server,
+        webhooks: settings.server.webhooks.filter((_, i) => i !== index),
+      },
+    };
+    void pushSettings();
+  }
+
+  async function onPickServerRoot() {
+    if (!settings) return;
+    try {
+      const picked = await openDialog({ multiple: false, directory: true });
+      if (typeof picked === "string" && picked.length > 0) {
+        settings = {
+          ...settings,
+          server: { ...settings.server, root: picked },
+        };
+        await pushSettings();
+      }
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
 </script>
 
 {#if $settingsOpen}
@@ -499,7 +599,7 @@
       {:else}
         <div class="body">
           <div class="tabs" role="tablist" aria-label={t("settings-title")}>
-            {#each [["general", "settings-tab-general"], ["transfer", "settings-tab-transfer"], ["filters", "settings-tab-filters"], ["shell", "settings-tab-shell"], ["secure-delete", "settings-tab-secure-delete"], ["advanced", "settings-tab-advanced"], ["updater", "settings-tab-updater"], ["network", "settings-tab-network"], ["power", "settings-tab-power"], ["remotes", "settings-tab-remotes"], ["mobile", "settings-tab-mobile"], ["provenance", "provenance-settings-heading"], ["sanitize", "sanitize-heading"], ["plugins", "settings-tab-plugins"], ["profiles", "settings-tab-profiles"]] as const as [id, key] (id)}
+            {#each [["general", "settings-tab-general"], ["transfer", "settings-tab-transfer"], ["filters", "settings-tab-filters"], ["shell", "settings-tab-shell"], ["secure-delete", "settings-tab-secure-delete"], ["advanced", "settings-tab-advanced"], ["updater", "settings-tab-updater"], ["network", "settings-tab-network"], ["power", "settings-tab-power"], ["remotes", "settings-tab-remotes"], ["mobile", "settings-tab-mobile"], ["provenance", "provenance-settings-heading"], ["sanitize", "sanitize-heading"], ["plugins", "settings-tab-plugins"], ["server", "settings-tab-server"], ["profiles", "settings-tab-profiles"]] as const as [id, key] (id)}
               <button
                 type="button"
                 role="tab"
@@ -1581,6 +1681,230 @@
               <SanitizeTab />
             {:else if activeTab === "plugins"}
               <PluginsTab />
+            {:else if activeTab === "server"}
+              <p class="hint">{t("server-hint")}</p>
+
+              <h4 class="subheading">{t("server-protocols")}</h4>
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.server.webdav}
+                  onchange={pushSettings}
+                />
+                <span class="label">WebDAV</span>
+              </label>
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.server.http}
+                  onchange={pushSettings}
+                />
+                <span class="label">HTTP</span>
+              </label>
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.server.s3}
+                  onchange={pushSettings}
+                />
+                <span class="label">S3</span>
+              </label>
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.server.sftp}
+                  onchange={pushSettings}
+                />
+                <span class="label">SFTP</span>
+              </label>
+
+              <label class="row">
+                <span class="label">{t("server-bind-addr")}</span>
+                <input
+                  type="text"
+                  bind:value={settings.server.bindAddr}
+                  onchange={pushSettings}
+                  placeholder="127.0.0.1:8080"
+                  spellcheck={false}
+                />
+              </label>
+
+              <label class="row">
+                <span class="label">{t("server-root")}</span>
+                <input
+                  type="text"
+                  bind:value={settings.server.root}
+                  onchange={pushSettings}
+                  placeholder="."
+                  spellcheck={false}
+                />
+                <button type="button" class="secondary" onclick={onPickServerRoot}>
+                  …
+                </button>
+              </label>
+
+              <label class="row check">
+                <input
+                  type="checkbox"
+                  bind:checked={settings.server.readonly}
+                  onchange={pushSettings}
+                />
+                <span class="label">{t("server-readonly")}</span>
+              </label>
+
+              <label class="row">
+                <span class="label">{t("server-auth-mode")}</span>
+                <select
+                  bind:value={settings.server.auth.mode}
+                  onchange={pushSettings}
+                >
+                  <option value="none">{t("server-auth-none")}</option>
+                  <option value="bearer">{t("server-auth-bearer")}</option>
+                  <option value="basic">{t("server-auth-basic")}</option>
+                </select>
+              </label>
+
+              {#if settings.server.auth.mode === "bearer"}
+                <label class="row">
+                  <span class="label">{t("server-auth-token")}</span>
+                  <input
+                    type="password"
+                    bind:value={settings.server.auth.token}
+                    onchange={pushSettings}
+                    spellcheck={false}
+                  />
+                </label>
+              {:else if settings.server.auth.mode === "basic"}
+                <label class="row">
+                  <span class="label">{t("server-auth-user")}</span>
+                  <input
+                    type="text"
+                    bind:value={settings.server.auth.user}
+                    onchange={pushSettings}
+                    spellcheck={false}
+                  />
+                </label>
+                <label class="row">
+                  <span class="label">{t("server-auth-password")}</span>
+                  <input
+                    type="password"
+                    bind:value={settings.server.auth.password}
+                    onchange={pushSettings}
+                    spellcheck={false}
+                  />
+                </label>
+              {/if}
+
+              <label class="row">
+                <span class="label">{t("otel-endpoint")}</span>
+                <input
+                  type="text"
+                  bind:value={settings.server.otelEndpoint}
+                  onchange={pushSettings}
+                  placeholder="http://localhost:4318/v1/traces"
+                  spellcheck={false}
+                />
+              </label>
+
+              <h4 class="subheading">{t("webhook-section")}</h4>
+              {#if settings.server.webhooks.length === 0}
+                <p class="hint empty">{t("webhook-empty")}</p>
+              {:else}
+                <ul class="webhook-list">
+                  {#each settings.server.webhooks as hook, i (i)}
+                    <li class="webhook-row">
+                      <select
+                        bind:value={hook.target}
+                        onchange={pushSettings}
+                      >
+                        <option value="slack">Slack</option>
+                        <option value="discord">Discord</option>
+                        <option value="ntfy">ntfy</option>
+                        <option value="pushover">Pushover</option>
+                      </select>
+                      <input
+                        type="text"
+                        class="webhook-url"
+                        bind:value={hook.url}
+                        onchange={pushSettings}
+                        placeholder={t("webhook-url")}
+                        spellcheck={false}
+                      />
+                      <button
+                        type="button"
+                        class="tiny danger"
+                        onclick={() => onRemoveWebhook(i)}
+                      >
+                        {t("webhook-remove")}
+                      </button>
+                      {#if hook.target === "pushover"}
+                        <input
+                          type="text"
+                          class="webhook-extra"
+                          bind:value={hook.pushoverToken}
+                          onchange={pushSettings}
+                          placeholder={t("webhook-pushover-token")}
+                          spellcheck={false}
+                        />
+                        <input
+                          type="text"
+                          class="webhook-extra"
+                          bind:value={hook.pushoverUser}
+                          onchange={pushSettings}
+                          placeholder={t("webhook-pushover-user")}
+                          spellcheck={false}
+                        />
+                      {/if}
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+              <div class="row">
+                <button type="button" class="secondary" onclick={onAddWebhook}>
+                  {t("webhook-add")}
+                </button>
+              </div>
+
+              <div class="row end">
+                {#if serverState?.running}
+                  <button
+                    type="button"
+                    class="danger"
+                    onclick={onServerStop}
+                    disabled={serverBusy}
+                  >
+                    {t("server-stop")}
+                  </button>
+                {:else}
+                  <button
+                    type="button"
+                    class="secondary"
+                    onclick={onServerStart}
+                    disabled={serverBusy}
+                  >
+                    {t("server-start")}
+                  </button>
+                {/if}
+              </div>
+
+              <div class="row server-status" data-running={serverState?.running ?? false}>
+                {#if serverState?.running}
+                  <span class="label"
+                    >{t("server-status-running", {
+                      addr: serverState.boundAddr ?? "",
+                    })}</span
+                  >
+                {:else}
+                  <span class="label">{t("server-status-stopped")}</span>
+                {/if}
+              </div>
+
+              {#if serverState?.running && serverState.metricsUrl}
+                <div class="row">
+                  <span class="label">{t("server-metrics-url")}</span>
+                  <span class="muted">{serverState.metricsUrl}</span>
+                </div>
+              {/if}
             {:else if activeTab === "profiles"}
               <p class="hint">{t("settings-profiles-hint")}</p>
               <div class="row">
@@ -1978,6 +2302,48 @@
     font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* Phase 48 — Settings → Server webhook list. One row per
+     destination: service dropdown + URL + remove; Pushover rows wrap
+     their token/user fields onto the next line. */
+  .webhook-list {
+    list-style: none;
+    margin: 6px 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .webhook-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border: 1px solid var(--border, rgba(128, 128, 128, 0.18));
+    border-radius: 4px;
+    background: var(--surface-alt, rgba(0, 0, 0, 0.02));
+  }
+
+  .webhook-row .webhook-url {
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .webhook-row .webhook-extra {
+    flex: 1 1 100%;
+  }
+
+  .server-status .label {
+    min-width: 0;
+    color: var(--fg-dim, #6a6a6a);
+  }
+
+  .server-status[data-running="true"] .label {
+    color: var(--accent, #4f8cff);
+    font-weight: 600;
   }
 
   /* Phase 24 — Security-metadata subsection. The header row carries

@@ -83,6 +83,11 @@ copythat-mobile = { path = "../../../crates/copythat-mobile", version = "0.19" }
 # `recovery_commands::recovery_apply` at boot + on every
 # `update_settings` flip.
 copythat-recovery = { path = "../../../crates/copythat-recovery", version = "0.19" }
+# Phase 48 — server mode + observability. AppState owns a
+# `ServerRegistry` whose live `ServerHandle` reflects the current
+# Settings → Server panel state. Started/stopped via
+# `server_commands::{server_start, server_stop}` from the GUI.
+copythat-server = { path = "../../../crates/copythat-server", version = "0.19" }
 # Phase 46.6 — Settings → Plugins UI. The Tauri shell owns the
 # per-user plugin store on disk (manifest + .wasm + state.toml per
 # plugin) and surfaces it through `plugin_commands.rs`. The runtime

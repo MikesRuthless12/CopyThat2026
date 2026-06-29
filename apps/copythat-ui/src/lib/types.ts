@@ -658,6 +658,41 @@ export interface SettingsDto {
   /// wire so older backends without the field don't break this
   /// frontend.
   mobile?: MobileSettingsDto;
+  /// Phase 48 — server mode + observability (Settings → Server).
+  /// Always present on the wire (the Rust DTO serializes it with a
+  /// serde default).
+  server: ServerSettingsDto;
+}
+
+/** Phase 48 — wire form of `copythat_settings::ServerSettings`. */
+export type ServerAuthModeWire = "none" | "bearer" | "basic";
+
+export interface ServerAuthDto {
+  mode: ServerAuthModeWire;
+  token: string;
+  user: string;
+  password: string;
+}
+
+export interface WebhookDto {
+  /** "slack" | "discord" | "ntfy" | "pushover" */
+  target: string;
+  url: string;
+  pushoverToken: string;
+  pushoverUser: string;
+}
+
+export interface ServerSettingsDto {
+  webdav: boolean;
+  http: boolean;
+  s3: boolean;
+  sftp: boolean;
+  bindAddr: string;
+  root: string;
+  readonly: boolean;
+  auth: ServerAuthDto;
+  otelEndpoint: string;
+  webhooks: WebhookDto[];
 }
 
 /** Phase 37 — wire form of `copythat_settings::MobileSettings`. */
