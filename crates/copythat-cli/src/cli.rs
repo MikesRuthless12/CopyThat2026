@@ -168,6 +168,11 @@ pub struct ServeArgs {
     /// HTTP Basic password (requires `--user`).
     #[arg(long, value_name = "PASSWORD", requires = "user")]
     pub password: Option<String>,
+    /// Export traces to an OTLP HTTP/protobuf collector at this URL, e.g.
+    /// `http://localhost:4318/v1/traces` (the full traces path is used
+    /// verbatim). Omit to disable trace export.
+    #[arg(long, value_name = "URL")]
+    pub otel_endpoint: Option<String>,
 }
 
 /// `copythat provenance <…>` — Phase 43 forensic chain-of-custody.

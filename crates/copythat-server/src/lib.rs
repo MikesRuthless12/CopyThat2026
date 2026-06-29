@@ -30,10 +30,12 @@ use thiserror::Error;
 use tokio::sync::oneshot;
 
 mod http;
+mod otel;
 mod s3;
 mod sftp;
 pub mod webhook;
 
+pub use otel::{OtelError, OtelGuard, install_otel};
 pub use webhook::{PushoverCreds, WebhookSink, send_webhook};
 
 /// Protocols the server can expose.
@@ -135,11 +137,11 @@ impl Default for ServerConfig {
     }
 }
 
-/// OpenTelemetry export configuration. The export pipeline is wired in the
-/// observability increment; this carries the knobs it reads.
+/// OpenTelemetry export configuration, consumed by [`install_otel`].
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct OtelConfig {
-    /// OTLP collector endpoint, e.g. `"http://localhost:4317"`.
+    /// OTLP/HTTP traces endpoint, used verbatim — pass the full traces path,
+    /// e.g. `"http://localhost:4318/v1/traces"`.
     pub endpoint: String,
     /// Whether trace export is enabled.
     pub enabled: bool,

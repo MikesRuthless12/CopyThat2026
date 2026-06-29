@@ -52,11 +52,33 @@ pub(crate) async fn run(
     args: ServeArgs,
     writer: Arc<OutputWriter>,
 ) -> ExitCode {
+    // Pulled out before `build_config` consumes `args`.
+    let otel_endpoint = args.otel_endpoint.clone();
     let config = build_config(args);
     let protocols: Vec<&str> = config.protocols.iter().map(|p| p.label()).collect();
     let readonly = config.readonly;
     // SFTP speaks SSH (no HTTP `/metrics`); everything else is HTTP-served.
     let is_sftp = config.protocols.contains(&Protocol::Sftp);
+
+    // Wire OpenTelemetry trace export before serving, and hold the guard for
+    // the whole server lifetime so buffered spans flush on Ctrl-C shutdown.
+    // Export is best-effort: a failed pipeline build is logged, not fatal.
+    let _otel_guard = match otel_endpoint {
+        Some(endpoint) => {
+            let cfg = copythat_server::OtelConfig {
+                endpoint,
+                enabled: true,
+            };
+            match copythat_server::install_otel(&cfg) {
+                Ok(guard) => Some(guard),
+                Err(e) => {
+                    eprintln!("copythat: OpenTelemetry trace export disabled: {e}");
+                    None
+                }
+            }
+        }
+        None => None,
+    };
 
     match copythat_server::serve(config).await {
         Ok(handle) => {
@@ -113,6 +135,7 @@ mod tests {
             token: None,
             user: None,
             password: None,
+            otel_endpoint: None,
         }
     }
 

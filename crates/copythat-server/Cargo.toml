@@ -94,6 +94,34 @@ russh-sftp = "2"
 # RNG for russh 0.60's ssh-key (rand 0.10 is already resolved in-tree via
 # russh). MIT / Apache-2.0.
 rand = "0.10"
+# Phase 48 follow-up — OpenTelemetry trace export. OTLP over HTTP/protobuf
+# (the `reqwest-client` path), NOT grpc-tonic: the async reqwest exporter
+# reuses the in-tree reqwest 0.12 + rustls stack instead of pulling
+# tonic/h2/grpc. `rt-tokio` gives the batch span processor a tokio-driven
+# background runtime so buffered spans flush on the engine's runtime;
+# `tracing-opentelemetry` bridges the engine's `tracing` spans into the OTel
+# pipeline; the `registry` subscriber layer is the install surface
+# (tracing-subscriber is already resolved in-tree via copythat-audit + the
+# Tauri app, with `registry` already active). MIT / Apache-2.0.
+opentelemetry = "0.32"
+opentelemetry_sdk = { version = "0.32", features = [
+    "rt-tokio",
+    # The runtime-driven batch span processor lives behind this experimental
+    # gate in 0.32 (the stable `with_batch_exporter` runs on a dedicated
+    # std::thread + `futures_executor::block_on`, which cannot drive the
+    # async reqwest exporter — it needs a tokio reactor). `rt-tokio` supplies
+    # `runtime::Tokio`; this feature supplies the matching processor module.
+    "experimental_trace_batch_span_processor_with_async_runtime",
+] }
+opentelemetry-otlp = { version = "0.32", default-features = false, features = [
+    "trace",
+    "http-proto",
+    "reqwest-client",
+] }
+tracing-opentelemetry = "0.33"
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "registry",
+] }
 
 [dev-dependencies]
 # Smoke round-trips the public types through JSON.
