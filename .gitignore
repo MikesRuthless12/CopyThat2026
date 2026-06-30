@@ -79,6 +79,8 @@ apps/copythat-ui/src-tauri/Cargo.lock
 /CopyThat2026-Build-Prompts-Guide2.md
 /CT26.txt
 /docs/ARCHITECTURE.md
+# Phase 49b–50i implementation design docs (reveal planned features) — local-only.
+/docs/design/
 /docs/CHANGELOG.md
 /docs/I18N_TODO.md
 /docs/ROADMAP.md

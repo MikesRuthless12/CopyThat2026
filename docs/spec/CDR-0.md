@@ -166,9 +166,7 @@ A reader **MUST** reject a manifest unless **all** of the following hold
    `chunks[i].offset == chunks[i-1].offset + chunks[i-1].len`.
 5. `sum(chunks[i].len) == size`.
 
-A machine-readable JSON-Schema mirror of this schema is published alongside this
-document as `CDR-0.manifest.schema.json` (planned; the CDDL above is normative in
-the interim).
+The CDDL schema above is normative.
 
 ---
 
@@ -270,7 +268,7 @@ manifest/snapshot CBOR **MAY** be sealed:
   32-byte output. The salt **MUST** be stored with the repository.
 - **Key derivation (raw):** alternatively a directly supplied 32-byte key.
 
-### 10.1 Recipient envelope (forward reference — Phase 51)
+### 10.1 Recipient envelope (optional, reserved)
 
 For multi-recipient sharing, a per-file random data key is wrapped once per
 recipient using an `age` recipient (X25519). The manifest **MAY** carry an
@@ -282,27 +280,27 @@ backward compatible).
 
 ## 11. Migration & compliance tooling
 
-CopyThat ships the migration **framework + repository detector**; full importers
-for the other tools are gated on the constraints below.
+CopyThat ships the migration **framework + repository detector + importers** for
+restic, Borg, and Kopia.
 
-**Implemented** (`copythat-chunk::migrate`, `copythat migrate` / `export` CLI):
+**Implemented** (`copythat-chunk::migrate`, `copythat migrate` CLI):
 - `RepoFormat::detect()` recognises restic / Borg / Kopia / CDR-0 repositories
   from their on-disk markers — no decryption, no new dependencies.
 - `copythat migrate cdr <src> <cdr-repo>` — copy / re-home a CDR-0 repository
   (the reference path; exercises the whole pipeline end to end).
-- **`copythat migrate restic <repo> <cdr> --password <pw>`** — a real
-  **restic v1/v2** importer (scrypt → AES-256-CTR + Poly1305-AES → zstd;
-  reconstructs file bytes and re-ingests them, since restic chunk IDs aren't
-  portable). Validated against a committed fixture (`tests/fixtures/restic-repo`).
-- `copythat migrate <borg|kopia> …` — returns a typed, actionable error naming
-  exactly what each still needs. It does **not** silently emit a wrong migration.
-- `copythat export <cdr-repo> <tool> <dst>` — the inverse entry point; writing a
-  foreign tool's on-disk format is not yet implemented.
+- **`copythat migrate <restic|borg|kopia> <repo> <cdr> --password <pw>`** —
+  real, validated importers for all three major deduplicating-backup tools
+  (restic v1/v2; Borg repokey; Kopia filesystem). Each decrypts the source,
+  reconstructs file bytes, and re-ingests them (source chunk IDs aren't
+  portable). Validated **byte-identical** against committed fixtures
+  (`tests/fixtures/{restic,borg,kopia}-repo`) — no source binary in CI.
 
-**restic is implemented** (its crypto crates — scrypt / aes / ctr / poly1305 /
-zstd — were already in the workspace lockfile, so it needed no new third-party
-crate). **Borg and Kopia remain blocked.** Enumerating even `path → (chunkID,
-length)` from another tool's repository is not a plaintext parse:
+**All three importers are implemented with no new third-party crate** — every
+cipher + codec (scrypt / aes / ctr / poly1305 / aes-gcm / hkdf / hmac / sha2 /
+zstd / flate2) was already in the workspace lockfile, and the format-specific
+parsers (MessagePack + LZ4 for Borg, the v2 packindex for Kopia) are
+hand-rolled. Enumerating `path → bytes` from each repository still required
+reverse-engineering its on-disk crypto + format — it is not a plaintext parse:
 
 | Tool | Passphrase required to enumerate? | Crypto / codec needed |
 | ---- | -------------------------------- | --------------------- |
@@ -311,26 +309,14 @@ length)` from another tool's repository is not a plaintext parse:
 | Borg `none` / `authenticated` (non-default) | No | still needs a **MessagePack** parser |
 | Kopia | **Yes, always** (even content IDs are keyed hashes) | AES-256-GCM + HKDF + scrypt + keyed-BLAKE2b |
 
-None of those crypto primitives (nor a MessagePack codec) are in this
-workspace's dependency tree, and Phase 50's rule is **no new crates** — so a
-correct importer cannot land without (a) relaxing that rule to add the codec +
-crypto crates, and (b) real source repositories to validate against (shipping
-untested decryption would risk silently corrupting a migration). Chunk identity
-is in any case **not portable across tools**: each uses a per-repo random CDC
-parameter and most key the chunk-ID hash with a per-repo secret, so migration
-translates *manifests*, never chunk IDs.
-
-**Planned ecosystem items:**
-- `cdr-py` — a reference parser on PyPI, published from a sibling repository
-  with a "spec compliance" README.
-- Upstream engagement: issues / PRs proposing CDR-0 adoption to restic, Borg,
-  and Kopia.
-
-Status tracked in [`docs/ROADMAP.md`](../ROADMAP.md).
+Each importer reconstructs file bytes and re-ingests them, since chunk identity
+is **not portable across tools**: each uses a per-repo random CDC parameter and
+most key the chunk-ID hash with a per-repo secret, so migration translates
+*content*, never chunk IDs.
 
 ---
 
-## 12. WORM marker (forward reference — Phase 34)
+## 12. WORM marker (optional)
 
 A repository participating in tamper-evident audit (Phase 34) carries a WORM
 marker file whose format chains to the audit log's rolling BLAKE3 hash. The

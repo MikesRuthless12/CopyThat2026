@@ -611,22 +611,24 @@
           </p>
           <ol>
             <li>
-              <strong>restic</strong> repositories are supported today. Copy That decrypts the repo,
-              reconstructs every file, and re-ingests it into a fresh CDR-0 repository &mdash;
-              deduplicated with Copy That's own chunking:
-              <pre><code>copythat migrate restic /path/to/restic-repo /path/to/cdr-repo --password &lt;passphrase&gt;</code></pre>
-              (or set the <code>RESTIC_PASSWORD</code> environment variable instead of
-              <code>--password</code>).
+              <strong>restic</strong>, <strong>Borg</strong>, and <strong>Kopia</strong> repositories
+              are all supported. Copy That decrypts the source, reconstructs every file, and re-ingests
+              it into a fresh CDR-0 repository &mdash; deduplicated with Copy That's own chunking:
+              <pre><code>copythat migrate restic /path/to/restic-repo /path/to/cdr-repo --password &lt;passphrase&gt;
+copythat migrate borg   /path/to/borg-repo   /path/to/cdr-repo --password &lt;passphrase&gt;
+copythat migrate kopia  /path/to/kopia-repo  /path/to/cdr-repo --password &lt;passphrase&gt;</code></pre>
+              (for restic you may also set the <code>RESTIC_PASSWORD</code> environment variable
+              instead of <code>--password</code>).
             </li>
             <li>
               <strong>Detection</strong>: point <code>copythat migrate</code> at any repository and it
               identifies whether it is restic, Borg, Kopia, or CDR-0 from its on-disk layout.
             </li>
             <li>
-              <strong>Borg</strong> and <strong>Kopia</strong> importers are in progress &mdash;
-              running them today prints exactly what each still needs. See the
+              Every importer is validated to restore <strong>byte-for-byte</strong> against the original
+              files. See the
               <a href="https://github.com/MikesRuthless12/CopyThat2026/blob/main/docs/spec/CDR-0.md">CDR-0
-              specification</a> for the format details and migration status.
+              specification</a> for the format details.
             </li>
           </ol>
         </section>
