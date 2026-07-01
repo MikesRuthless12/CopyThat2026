@@ -1621,589 +1621,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "freally-audit"
-version = "0.19.85"
-dependencies = [
- "blake3",
- "chrono",
- "freally-hash",
- "csv",
- "gethostname",
- "hex",
- "libc",
- "nix 0.29.0",
- "serde",
- "serde_json",
- "subtle",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "freally-chunk"
-version = "0.19.85"
-dependencies = [
- "aes 0.8.4",
- "aes-gcm 0.10.3",
- "base64 0.21.7",
- "blake2",
- "blake3",
- "chrono",
- "ciborium",
- "cipher 0.4.4",
- "freally-core",
- "ctr 0.9.2",
- "directories",
- "fastcdc",
- "flate2",
- "getrandom 0.3.4",
- "hkdf 0.12.4",
- "hmac 0.12.1",
- "poly1305",
- "rand 0.9.4",
- "redb",
- "scrypt 0.11.0",
- "serde",
- "serde_bytes",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.18",
- "tracing",
- "uuid",
- "zstd",
-]
-
-[[package]]
-name = "freally-cli"
-version = "0.19.85"
-dependencies = [
- "assert_cmd",
- "chrono",
- "clap",
- "clap_complete",
- "freally-chunk",
- "freally-core",
- "freally-hash",
- "freally-history",
- "freally-platform",
- "freally-provenance",
- "freally-server",
- "freally-settings",
- "freally-shape",
- "predicates",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "toml 0.9.12+spec-1.1.0",
-]
-
-[[package]]
-name = "freally-cloud"
-version = "0.19.85"
-dependencies = [
- "async-trait",
- "base64 0.22.1",
- "blake3",
- "bytes",
- "freally-core",
- "freally-settings",
- "futures",
- "getrandom 0.3.4",
- "hex",
- "hmac 0.12.1",
- "keyring",
- "md-5",
- "opendal",
- "reqwest 0.12.28",
- "russh",
- "russh-sftp",
- "serde",
- "serde_json",
- "sha1 0.10.6",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "toml 0.9.12+spec-1.1.0",
- "url",
- "webbrowser",
-]
-
-[[package]]
-name = "freally-core"
-version = "0.19.85"
-dependencies = [
- "blake3",
- "freally-settings",
- "criterion",
- "directories",
- "dunce",
- "filetime",
- "globset",
- "nix 0.29.0",
- "rand 0.9.4",
- "rusqlite",
- "sysinfo",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "unicode-normalization",
- "uuid",
- "walkdir",
-]
-
-[[package]]
-name = "freally-crypt"
-version = "0.19.85"
-dependencies = [
- "age",
- "freally-core",
- "secrecy",
- "serde",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "zstd",
-]
-
-[[package]]
-name = "freally-diag"
-version = "0.19.85"
-dependencies = [
- "serde",
- "serde_json",
- "sysinfo",
-]
-
-[[package]]
-name = "freally-hash"
-version = "0.19.85"
-dependencies = [
- "blake3",
- "freally-core",
- "crc32fast",
- "digest 0.10.7",
- "hex",
- "md-5",
- "rand 0.9.4",
- "sha1 0.10.6",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "xxhash-rust",
-]
-
-[[package]]
-name = "freally-helper"
-version = "0.19.85"
-dependencies = [
- "freally-core",
- "freally-hash",
- "freally-platform",
- "getrandom 0.3.4",
- "hex",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
-name = "freally-history"
-version = "0.19.85"
-dependencies = [
- "freally-core",
- "directories",
- "rusqlite",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
-name = "freally-i18n"
-version = "0.19.85"
-
-[[package]]
-name = "freally-journal"
-version = "0.19.85"
-dependencies = [
- "blake3",
- "freally-core",
- "directories",
- "rand 0.9.4",
- "redb",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
-name = "freally-mobile"
-version = "0.19.85"
-dependencies = [
- "async-trait",
- "base32",
- "freally-settings",
- "getrandom 0.3.4",
- "hmac 0.12.1",
- "jsonwebtoken",
- "qrcodegen",
- "rand_core 0.6.4",
- "rcgen",
- "reqwest 0.12.28",
- "rsa 0.9.10",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "toml 0.9.12+spec-1.1.0",
- "x25519-dalek",
- "zeroize",
-]
-
-[[package]]
-name = "freally-mount"
-version = "0.19.85"
-dependencies = [
- "freally-chunk",
- "freally-core",
- "freally-history",
- "fuser",
- "serde",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "widestring",
- "winfsp_wrs",
-]
-
-[[package]]
-name = "freally-perceptual"
-version = "0.19.85"
-dependencies = [
- "image",
- "image_hasher",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "freally-platform"
-version = "0.19.85"
-dependencies = [
- "blake3",
- "compio",
- "freally-core",
- "freally-hash",
- "core-foundation-sys 0.8.7",
- "libc",
- "reflink-copy",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "windows 0.58.0",
- "windows-sys 0.59.0",
- "xattr",
- "zbus",
-]
-
-[[package]]
-name = "freally-plugin"
-version = "0.19.85"
-dependencies = [
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "toml 0.9.12+spec-1.1.0",
- "wasmtime",
-]
-
-[[package]]
-name = "freally-power"
-version = "0.19.85"
-dependencies = [
- "battery",
- "freally-platform",
- "freally-settings",
- "freally-shape",
- "raw-cpuid",
- "serde",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
-name = "freally-provenance"
-version = "0.19.85"
-dependencies = [
- "bao",
- "blake3",
- "chrono",
- "ciborium",
- "freally-core",
- "freally-hash",
- "ed25519-dalek 2.2.0",
- "hex",
- "rand 0.8.5",
- "serde",
- "serde_bytes",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "freally-recovery"
-version = "0.19.85"
-dependencies = [
- "askama",
- "axum",
- "base32",
- "freally-chunk",
- "freally-history",
- "getrandom 0.3.4",
- "http",
- "percent-encoding",
- "reqwest 0.12.28",
- "secrecy",
- "serde",
- "serde_json",
- "subtle",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
-]
-
-[[package]]
-name = "freally-secure-delete"
-version = "0.19.85"
-dependencies = [
- "freally-core",
- "freally-platform",
- "rand 0.9.4",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "walkdir",
-]
-
-[[package]]
-name = "freally-server"
-version = "0.19.85"
-dependencies = [
- "axum",
- "base64 0.22.1",
- "bytes",
- "dav-server",
- "futures-util",
- "hex",
- "hmac 0.12.1",
- "http",
- "http-body",
- "http-body-util",
- "hyper",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "percent-encoding",
- "rand 0.10.1",
- "reqwest 0.12.28",
- "russh",
- "russh-sftp",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "subtle",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tower",
- "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "freally-settings"
-version = "0.19.85"
-dependencies = [
- "directories",
- "globset",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "toml 0.9.12+spec-1.1.0",
-]
-
-[[package]]
-name = "freally-shape"
-version = "0.19.85"
-dependencies = [
- "arc-swap",
- "blake3",
- "chrono",
- "freally-core",
- "governor",
- "rand 0.9.4",
- "serde",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
-name = "freally-shellext"
-version = "0.19.85"
-dependencies = [
- "tempfile",
- "windows 0.61.3",
- "windows-core 0.61.2",
- "windows-implement 0.60.2",
-]
-
-[[package]]
-name = "freally-snapshot"
-version = "0.19.85"
-dependencies = [
- "freally-core",
- "getrandom 0.3.4",
- "hex",
- "libc",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "uuid",
- "winapi",
- "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "freally-sync"
-version = "0.19.85"
-dependencies = [
- "blake3",
- "chrono",
- "freally-core",
- "redb",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "uuid",
- "walkdir",
-]
-
-[[package]]
-name = "freally-ui"
-version = "0.19.85"
-dependencies = [
- "arboard",
- "async-trait",
- "base32",
- "base64 0.22.1",
- "blake3",
- "chrono",
- "freally-audit",
- "freally-chunk",
- "freally-cloud",
- "freally-core",
- "freally-crypt",
- "freally-diag",
- "freally-hash",
- "freally-helper",
- "freally-history",
- "freally-journal",
- "freally-mobile",
- "freally-mount",
- "freally-platform",
- "freally-plugin",
- "freally-power",
- "freally-recovery",
- "freally-secure-delete",
- "freally-server",
- "freally-settings",
- "freally-shape",
- "freally-snapshot",
- "freally-sync",
- "freally-watch",
- "directories",
- "filetime",
- "gethostname",
- "getrandom 0.2.17",
- "globset",
- "hex",
- "hmac 0.12.1",
- "image",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "reqwest 0.12.28",
- "secrecy",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-single-instance",
- "tauri-plugin-updater",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "toml 0.9.12+spec-1.1.0",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "walkdir",
- "windows 0.61.3",
- "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "freally-watch"
-version = "0.19.85"
-dependencies = [
- "notify",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "core-foundation"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3601,6 +3018,589 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "freally-audit"
+version = "0.19.85"
+dependencies = [
+ "blake3",
+ "chrono",
+ "csv",
+ "freally-hash",
+ "gethostname",
+ "hex",
+ "libc",
+ "nix 0.29.0",
+ "serde",
+ "serde_json",
+ "subtle",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "freally-chunk"
+version = "0.19.85"
+dependencies = [
+ "aes 0.8.4",
+ "aes-gcm 0.10.3",
+ "base64 0.21.7",
+ "blake2",
+ "blake3",
+ "chrono",
+ "ciborium",
+ "cipher 0.4.4",
+ "ctr 0.9.2",
+ "directories",
+ "fastcdc",
+ "flate2",
+ "freally-core",
+ "getrandom 0.3.4",
+ "hkdf 0.12.4",
+ "hmac 0.12.1",
+ "poly1305",
+ "rand 0.9.4",
+ "redb",
+ "scrypt 0.11.0",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
+ "uuid",
+ "zstd",
+]
+
+[[package]]
+name = "freally-cli"
+version = "0.19.85"
+dependencies = [
+ "assert_cmd",
+ "chrono",
+ "clap",
+ "clap_complete",
+ "freally-chunk",
+ "freally-core",
+ "freally-hash",
+ "freally-history",
+ "freally-platform",
+ "freally-provenance",
+ "freally-server",
+ "freally-settings",
+ "freally-shape",
+ "predicates",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
+name = "freally-cloud"
+version = "0.19.85"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "blake3",
+ "bytes",
+ "freally-core",
+ "freally-settings",
+ "futures",
+ "getrandom 0.3.4",
+ "hex",
+ "hmac 0.12.1",
+ "keyring",
+ "md-5",
+ "opendal",
+ "reqwest 0.12.28",
+ "russh",
+ "russh-sftp",
+ "serde",
+ "serde_json",
+ "sha1 0.10.6",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+ "url",
+ "webbrowser",
+]
+
+[[package]]
+name = "freally-core"
+version = "0.19.85"
+dependencies = [
+ "blake3",
+ "criterion",
+ "directories",
+ "dunce",
+ "filetime",
+ "freally-settings",
+ "globset",
+ "nix 0.29.0",
+ "rand 0.9.4",
+ "rusqlite",
+ "sysinfo",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "unicode-normalization",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
+name = "freally-crypt"
+version = "0.19.85"
+dependencies = [
+ "age",
+ "freally-core",
+ "secrecy",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "zstd",
+]
+
+[[package]]
+name = "freally-diag"
+version = "0.19.85"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sysinfo",
+]
+
+[[package]]
+name = "freally-hash"
+version = "0.19.85"
+dependencies = [
+ "blake3",
+ "crc32fast",
+ "digest 0.10.7",
+ "freally-core",
+ "hex",
+ "md-5",
+ "rand 0.9.4",
+ "sha1 0.10.6",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "xxhash-rust",
+]
+
+[[package]]
+name = "freally-helper"
+version = "0.19.85"
+dependencies = [
+ "freally-core",
+ "freally-hash",
+ "freally-platform",
+ "getrandom 0.3.4",
+ "hex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "freally-history"
+version = "0.19.85"
+dependencies = [
+ "directories",
+ "freally-core",
+ "rusqlite",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "freally-i18n"
+version = "0.19.85"
+
+[[package]]
+name = "freally-journal"
+version = "0.19.85"
+dependencies = [
+ "blake3",
+ "directories",
+ "freally-core",
+ "rand 0.9.4",
+ "redb",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "freally-mobile"
+version = "0.19.85"
+dependencies = [
+ "async-trait",
+ "base32",
+ "freally-settings",
+ "getrandom 0.3.4",
+ "hmac 0.12.1",
+ "jsonwebtoken",
+ "qrcodegen",
+ "rand_core 0.6.4",
+ "rcgen",
+ "reqwest 0.12.28",
+ "rsa 0.9.10",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+ "x25519-dalek",
+ "zeroize",
+]
+
+[[package]]
+name = "freally-mount"
+version = "0.19.85"
+dependencies = [
+ "freally-chunk",
+ "freally-core",
+ "freally-history",
+ "fuser",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "widestring",
+ "winfsp_wrs",
+]
+
+[[package]]
+name = "freally-perceptual"
+version = "0.19.85"
+dependencies = [
+ "image",
+ "image_hasher",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "freally-platform"
+version = "0.19.85"
+dependencies = [
+ "blake3",
+ "compio",
+ "core-foundation-sys 0.8.7",
+ "freally-core",
+ "freally-hash",
+ "libc",
+ "reflink-copy",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "windows 0.58.0",
+ "windows-sys 0.59.0",
+ "xattr",
+ "zbus",
+]
+
+[[package]]
+name = "freally-plugin"
+version = "0.19.85"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+ "wasmtime",
+]
+
+[[package]]
+name = "freally-power"
+version = "0.19.85"
+dependencies = [
+ "battery",
+ "freally-platform",
+ "freally-settings",
+ "freally-shape",
+ "raw-cpuid",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "freally-provenance"
+version = "0.19.85"
+dependencies = [
+ "bao",
+ "blake3",
+ "chrono",
+ "ciborium",
+ "ed25519-dalek 2.2.0",
+ "freally-core",
+ "freally-hash",
+ "hex",
+ "rand 0.8.5",
+ "serde",
+ "serde_bytes",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "freally-recovery"
+version = "0.19.85"
+dependencies = [
+ "askama",
+ "axum",
+ "base32",
+ "freally-chunk",
+ "freally-history",
+ "getrandom 0.3.4",
+ "http",
+ "percent-encoding",
+ "reqwest 0.12.28",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "subtle",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+]
+
+[[package]]
+name = "freally-secure-delete"
+version = "0.19.85"
+dependencies = [
+ "freally-core",
+ "freally-platform",
+ "rand 0.9.4",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "walkdir",
+]
+
+[[package]]
+name = "freally-server"
+version = "0.19.85"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "bytes",
+ "dav-server",
+ "futures-util",
+ "hex",
+ "hmac 0.12.1",
+ "http",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "percent-encoding",
+ "rand 0.10.1",
+ "reqwest 0.12.28",
+ "russh",
+ "russh-sftp",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "freally-settings"
+version = "0.19.85"
+dependencies = [
+ "directories",
+ "globset",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
+name = "freally-shape"
+version = "0.19.85"
+dependencies = [
+ "arc-swap",
+ "blake3",
+ "chrono",
+ "freally-core",
+ "governor",
+ "rand 0.9.4",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "freally-shellext"
+version = "0.19.85"
+dependencies = [
+ "tempfile",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
+ "windows-implement 0.60.2",
+]
+
+[[package]]
+name = "freally-snapshot"
+version = "0.19.85"
+dependencies = [
+ "freally-core",
+ "getrandom 0.3.4",
+ "hex",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+ "winapi",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "freally-sync"
+version = "0.19.85"
+dependencies = [
+ "blake3",
+ "chrono",
+ "freally-core",
+ "redb",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
+name = "freally-ui"
+version = "0.19.85"
+dependencies = [
+ "arboard",
+ "async-trait",
+ "base32",
+ "base64 0.22.1",
+ "blake3",
+ "chrono",
+ "directories",
+ "filetime",
+ "freally-audit",
+ "freally-chunk",
+ "freally-cloud",
+ "freally-core",
+ "freally-crypt",
+ "freally-diag",
+ "freally-hash",
+ "freally-helper",
+ "freally-history",
+ "freally-journal",
+ "freally-mobile",
+ "freally-mount",
+ "freally-platform",
+ "freally-plugin",
+ "freally-power",
+ "freally-recovery",
+ "freally-secure-delete",
+ "freally-server",
+ "freally-settings",
+ "freally-shape",
+ "freally-snapshot",
+ "freally-sync",
+ "freally-watch",
+ "gethostname",
+ "getrandom 0.2.17",
+ "globset",
+ "hex",
+ "hmac 0.12.1",
+ "image",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "reqwest 0.12.28",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "walkdir",
+ "windows 0.61.3",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "freally-watch"
+version = "0.19.85"
+dependencies = [
+ "notify",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

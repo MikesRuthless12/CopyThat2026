@@ -10,8 +10,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use freally_core::{CopyControl, CopyEvent, MoveOptions, TreeOptions, copy_tree, move_tree};
 use filetime::{FileTime, set_file_mtime};
+use freally_core::{CopyControl, CopyEvent, MoveOptions, TreeOptions, copy_tree, move_tree};
 use rand::{RngCore, SeedableRng};
 use tempfile::tempdir;
 use tokio::sync::mpsc;

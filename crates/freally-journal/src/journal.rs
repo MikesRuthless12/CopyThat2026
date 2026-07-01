@@ -27,8 +27,8 @@ use crate::types::{
 /// `history.db` so a backup script that already grabs the data dir
 /// gets resume info for free.
 pub fn default_journal_path() -> Result<PathBuf> {
-    let dirs =
-        ProjectDirs::from("com", "Freally", "freally-file-manager").ok_or(JournalError::NoDataDir)?;
+    let dirs = ProjectDirs::from("com", "Freally", "freally-file-manager")
+        .ok_or(JournalError::NoDataDir)?;
     let dir = dirs.data_dir().to_path_buf();
     Ok(dir.join("freally-journal.redb"))
 }

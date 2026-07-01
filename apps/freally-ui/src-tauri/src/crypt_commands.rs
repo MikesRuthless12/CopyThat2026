@@ -20,8 +20,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use freally_crypt::{
-    CompressionLevel, CompressionPolicy, FreallyCryptHook, DEFAULT_DENY_EXTENSIONS,
-    EncryptionPolicy, Recipient,
+    CompressionLevel, CompressionPolicy, DEFAULT_DENY_EXTENSIONS, EncryptionPolicy,
+    FreallyCryptHook, Recipient,
 };
 use freally_settings::CryptSettings;
 

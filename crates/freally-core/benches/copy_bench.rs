@@ -25,9 +25,9 @@
 use std::env;
 use std::path::PathBuf;
 
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use freally_core::{CopyControl, TreeOptions};
 use freally_core::{CopyOptions, copy_file, copy_tree};
-use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use tempfile::tempdir;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;

@@ -28,7 +28,7 @@ use std::time::Duration;
 
 use freally_core::{CopyControl, CopyEvent, ProvenancePolicy, TreeOptions, copy_tree};
 use freally_provenance::{
-    FreallyProvenanceSink, DEFAULT_MANIFEST_FILENAME, SinkConfig, VerificationOutcome,
+    DEFAULT_MANIFEST_FILENAME, FreallyProvenanceSink, SinkConfig, VerificationOutcome,
     generate_signing_key, verify_manifest,
 };
 use tempfile::TempDir;

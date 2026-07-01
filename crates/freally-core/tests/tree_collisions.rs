@@ -4,10 +4,10 @@ mod common;
 
 use std::time::Duration;
 
+use filetime::{FileTime, set_file_mtime};
 use freally_core::{
     CollisionPolicy, CollisionResolution, CopyControl, CopyEvent, TreeOptions, copy_tree,
 };
-use filetime::{FileTime, set_file_mtime};
 use tempfile::tempdir;
 use tokio::sync::mpsc;
 

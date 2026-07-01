@@ -252,9 +252,7 @@ fn translate_path_strips_original_root_from_nested_path() {
 #[tokio::test(flavor = "current_thread")]
 async fn vss_opt_in_real_snapshot_of_system_drive() {
     if std::env::var("FREALLY_PHASE19B_VSS").ok().as_deref() != Some("1") {
-        eprintln!(
-            "skipping real VSS test (set FREALLY_PHASE19B_VSS=1 and run elevated to enable)"
-        );
+        eprintln!("skipping real VSS test (set FREALLY_PHASE19B_VSS=1 and run elevated to enable)");
         return;
     }
     // Snapshot the system drive via the in-process path. The test

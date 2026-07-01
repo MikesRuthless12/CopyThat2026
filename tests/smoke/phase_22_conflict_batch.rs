@@ -44,6 +44,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, UNIX_EPOCH};
 
+use filetime::{FileTime, set_file_mtime};
 use freally_core::{
     CollisionPolicy, CollisionResolution, CopyControl, CopyEvent, TreeOptions, copy_tree,
 };
@@ -51,7 +52,6 @@ use freally_settings::{
     ConflictProfile, ConflictProfileSettings, ConflictRule, ConflictRuleResolution, ProfileStore,
     Settings,
 };
-use filetime::{FileTime, set_file_mtime};
 use tempfile::tempdir;
 use tokio::sync::mpsc;
 

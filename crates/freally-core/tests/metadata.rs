@@ -5,8 +5,8 @@ mod common;
 use std::time::{Duration, SystemTime};
 
 use common::{run_copy, write_random};
-use freally_core::CopyOptions;
 use filetime::{FileTime, set_file_mtime};
+use freally_core::CopyOptions;
 use tempfile::tempdir;
 
 #[tokio::test]

@@ -209,9 +209,9 @@ pub(crate) async fn run_job(job: RunJob) {
     // effect on every in-flight job without re-enqueuing. The sink
     // is cheap to clone and short-circuits when the shape's current
     // rate is `None`.
-    copy_opts_with_verify.shape = Some(std::sync::Arc::new(
-        freally_shape::FreallyShapeSink::new(state.shape.clone()),
-    ));
+    copy_opts_with_verify.shape = Some(std::sync::Arc::new(freally_shape::FreallyShapeSink::new(
+        state.shape.clone(),
+    )));
 
     // Phase 35 — attach the crypt transform hook when Settings has
     // either encryption or compression turned on. The hook owns

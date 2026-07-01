@@ -22,8 +22,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
-use freally_core::{OutboardEncoder, ProvenanceSink};
 use ed25519_dalek::Signer;
+use freally_core::{OutboardEncoder, ProvenanceSink};
 
 use crate::encoder::{BaoOutboardEncoder, RootOnlyEncoder};
 use crate::error::ProvenanceError;

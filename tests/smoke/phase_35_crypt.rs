@@ -22,7 +22,7 @@ use std::path::Path;
 
 use freally_core::TransformSink;
 use freally_crypt::{
-    CompressionLevel, CompressionPolicy, FreallyCryptHook, EncryptionPolicy, Identity,
+    CompressionLevel, CompressionPolicy, EncryptionPolicy, FreallyCryptHook, Identity,
     decrypted_reader,
 };
 use secrecy::SecretString;

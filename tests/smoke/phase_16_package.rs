@@ -205,7 +205,12 @@ fn packaging_manifests_exist_and_are_non_empty() {
             "chocolateyinstall.ps1",
         ],
         &["packaging", "macos", "homebrew-cask", "freally.rb"],
-        &["packaging", "linux", "flatpak", "com.freally.filemanager.yml"],
+        &[
+            "packaging",
+            "linux",
+            "flatpak",
+            "com.freally.filemanager.yml",
+        ],
         &[
             "packaging",
             "linux",

@@ -382,12 +382,10 @@ pub async fn repository_set_tags(
     tags: Vec<String>,
 ) -> Result<bool, String> {
     let repo = state.repository().ok_or("repository-unavailable")?;
-    tokio::task::spawn_blocking(move || {
-        repo.set_tags(freally_chunk::SnapshotId(snapshot_id), tags)
-    })
-    .await
-    .map_err(|e| format!("set_tags task: {e}"))?
-    .map_err(|e| format!("set_tags: {e}"))
+    tokio::task::spawn_blocking(move || repo.set_tags(freally_chunk::SnapshotId(snapshot_id), tags))
+        .await
+        .map_err(|e| format!("set_tags task: {e}"))?
+        .map_err(|e| format!("set_tags: {e}"))
 }
 
 /// `repository_prune_policy` — global keep-last / keep-within prune that
@@ -536,10 +534,7 @@ fn repo_entry_dto(e: &freally_settings::RepoEntry, active: &str) -> RepoEntryDto
 }
 
 /// Persist `settings` (no-op when the path is empty, e.g. tests).
-fn persist_settings(
-    state: &AppState,
-    settings: &freally_settings::Settings,
-) -> Result<(), String> {
+fn persist_settings(state: &AppState, settings: &freally_settings::Settings) -> Result<(), String> {
     let path = state.settings_path.as_path();
     if path.as_os_str().is_empty() {
         return Ok(());

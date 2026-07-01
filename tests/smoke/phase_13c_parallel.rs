@@ -63,10 +63,9 @@ fn parallel_module_carries_min_file_threshold() {
     // file rather than depending on a private const; cheap and
     // catches a drift even when the module isn't built (e.g. a
     // non-Windows host that skipped the conditional compilation).
-    let parallel = std::fs::read_to_string(
-        repo_root().join("crates/freally-platform/src/native/parallel.rs"),
-    )
-    .unwrap();
+    let parallel =
+        std::fs::read_to_string(repo_root().join("crates/freally-platform/src/native/parallel.rs"))
+            .unwrap();
     assert!(
         parallel.contains("MIN_FILE_FOR_PARALLEL: u64 = 1024 * 1024 * 1024"),
         "parallel.rs must keep MIN_FILE_FOR_PARALLEL at 1 GiB",
@@ -79,10 +78,9 @@ fn parallel_module_carries_min_file_threshold() {
 
 #[test]
 fn parallel_module_documents_the_regression_outcome() {
-    let parallel = std::fs::read_to_string(
-        repo_root().join("crates/freally-platform/src/native/parallel.rs"),
-    )
-    .unwrap();
+    let parallel =
+        std::fs::read_to_string(repo_root().join("crates/freally-platform/src/native/parallel.rs"))
+            .unwrap();
     // The docstring spells out the measured A/B regression so a
     // future reader doesn't try to flip the default without re-
     // running the bench. Remove these assertions only after a

@@ -52,10 +52,8 @@ pub async fn hash_file_async_with_buffer(
     events: mpsc::Sender<HashEvent>,
 ) -> Result<HashReport, HashError> {
     let path_buf = path.to_path_buf();
-    let buffer_size = buffer_size.clamp(
-        freally_core::MIN_BUFFER_SIZE,
-        freally_core::MAX_BUFFER_SIZE,
-    );
+    let buffer_size =
+        buffer_size.clamp(freally_core::MIN_BUFFER_SIZE, freally_core::MAX_BUFFER_SIZE);
 
     let meta = tokio::fs::metadata(&path_buf)
         .await

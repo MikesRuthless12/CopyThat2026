@@ -849,10 +849,7 @@ fn job_to_summary(job: freally_core::Job) -> JobSummary {
 /// PWA sends the id as a u64 stringified (`"123"`); we look it up
 /// against `JobId::as_u64()` rather than constructing a `JobId` from
 /// a raw u64 since the public constructor lives on `Queue::add`.
-fn lookup_job_id(
-    queue: &freally_core::Queue,
-    target: &str,
-) -> Result<freally_core::JobId, String> {
+fn lookup_job_id(queue: &freally_core::Queue, target: &str) -> Result<freally_core::JobId, String> {
     let want: u64 = target
         .parse()
         .map_err(|_| format!("invalid job id `{target}`"))?;

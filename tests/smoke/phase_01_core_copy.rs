@@ -12,8 +12,8 @@
 
 use std::time::Instant;
 
-use freally_core::{CopyControl, CopyEvent, CopyOptions, copy_file};
 use filetime::{FileTime, set_file_mtime};
+use freally_core::{CopyControl, CopyEvent, CopyOptions, copy_file};
 use rand::{RngCore, SeedableRng};
 use tempfile::tempdir;
 use tokio::sync::mpsc;

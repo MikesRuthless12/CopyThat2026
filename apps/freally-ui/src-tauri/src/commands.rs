@@ -325,9 +325,7 @@ fn apply_options(
         } else {
             match settings.transfer.reflink {
                 freally_settings::ReflinkPreference::Prefer => freally_core::CopyStrategy::Auto,
-                freally_settings::ReflinkPreference::Avoid => {
-                    freally_core::CopyStrategy::NoReflink
-                }
+                freally_settings::ReflinkPreference::Avoid => freally_core::CopyStrategy::NoReflink,
                 freally_settings::ReflinkPreference::Disabled => {
                     freally_core::CopyStrategy::AlwaysAsync
                 }
@@ -338,9 +336,7 @@ fn apply_options(
             freally_settings::LockedFilePolicyChoice::Retry => {
                 freally_core::LockedFilePolicy::Retry
             }
-            freally_settings::LockedFilePolicyChoice::Skip => {
-                freally_core::LockedFilePolicy::Skip
-            }
+            freally_settings::LockedFilePolicyChoice::Skip => freally_core::LockedFilePolicy::Skip,
             freally_settings::LockedFilePolicyChoice::Snapshot => {
                 freally_core::LockedFilePolicy::Snapshot
             }
@@ -1078,9 +1074,7 @@ pub async fn history_rerun(
     ))
 }
 
-fn require_history(
-    state: &tauri::State<'_, AppState>,
-) -> Result<freally_history::History, String> {
+fn require_history(state: &tauri::State<'_, AppState>) -> Result<freally_history::History, String> {
     state
         .inner()
         .history

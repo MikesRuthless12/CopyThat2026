@@ -489,8 +489,7 @@ mod winfsp_body {
     /// winfsp initializer off the hot-path `Option<Arc<_>>` hunts
     /// at every callback.
     fn chunk_placeholder_fs() -> freally_chunk::ChunkStore {
-        let dir =
-            std::env::temp_dir().join(format!("freally-winfsp-empty-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("freally-winfsp-empty-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         freally_chunk::ChunkStore::open(&dir).expect("empty winfsp chunk store open")
     }

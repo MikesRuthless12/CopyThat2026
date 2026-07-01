@@ -668,8 +668,8 @@ fn now_ms_sync() -> i64 {
 /// the Tauri layer can show "database: `<path>`" in the About dialog
 /// without opening the DB.
 pub fn default_db_path() -> Result<PathBuf, HistoryError> {
-    let dirs =
-        ProjectDirs::from("com", "Freally", "freally-file-manager").ok_or(HistoryError::NoDataDir)?;
+    let dirs = ProjectDirs::from("com", "Freally", "freally-file-manager")
+        .ok_or(HistoryError::NoDataDir)?;
     let dir = dirs.data_dir().to_path_buf();
     Ok(dir.join("history.db"))
 }

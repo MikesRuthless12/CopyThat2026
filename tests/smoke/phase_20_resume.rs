@@ -261,8 +261,7 @@ async fn run_child_copy() {
         .begin_job(JobRecord::new("copy", src.clone(), Some(dst.clone())))
         .expect("begin_job");
 
-    let sink: Arc<dyn freally_core::JournalSink> =
-        Arc::new(FreallyJournalSink::new(journal, row));
+    let sink: Arc<dyn freally_core::JournalSink> = Arc::new(FreallyJournalSink::new(journal, row));
     let opts = CopyOptions {
         journal: Some(sink),
         journal_file_idx: 0,
