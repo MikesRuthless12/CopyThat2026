@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use copythat_chunk::{RepoFormat, migrate};
+use copythat_chunk::{RepoFormat, export, migrate};
 
 use crate::ExitCode;
 use crate::cli::{ExportArgs, GlobalArgs, MigrateArgs};
@@ -91,11 +91,31 @@ pub(crate) async fn run_export(
         )
         .await;
     }
-    let _ = writer.human(&format!(
-        "Exporting a CDR-0 repository to a {tool} repository is not yet implemented: it \
-         requires {tool}'s pack/index encoder + encryption (see docs/spec/CDR-0.md §11). To \
-         copy or re-home a CDR-0 repository, use `copythat migrate cdr <src> <dst>`.",
-        tool = to.as_str(),
-    ));
-    ExitCode::GenericError
+    let pw = args.password.clone().or_else(|| {
+        let env_var = match to {
+            RepoFormat::Restic => "RESTIC_PASSWORD",
+            RepoFormat::Borg => "BORG_PASSPHRASE",
+            RepoFormat::Kopia => "KOPIA_PASSWORD",
+            _ => return None,
+        };
+        std::env::var(env_var).ok()
+    });
+    match export(to, &args.src, &args.dst, pw.as_deref()) {
+        Ok(report) => {
+            let _ = writer.human(&format!(
+                "Exported {} snapshot(s) / {} file(s) into the {} repository at {}",
+                report.snapshots,
+                report.files,
+                to.as_str(),
+                args.dst.display(),
+            ));
+            ExitCode::Success
+        }
+        Err(e) => {
+            // kopia returns a typed `SourceUnsupported`; restic/borg surface
+            // any I/O or crypto failure. Both print a clear line here.
+            let _ = writer.human(&format!("export failed: {e}"));
+            ExitCode::GenericError
+        }
+    }
 }

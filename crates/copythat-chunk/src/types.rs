@@ -40,8 +40,14 @@ pub struct ChunkRef {
     pub hash: Blake3Hash,
     /// Byte offset in the reconstructed file where this chunk starts.
     pub offset: u64,
-    /// Byte length of the chunk.
+    /// Byte length of the chunk (LOGICAL / plaintext).
     pub len: u32,
+    /// Phase 49h — codec the chunk's stored bytes use. `#[serde(default)]`
+    /// so every manifest written before 49h decodes as `None` (correct —
+    /// those repos are uncompressed). Orthogonal to dedup: `hash` + `len`
+    /// are always of the plaintext.
+    #[serde(default)]
+    pub codec: crate::compress::ChunkCodec,
 }
 
 /// A file-level manifest. One manifest per distinct source file that

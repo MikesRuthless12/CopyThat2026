@@ -1199,6 +1199,32 @@ repo-kind-copy = कॉपी
 repo-kind-sync = सिंक
 repo-kind-version = संस्करण
 repo-kind-backup = बैकअप
+# Phase 49o — snapshot diff / compare.
+library-tab-compare = तुलना करें
+repo-change-added = जोड़ा गया
+repo-change-removed = हटाया गया
+repo-change-modified = संशोधित
+repo-change-unchanged = कोई बदलाव नहीं
+repo-diff-summary = { $added } जोड़े गए · { $removed } हटाए गए · { $modified } संशोधित
+repo-diff-bytes-added = { $bytes } नया
+repo-diff-pick-two = तुलना के लिए दो स्नैपशॉट चुनें
+# Phase 49r — statistics / reports.
+library-tab-reports = रिपोर्ट
+report-growth-title = स्टोरेज वृद्धि
+report-by-kind-title = प्रकार के अनुसार
+report-top-files-title = शीर्ष फ़ाइलें
+report-dedup-ratio = { $pct }% डिडुप्लिकेट किया गया
+report-export = रिपोर्ट निर्यात करें
+report-exported = रिपोर्ट { $path } में सहेजी गई
+report-file-versions = { $n } संस्करण
+# Phase 49p — pinning / prune.
+repo-pin = पिन करें
+repo-unpin = अनपिन करें
+repo-pinned-badge = पिन किया गया
+repo-prune-title = छँटाई करें
+repo-prune-keep-last = नवीनतम रखें
+repo-prune-removed = { $n } स्नैपशॉट छाँटे गए
+repo-prune-none = छाँटने के लिए कुछ नहीं
 
 # Phase 49c — बैकअप स्रोत।
 library-tab-sources = स्रोत
@@ -1214,6 +1240,32 @@ backup-running = बैकअप ले रहे हैं… { $files } फ़
 backup-toast-started = { $label } का बैकअप ले रहे हैं…
 backup-toast-completed = { $label } का बैकअप लिया: { $files } फ़ाइलें
 backup-toast-failed = { $label } का बैकअप विफल: { $reason }
+# Phase 49e — per-source retention + prune.
+backup-retention = प्रतिधारण
+backup-retention-keep-all = सभी रखें
+backup-retention-last = अंतिम { $n } रखें
+backup-retention-days = { $days } दिन से पुराने
+backup-retention-gfs = GFS रोलिंग
+backup-prune-now = अभी छँटाई करें
+backup-prune-none = छँटाई के लिए कुछ नहीं
+backup-prune-result = { $removed } स्नैपशॉट हटाए · { $bytes } पुनः प्राप्त
+# Phase 49f — per-source scheduling.
+backup-schedule = शेड्यूल
+backup-schedule-manual = मैन्युअल
+backup-schedule-hourly = प्रति घंटा
+backup-schedule-daily = दैनिक
+backup-schedule-weekly = साप्ताहिक
+backup-next-run = अगला रन { $when }
+backup-not-scheduled = शेड्यूल नहीं किया गया
+# Phase 49g — source filters.
+backup-include-ph = इन्क्लूड ग्लोब्स (कॉमा से अलग)
+backup-skip-hidden = छिपी हुई छोड़ें
+# Phase 49q — notifications.
+notify-title = सूचनाएँ
+notify-on-success = सफल होने पर
+notify-on-failure = विफल होने पर
+notify-test = परीक्षण भेजें
+notify-test-sent = { $n } गंतव्य को परीक्षण भेजा गया
 
 # Phase 49d — पुनर्स्थापना ब्राउज़र।
 restore-browse = पुनर्स्थापित करें…
@@ -1231,5 +1283,64 @@ restore-toast-failed = पुनर्स्थापना विफल: { $rea
 snapshot-forget = भूल जाएँ
 snapshot-forget-toast = स्नैपशॉट भुला दिया — स्थान खाली करने के लिए “स्थान पुनः प्राप्त करें” चलाएँ
 library-reclaim = स्थान पुनः प्राप्त करें
+# Phase 49i — full compaction.
+library-compact = पूर्ण संघनन
+library-compact-started = संघनन शुरू हुआ — कार्य देखें
+# Phase 49h — compression.
+library-stat-compression = कम्प्रेशन से बचत
+storage-compression = कम्प्रेशन
+storage-compression-off = बंद
+storage-compression-auto = स्वतः (कम्प्रेस न होने योग्य डेटा छोड़ें)
+storage-compression-always = हमेशा
+storage-compression-restart = अगले लॉन्च पर लागू होगा
+# Phase 49j — tasks & progress center.
+footer-tasks = कार्य
+tasks-title = कार्य
+tasks-empty = अभी तक कोई कार्य नहीं
+tasks-running = चल रहा है
+tasks-recent = हाल के
+tasks-cancel = रद्द करें
+task-state-running = चल रहा है
+task-state-completed = पूर्ण
+task-state-failed = विफल
+task-state-cancelled = रद्द किया गया
+# Phase 49k — repository setup/connect wizard.
+repo-wizard-title = रिपॉज़िटरी कनेक्ट करें
+repo-wizard-create-tab = नया बनाएँ
+repo-wizard-connect-tab = मौजूदा कनेक्ट करें
+repo-field-name = नाम
+repo-field-path = स्थान
+repo-field-password = पासफ़्रेज़ (वैकल्पिक)
+repo-action-create = बनाएँ
+repo-action-connect = कनेक्ट करें
+repo-action-browse = ब्राउज़ करें…
+repo-switcher-label = रिपॉज़िटरी
+repo-action-forget = भूल जाएँ
+repo-action-change-pass = पासफ़्रेज़ बदलें…
+repo-password-old = वर्तमान पासफ़्रेज़
+repo-password-new = नया पासफ़्रेज़
+repo-error-exists = इस स्थान पर पहले से एक रिपॉज़िटरी मौजूद है
+repo-error-not-found = इस स्थान पर कोई रिपॉज़िटरी नहीं मिली
+repo-error-bad-pass = पासफ़्रेज़ ग़लत है
+repo-note-no-encryption = पासफ़्रेज़ केवल पहुँच नियंत्रित करता है; निष्क्रिय डेटा एन्क्रिप्शन किसी बाद के रिलीज़ में आएगा
+repo-confirm-forget = "{ $name }" को सूची से हटाएँ? आपका डेटा डिस्क पर बना रहता है।
+repo-toast-created = रिपॉज़िटरी "{ $name }" बनाई गई
+repo-toast-connected = "{ $name }" से कनेक्ट किया गया
+repo-toast-pass-changed = पासफ़्रेज़ अपडेट किया गया
+# Phase 49l — Sources dashboard.
+library-tab-overview = अवलोकन
+library-source-empty = अभी तक कोई स्रोत नहीं
+library-source-unknown = (अनिर्दिष्ट स्रोत)
+library-source-snapshots = { $n } स्नैपशॉट
+library-source-latest = नवीनतम { $when }
+# Phase 49n — verify & repair.
+repo-action-verify = सत्यापित करें
+repo-action-verify-deep = सत्यापित करें (सभी डेटा पढ़ें)
+repo-action-repair = मरम्मत करें…
+repo-verify-clean = { $files } फ़ाइलें / { $chunks } खंड सत्यापित — कोई क्षति नहीं
+repo-verify-damaged = { $missing } गायब, { $corrupt } दूषित खंड
+repo-repair-confirm = { $n } स्नैपशॉट हटाएँ जिन्हें अब पुनर्स्थापित नहीं किया जा सकता?
+repo-repair-removed = { $n } क्षतिग्रस्त स्नैपशॉट हटाए गए
+repo-repair-none = मरम्मत के लिए कुछ नहीं — रिपॉज़िटरी स्वच्छ है
 repo-gc-done = { $bytes } पुनः प्राप्त ({ $chunks } खंड)
 restore-toast-partial = { $restored } पुनर्स्थापित, { $skipped } छोड़े गए, { $failed } विफल

@@ -259,6 +259,16 @@ pub fn synthesize_attr_with_size(
                 mtime_unix_secs: mount_mtime_unix_secs,
             }
         }
+        // Phase 49m — a snapshot file; size comes straight from the
+        // manifest (no `size_lookup` round-trip needed).
+        NodeKind::SnapshotFile { manifest } => MountFileAttr {
+            ino: inode,
+            size: manifest.size,
+            kind: MountFileKind::RegularFile,
+            perm: 0o444,
+            nlink: 1,
+            mtime_unix_secs: mount_mtime_unix_secs,
+        },
     })
 }
 

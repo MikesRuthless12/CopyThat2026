@@ -1199,6 +1199,32 @@ repo-kind-copy = Kopie
 repo-kind-sync = Synchronisatie
 repo-kind-version = Versie
 repo-kind-backup = Back-up
+# Phase 49o — snapshot diff / compare.
+library-tab-compare = Vergelijken
+repo-change-added = Toegevoegd
+repo-change-removed = Verwijderd
+repo-change-modified = Gewijzigd
+repo-change-unchanged = Geen wijzigingen
+repo-diff-summary = { $added } toegevoegd · { $removed } verwijderd · { $modified } gewijzigd
+repo-diff-bytes-added = { $bytes } nieuw
+repo-diff-pick-two = Kies twee snapshots om te vergelijken
+# Phase 49r — statistics / reports.
+library-tab-reports = Rapporten
+report-growth-title = Opslaggroei
+report-by-kind-title = Op type
+report-top-files-title = Topbestanden
+report-dedup-ratio = { $pct }% gededupliceerd
+report-export = Rapport exporteren
+report-exported = Rapport opgeslagen in { $path }
+report-file-versions = { $n } versies
+# Phase 49p — pinning / prune.
+repo-pin = Vastmaken
+repo-unpin = Losmaken
+repo-pinned-badge = Vastgemaakt
+repo-prune-title = Opschonen
+repo-prune-keep-last = Nieuwste behouden
+repo-prune-removed = { $n } snapshots opgeschoond
+repo-prune-none = Niets op te schonen
 
 # Phase 49c — back-upbronnen.
 library-tab-sources = Bronnen
@@ -1214,6 +1240,32 @@ backup-running = Back-uppen… { $files } bestanden
 backup-toast-started = { $label } back-uppen…
 backup-toast-completed = { $label } geback-upt: { $files } bestanden
 backup-toast-failed = Back-up van { $label } mislukt: { $reason }
+# Phase 49e — per-source retention + prune.
+backup-retention = Bewaarbeleid
+backup-retention-keep-all = Alles behouden
+backup-retention-last = Laatste { $n } behouden
+backup-retention-days = Ouder dan { $days } dagen
+backup-retention-gfs = GFS-rotatie
+backup-prune-now = Nu opschonen
+backup-prune-none = Niets op te schonen
+backup-prune-result = { $removed } momentopnames verwijderd · { $bytes } vrijgemaakt
+# Phase 49f — per-source scheduling.
+backup-schedule = Planning
+backup-schedule-manual = Handmatig
+backup-schedule-hourly = Elk uur
+backup-schedule-daily = Dagelijks
+backup-schedule-weekly = Wekelijks
+backup-next-run = Volgende uitvoering { $when }
+backup-not-scheduled = Niet gepland
+# Phase 49g — source filters.
+backup-include-ph = Insluitings-globs (door komma's gescheiden)
+backup-skip-hidden = Verborgen overslaan
+# Phase 49q — notifications.
+notify-title = Meldingen
+notify-on-success = Bij succes
+notify-on-failure = Bij mislukking
+notify-test = Test verzenden
+notify-test-sent = Test verzonden naar { $n } bestemming(en)
 
 # Phase 49d — herstelbrowser.
 restore-browse = Herstellen…
@@ -1231,5 +1283,64 @@ restore-toast-failed = Herstellen mislukt: { $reason }
 snapshot-forget = Vergeten
 snapshot-forget-toast = Momentopname vergeten — voer Ruimte vrijmaken uit om deze vrij te geven
 library-reclaim = Ruimte vrijmaken
+# Phase 49i — full compaction.
+library-compact = Volledige compactie
+library-compact-started = Compactie gestart — bekijk Taken
+# Phase 49h — compression.
+library-stat-compression = Bespaard door compressie
+storage-compression = Compressie
+storage-compression-off = Uit
+storage-compression-auto = Automatisch (niet-comprimeerbare overslaan)
+storage-compression-always = Altijd
+storage-compression-restart = Wordt bij volgende start toegepast
+# Phase 49j — tasks & progress center.
+footer-tasks = Taken
+tasks-title = Taken
+tasks-empty = Nog geen taken
+tasks-running = Actief
+tasks-recent = Recent
+tasks-cancel = Annuleren
+task-state-running = Actief
+task-state-completed = Voltooid
+task-state-failed = Mislukt
+task-state-cancelled = Geannuleerd
+# Phase 49k — repository setup/connect wizard.
+repo-wizard-title = Repository verbinden
+repo-wizard-create-tab = Nieuw aanmaken
+repo-wizard-connect-tab = Bestaande verbinden
+repo-field-name = Naam
+repo-field-path = Locatie
+repo-field-password = Wachtwoordzin (optioneel)
+repo-action-create = Aanmaken
+repo-action-connect = Verbinden
+repo-action-browse = Bladeren…
+repo-switcher-label = Repository
+repo-action-forget = Vergeten
+repo-action-change-pass = Wachtwoordzin wijzigen…
+repo-password-old = Huidige wachtwoordzin
+repo-password-new = Nieuwe wachtwoordzin
+repo-error-exists = Op deze locatie bestaat al een repository
+repo-error-not-found = Geen repository gevonden op deze locatie
+repo-error-bad-pass = Onjuiste wachtwoordzin
+repo-note-no-encryption = De wachtwoordzin regelt alleen de toegang; versleuteling in rust komt in een latere versie
+repo-confirm-forget = "{ $name }" uit de lijst verwijderen? Je gegevens blijven op de schijf.
+repo-toast-created = Repository "{ $name }" aangemaakt
+repo-toast-connected = Verbonden met "{ $name }"
+repo-toast-pass-changed = Wachtwoordzin bijgewerkt
+# Phase 49l — Sources dashboard.
+library-tab-overview = Overzicht
+library-source-empty = Nog geen bronnen
+library-source-unknown = (niet-opgegeven bron)
+library-source-snapshots = { $n } momentopnamen
+library-source-latest = Laatste { $when }
+# Phase 49n — verify & repair.
+repo-action-verify = Verifiëren
+repo-action-verify-deep = Verifiëren (alle gegevens lezen)
+repo-action-repair = Repareren…
+repo-verify-clean = { $files } bestanden / { $chunks } blokken geverifieerd — geen schade
+repo-verify-damaged = { $missing } ontbreekt, { $corrupt } beschadigde blokken
+repo-repair-confirm = { $n } momentopnamen verwijderen die niet meer hersteld kunnen worden?
+repo-repair-removed = { $n } beschadigde momentopnamen verwijderd
+repo-repair-none = Niets te repareren — de repository is schoon
 repo-gc-done = { $bytes } vrijgemaakt ({ $chunks } blokken)
 restore-toast-partial = { $restored } hersteld, { $skipped } overgeslagen, { $failed } mislukt

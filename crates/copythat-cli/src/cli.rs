@@ -161,6 +161,11 @@ pub struct ExportArgs {
     pub to: String,
     /// Destination repository path.
     pub dst: PathBuf,
+    /// Passphrase to encrypt the exported repository (restic / borg). Falls
+    /// back to the target tool's conventional env var (`RESTIC_PASSWORD` /
+    /// `BORG_PASSPHRASE`).
+    #[arg(long)]
+    pub password: Option<String>,
 }
 
 /// `copythat serve <…>` — Phase 48 headless server mode.

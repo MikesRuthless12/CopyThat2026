@@ -457,8 +457,13 @@ fn walk_tree(
                 for cid in node.content.iter().flatten() {
                     bytes.extend_from_slice(&read_blob(ctx.repo, ctx.key, ctx.index, cid)?);
                 }
-                let manifest =
-                    crate::manifest::chunk_into_store(ctx.dest.store(), &ctx.chunker, &bytes)?.1;
+                let manifest = crate::manifest::chunk_into_store(
+                    ctx.dest.store(),
+                    &ctx.chunker,
+                    &bytes,
+                    ctx.dest.compression(),
+                )?
+                .1;
                 out.push(FileEntry {
                     path: super::safe_path(&path),
                     manifest,

@@ -249,7 +249,7 @@ pub async fn start_sync(
     let settings_handle = state.settings.clone();
     let settings_path = state.settings_path.clone();
     // Phase 49b — captures for the post-run `Sync` snapshot.
-    let repository = state.repository.clone();
+    let repository = state.repository();
     let snapshot_on_sync = state.settings_snapshot().chunk_store.snapshot_on_sync;
     let sync_right = cfg.right.clone();
     let sync_label = cfg.label.clone();

@@ -45,13 +45,14 @@
 //! ACID.
 
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use redb::{Database, ReadableTable, ReadableTableMetadata, TableDefinition};
 use uuid::Uuid;
 
+use crate::compress::{ChunkCodec, RepoCompression};
 use crate::error::{ChunkStoreError, Result};
 use crate::types::{Blake3Hash, Manifest, hex_of};
 
@@ -88,8 +89,15 @@ pub struct ChunkLocator {
     pub pack_id: Uuid,
     /// Byte offset within the pack.
     pub offset: u64,
-    /// Length in bytes. Also the hint for the `get` read.
+    /// LOGICAL (plaintext) length — the size `get` returns; unchanged
+    /// meaning from the v0 format.
     pub len: u32,
+    /// Phase 49h — bytes actually stored in the pack at `offset`
+    /// (`== len` when `codec == None`). Legacy v0 records decode with
+    /// `stored_len = len`.
+    pub stored_len: u32,
+    /// Phase 49h — how the stored bytes are encoded.
+    pub codec: ChunkCodec,
 }
 
 /// The chunk store.
@@ -102,12 +110,35 @@ pub struct ChunkStore {
     packs_dir: PathBuf,
     db: Database,
     active: Mutex<ActivePack>,
+    /// Phase 49i — active-pack rollover threshold. Overridable via
+    /// [`Self::open_with_rollover`] so compaction tests can force many
+    /// small packs; production uses [`PACK_ROLLOVER_BYTES`].
+    rollover_bytes: u64,
+    /// Phase 50g — pluggable pack-blob storage. `LocalFsBackend(packs_dir)`
+    /// by default (byte-for-byte the pre-50g behaviour); the read path routes
+    /// through it so the store can later live on a remote object backend.
+    backend: Box<dyn crate::backend::BlobBackend>,
 }
 
 struct ActivePack {
     id: Uuid,
     path: PathBuf,
     size: u64,
+}
+
+/// Phase 49i — per-pack live accounting for the maintenance/compaction UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PackStat {
+    /// Pack file UUID.
+    pub pack_id: Uuid,
+    /// On-disk size of the pack file.
+    pub file_bytes: u64,
+    /// Sum of `stored_len` over the live index rows pointing at this pack.
+    pub live_bytes: u64,
+    /// Count of live chunks in this pack.
+    pub live_chunks: u64,
+    /// Whether this is the active (currently-appended) pack — never compacted.
+    pub is_active: bool,
 }
 
 impl std::fmt::Debug for ChunkStore {
@@ -124,6 +155,13 @@ impl ChunkStore {
     /// Creates the directory + `packs/` subdir if missing and seeds
     /// the redb tables on first call.
     pub fn open(root: &Path) -> Result<Self> {
+        Self::open_with_rollover(root, PACK_ROLLOVER_BYTES)
+    }
+
+    /// Open with a custom active-pack rollover threshold (Phase 49i). The
+    /// production [`Self::open`] uses [`PACK_ROLLOVER_BYTES`]; a small value
+    /// here forces many packs so compaction can be exercised in tests.
+    pub fn open_with_rollover(root: &Path, rollover_bytes: u64) -> Result<Self> {
         std::fs::create_dir_all(root).map_err(|e| ChunkStoreError::Io {
             path: root.to_path_buf(),
             source: e,
@@ -182,9 +220,11 @@ impl ChunkStore {
 
         Ok(Self {
             root: root.to_path_buf(),
+            backend: Box::new(crate::backend::LocalFsBackend::new(packs_dir.clone())),
             packs_dir,
             db,
             active: Mutex::new(active),
+            rollover_bytes,
         })
     }
 
@@ -198,19 +238,10 @@ impl ChunkStore {
     /// by the spec's smoke case 3 and by the Settings "disk usage"
     /// readout.
     pub fn disk_usage_bytes(&self) -> Result<u64> {
+        // Phase 50g — sum pack sizes via the backend.
         let mut total = 0u64;
-        let rd = std::fs::read_dir(&self.packs_dir).map_err(|e| ChunkStoreError::Io {
-            path: self.packs_dir.clone(),
-            source: e,
-        })?;
-        for ent in rd {
-            let ent = ent.map_err(|e| ChunkStoreError::Io {
-                path: self.packs_dir.clone(),
-                source: e,
-            })?;
-            if let Ok(m) = ent.metadata() {
-                total += m.len();
-            }
+        for name in self.backend.list("pack-")? {
+            total += self.backend.size(&name)?.unwrap_or(0);
         }
         Ok(total)
     }
@@ -237,20 +268,28 @@ impl ChunkStore {
         let Some(v) = tbl.get(hash.as_slice())? else {
             return Ok(None);
         };
-        Ok(Some(decode_locator(v.value())))
+        Ok(Some(decode_locator(v.value())?))
     }
 
-    /// Insert `bytes` keyed by `hash`. If the hash is already
-    /// present, the insert is a no-op (dedup path). Callers that
-    /// care can check `has` first, but `put` is the canonical entry.
-    pub fn put(&self, hash: Blake3Hash, bytes: &[u8]) -> Result<()> {
-        // Point-read first: dedup fast path avoids the pack write +
-        // transaction commit cost.
+    /// Insert `plaintext` keyed by `hash`, encoding the stored bytes per
+    /// `comp` (Phase 49h). On a dedup hit returns the EXISTING chunk's
+    /// codec (first writer wins) so the caller's manifest records the
+    /// truth; otherwise the codec actually used. The hash is always
+    /// `BLAKE3(plaintext)`, independent of codec.
+    pub fn put_chunk(
+        &self,
+        hash: Blake3Hash,
+        plaintext: &[u8],
+        comp: RepoCompression,
+    ) -> Result<ChunkCodec> {
+        // Point-read first: dedup fast path avoids the pack write + commit
+        // cost. On a hit, return the EXISTING chunk's codec (first writer
+        // wins) so the caller records the truth, not what it would pick.
         {
             let txn = self.db.begin_read()?;
             let tbl = txn.open_table(CHUNKS)?;
-            if tbl.get(hash.as_slice())?.is_some() {
-                return Ok(());
+            if let Some(v) = tbl.get(hash.as_slice())? {
+                return Ok(decode_locator(v.value())?.codec);
             }
         }
 
@@ -259,24 +298,28 @@ impl ChunkStore {
             .lock()
             .map_err(|_| ChunkStoreError::Redb("active pack mutex poisoned".into()))?;
 
-        // Roll over the pack if it's grown past threshold.
-        if active.size >= PACK_ROLLOVER_BYTES {
-            let id = Uuid::new_v4();
-            let path = self.packs_dir.join(format!("pack-{id}.pack"));
-            File::create(&path).map_err(|e| ChunkStoreError::Io {
-                path: path.clone(),
-                source: e,
-            })?;
-            *active = ActivePack { id, path, size: 0 };
-            let txn = self.db.begin_write()?;
-            {
-                let mut stats = txn.open_table(STATS)?;
-                stats.insert("active_pack_id", active.id.as_bytes().as_slice())?;
+        // Re-check dedup UNDER the active-pack lock. Two concurrent record
+        // paths (e.g. a manual "Back up now" racing a scheduled tick) each
+        // hold only a shared read lease, so both can miss the unlocked
+        // point-read above for the same new chunk. Without this second check
+        // both would append a physical copy — dead space gc can't reclaim
+        // until a full compaction — and both would count it as a new chunk.
+        {
+            let txn = self.db.begin_read()?;
+            let tbl = txn.open_table(CHUNKS)?;
+            if let Some(v) = tbl.get(hash.as_slice())? {
+                return Ok(decode_locator(v.value())?.codec);
             }
-            txn.commit()?;
         }
 
-        // Append bytes to the active pack file.
+        let (codec, stored) = comp.encode(plaintext);
+
+        // Roll over the pack if it's grown past threshold.
+        if active.size >= self.rollover_bytes {
+            self.roll_locked(&mut active)?;
+        }
+
+        // Append the STORED bytes (codec-encoded) to the active pack file.
         let offset = active.size;
         {
             let mut f = OpenOptions::new()
@@ -286,7 +329,7 @@ impl ChunkStore {
                     path: active.path.clone(),
                     source: e,
                 })?;
-            f.write_all(bytes).map_err(|e| ChunkStoreError::Io {
+            f.write_all(&stored).map_err(|e| ChunkStoreError::Io {
                 path: active.path.clone(),
                 source: e,
             })?;
@@ -295,13 +338,15 @@ impl ChunkStore {
                 source: e,
             })?;
         }
-        active.size += bytes.len() as u64;
+        active.size += stored.len() as u64;
 
-        // Index the new chunk.
+        // Index the new chunk: logical len = plaintext, stored_len = on-disk.
         let locator = ChunkLocator {
             pack_id: active.id,
             offset,
-            len: bytes.len() as u32,
+            len: plaintext.len() as u32,
+            stored_len: stored.len() as u32,
+            codec,
         };
         let encoded = encode_locator(&locator);
         let txn = self.db.begin_write()?;
@@ -310,7 +355,15 @@ impl ChunkStore {
             tbl.insert(hash.as_slice(), encoded.as_slice())?;
         }
         txn.commit()?;
-        Ok(())
+        Ok(codec)
+    }
+
+    /// Insert `bytes` keyed by `hash` UNCOMPRESSED — a back-compat shim
+    /// over [`Self::put_chunk`] with [`RepoCompression::Off`]. If the hash
+    /// is already present, the insert is a no-op (dedup path).
+    pub fn put(&self, hash: Blake3Hash, bytes: &[u8]) -> Result<()> {
+        self.put_chunk(hash, bytes, RepoCompression::Off)
+            .map(|_| ())
     }
 
     /// Read the raw bytes for `hash`. Returns `Ok(None)` when the
@@ -320,26 +373,26 @@ impl ChunkStore {
         let Some(loc) = self.locate(hash)? else {
             return Ok(None);
         };
-        let pack_path = self.packs_dir.join(format!("pack-{}.pack", loc.pack_id));
-        let mut f = File::open(&pack_path).map_err(|e| ChunkStoreError::Io {
-            path: pack_path.clone(),
-            source: e,
-        })?;
-        f.seek(SeekFrom::Start(loc.offset))
-            .map_err(|e| ChunkStoreError::Io {
-                path: pack_path.clone(),
-                source: e,
-            })?;
-        let mut buf = vec![0u8; loc.len as usize];
-        f.read_exact(&mut buf).map_err(|e| ChunkStoreError::Io {
-            path: pack_path.clone(),
-            source: e,
-        })?;
-        let got = blake3::hash(&buf);
+        // Phase 50g — read through the blob backend (LocalFsBackend seeks the
+        // pack file; a remote backend would range-get the object).
+        let pack_name = format!("pack-{}.pack", loc.pack_id);
+        let stored = self
+            .backend
+            .get_range(&pack_name, loc.offset, loc.stored_len as usize)?
+            .ok_or_else(|| ChunkStoreError::MissingChunk { hash: hex_of(hash) })?;
+        // Decode the stored bytes back to plaintext. The zstd decompress is
+        // capacity-bounded by the known logical length, so a crafted frame
+        // can't blow memory (no decompression bomb).
+        let plaintext = match loc.codec {
+            ChunkCodec::None => stored,
+            ChunkCodec::Zstd => zstd::bulk::decompress(&stored, loc.len as usize)
+                .map_err(|_| ChunkStoreError::CorruptChunk { hash: hex_of(hash) })?,
+        };
+        let got = blake3::hash(&plaintext);
         if got.as_bytes() != hash {
             return Err(ChunkStoreError::CorruptChunk { hash: hex_of(hash) });
         }
-        Ok(Some(buf))
+        Ok(Some(plaintext))
     }
 
     /// Persist a manifest under `key`. `key` is opaque to the store
@@ -399,7 +452,7 @@ impl ChunkStore {
             }
             let mut hash = [0u8; 32];
             hash.copy_from_slice(key);
-            out.push((hash, decode_locator(v.value())));
+            out.push((hash, decode_locator(v.value())?));
         }
         Ok(out)
     }
@@ -440,13 +493,9 @@ impl ChunkStore {
     /// as already-reclaimed (`Ok(0)`), so GC is idempotent across a
     /// crash mid-sweep.
     pub(crate) fn remove_pack_file(&self, id: Uuid) -> Result<u64> {
-        let path = self.packs_dir.join(format!("pack-{id}.pack"));
-        let freed = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-        match std::fs::remove_file(&path) {
-            Ok(()) => Ok(freed),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(0),
-            Err(e) => Err(ChunkStoreError::Io { path, source: e }),
-        }
+        // Phase 50g — reclaim through the backend (LocalFs removes the file;
+        // a remote backend deletes the object). Idempotent (0 if absent).
+        self.backend.delete(&format!("pack-{id}.pack"))
     }
 
     /// Every Phase 27 manifest currently persisted in the `manifests`
@@ -464,28 +513,235 @@ impl ChunkStore {
         }
         Ok(out)
     }
+
+    // ----- Phase 49i — maintenance / compaction -----
+
+    /// Replace the active pack with a fresh one. Caller holds the `active`
+    /// lock. The old active pack becomes a normal, compactable pack;
+    /// persists the new id so a restart resumes it.
+    fn roll_locked(&self, active: &mut ActivePack) -> Result<()> {
+        let id = Uuid::new_v4();
+        let path = self.packs_dir.join(format!("pack-{id}.pack"));
+        File::create(&path).map_err(|e| ChunkStoreError::Io {
+            path: path.clone(),
+            source: e,
+        })?;
+        *active = ActivePack { id, path, size: 0 };
+        let txn = self.db.begin_write()?;
+        {
+            let mut stats = txn.open_table(STATS)?;
+            stats.insert("active_pack_id", active.id.as_bytes().as_slice())?;
+        }
+        txn.commit()?;
+        Ok(())
+    }
+
+    /// Force a fresh active pack so the *current* active pack becomes
+    /// compactable (its dead bytes can then be reclaimed). (Phase 49i.)
+    pub(crate) fn roll_active_pack(&self) -> Result<()> {
+        let mut active = self
+            .active
+            .lock()
+            .map_err(|_| ChunkStoreError::Redb("active pack mutex poisoned".into()))?;
+        self.roll_locked(&mut active)
+    }
+
+    /// Per-pack live accounting. After a [`crate::Repository::gc`] sweep
+    /// every index row is live, so `live_bytes(pack) = Σ stored_len` of the
+    /// rows pointing at it and `dead = file_bytes - live_bytes`. A pack with
+    /// zero live rows still appears (so callers see fully-dead packs).
+    /// (Phase 49i.)
+    pub(crate) fn pack_stats(&self) -> Result<Vec<PackStat>> {
+        use std::collections::HashMap;
+        let active_id = self.active_pack_id()?;
+        let mut live: HashMap<Uuid, (u64, u64)> = HashMap::new();
+        for (_h, loc) in self.all_locators()? {
+            let e = live.entry(loc.pack_id).or_insert((0, 0));
+            e.0 += u64::from(loc.stored_len);
+            e.1 += 1;
+        }
+        let mut out = Vec::new();
+        // Phase 50g — enumerate packs + their sizes via the backend.
+        for name in self.backend.list("pack-")? {
+            let Some(id_hex) = name
+                .strip_prefix("pack-")
+                .and_then(|s| s.strip_suffix(".pack"))
+            else {
+                continue;
+            };
+            let Ok(pack_id) = Uuid::parse_str(id_hex) else {
+                continue;
+            };
+            let file_bytes = self.backend.size(&name)?.unwrap_or(0);
+            let (live_bytes, live_chunks) = live.get(&pack_id).copied().unwrap_or((0, 0));
+            out.push(PackStat {
+                pack_id,
+                file_bytes,
+                live_bytes,
+                live_chunks,
+                is_active: pack_id == active_id,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Move every live chunk out of `pack_id` into the active pack
+    /// (rolling as needed), repoint its index rows verbatim (same
+    /// `stored_len`/`len`/`codec` — bytes copied, NO re-decompress), then
+    /// delete the old pack file. Returns the bytes the old file freed.
+    /// (Phase 49i.)
+    ///
+    /// **Crash safety:** each chunk is appended to the active pack and its
+    /// index row repointed in one redb commit; the old pack is deleted only
+    /// after *all* rows are repointed, so a crash mid-move just leaves a
+    /// partially-drained pack the next pass finishes. **Cancellation** is
+    /// cooperative (checked between chunks); on cancel the old pack is left
+    /// intact and `Ok(0)` is returned.
+    pub(crate) fn compact_pack(
+        &self,
+        pack_id: Uuid,
+        cancel: &dyn Fn() -> bool,
+        progress: &mut dyn FnMut(u64),
+    ) -> Result<u64> {
+        let active_id = self.active_pack_id()?;
+        assert_ne!(pack_id, active_id, "cannot compact the active pack");
+
+        // Point-in-time set of live chunks living in this pack.
+        let live: Vec<(Blake3Hash, ChunkLocator)> = self
+            .all_locators()?
+            .into_iter()
+            .filter(|(_, loc)| loc.pack_id == pack_id)
+            .collect();
+
+        let old_name = format!("pack-{pack_id}.pack");
+
+        let mut moved = 0u64;
+        for (hash, loc) in &live {
+            if cancel() {
+                return Ok(0);
+            }
+            // Read the STORED bytes verbatim via the backend (no decode —
+            // codec preserved).
+            let stored = self
+                .backend
+                .get_range(&old_name, loc.offset, loc.stored_len as usize)?
+                .ok_or_else(|| ChunkStoreError::MissingChunk { hash: hex_of(hash) })?;
+            // A short read (truncated / corrupt source pack — `get_range`
+            // clamps to the object's real length) must not be silently
+            // re-recorded under the original `stored_len`.
+            if stored.len() != loc.stored_len as usize {
+                return Err(ChunkStoreError::CorruptChunk { hash: hex_of(hash) });
+            }
+
+            // Append to the active pack (rolling if full), then repoint the
+            // index row — committed together so a crash can't lose the chunk.
+            let mut active = self
+                .active
+                .lock()
+                .map_err(|_| ChunkStoreError::Redb("active pack mutex poisoned".into()))?;
+            if active.size >= self.rollover_bytes {
+                self.roll_locked(&mut active)?;
+            }
+            let new_offset = active.size;
+            {
+                let mut f = OpenOptions::new()
+                    .append(true)
+                    .open(&active.path)
+                    .map_err(|e| ChunkStoreError::Io {
+                        path: active.path.clone(),
+                        source: e,
+                    })?;
+                f.write_all(&stored).map_err(|e| ChunkStoreError::Io {
+                    path: active.path.clone(),
+                    source: e,
+                })?;
+                f.flush().map_err(|e| ChunkStoreError::Io {
+                    path: active.path.clone(),
+                    source: e,
+                })?;
+            }
+            active.size += stored.len() as u64;
+            let new_loc = ChunkLocator {
+                pack_id: active.id,
+                offset: new_offset,
+                len: loc.len,
+                stored_len: loc.stored_len,
+                codec: loc.codec,
+            };
+            let encoded = encode_locator(&new_loc);
+            let txn = self.db.begin_write()?;
+            {
+                let mut tbl = txn.open_table(CHUNKS)?;
+                tbl.insert(hash.as_slice(), encoded.as_slice())?;
+            }
+            txn.commit()?;
+            drop(active);
+            moved += 1;
+            progress(moved);
+        }
+
+        // All rows repointed → reclaim the old pack via the backend.
+        self.remove_pack_file(pack_id)
+    }
 }
 
-fn encode_locator(loc: &ChunkLocator) -> [u8; 28] {
-    let mut out = [0u8; 28];
+/// v1 on-disk locator layout (34 bytes), written from Phase 49h onward:
+/// `0..16 pack_id | 16..24 offset | 24..28 stored_len | 28..32 len |
+/// 32 codec | 33 reserved(0)`. The legacy v0 layout (28 bytes) is still
+/// READ (never written again): `… | 24..28 len → {stored_len = len,
+/// codec = None}` — so existing chunk stores keep working with zero
+/// rewrite (the dedup key never moved; old records ARE uncompressed).
+fn encode_locator(loc: &ChunkLocator) -> [u8; 34] {
+    let mut out = [0u8; 34];
     out[0..16].copy_from_slice(loc.pack_id.as_bytes());
     out[16..24].copy_from_slice(&loc.offset.to_le_bytes());
-    out[24..28].copy_from_slice(&loc.len.to_le_bytes());
+    out[24..28].copy_from_slice(&loc.stored_len.to_le_bytes());
+    out[28..32].copy_from_slice(&loc.len.to_le_bytes());
+    out[32] = loc.codec.as_u8();
+    // out[33] reserved = 0
     out
 }
 
-fn decode_locator(bytes: &[u8]) -> ChunkLocator {
-    debug_assert_eq!(bytes.len(), 28, "locator must be 28 bytes");
+fn decode_locator(bytes: &[u8]) -> Result<ChunkLocator> {
     let mut id_bytes = [0u8; 16];
-    id_bytes.copy_from_slice(&bytes[0..16]);
     let mut off_bytes = [0u8; 8];
-    off_bytes.copy_from_slice(&bytes[16..24]);
-    let mut len_bytes = [0u8; 4];
-    len_bytes.copy_from_slice(&bytes[24..28]);
-    ChunkLocator {
-        pack_id: Uuid::from_bytes(id_bytes),
-        offset: u64::from_le_bytes(off_bytes),
-        len: u32::from_le_bytes(len_bytes),
+    match bytes.len() {
+        28 => {
+            // v0 — legacy uncompressed record.
+            id_bytes.copy_from_slice(&bytes[0..16]);
+            off_bytes.copy_from_slice(&bytes[16..24]);
+            let mut len_bytes = [0u8; 4];
+            len_bytes.copy_from_slice(&bytes[24..28]);
+            let len = u32::from_le_bytes(len_bytes);
+            Ok(ChunkLocator {
+                pack_id: Uuid::from_bytes(id_bytes),
+                offset: u64::from_le_bytes(off_bytes),
+                len,
+                stored_len: len,
+                codec: ChunkCodec::None,
+            })
+        }
+        34 => {
+            id_bytes.copy_from_slice(&bytes[0..16]);
+            off_bytes.copy_from_slice(&bytes[16..24]);
+            let mut sl = [0u8; 4];
+            sl.copy_from_slice(&bytes[24..28]);
+            let mut ln = [0u8; 4];
+            ln.copy_from_slice(&bytes[28..32]);
+            let codec = ChunkCodec::from_u8(bytes[32]).ok_or_else(|| {
+                ChunkStoreError::Redb(format!("unknown chunk codec tag {}", bytes[32]))
+            })?;
+            Ok(ChunkLocator {
+                pack_id: Uuid::from_bytes(id_bytes),
+                offset: u64::from_le_bytes(off_bytes),
+                stored_len: u32::from_le_bytes(sl),
+                len: u32::from_le_bytes(ln),
+                codec,
+            })
+        }
+        n => Err(ChunkStoreError::Redb(format!(
+            "corrupt chunk locator: {n} bytes (expected 28 or 34)"
+        ))),
     }
 }
 
@@ -501,6 +757,38 @@ pub fn default_chunk_store_path() -> Result<PathBuf> {
 mod tests {
     use super::*;
     use crate::types::Manifest;
+
+    #[test]
+    fn locator_v0_v1_round_trip_and_compat() {
+        let id = Uuid::new_v4();
+        let v1 = ChunkLocator {
+            pack_id: id,
+            offset: 4096,
+            len: 1000,
+            stored_len: 400,
+            codec: ChunkCodec::Zstd,
+        };
+        let bytes = encode_locator(&v1);
+        assert_eq!(bytes.len(), 34);
+        assert_eq!(decode_locator(&bytes).unwrap(), v1);
+
+        // A legacy 28-byte v0 record decodes as uncompressed (stored_len == len).
+        let mut v0 = [0u8; 28];
+        v0[0..16].copy_from_slice(id.as_bytes());
+        v0[16..24].copy_from_slice(&4096u64.to_le_bytes());
+        v0[24..28].copy_from_slice(&1000u32.to_le_bytes());
+        let decoded = decode_locator(&v0).unwrap();
+        assert_eq!(decoded.pack_id, id);
+        assert_eq!(decoded.len, 1000);
+        assert_eq!(decoded.stored_len, 1000);
+        assert_eq!(decoded.codec, ChunkCodec::None);
+
+        // Wrong length + unknown codec tag are typed errors, not panics.
+        assert!(decode_locator(&[0u8; 20]).is_err());
+        let mut bad = encode_locator(&v1);
+        bad[32] = 99;
+        assert!(decode_locator(&bad).is_err());
+    }
 
     #[test]
     fn open_creates_layout() {

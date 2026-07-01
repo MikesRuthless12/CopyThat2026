@@ -150,9 +150,10 @@ CdrManifest = {
 }
 
 CdrChunkRef = {
-  "hash":   bstr .size 32,     // BLAKE3-256 of the chunk
+  "hash":   bstr .size 32,     // BLAKE3-256 of the chunk (of the PLAINTEXT)
   "offset": uint,              // byte offset of this chunk in the file
-  "len":    uint               // chunk byte length (<= 4 MiB per §2)
+  "len":    uint,              // logical (plaintext) byte length (<= 4 MiB per §2)
+  ? "codec": tstr              // OPTIONAL (Phase 49h): "none" (default) | "zstd"
 }
 ```
 
@@ -167,6 +168,16 @@ A reader **MUST** reject a manifest unless **all** of the following hold
 5. `sum(chunks[i].len) == size`.
 
 The CDDL schema above is normative.
+
+The optional `codec` field records how a chunk's bytes are encoded **at
+rest** — `"none"` (default, raw) or `"zstd"` (a single zstd frame). It is
+**orthogonal to chunk identity**: `hash` and `len` are always of the
+**plaintext**, so deduplication, the §8 version gate, and all five rules
+above are unaffected. A reader that doesn't understand `codec` treats it as
+`"none"`; one that does decompresses on read (bounded by `len`, so no
+decompression bomb). This is a **v0-compatible additive field** — a manifest
+written without it decodes as `"none"`, and its presence does **not** bump
+`spec_version`.
 
 ---
 

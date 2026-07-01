@@ -1199,6 +1199,32 @@ repo-kind-copy = نسخ
 repo-kind-sync = مزامنة
 repo-kind-version = إصدار
 repo-kind-backup = نسخ احتياطي
+# Phase 49o — snapshot diff / compare.
+library-tab-compare = مقارنة
+repo-change-added = مُضاف
+repo-change-removed = محذوف
+repo-change-modified = مُعدّل
+repo-change-unchanged = لا تغييرات
+repo-diff-summary = { $added } مُضاف · { $removed } محذوف · { $modified } مُعدّل
+repo-diff-bytes-added = { $bytes } جديد
+repo-diff-pick-two = اختر لقطتين للمقارنة
+# Phase 49r — statistics / reports.
+library-tab-reports = التقارير
+report-growth-title = نمو التخزين
+report-by-kind-title = حسب النوع
+report-top-files-title = أهم الملفات
+report-dedup-ratio = تمت إزالة التكرار بنسبة { $pct }%
+report-export = تصدير التقرير
+report-exported = تم حفظ التقرير في { $path }
+report-file-versions = { $n } إصدارات
+# Phase 49p — pinning / prune.
+repo-pin = تثبيت
+repo-unpin = إلغاء التثبيت
+repo-pinned-badge = مثبّت
+repo-prune-title = تقليم
+repo-prune-keep-last = الاحتفاظ بالأحدث
+repo-prune-removed = تم تقليم { $n } لقطة
+repo-prune-none = لا شيء للتقليم
 
 # Phase 49c — مصادر النسخ الاحتياطي.
 library-tab-sources = المصادر
@@ -1214,6 +1240,32 @@ backup-running = جارٍ النسخ الاحتياطي… { $files } ملفات
 backup-toast-started = جارٍ نسخ { $label } احتياطيًا…
 backup-toast-completed = تم نسخ { $label } احتياطيًا: { $files } ملفات
 backup-toast-failed = فشل النسخ الاحتياطي لـ { $label }: { $reason }
+# Phase 49e — per-source retention + prune.
+backup-retention = الاحتفاظ
+backup-retention-keep-all = الاحتفاظ بالكل
+backup-retention-last = الاحتفاظ بآخر { $n }
+backup-retention-days = أقدم من { $days } يوم
+backup-retention-gfs = تدوير GFS
+backup-prune-now = تنظيف الآن
+backup-prune-none = لا شيء للتنظيف
+backup-prune-result = تمت إزالة { $removed } لقطة · تم استرجاع { $bytes }
+# Phase 49f — per-source scheduling.
+backup-schedule = الجدولة
+backup-schedule-manual = يدوي
+backup-schedule-hourly = كل ساعة
+backup-schedule-daily = يوميًا
+backup-schedule-weekly = أسبوعيًا
+backup-next-run = التشغيل التالي { $when }
+backup-not-scheduled = غير مجدول
+# Phase 49g — source filters.
+backup-include-ph = أنماط التضمين (مفصولة بفواصل)
+backup-skip-hidden = تخطّي المخفية
+# Phase 49q — notifications.
+notify-title = الإشعارات
+notify-on-success = عند النجاح
+notify-on-failure = عند الفشل
+notify-test = إرسال اختبار
+notify-test-sent = تم إرسال اختبار إلى { $n } وجهة
 
 # Phase 49d — متصفح الاستعادة.
 restore-browse = استعادة…
@@ -1231,5 +1283,64 @@ restore-toast-failed = فشلت الاستعادة: { $reason }
 snapshot-forget = نسيان
 snapshot-forget-toast = تم نسيان اللقطة — شغّل "استرجاع المساحة" لتحريرها
 library-reclaim = استرجاع المساحة
+# Phase 49i — full compaction.
+library-compact = ضغط كامل
+library-compact-started = بدأ الضغط الكامل — راقب المهام
+# Phase 49h — compression.
+library-stat-compression = التوفير بالضغط
+storage-compression = الضغط
+storage-compression-off = إيقاف
+storage-compression-auto = تلقائي (تخطّي البيانات غير القابلة للضغط)
+storage-compression-always = دائمًا
+storage-compression-restart = يُطبَّق عند التشغيل التالي
+# Phase 49j — tasks & progress center.
+footer-tasks = المهام
+tasks-title = المهام
+tasks-empty = لا توجد مهام بعد
+tasks-running = قيد التشغيل
+tasks-recent = الأخيرة
+tasks-cancel = إلغاء
+task-state-running = قيد التشغيل
+task-state-completed = اكتمل
+task-state-failed = فشل
+task-state-cancelled = أُلغي
+# Phase 49k — repository setup/connect wizard.
+repo-wizard-title = ربط المستودع
+repo-wizard-create-tab = إنشاء جديد
+repo-wizard-connect-tab = ربط موجود
+repo-field-name = الاسم
+repo-field-path = الموقع
+repo-field-password = عبارة مرور (اختياري)
+repo-action-create = إنشاء
+repo-action-connect = ربط
+repo-action-browse = تصفّح…
+repo-switcher-label = المستودع
+repo-action-forget = نسيان
+repo-action-change-pass = تغيير عبارة المرور…
+repo-password-old = عبارة المرور الحالية
+repo-password-new = عبارة مرور جديدة
+repo-error-exists = يوجد مستودع بالفعل في هذا الموقع
+repo-error-not-found = لم يُعثر على مستودع في هذا الموقع
+repo-error-bad-pass = عبارة المرور غير صحيحة
+repo-note-no-encryption = عبارة المرور تتحكم في الوصول فقط؛ سيأتي تشفير البيانات الساكنة في إصدار لاحق
+repo-confirm-forget = إزالة "{ $name }" من القائمة؟ تبقى بياناتك على القرص.
+repo-toast-created = تم إنشاء المستودع "{ $name }"
+repo-toast-connected = تم الاتصال بـ "{ $name }"
+repo-toast-pass-changed = تم تحديث عبارة المرور
+# Phase 49l — Sources dashboard.
+library-tab-overview = نظرة عامة
+library-source-empty = لا توجد مصادر بعد
+library-source-unknown = (مصدر غير محدد)
+library-source-snapshots = { $n } لقطة
+library-source-latest = الأحدث { $when }
+# Phase 49n — verify & repair.
+repo-action-verify = تحقّق
+repo-action-verify-deep = تحقّق (قراءة كل البيانات)
+repo-action-repair = إصلاح…
+repo-verify-clean = تم التحقق من { $files } ملف / { $chunks } كتلة — لا يوجد تلف
+repo-verify-damaged = { $missing } مفقودة، { $corrupt } كتلة تالفة
+repo-repair-confirm = إزالة { $n } لقطة لم يعد بالإمكان استعادتها؟
+repo-repair-removed = تمت إزالة { $n } لقطة تالفة
+repo-repair-none = لا شيء لإصلاحه — المستودع سليم
 repo-gc-done = تم استرجاع { $bytes } ({ $chunks } كتلة)
 restore-toast-partial = تمت استعادة { $restored }، وتخطّي { $skipped }، وفشل { $failed }

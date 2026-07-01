@@ -71,6 +71,12 @@ pub struct AppState {
     /// interval. Wrapped in `Mutex` because `update_settings` needs
     /// a `&mut` view to start / stop without cloning `AppState`.
     pub clipboard_watcher: Arc<Mutex<Option<WatcherHandle>>>,
+    /// Phase 49f — ids of backup sources whose scheduled run is currently
+    /// in flight, so the minute tick never double-fires a long backup.
+    pub backups_running: Arc<Mutex<std::collections::HashSet<String>>>,
+    /// Phase 49j — registry of long, cancellable tasks (gc / compaction /
+    /// migration) backing the Tasks & progress center.
+    pub tasks: crate::tasks::TaskRegistry,
     /// Phase 19a — active scan-control handles keyed by scan id.
     /// Populated on `scan_start`, drained by the scanner task when
     /// it exits (normal / cancelled / failed).
@@ -193,7 +199,14 @@ pub struct AppState {
     /// Phase 49b — see [`AppState::chunk_store`]. Built on the same
     /// shared store handle via `Repository::with_store`, so the
     /// snapshot catalog and the chunk store share one redb open.
-    pub repository: Option<Arc<copythat_chunk::Repository>>,
+    /// Phase 49k — `Arc<RwLock>` (so `AppState` stays `Clone`) lets the
+    /// Repository wizard's `set_active` SWAP the live handle at runtime.
+    /// Read via [`AppState::repository`]; swapped via [`AppState::set_repository`].
+    repository_handle: Arc<std::sync::RwLock<Option<Arc<copythat_chunk::Repository>>>>,
+    /// Phase 49k — the startup (default-path) repository, kept so
+    /// `set_active("")` can restore it without re-opening (which would
+    /// clash with the still-held default chunk-store lock).
+    default_repository: Option<Arc<copythat_chunk::Repository>>,
 }
 
 impl AppState {
@@ -246,6 +259,8 @@ impl AppState {
             settings_path: Arc::new(settings_path),
             profiles,
             clipboard_watcher: Arc::new(Mutex::new(None)),
+            backups_running: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            tasks: crate::tasks::TaskRegistry::default(),
             scans: ScanRegistry::new(),
             journal: None,
             startup_unfinished: Arc::new(Mutex::new(Vec::new())),
@@ -313,7 +328,8 @@ impl AppState {
             // constructor) so the Library tab degrades cleanly to
             // "repository-unavailable".
             chunk_store: None,
-            repository: None,
+            repository_handle: Arc::new(std::sync::RwLock::new(None)),
+            default_repository: None,
         }
     }
 
@@ -347,8 +363,30 @@ impl AppState {
         repository: Option<Arc<copythat_chunk::Repository>>,
     ) -> Self {
         self.chunk_store = Some(store);
-        self.repository = repository;
+        self.default_repository = repository.clone();
+        if let Ok(mut g) = self.repository_handle.write() {
+            *g = repository;
+        }
         self
+    }
+
+    /// Phase 49k — the startup default repository (for `set_active("")`).
+    pub fn default_repository(&self) -> Option<Arc<copythat_chunk::Repository>> {
+        self.default_repository.clone()
+    }
+
+    /// Phase 49k — the active unified repository handle (read lease on the
+    /// `RwLock`). `None` when unavailable.
+    pub fn repository(&self) -> Option<Arc<copythat_chunk::Repository>> {
+        self.repository_handle.read().ok().and_then(|g| g.clone())
+    }
+
+    /// Phase 49k — swap the active repository handle (the wizard's
+    /// create / connect / set-active paths).
+    pub fn set_repository(&self, repository: Option<Arc<copythat_chunk::Repository>>) {
+        if let Ok(mut g) = self.repository_handle.write() {
+            *g = repository;
+        }
     }
 
     /// Convenience wrapper preserved for callers that predate

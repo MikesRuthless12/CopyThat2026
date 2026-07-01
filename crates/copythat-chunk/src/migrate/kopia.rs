@@ -739,8 +739,13 @@ fn walk_dir(
             "d" => walk_dir(ctx, &entry.obj, &path, depth + 1, out, skipped)?,
             "f" => {
                 let bytes = resolve_object(ctx.store, ctx.index, ctx.kds, &entry.obj, 0)?;
-                let manifest =
-                    crate::manifest::chunk_into_store(ctx.dest.store(), &ctx.chunker, &bytes)?.1;
+                let manifest = crate::manifest::chunk_into_store(
+                    ctx.dest.store(),
+                    &ctx.chunker,
+                    &bytes,
+                    ctx.dest.compression(),
+                )?
+                .1;
                 out.push(FileEntry {
                     path: super::safe_path(&path),
                     manifest,

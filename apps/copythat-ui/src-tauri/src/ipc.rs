@@ -141,6 +141,13 @@ pub const EVENT_BACKUP_PROGRESS: &str = "backup-progress";
 pub const EVENT_BACKUP_COMPLETED: &str = "backup-completed";
 pub const EVENT_BACKUP_FAILED: &str = "backup-failed";
 
+/// Phase 49j — task / progress center lifecycle events.
+pub const EVENT_TASK_STARTED: &str = "task-started";
+pub const EVENT_TASK_PROGRESS: &str = "task-progress";
+pub const EVENT_TASK_COMPLETED: &str = "task-completed";
+pub const EVENT_TASK_FAILED: &str = "task-failed";
+pub const EVENT_TASK_CANCELLED: &str = "task-cancelled";
+
 /// Single entry in the live activity list.
 ///
 /// `phase`:

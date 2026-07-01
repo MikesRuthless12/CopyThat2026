@@ -1117,6 +1117,32 @@ repo-kind-copy = コピー
 repo-kind-sync = 同期
 repo-kind-version = バージョン管理
 repo-kind-backup = バックアップ
+# Phase 49o — snapshot diff / compare.
+library-tab-compare = 比較
+repo-change-added = 追加
+repo-change-removed = 削除
+repo-change-modified = 変更
+repo-change-unchanged = 変更なし
+repo-diff-summary = { $added } 件追加 · { $removed } 件削除 · { $modified } 件変更
+repo-diff-bytes-added = 新規 { $bytes }
+repo-diff-pick-two = 比較する2つのスナップショットを選択
+# Phase 49r — statistics / reports.
+library-tab-reports = レポート
+report-growth-title = ストレージの増加
+report-by-kind-title = 種類別
+report-top-files-title = 上位ファイル
+report-dedup-ratio = { $pct }% 重複排除済み
+report-export = レポートをエクスポート
+report-exported = レポートを { $path } に保存しました
+report-file-versions = { $n } バージョン
+# Phase 49p — pinning / prune.
+repo-pin = ピン留め
+repo-unpin = ピン留めを解除
+repo-pinned-badge = ピン留め済み
+repo-prune-title = 整理
+repo-prune-keep-last = 最新を保持
+repo-prune-removed = { $n } 個のスナップショットを整理しました
+repo-prune-none = 整理するものはありません
 
 # Phase 46.6 — Settings → Plugins tab. The IPC layer in
 # `apps/copythat-ui/src-tauri/src/plugin_commands.rs` enumerates the
@@ -1214,6 +1240,32 @@ backup-running = バックアップ中… { $files } 個のファイル
 backup-toast-started = { $label } をバックアップ中…
 backup-toast-completed = { $label } をバックアップしました: { $files } 個のファイル
 backup-toast-failed = { $label } のバックアップに失敗: { $reason }
+# Phase 49e — per-source retention + prune.
+backup-retention = 保持
+backup-retention-keep-all = すべて保持
+backup-retention-last = 最新 { $n } 件を保持
+backup-retention-days = { $days } 日より古い
+backup-retention-gfs = GFS ローテーション
+backup-prune-now = 今すぐ整理
+backup-prune-none = 整理するものはありません
+backup-prune-result = { $removed } 件のスナップショットを削除 · { $bytes } を回収
+# Phase 49f — per-source scheduling.
+backup-schedule = スケジュール
+backup-schedule-manual = 手動
+backup-schedule-hourly = 毎時
+backup-schedule-daily = 毎日
+backup-schedule-weekly = 毎週
+backup-next-run = 次回の実行 { $when }
+backup-not-scheduled = スケジュールなし
+# Phase 49g — source filters.
+backup-include-ph = 含めるグロブ（カンマ区切り）
+backup-skip-hidden = 隠しファイルをスキップ
+# Phase 49q — notifications.
+notify-title = 通知
+notify-on-success = 成功時
+notify-on-failure = 失敗時
+notify-test = テスト送信
+notify-test-sent = { $n } 件の宛先にテストを送信しました
 
 # Phase 49d — 復元ブラウザー。
 restore-browse = 復元…
@@ -1231,5 +1283,64 @@ restore-toast-failed = 復元に失敗: { $reason }
 snapshot-forget = 削除
 snapshot-forget-toast = スナップショットを削除しました — 「容量を回収」で解放できます
 library-reclaim = 容量を回収
+# Phase 49i — full compaction.
+library-compact = 完全コンパクト化
+library-compact-started = コンパクト化を開始しました — タスクを確認
+# Phase 49h — compression.
+library-stat-compression = 圧縮による節約
+storage-compression = 圧縮
+storage-compression-off = オフ
+storage-compression-auto = 自動（圧縮できないデータをスキップ）
+storage-compression-always = 常に
+storage-compression-restart = 次回起動時に適用
+# Phase 49j — tasks & progress center.
+footer-tasks = タスク
+tasks-title = タスク
+tasks-empty = タスクはまだありません
+tasks-running = 実行中
+tasks-recent = 最近
+tasks-cancel = キャンセル
+task-state-running = 実行中
+task-state-completed = 完了
+task-state-failed = 失敗
+task-state-cancelled = キャンセル済み
+# Phase 49k — repository setup/connect wizard.
+repo-wizard-title = リポジトリに接続
+repo-wizard-create-tab = 新規作成
+repo-wizard-connect-tab = 既存に接続
+repo-field-name = 名前
+repo-field-path = 場所
+repo-field-password = パスフレーズ（任意）
+repo-action-create = 作成
+repo-action-connect = 接続
+repo-action-browse = 参照…
+repo-switcher-label = リポジトリ
+repo-action-forget = 登録解除
+repo-action-change-pass = パスフレーズを変更…
+repo-password-old = 現在のパスフレーズ
+repo-password-new = 新しいパスフレーズ
+repo-error-exists = この場所には既にリポジトリが存在します
+repo-error-not-found = この場所にリポジトリが見つかりません
+repo-error-bad-pass = パスフレーズが正しくありません
+repo-note-no-encryption = パスフレーズはアクセス制御のみを行います。保存データの暗号化は今後のリリースで提供されます
+repo-confirm-forget = "{ $name }" をリストから削除しますか？ データはディスクに残ります。
+repo-toast-created = リポジトリ "{ $name }" を作成しました
+repo-toast-connected = "{ $name }" に接続しました
+repo-toast-pass-changed = パスフレーズを更新しました
+# Phase 49l — Sources dashboard.
+library-tab-overview = 概要
+library-source-empty = ソースはまだありません
+library-source-unknown = （未指定のソース）
+library-source-snapshots = { $n } 個のスナップショット
+library-source-latest = 最新 { $when }
+# Phase 49n — verify & repair.
+repo-action-verify = 検証
+repo-action-verify-deep = 検証（すべてのデータを読み取る）
+repo-action-repair = 修復…
+repo-verify-clean = { $files } ファイル / { $chunks } チャンクを検証 — 損傷なし
+repo-verify-damaged = 欠落 { $missing } 件、破損チャンク { $corrupt } 件
+repo-repair-confirm = 復元できなくなった { $n } 個のスナップショットを削除しますか？
+repo-repair-removed = 破損した { $n } 個のスナップショットを削除しました
+repo-repair-none = 修復する項目はありません — リポジトリは正常です
 repo-gc-done = { $bytes } を回収（{ $chunks } チャンク）
 restore-toast-partial = { $restored } 個を復元、{ $skipped } 個をスキップ、{ $failed } 個が失敗

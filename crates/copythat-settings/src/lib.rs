@@ -85,6 +85,9 @@ pub struct Settings {
     /// on-demand snapshotting into the unified repository. See
     /// [`BackupSettings`].
     pub backup: BackupSettings,
+    /// Phase 49q — engine-job notifications (on success / failure),
+    /// delivered to the configured server webhooks.
+    pub notifications: NotificationSettings,
     /// Phase 28 — tray-resident Drop Stack. See
     /// [`DropStackSettings`].
     pub drop_stack: DropStackSettings,
@@ -151,6 +154,36 @@ pub struct Settings {
     /// `ServerHandle` is runtime state owned by the Tauri shell's
     /// `ServerRegistry`. See [`ServerSettings`].
     pub server: ServerSettings,
+    /// Phase 49k — the registered repositories + the active selection
+    /// (the multi-repo "Repository" screen).
+    pub repository: RepositorySettings,
+}
+
+/// Phase 49k — the multi-repository list + which one is active (the Kopia
+/// "Repository" screen). `active` is a `RepoEntry.id`; `""` = the default
+/// chunk-store path.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct RepositorySettings {
+    /// Registered repositories (create/connect adds; forget removes — data
+    /// on disk is never touched by forget).
+    pub repos: Vec<RepoEntry>,
+    /// Active repository id (a `RepoEntry.id`); empty = the default path.
+    pub active: String,
+}
+
+/// Phase 49k — one registered repository.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct RepoEntry {
+    /// Stable id (uuid v4).
+    pub id: String,
+    /// User-facing label.
+    pub name: String,
+    /// Root directory of the repository.
+    pub path: String,
+    /// Creation timestamp (ms since epoch).
+    pub created_at_ms: i64,
 }
 
 impl Settings {
@@ -1199,6 +1232,29 @@ pub enum ConflictSuffixFormat {
 
 /// Content-defined chunk store configuration.
 ///
+/// Phase 49h — TOML mirror of `copythat_chunk::RepoCompression`. Kebab
+/// tagged-enum so it round-trips cleanly and an older binary falls back to
+/// `off`. The bridge → `RepoCompression` lives in the Tauri/CLI layer
+/// (this crate has no copythat-chunk edge). `level` is the zstd level
+/// (1..=22, clamped downstream).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "kebab-case")]
+pub enum RepoCompressionSettings {
+    /// Never compress (default; pre-49h behaviour).
+    #[default]
+    Off,
+    /// Try zstd at `level`; keep it only when it wins.
+    Auto {
+        /// zstd level (1..=22).
+        level: i32,
+    },
+    /// Compress every chunk at `level` (raw fallback if not smaller).
+    Always {
+        /// zstd level (1..=22).
+        level: i32,
+    },
+}
+
 /// The chunk store is always optional — Copy That works identically
 /// with it disabled. When enabled, every copy ingests its source
 /// files into the store so that (a) a retry of the same copy only
@@ -1241,6 +1297,10 @@ pub struct ChunkStoreSettings {
     /// snapshot-on-overwrite hook). Default `false`: this re-reads + chunks
     /// the old file on the copy hot path, a cost the user opts into.
     pub snapshot_on_overwrite: bool,
+    /// Phase 49h — at-rest chunk compression policy. Default `Off`. Applied
+    /// when the repository is opened (a change takes effect on next launch);
+    /// existing chunks are never rewritten (dedup-by-hash).
+    pub compression: RepoCompressionSettings,
 }
 
 impl Default for ChunkStoreSettings {
@@ -1254,6 +1314,7 @@ impl Default for ChunkStoreSettings {
             snapshot_on_copy: false,
             snapshot_on_sync: false,
             snapshot_on_overwrite: false,
+            compression: RepoCompressionSettings::Off,
         }
     }
 }
@@ -1289,6 +1350,63 @@ pub struct SourceConfig {
     pub last_run_at: String,
     /// Snapshot id of the last successful run, for "view in timeline".
     pub last_snapshot_id: Option<u64>,
+    /// Phase 49e — retention policy applied to THIS source's snapshots
+    /// after each run (and on demand via "Prune now"). Default
+    /// [`RetentionSettings::KeepAll`] so existing sources never start
+    /// silently deleting history on upgrade.
+    pub retention: RetentionSettings,
+    /// Phase 49f — auto-run schedule spec (`""` / `@hourly` / `@daily` /
+    /// `@weekly` / `M H * * *`). Empty = manual-only. Parsed by
+    /// `copythat_shape::BackupSchedule`.
+    pub schedule: String,
+    /// Phase 49f — whether the schedule auto-runs on the minute tick. A
+    /// disabled source is still runnable on demand. Default `false`.
+    pub enabled: bool,
+    /// Phase 49g — include-glob whitelist (empty = capture everything not
+    /// excluded). Matched against source-root-relative paths.
+    pub include_globs: Vec<String>,
+    /// Phase 49g — skip dotfiles / Windows hidden-attribute files.
+    pub skip_hidden: bool,
+}
+
+/// TOML/JSON mirror of `copythat_core::versioning::RetentionPolicy`
+/// (Phase 49e). Kebab-tagged so it round-trips cleanly and an older
+/// binary that doesn't recognise a variant falls back to `keep-all`.
+///
+/// This crate deliberately has no `copythat-core` / `copythat-chunk`
+/// edge (it stays a leaf), so the bridge to the real `RetentionPolicy`
+/// lives in the Tauri/CLI layer — exactly like the existing
+/// `RetentionPolicyDto`. `KeepAll` maps to `RetentionPolicy::None`
+/// (renamed in the UI vocabulary because "Keep all" reads clearer than
+/// "None").
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum RetentionSettings {
+    /// Keep every snapshot of this source forever.
+    #[default]
+    KeepAll,
+    /// Keep the `n` newest snapshots; prune the rest.
+    LastN {
+        /// Number of newest snapshots to retain.
+        n: u32,
+    },
+    /// Prune snapshots older than `days` days.
+    OlderThanDays {
+        /// Age cutoff in days.
+        days: u32,
+    },
+    /// Grandfather-Father-Son rolling retention — keep the newest per
+    /// hour / day / week / month bucket up to each count.
+    Gfs {
+        /// Newest-per-hour buckets to keep.
+        hourly: u32,
+        /// Newest-per-day buckets to keep.
+        daily: u32,
+        /// Newest-per-week buckets to keep.
+        weekly: u32,
+        /// Newest-per-month buckets to keep.
+        monthly: u32,
+    },
 }
 
 // ---------------------------------------------------------------------
@@ -2388,6 +2506,18 @@ pub struct WebhookSettings {
     pub pushover_user: String,
 }
 
+/// Phase 49q — engine-job notification preferences. Destinations are the
+/// configured server webhooks ([`ServerSettings::webhooks`]); these toggles
+/// gate WHEN a notification fires. Both default off (opt-in).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct NotificationSettings {
+    /// Fire a webhook when a backup/job completes successfully.
+    pub on_success: bool,
+    /// Fire a webhook when a backup/job fails.
+    pub on_failure: bool,
+}
+
 // ---------------------------------------------------------------------
 // Convenience surface
 // ---------------------------------------------------------------------
@@ -2698,6 +2828,11 @@ log-level = "debug"
                         exclude_globs: vec!["**/*.tmp".into(), "node_modules/**".into()],
                         last_run_at: "2026-06-30T14:03:00Z".into(),
                         last_snapshot_id: Some(42),
+                        retention: RetentionSettings::LastN { n: 7 },
+                        schedule: "@daily".into(),
+                        enabled: true,
+                        include_globs: vec!["**/*.rs".into()],
+                        skip_hidden: true,
                     },
                     SourceConfig::default(),
                 ],

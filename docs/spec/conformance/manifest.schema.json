@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://copythat.dev/spec/cdr-0/manifest.schema.json",
+  "title": "CDR-0 file manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spec_version", "algo", "file_hash", "size", "chunks"],
+  "properties": {
+    "spec_version": { "type": "integer", "minimum": 0, "description": "CDR spec version; a reader rejects a value it does not implement (§8)." },
+    "algo": { "type": "string", "description": "Chunk-algorithm tag; must equal the canonical CDR_ALGO for a v0 reader." },
+    "file_hash": { "type": "string", "description": "BLAKE3-256 of the whole file (32 bytes; hex/bstr on the wire)." },
+    "size": { "type": "integer", "minimum": 0, "description": "Total file size; equals sum(chunks[].len)." },
+    "chunks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hash", "offset", "len"],
+        "properties": {
+          "hash": { "type": "string", "description": "BLAKE3-256 of the chunk plaintext (32 bytes)." },
+          "offset": { "type": "integer", "minimum": 0, "description": "Byte offset of the chunk in the reconstructed file." },
+          "len": { "type": "integer", "minimum": 0, "description": "Chunk length (<= 4 MiB per §2)." },
+          "codec": { "type": "string", "enum": ["none", "zstd"], "description": "OPTIONAL (Phase 49h); default none. Orthogonal to identity." }
+        }
+      },
+      "description": "Ordered; chunks tile the file contiguously from offset 0 and their bytes concatenate to reconstruct it."
+    }
+  }
+}

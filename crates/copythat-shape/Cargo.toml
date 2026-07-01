@@ -50,6 +50,10 @@ tokio = { version = "1", features = [
 
 [dev-dependencies]
 blake3 = "1"
+# Phase 49f — the backup-schedule smoke test constructs `DateTime<Local>`
+# instants; chrono is already a normal dep (clock feature) but integration
+# tests only see dev-deps, so it is declared here too.
+chrono = { version = "0.4", default-features = false, features = ["clock", "alloc"] }
 rand = "0.9"
 tempfile = "3"
 tokio = { version = "1", features = [
@@ -67,3 +71,8 @@ tokio = { version = "1", features = [
 [[test]]
 name = "phase_21_shape"
 path = "../../tests/smoke/phase_21_shape.rs"
+
+# Phase 49f smoke — in-process backup schedule evaluator.
+[[test]]
+name = "phase_49f_schedule"
+path = "../../tests/smoke/phase_49f_schedule.rs"

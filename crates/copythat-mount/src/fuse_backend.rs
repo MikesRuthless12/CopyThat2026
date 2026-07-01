@@ -266,7 +266,8 @@ mod fuse_body {
             for (idx, (child_ino, name, kind)) in all.iter().enumerate().skip(offset as usize) {
                 let ft = match kind {
                     crate::NodeKind::Directory => FileType::Directory,
-                    crate::NodeKind::JobPlaceholder { .. } => FileType::RegularFile,
+                    crate::NodeKind::JobPlaceholder { .. }
+                    | crate::NodeKind::SnapshotFile { .. } => FileType::RegularFile,
                 };
                 if reply.add(*child_ino, (idx + 1) as i64, ft, name.as_str()) {
                     break;
@@ -314,6 +315,20 @@ mod fuse_body {
                 reply.error(ENOENT);
                 return;
             };
+            // Phase 49m — a snapshot file streams its range straight from the
+            // manifest + chunk store (no history round-trip).
+            if let crate::NodeKind::SnapshotFile { manifest } = &entry.kind {
+                let Some(chunk_store) = self.chunk_store.as_ref() else {
+                    reply.error(ENOSYS);
+                    return;
+                };
+                let off = offset.max(0) as u64;
+                match copythat_chunk::materialise_range(chunk_store, manifest, off, size as usize) {
+                    Ok(bytes) => reply.data(&bytes),
+                    Err(_) => reply.error(ENOSYS),
+                }
+                return;
+            }
             let crate::NodeKind::JobPlaceholder { job_row_id } = &entry.kind else {
                 reply.error(ENOSYS);
                 return;

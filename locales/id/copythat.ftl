@@ -1199,6 +1199,32 @@ repo-kind-copy = Salin
 repo-kind-sync = Sinkron
 repo-kind-version = Versi
 repo-kind-backup = Cadangan
+# Phase 49o — snapshot diff / compare.
+library-tab-compare = Bandingkan
+repo-change-added = Ditambahkan
+repo-change-removed = Dihapus
+repo-change-modified = Diubah
+repo-change-unchanged = Tidak ada perubahan
+repo-diff-summary = { $added } ditambahkan · { $removed } dihapus · { $modified } diubah
+repo-diff-bytes-added = { $bytes } baru
+repo-diff-pick-two = Pilih dua snapshot untuk dibandingkan
+# Phase 49r — statistics / reports.
+library-tab-reports = Laporan
+report-growth-title = Pertumbuhan penyimpanan
+report-by-kind-title = Menurut jenis
+report-top-files-title = File teratas
+report-dedup-ratio = { $pct }% terdeduplikasi
+report-export = Ekspor laporan
+report-exported = Laporan disimpan ke { $path }
+report-file-versions = { $n } versi
+# Phase 49p — pinning / prune.
+repo-pin = Sematkan
+repo-unpin = Lepas sematan
+repo-pinned-badge = Tersemat
+repo-prune-title = Pangkas
+repo-prune-keep-last = Simpan terbaru
+repo-prune-removed = { $n } snapshot dipangkas
+repo-prune-none = Tidak ada yang dipangkas
 
 # Phase 49c — sumber cadangan.
 library-tab-sources = Sumber
@@ -1214,6 +1240,32 @@ backup-running = Mencadangkan… { $files } berkas
 backup-toast-started = Mencadangkan { $label }…
 backup-toast-completed = { $label } dicadangkan: { $files } berkas
 backup-toast-failed = Pencadangan { $label } gagal: { $reason }
+# Phase 49e — per-source retention + prune.
+backup-retention = Retensi
+backup-retention-keep-all = Simpan semua
+backup-retention-last = Simpan { $n } terakhir
+backup-retention-days = Lebih lama dari { $days } hari
+backup-retention-gfs = Rotasi GFS
+backup-prune-now = Pangkas sekarang
+backup-prune-none = Tidak ada yang dipangkas
+backup-prune-result = { $removed } snapshot dihapus · { $bytes } dipulihkan
+# Phase 49f — per-source scheduling.
+backup-schedule = Jadwal
+backup-schedule-manual = Manual
+backup-schedule-hourly = Setiap jam
+backup-schedule-daily = Harian
+backup-schedule-weekly = Mingguan
+backup-next-run = Eksekusi berikutnya { $when }
+backup-not-scheduled = Tidak dijadwalkan
+# Phase 49g — source filters.
+backup-include-ph = Sertakan glob (dipisah koma)
+backup-skip-hidden = Lewati tersembunyi
+# Phase 49q — notifications.
+notify-title = Notifikasi
+notify-on-success = Saat berhasil
+notify-on-failure = Saat gagal
+notify-test = Kirim tes
+notify-test-sent = Tes dikirim ke { $n } tujuan
 
 # Phase 49d — penjelajah pemulihan.
 restore-browse = Pulihkan…
@@ -1231,5 +1283,64 @@ restore-toast-failed = Pemulihan gagal: { $reason }
 snapshot-forget = Lupakan
 snapshot-forget-toast = Snapshot dilupakan — jalankan Klaim ulang ruang untuk membebaskannya
 library-reclaim = Klaim ulang ruang
+# Phase 49i — full compaction.
+library-compact = Pemadatan penuh
+library-compact-started = Pemadatan dimulai — lihat Tugas
+# Phase 49h — compression.
+library-stat-compression = Dihemat oleh kompresi
+storage-compression = Kompresi
+storage-compression-off = Mati
+storage-compression-auto = Otomatis (lewati yang tidak dapat dikompresi)
+storage-compression-always = Selalu
+storage-compression-restart = Berlaku saat peluncuran berikutnya
+# Phase 49j — tasks & progress center.
+footer-tasks = Tugas
+tasks-title = Tugas
+tasks-empty = Belum ada tugas
+tasks-running = Berjalan
+tasks-recent = Terbaru
+tasks-cancel = Batal
+task-state-running = Berjalan
+task-state-completed = Selesai
+task-state-failed = Gagal
+task-state-cancelled = Dibatalkan
+# Phase 49k — repository setup/connect wizard.
+repo-wizard-title = Hubungkan repositori
+repo-wizard-create-tab = Buat baru
+repo-wizard-connect-tab = Hubungkan yang ada
+repo-field-name = Nama
+repo-field-path = Lokasi
+repo-field-password = Frasa sandi (opsional)
+repo-action-create = Buat
+repo-action-connect = Hubungkan
+repo-action-browse = Telusuri…
+repo-switcher-label = Repositori
+repo-action-forget = Lupakan
+repo-action-change-pass = Ubah frasa sandi…
+repo-password-old = Frasa sandi saat ini
+repo-password-new = Frasa sandi baru
+repo-error-exists = Sudah ada repositori di lokasi ini
+repo-error-not-found = Tidak ada repositori yang ditemukan di lokasi ini
+repo-error-bad-pass = Frasa sandi salah
+repo-note-no-encryption = Frasa sandi hanya mengatur akses; enkripsi data tersimpan akan hadir di rilis berikutnya
+repo-confirm-forget = Hapus "{ $name }" dari daftar? Data Anda tetap ada di disk.
+repo-toast-created = Repositori "{ $name }" dibuat
+repo-toast-connected = Terhubung ke "{ $name }"
+repo-toast-pass-changed = Frasa sandi diperbarui
+# Phase 49l — Sources dashboard.
+library-tab-overview = Ikhtisar
+library-source-empty = Belum ada sumber
+library-source-unknown = (sumber tidak ditentukan)
+library-source-snapshots = { $n } snapshot
+library-source-latest = Terbaru { $when }
+# Phase 49n — verify & repair.
+repo-action-verify = Verifikasi
+repo-action-verify-deep = Verifikasi (baca semua data)
+repo-action-repair = Perbaiki…
+repo-verify-clean = { $files } berkas / { $chunks } potongan diverifikasi — tidak ada kerusakan
+repo-verify-damaged = { $missing } hilang, { $corrupt } potongan rusak
+repo-repair-confirm = Hapus { $n } snapshot yang tidak dapat dipulihkan lagi?
+repo-repair-removed = { $n } snapshot rusak dihapus
+repo-repair-none = Tidak ada yang perlu diperbaiki — repositori bersih
 repo-gc-done = { $bytes } diklaim ulang ({ $chunks } potongan)
 restore-toast-partial = { $restored } dipulihkan, { $skipped } dilewati, { $failed } gagal

@@ -1199,6 +1199,32 @@ repo-kind-copy = Sao chép
 repo-kind-sync = Đồng bộ
 repo-kind-version = Phiên bản
 repo-kind-backup = Sao lưu
+# Phase 49o — snapshot diff / compare.
+library-tab-compare = So sánh
+repo-change-added = Đã thêm
+repo-change-removed = Đã xóa
+repo-change-modified = Đã sửa đổi
+repo-change-unchanged = Không có thay đổi
+repo-diff-summary = { $added } đã thêm · { $removed } đã xóa · { $modified } đã sửa đổi
+repo-diff-bytes-added = { $bytes } mới
+repo-diff-pick-two = Chọn hai ảnh chụp để so sánh
+# Phase 49r — statistics / reports.
+library-tab-reports = Báo cáo
+report-growth-title = Tăng trưởng lưu trữ
+report-by-kind-title = Theo loại
+report-top-files-title = Tệp hàng đầu
+report-dedup-ratio = Đã loại trùng lặp { $pct }%
+report-export = Xuất báo cáo
+report-exported = Đã lưu báo cáo vào { $path }
+report-file-versions = { $n } phiên bản
+# Phase 49p — pinning / prune.
+repo-pin = Ghim
+repo-unpin = Bỏ ghim
+repo-pinned-badge = Đã ghim
+repo-prune-title = Dọn bớt
+repo-prune-keep-last = Giữ mới nhất
+repo-prune-removed = Đã dọn { $n } ảnh chụp
+repo-prune-none = Không có gì để dọn
 
 # Phase 49c — nguồn sao lưu.
 library-tab-sources = Nguồn
@@ -1214,6 +1240,32 @@ backup-running = Đang sao lưu… { $files } tệp
 backup-toast-started = Đang sao lưu { $label }…
 backup-toast-completed = Đã sao lưu { $label }: { $files } tệp
 backup-toast-failed = Sao lưu { $label } thất bại: { $reason }
+# Phase 49e — per-source retention + prune.
+backup-retention = Lưu giữ
+backup-retention-keep-all = Giữ tất cả
+backup-retention-last = Giữ { $n } bản mới nhất
+backup-retention-days = Cũ hơn { $days } ngày
+backup-retention-gfs = Xoay vòng GFS
+backup-prune-now = Dọn ngay
+backup-prune-none = Không có gì để dọn
+backup-prune-result = Đã xóa { $removed } ảnh chụp · thu hồi { $bytes }
+# Phase 49f — per-source scheduling.
+backup-schedule = Lịch
+backup-schedule-manual = Thủ công
+backup-schedule-hourly = Hàng giờ
+backup-schedule-daily = Hàng ngày
+backup-schedule-weekly = Hàng tuần
+backup-next-run = Lần chạy tiếp theo { $when }
+backup-not-scheduled = Chưa lên lịch
+# Phase 49g — source filters.
+backup-include-ph = Mẫu glob bao gồm (phân tách bằng dấu phẩy)
+backup-skip-hidden = Bỏ qua mục ẩn
+# Phase 49q — notifications.
+notify-title = Thông báo
+notify-on-success = Khi thành công
+notify-on-failure = Khi thất bại
+notify-test = Gửi thử
+notify-test-sent = Đã gửi thử đến { $n } đích
 
 # Phase 49d — trình duyệt khôi phục.
 restore-browse = Khôi phục…
@@ -1231,5 +1283,64 @@ restore-toast-failed = Khôi phục thất bại: { $reason }
 snapshot-forget = Quên
 snapshot-forget-toast = Đã quên ảnh chụp — chạy Thu hồi dung lượng để giải phóng
 library-reclaim = Thu hồi dung lượng
+# Phase 49i — full compaction.
+library-compact = Dồn nén toàn bộ
+library-compact-started = Đã bắt đầu dồn nén — theo dõi Tác vụ
+# Phase 49h — compression.
+library-stat-compression = Tiết kiệm nhờ nén
+storage-compression = Nén
+storage-compression-off = Tắt
+storage-compression-auto = Tự động (bỏ qua dữ liệu không nén được)
+storage-compression-always = Luôn nén
+storage-compression-restart = Áp dụng ở lần khởi chạy tiếp theo
+# Phase 49j — tasks & progress center.
+footer-tasks = Tác vụ
+tasks-title = Tác vụ
+tasks-empty = Chưa có tác vụ nào
+tasks-running = Đang chạy
+tasks-recent = Gần đây
+tasks-cancel = Hủy
+task-state-running = Đang chạy
+task-state-completed = Hoàn tất
+task-state-failed = Thất bại
+task-state-cancelled = Đã hủy
+# Phase 49k — repository setup/connect wizard.
+repo-wizard-title = Kết nối kho lưu trữ
+repo-wizard-create-tab = Tạo mới
+repo-wizard-connect-tab = Kết nối kho hiện có
+repo-field-name = Tên
+repo-field-path = Vị trí
+repo-field-password = Cụm mật khẩu (tùy chọn)
+repo-action-create = Tạo
+repo-action-connect = Kết nối
+repo-action-browse = Duyệt…
+repo-switcher-label = Kho lưu trữ
+repo-action-forget = Quên
+repo-action-change-pass = Đổi cụm mật khẩu…
+repo-password-old = Cụm mật khẩu hiện tại
+repo-password-new = Cụm mật khẩu mới
+repo-error-exists = Đã có kho lưu trữ tại vị trí này
+repo-error-not-found = Không tìm thấy kho lưu trữ tại vị trí này
+repo-error-bad-pass = Cụm mật khẩu không đúng
+repo-note-no-encryption = Cụm mật khẩu chỉ kiểm soát quyền truy cập; mã hóa khi lưu trữ sẽ có trong bản phát hành sau
+repo-confirm-forget = Gỡ "{ $name }" khỏi danh sách? Dữ liệu của bạn vẫn còn trên đĩa.
+repo-toast-created = Đã tạo kho lưu trữ "{ $name }"
+repo-toast-connected = Đã kết nối tới "{ $name }"
+repo-toast-pass-changed = Đã cập nhật cụm mật khẩu
+# Phase 49l — Sources dashboard.
+library-tab-overview = Tổng quan
+library-source-empty = Chưa có nguồn nào
+library-source-unknown = (nguồn không xác định)
+library-source-snapshots = { $n } ảnh chụp
+library-source-latest = Mới nhất { $when }
+# Phase 49n — verify & repair.
+repo-action-verify = Xác minh
+repo-action-verify-deep = Xác minh (đọc tất cả dữ liệu)
+repo-action-repair = Sửa chữa…
+repo-verify-clean = Đã xác minh { $files } tệp / { $chunks } khối — không có hư hỏng
+repo-verify-damaged = { $missing } bị thiếu, { $corrupt } khối bị hỏng
+repo-repair-confirm = Xóa { $n } ảnh chụp không còn khôi phục được?
+repo-repair-removed = Đã xóa { $n } ảnh chụp bị hỏng
+repo-repair-none = Không có gì để sửa chữa — kho lưu trữ sạch
 repo-gc-done = Đã thu hồi { $bytes } ({ $chunks } khối)
 restore-toast-partial = Đã khôi phục { $restored }, bỏ qua { $skipped }, thất bại { $failed }

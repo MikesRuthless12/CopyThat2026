@@ -59,6 +59,7 @@ pub mod ipc_safety;
 pub mod live_mirror;
 pub mod mobile_commands;
 pub mod mount_commands;
+mod notifications;
 pub mod offload_commands;
 pub mod plugin_commands;
 pub mod power;
@@ -75,6 +76,7 @@ pub mod server_commands;
 pub mod shell;
 pub mod state;
 pub mod sync_commands;
+mod tasks;
 pub mod thumbnail;
 pub mod updater;
 pub mod version_commands;
@@ -215,6 +217,25 @@ fn pinned_target_for_menu_id<R: Runtime>(
 /// this handle) can start regardless of the chunk-store toggle. An empty
 /// store is cheap — the GB-scale cost is the chunk bytes themselves, which
 /// only accumulate when recording is on.
+/// Bridge the settings-layer compression mirror to the chunk crate's
+/// `RepoCompression` (Phase 49h). Lives here because `copythat-settings`
+/// has no `copythat-chunk` edge.
+pub(crate) fn compression_from_settings(
+    c: &copythat_settings::RepoCompressionSettings,
+) -> copythat_chunk::RepoCompression {
+    use copythat_chunk::{CompressionLevel, RepoCompression};
+    use copythat_settings::RepoCompressionSettings as S;
+    match *c {
+        S::Off => RepoCompression::Off,
+        S::Auto { level } => RepoCompression::Auto {
+            level: CompressionLevel(level),
+        },
+        S::Always { level } => RepoCompression::Always {
+            level: CompressionLevel(level),
+        },
+    }
+}
+
 fn open_repository_blocking(
     settings: &copythat_settings::Settings,
 ) -> Option<(
@@ -254,7 +275,11 @@ fn open_repository_blocking(
     // available while the Library (which needs the snapshot catalog) degrades
     // to "repository-unavailable".
     let repository = match copythat_chunk::Repository::with_store(store.clone()) {
-        Ok(r) => Some(std::sync::Arc::new(r)),
+        Ok(mut r) => {
+            // Phase 49h — apply the persisted at-rest compression policy.
+            r.set_compression(compression_from_settings(&cs.compression));
+            Some(std::sync::Arc::new(r))
+        }
         Err(e) => {
             tracing::warn!(error = %e, "repository catalog open failed; Library unavailable (chunk store still serves recovery/mount)");
             None
@@ -655,18 +680,62 @@ pub fn run() {
             // Phase 49 — unified chunk repository (Library tab).
             repository_commands::repository_stats,
             repository_commands::repository_snapshots,
+            // Phase 49o — snapshot diff / compare.
+            repository_commands::repository_diff,
+            // Phase 49r — statistics / report.
+            repository_commands::repository_report,
+            repository_commands::repository_export_report,
+            // Phase 49h — at-rest compression policy.
+            repository_commands::repository_compression_get,
+            repository_commands::repository_compression_set,
+            // Phase 49i — full compaction (task-based).
+            repository_commands::repository_compact,
+            // Phase 49k — multi-repository management.
+            repository_commands::repository_list,
+            repository_commands::repository_active,
+            repository_commands::repository_create,
+            repository_commands::repository_connect,
+            repository_commands::repository_set_active,
+            repository_commands::repository_disconnect,
+            repository_commands::repository_change_password,
+            // Phase 49l — Sources dashboard.
+            repository_commands::repository_sources,
+            // Phase 49n — verify & repair.
+            repository_commands::repository_verify,
+            repository_commands::repository_repair,
+            // Phase 49j — tasks & progress center.
+            tasks::tasks_list,
+            tasks::task_get,
+            tasks::task_cancel,
             // Phase 49c — backup sources ("Back up now").
             backup_commands::sources_list,
             backup_commands::sources_add,
             backup_commands::sources_update,
             backup_commands::sources_remove,
             backup_commands::backup_now,
+            // Phase 49e — per-source retention + prune.
+            backup_commands::sources_set_retention,
+            backup_commands::repository_prune,
+            backup_commands::repository_prune_preview,
+            // Phase 49f — per-source scheduling.
+            backup_commands::sources_set_schedule,
+            backup_commands::backup_sources_status,
             // Phase 49d — restore browser.
             repository_commands::snapshot_tree,
             repository_commands::restore_preview,
             repository_commands::restore_paths,
             repository_commands::repository_forget,
             repository_commands::repository_gc,
+            // Phase 49p — pinning / metadata / pin-protected prune.
+            repository_commands::repository_set_pinned,
+            repository_commands::repository_set_label,
+            repository_commands::repository_set_description,
+            repository_commands::repository_set_tags,
+            repository_commands::repository_prune_policy,
+            // Phase 49q — notifications (toggles + test current webhook destinations).
+            notifications::notifications_get,
+            notifications::notifications_set,
+            notifications::notifications_test,
             // Phase 44.2 — SSD-aware whole-drive sanitize IPC.
             sanitize_commands::sanitize_list_devices,
             sanitize_commands::sanitize_capabilities_cmd,
@@ -824,6 +893,8 @@ pub fn run() {
                         };
                         let snap = state.settings_snapshot();
                         state::apply_network_settings_to_shape(&state.shape, &snap.network);
+                        // Phase 49f — run any backup sources whose schedule is due.
+                        backup_commands::backup_tick(&poll_handle);
                         let new_rate = state.shape.current_rate().map(|r| r.bytes_per_second());
                         if new_rate != last_rate {
                             let _ = poll_handle.emit(

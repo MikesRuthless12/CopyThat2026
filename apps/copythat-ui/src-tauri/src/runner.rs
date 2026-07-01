@@ -252,14 +252,20 @@ pub(crate) async fn run_job(job: RunJob) {
     {
         let cs = state.settings_snapshot().chunk_store;
         if cs.enabled
-            && let Some(store) = state.chunk_store.clone()
+            && let Some(repo) = state.repository()
         {
+            // Use the ACTIVE repository's store (Phase 49k lets the user switch
+            // repositories at runtime). Pinning the startup-default
+            // `state.chunk_store` here would desync after a switch: delta-resume
+            // chunks would land in the OLD store while the copy/version snapshot
+            // below records into the NEW one — silently breaking dedup and
+            // roughly doubling on-disk size.
             copy_opts_with_verify.chunk_store = Some(std::sync::Arc::new(
-                copythat_chunk::CopyThatChunkSink::new(store),
+                copythat_chunk::CopyThatChunkSink::new(repo.store_arc()),
             ));
         }
         if cs.snapshot_on_overwrite
-            && let Some(repo) = state.repository.clone()
+            && let Some(repo) = state.repository()
         {
             copy_opts_with_verify.versioning.enabled = true;
             copy_opts_with_verify.versioning_sink = Some(std::sync::Arc::new(
@@ -524,7 +530,7 @@ pub(crate) async fn run_job(job: RunJob) {
     if terminal_status == "succeeded"
         && matches!(kind, JobKind::Copy | JobKind::Move)
         && let Some(dst_root) = dst.clone()
-        && let Some(repo) = state.repository.clone()
+        && let Some(repo) = state.repository()
         && state.settings_snapshot().chunk_store.snapshot_on_copy
     {
         let src_label = src.clone();

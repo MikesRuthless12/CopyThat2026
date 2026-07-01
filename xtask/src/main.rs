@@ -31,6 +31,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 mod bench;
+mod conformance;
 mod plugins;
 mod qa;
 mod release;
@@ -123,6 +124,13 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("xtask build-sample-plugins: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("gen-conformance") => match conformance::run() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("xtask gen-conformance: {e}");
                 ExitCode::FAILURE
             }
         },

@@ -25,6 +25,8 @@
 //! on-disk markers (no decryption).
 
 mod borg;
+mod export_borg;
+mod export_restic;
 mod kopia;
 mod restic;
 
@@ -191,6 +193,16 @@ pub fn write_cdr_descriptor(root: &Path) -> std::result::Result<(), MigrateError
     std::fs::write(&path, body).map_err(|e| MigrateError::Io { path, source: e })
 }
 
+/// Fill `buf` with cryptographically-secure random bytes from the OS CSPRNG
+/// (`getrandom`), shared by the restic + Borg exporters for master-key / IV /
+/// salt generation. A `getrandom` failure means the OS has no entropy source
+/// available — an unrecoverable environment fault, not a routine error — so it
+/// panics rather than silently emitting weak or zeroed key material. Preferred
+/// over UUID-v4 fills, which pin 6 bits per 16-byte block.
+pub(super) fn fill_random(buf: &mut [u8]) {
+    getrandom::fill(buf).expect("OS CSPRNG (getrandom) unavailable");
+}
+
 /// Constant-time byte-slice equality for MAC verification (shared by the
 /// restic + Borg importers so the security-sensitive compare lives once).
 pub(super) fn ct_eq(a: &[u8], b: &[u8]) -> bool {
@@ -261,6 +273,37 @@ pub fn migrate(
     }
 }
 
+/// Export a CDR-0 repository at `src_cdr` OUT to another tool's on-disk
+/// format at `dst` — the inverse of [`migrate`]. Chunk ids aren't portable,
+/// so each file is re-chunked with the target's CDC and re-sealed with the
+/// target's crypto; the result round-trips through that tool's importer.
+/// `kopia` is not yet supported (returns `SourceUnsupported`). (Phase 50e.)
+pub fn export(
+    to: RepoFormat,
+    src_cdr: &Path,
+    dst: &Path,
+    passphrase: Option<&str>,
+) -> std::result::Result<MigrateReport, MigrateError> {
+    match to {
+        RepoFormat::Restic => {
+            let pw = passphrase.ok_or(MigrateError::NeedsPassphrase { tool: "restic" })?;
+            let src = Repository::open(src_cdr)?;
+            export_restic::export_restic(&src, dst, pw)
+        }
+        RepoFormat::Borg => {
+            let pw = passphrase.ok_or(MigrateError::NeedsPassphrase { tool: "borg" })?;
+            let src = Repository::open(src_cdr)?;
+            export_borg::export_borg(&src, dst, pw)
+        }
+        RepoFormat::Kopia => Err(MigrateError::SourceUnsupported {
+            tool: "kopia",
+            reason: "kopia export is blocked on the index-v2 importer build-out".into(),
+        }),
+        RepoFormat::Cdr => migrate_cdr_to_cdr(src_cdr, dst),
+        RepoFormat::Unknown => Err(MigrateError::Unrecognized(src_cdr.to_path_buf())),
+    }
+}
+
 /// Copy every snapshot from one CDR-0 repository into another,
 /// re-ingesting file bytes (so the destination's chunk store is built
 /// fresh + self-consistent). Returns the counts.
@@ -302,7 +345,13 @@ fn migrate_cdr_to_cdr(
                 })?;
                 bytes.extend_from_slice(&data);
             }
-            let manifest = crate::manifest::chunk_into_store(dest.store(), &chunker, &bytes)?.1;
+            let manifest = crate::manifest::chunk_into_store(
+                dest.store(),
+                &chunker,
+                &bytes,
+                dest.compression(),
+            )?
+            .1;
             entries.push(crate::repository::FileEntry {
                 path: entry.path.clone(),
                 manifest,

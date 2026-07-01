@@ -15,9 +15,17 @@
   import { t } from "../i18n";
   import {
     backupNow,
+    backupSourcesStatus,
+    notificationsGet,
+    notificationsSet,
+    notificationsTest,
+    repositoryPrune,
     sourcesAdd,
     sourcesList,
     sourcesRemove,
+    sourcesSetRetention,
+    sourcesSetSchedule,
+    type RetentionSettings,
     type SourceConfigDto,
   } from "../ipc";
   import { pushToast } from "../stores";
@@ -29,11 +37,16 @@
   let sources = $state<SourceConfigDto[]>([]);
   let progress = $state<Record<string, Progress | undefined>>({});
   let newExcludes = $state("");
+  let newIncludes = $state("");
+  let newSkipHidden = $state(false);
+  let notifyOnSuccess = $state(false);
+  let notifyOnFailure = $state(false);
   let unlistenFns: UnlistenFn[] = [];
 
   async function reload() {
     try {
       sources = await sourcesList();
+      await loadStatus();
     } catch (e) {
       pushToast("error", e instanceof Error ? e.message : String(e));
     }
@@ -47,6 +60,7 @@
 
   onMount(() => {
     void reload();
+    void loadNotifications();
     (async () => {
       unlistenFns.push(
         await listen<{ id: string; filesDone: number; filesTotal: number }>(
@@ -111,13 +125,19 @@
   async function addSource() {
     const picked = await openDialog({ directory: true, multiple: false });
     if (typeof picked !== "string") return;
-    const globs = newExcludes
-      .split(",")
-      .map((g) => g.trim())
-      .filter(Boolean);
+    const splitGlobs = (s: string) =>
+      s.split(",").map((g) => g.trim()).filter(Boolean);
     try {
-      await sourcesAdd(baseName(picked), picked, globs);
+      await sourcesAdd(
+        baseName(picked),
+        picked,
+        splitGlobs(newExcludes),
+        splitGlobs(newIncludes),
+        newSkipHidden,
+      );
       newExcludes = "";
+      newIncludes = "";
+      newSkipHidden = false;
       await reload();
     } catch (e) {
       pushToast("error", e instanceof Error ? e.message : String(e));
@@ -149,14 +169,154 @@
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
   }
+
+  // --- Phase 49e: per-source retention ---------------------------------
+
+  // Preset retention policies surfaced in the dropdown. The backend
+  // supports arbitrary Last-N / Older-than-days / GFS values; the GUI
+  // offers the common ones (GFS uses a sensible rolling default).
+  const PRESETS: Record<string, RetentionSettings> = {
+    "keep-all": { kind: "keep-all" },
+    "last-5": { kind: "last-n", n: 5 },
+    "last-10": { kind: "last-n", n: 10 },
+    "last-30": { kind: "last-n", n: 30 },
+    "older-30": { kind: "older-than-days", days: 30 },
+    "older-90": { kind: "older-than-days", days: 90 },
+    gfs: { kind: "gfs", hourly: 24, daily: 7, weekly: 4, monthly: 12 },
+  };
+
+  function policyToValue(r: RetentionSettings): string {
+    if (r.kind === "last-n") return r.n <= 5 ? "last-5" : r.n <= 10 ? "last-10" : "last-30";
+    if (r.kind === "older-than-days") return r.days <= 30 ? "older-30" : "older-90";
+    if (r.kind === "gfs") return "gfs";
+    return "keep-all";
+  }
+
+  function humanBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    const units = ["KiB", "MiB", "GiB", "TiB"];
+    let v = n / 1024;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i++;
+    }
+    return `${v.toFixed(1)} ${units[i]}`;
+  }
+
+  async function setRetention(id: string, value: string) {
+    const policy = PRESETS[value] ?? { kind: "keep-all" };
+    try {
+      await sourcesSetRetention(id, policy);
+      await reload();
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function pruneNow(id: string) {
+    try {
+      const r = await repositoryPrune(id, Date.now());
+      if (r.snapshotsRemoved === 0) {
+        pushToast("info", t("backup-prune-none"));
+      } else {
+        pushToast(
+          "success",
+          t("backup-prune-result", {
+            removed: r.snapshotsRemoved,
+            bytes: humanBytes(r.bytesReclaimed),
+          }),
+        );
+      }
+      await reload();
+      void refresh();
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // --- Phase 49f: scheduling -------------------------------------------
+
+  let nextRun = $state<Record<string, number | null>>({});
+
+  async function loadStatus() {
+    try {
+      const rows = await backupSourcesStatus();
+      const m: Record<string, number | null> = {};
+      for (const r of rows) m[r.id] = r.nextRunMs;
+      nextRun = m;
+    } catch {
+      // Status is advisory (e.g. repository unavailable); ignore.
+    }
+  }
+
+  async function setSchedule(id: string, spec: string) {
+    try {
+      // A non-Manual cadence implies auto-run enabled.
+      await sourcesSetSchedule(id, spec, spec !== "");
+      await reload();
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // --- Phase 49q: notifications ----------------------------------------
+
+  async function loadNotifications() {
+    try {
+      const n = await notificationsGet();
+      notifyOnSuccess = n.onSuccess;
+      notifyOnFailure = n.onFailure;
+    } catch {
+      // advisory; ignore
+    }
+  }
+
+  async function saveNotifications() {
+    try {
+      await notificationsSet(notifyOnSuccess, notifyOnFailure);
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function testNotify() {
+    try {
+      const n = await notificationsTest();
+      pushToast("info", t("notify-test-sent", { n }));
+    } catch (e) {
+      pushToast("error", e instanceof Error ? e.message : String(e));
+    }
+  }
 </script>
 
+<div class="notify-bar">
+  <span class="notify-title">{t("notify-title")}</span>
+  <label class="notify-toggle">
+    <input type="checkbox" bind:checked={notifyOnSuccess} onchange={saveNotifications} />
+    {t("notify-on-success")}
+  </label>
+  <label class="notify-toggle">
+    <input type="checkbox" bind:checked={notifyOnFailure} onchange={saveNotifications} />
+    {t("notify-on-failure")}
+  </label>
+  <button type="button" onclick={testNotify}>{t("notify-test")}</button>
+</div>
 <div class="add-row">
   <input
     type="text"
     placeholder={t("backup-exclude-ph")}
     bind:value={newExcludes}
   />
+  <input
+    type="text"
+    placeholder={t("backup-include-ph")}
+    bind:value={newIncludes}
+  />
+  <label class="skip-hidden">
+    <input type="checkbox" bind:checked={newSkipHidden} />
+    {t("backup-skip-hidden")}
+  </label>
   <button type="button" onclick={addSource}>{t("backup-add-source")}</button>
 </div>
 
@@ -196,6 +356,56 @@
             </button>
           </div>
         </div>
+        <div class="schedule">
+          <label class="sched-label">
+            {t("backup-schedule")}
+            <select
+              value={s.schedule}
+              disabled={!!progress[s.id]}
+              onchange={(e) => setSchedule(s.id, e.currentTarget.value)}
+            >
+              <option value="">{t("backup-schedule-manual")}</option>
+              <option value="@hourly">{t("backup-schedule-hourly")}</option>
+              <option value="@daily">{t("backup-schedule-daily")}</option>
+              <option value="@weekly">{t("backup-schedule-weekly")}</option>
+            </select>
+          </label>
+          {#if s.enabled && nextRun[s.id]}
+            <span class="meta">
+              {t("backup-next-run", {
+                when: new Date(nextRun[s.id] as number).toLocaleString(),
+              })}
+            </span>
+          {:else}
+            <span class="meta">{t("backup-not-scheduled")}</span>
+          {/if}
+        </div>
+        <div class="retention">
+          <label class="ret-label">
+            {t("backup-retention")}
+            <select
+              value={policyToValue(s.retention)}
+              disabled={!!progress[s.id]}
+              onchange={(e) => setRetention(s.id, e.currentTarget.value)}
+            >
+              <option value="keep-all">{t("backup-retention-keep-all")}</option>
+              <option value="last-5">{t("backup-retention-last", { n: 5 })}</option>
+              <option value="last-10">{t("backup-retention-last", { n: 10 })}</option>
+              <option value="last-30">{t("backup-retention-last", { n: 30 })}</option>
+              <option value="older-30">{t("backup-retention-days", { days: 30 })}</option>
+              <option value="older-90">{t("backup-retention-days", { days: 90 })}</option>
+              <option value="gfs">{t("backup-retention-gfs")}</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            class="prune"
+            disabled={!!progress[s.id]}
+            onclick={() => pruneNow(s.id)}
+          >
+            {t("backup-prune-now")}
+          </button>
+        </div>
         {#if progress[s.id]}
           {@const p = progress[s.id]}
           <div class="progress">
@@ -216,14 +426,38 @@
 {/if}
 
 <style>
+  .notify-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px 0;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+  }
+  .notify-title {
+    font-weight: 600;
+  }
+  .notify-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
   .add-row {
     display: flex;
     gap: 8px;
     padding: 12px 16px;
   }
-  .add-row input {
+  .add-row input[type="text"] {
     flex: 1;
     padding: 6px 8px;
+  }
+  .skip-hidden {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--muted, #666666);
+    white-space: nowrap;
   }
   .list {
     list-style: none;
@@ -281,6 +515,40 @@
     height: 100%;
     background: var(--accent, #3b82f6);
     transition: width 0.2s ease;
+  }
+  .schedule {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .sched-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--muted, #666666);
+  }
+  .sched-label select {
+    padding: 4px 6px;
+  }
+  .retention {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .ret-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--muted, #666666);
+  }
+  .ret-label select {
+    padding: 4px 6px;
   }
   .empty {
     padding: 24px 16px;

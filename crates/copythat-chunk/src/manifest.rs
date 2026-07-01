@@ -21,6 +21,7 @@ use std::io::{BufReader, Read, Write};
 use std::path::Path;
 
 use crate::chunker::Chunker;
+use crate::compress::RepoCompression;
 use crate::error::{ChunkStoreError, Result};
 use crate::store::ChunkStore;
 use crate::types::{Blake3Hash, ChunkRef, Manifest};
@@ -77,7 +78,9 @@ pub fn ingest_bytes(
     bytes: &[u8],
     manifest_key: &str,
 ) -> Result<(IngestStats, Manifest)> {
-    let (stats, manifest) = chunk_into_store(store, chunker, bytes)?;
+    // Phase 27 delta-resume ingest stays uncompressed (it shares the store;
+    // dedup-by-hash means the first writer's codec wins consistently).
+    let (stats, manifest) = chunk_into_store(store, chunker, bytes, RepoCompression::Off)?;
     store.put_manifest(manifest_key, &manifest)?;
     Ok((stats, manifest))
 }
@@ -93,6 +96,7 @@ pub(crate) fn chunk_into_store(
     store: &ChunkStore,
     chunker: &Chunker,
     bytes: &[u8],
+    comp: RepoCompression,
 ) -> Result<(IngestStats, Manifest)> {
     let file_hash: Blake3Hash = *blake3::hash(bytes).as_bytes();
     let cuts = chunker.chunk_bytes(bytes);
@@ -103,11 +107,14 @@ pub(crate) fn chunk_into_store(
     let mut chunks = Vec::with_capacity(cuts.len());
     for c in &cuts {
         let slice = &bytes[c.offset as usize..(c.offset as usize + c.len as usize)];
-        if store.has(&c.hash)? {
+        let was_present = store.has(&c.hash)?;
+        // put_chunk re-checks dedup internally and returns the codec the
+        // stored bytes actually use (the existing one on a dedup hit).
+        let codec = store.put_chunk(c.hash, slice, comp)?;
+        if was_present {
             stats.chunks_dedup += 1;
             stats.bytes_dedup += u64::from(c.len);
         } else {
-            store.put(c.hash, slice)?;
             stats.chunks_new += 1;
             stats.bytes_new += u64::from(c.len);
         }
@@ -115,6 +122,7 @@ pub(crate) fn chunk_into_store(
             hash: c.hash,
             offset: c.offset,
             len: c.len,
+            codec,
         });
     }
     let manifest = Manifest {
@@ -158,6 +166,47 @@ pub fn materialise_file(store: &ChunkStore, manifest: &Manifest, dst: &Path) -> 
         source: e,
     })?;
     Ok(())
+}
+
+/// Read `[offset, offset+len)` of the file described by `manifest`, pulling
+/// only the chunks that overlap the range from `store`. Each `ChunkRef`
+/// carries its absolute file offset + logical length, so the read touches
+/// just the overlapping chunks. `store.get` re-hashes on read, so a corrupt
+/// pack surfaces as `CorruptChunk` and a missing chunk as `MissingChunk`. A
+/// read at/after EOF is clamped (returns fewer bytes, or empty). (Phase 49m
+/// — the mount read callback; testable without a kernel.)
+pub fn materialise_range(
+    store: &ChunkStore,
+    manifest: &Manifest,
+    offset: u64,
+    len: usize,
+) -> Result<Vec<u8>> {
+    if len == 0 || offset >= manifest.size {
+        return Ok(Vec::new());
+    }
+    let end = (offset + len as u64).min(manifest.size);
+    let mut out = Vec::with_capacity((end - offset) as usize);
+    for c in &manifest.chunks {
+        let chunk_start = c.offset;
+        let chunk_end = c.offset + u64::from(c.len);
+        if chunk_end <= offset || chunk_start >= end {
+            continue; // no overlap with the requested range
+        }
+        let bytes = store
+            .get(&c.hash)?
+            .ok_or_else(|| ChunkStoreError::MissingChunk {
+                hash: crate::types::hex_of(&c.hash),
+            })?;
+        if bytes.len() != c.len as usize {
+            return Err(ChunkStoreError::CorruptChunk {
+                hash: crate::types::hex_of(&c.hash),
+            });
+        }
+        let from = (offset.max(chunk_start) - chunk_start) as usize;
+        let to = (end.min(chunk_end) - chunk_start) as usize;
+        out.extend_from_slice(&bytes[from..to]);
+    }
+    Ok(out)
 }
 
 /// Planning helper for delta-resume. Given an `old` manifest (what

@@ -732,7 +732,13 @@ fn import_archive(
                         .ok_or_else(|| mp_err("file chunk id"))?;
                     bytes.extend_from_slice(&read_chunk(key, segs, &id)?);
                 }
-                let manifest = crate::manifest::chunk_into_store(dest.store(), chunker, &bytes)?.1;
+                let manifest = crate::manifest::chunk_into_store(
+                    dest.store(),
+                    chunker,
+                    &bytes,
+                    dest.compression(),
+                )?
+                .1;
                 entries.push(FileEntry {
                     path: super::safe_path(&path),
                     manifest,

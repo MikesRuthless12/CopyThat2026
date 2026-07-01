@@ -89,6 +89,15 @@ impl MountNode {
         }
     }
 
+    /// Phase 49m — a snapshot-file leaf carrying its chunk manifest.
+    fn snapshot_file(name: impl Into<String>, manifest: copythat_chunk::Manifest) -> Self {
+        Self {
+            name: name.into(),
+            kind: NodeKind::SnapshotFile { manifest },
+            children: BTreeMap::new(),
+        }
+    }
+
     /// Recursive child count, not including self.
     pub fn descendant_count(&self) -> usize {
         self.children
@@ -124,6 +133,13 @@ pub enum NodeKind {
     /// `History::items_for(job_row_id)` + streaming chunks from the
     /// chunk store.
     JobPlaceholder { job_row_id: i64 },
+    /// Phase 49m — a real file from a Repository snapshot, backed by its
+    /// chunk manifest. The FUSE / WinFsp read callback streams the
+    /// requested byte range from the chunk store via `materialise_range`.
+    SnapshotFile {
+        /// The file's chunk manifest (carries size + the chunk list).
+        manifest: copythat_chunk::Manifest,
+    },
 }
 
 /// Full virtual filesystem tree backed by the history + chunk store.
@@ -186,6 +202,30 @@ impl MountTree {
             layout,
             job_count: jobs.len(),
         })
+    }
+
+    /// Phase 49m — build a mount tree from a Repository snapshot. Each
+    /// `FileEntry.path` is split into path segments and inserted with a
+    /// [`NodeKind::SnapshotFile`] leaf carrying its manifest; intermediate
+    /// directories are synthesised from the path.
+    pub fn build_from_snapshot(snap: &copythat_chunk::Snapshot) -> Self {
+        let mut root = MountNode::directory("");
+        for f in &snap.files {
+            let segments: Vec<&str> = f
+                .path
+                .split(['/', '\\'])
+                .filter(|s| !s.is_empty())
+                .collect();
+            let Some((name, dirs)) = segments.split_last() else {
+                continue; // empty path — skip
+            };
+            root.insert_at(dirs, MountNode::snapshot_file(*name, f.manifest.clone()));
+        }
+        Self {
+            root,
+            layout: MountLayout::default(),
+            job_count: snap.files.len(),
+        }
     }
 
     /// Convenience — locate a node by its slash-delimited virtual
@@ -371,6 +411,42 @@ mod tests {
         );
         assert!(tree.lookup("by-source/C--src").is_some());
         assert!(tree.lookup("by-job-id/1/archive-copy").is_some());
+    }
+
+    #[test]
+    fn build_from_snapshot_builds_file_tree() {
+        use copythat_chunk::{FileEntry, Manifest, Snapshot, SnapshotKind};
+        let mk = |path: &str| FileEntry {
+            path: path.to_string(),
+            manifest: Manifest {
+                file_hash: [0u8; 32],
+                size: 10,
+                chunks: vec![],
+            },
+        };
+        let snap = Snapshot {
+            id: 1,
+            kind: SnapshotKind::Backup,
+            created_at_ms: 0,
+            label: "t".to_string(),
+            source_key: None,
+            description: String::new(),
+            tags: vec![],
+            pinned: false,
+            source: String::new(),
+            files: vec![mk("/docs/a.txt"), mk("/docs/sub/b.txt")],
+        };
+        let tree = MountTree::build_from_snapshot(&snap);
+        assert_eq!(tree.job_count, 2);
+        assert_eq!(tree.lookup("docs").unwrap().kind, NodeKind::Directory);
+        assert!(matches!(
+            tree.lookup("docs/a.txt").unwrap().kind,
+            NodeKind::SnapshotFile { .. }
+        ));
+        assert!(matches!(
+            tree.lookup("docs/sub/b.txt").unwrap().kind,
+            NodeKind::SnapshotFile { .. }
+        ));
     }
 
     #[test]

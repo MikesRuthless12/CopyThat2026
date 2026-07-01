@@ -64,6 +64,22 @@ pub enum ChunkStoreError {
     /// (forgotten, or never existed).
     #[error("snapshot not found: {0}")]
     SnapshotNotFound(u64),
+
+    /// Phase 49k — a repository is already initialised at this path.
+    #[error("a repository is already initialised at {0}")]
+    AlreadyExists(PathBuf),
+
+    /// Phase 49k — no repository found at this path.
+    #[error("no repository found at {0}")]
+    NotInitialised(PathBuf),
+
+    /// Phase 49k — the repository has a passphrase verifier but none was given.
+    #[error("repository is locked — a passphrase is required")]
+    Locked,
+
+    /// Phase 49k — the supplied passphrase did not match the verifier.
+    #[error("incorrect repository passphrase")]
+    BadPassphrase,
 }
 
 // redb's public error types are split across `DatabaseError`,

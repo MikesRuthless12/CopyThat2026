@@ -39,12 +39,14 @@
 #![forbid(unsafe_code)]
 
 pub mod auto;
+mod backup_schedule;
 mod error;
 mod schedule;
 mod shape;
 mod sink;
 
 pub use auto::{NetworkClass, PowerState, current_network_class, current_power_state};
+pub use backup_schedule::{BackupSchedule, BackupScheduleError};
 pub use error::{ScheduleError, ShapeError};
 pub use schedule::{DayMask, Schedule, ScheduleRule, TimeWindow};
 pub use shape::{ByteRate, Shape};

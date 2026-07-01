@@ -1117,6 +1117,32 @@ repo-kind-copy = 复制
 repo-kind-sync = 同步
 repo-kind-version = 版本管理
 repo-kind-backup = 备份
+# Phase 49o — snapshot diff / compare.
+library-tab-compare = 比较
+repo-change-added = 已添加
+repo-change-removed = 已移除
+repo-change-modified = 已修改
+repo-change-unchanged = 无更改
+repo-diff-summary = { $added } 个新增 · { $removed } 个移除 · { $modified } 个修改
+repo-diff-bytes-added = 新增 { $bytes }
+repo-diff-pick-two = 选择两个快照进行比较
+# Phase 49r — statistics / reports.
+library-tab-reports = 报告
+report-growth-title = 存储增长
+report-by-kind-title = 按类型
+report-top-files-title = 热门文件
+report-dedup-ratio = 已去重 { $pct }%
+report-export = 导出报告
+report-exported = 报告已保存到 { $path }
+report-file-versions = { $n } 个版本
+# Phase 49p — pinning / prune.
+repo-pin = 固定
+repo-unpin = 取消固定
+repo-pinned-badge = 已固定
+repo-prune-title = 清理
+repo-prune-keep-last = 保留最新
+repo-prune-removed = 已清理 { $n } 个快照
+repo-prune-none = 没有可清理的内容
 
 # Phase 46.6 — Settings → Plugins tab. The IPC layer in
 # `apps/copythat-ui/src-tauri/src/plugin_commands.rs` enumerates the
@@ -1214,6 +1240,32 @@ backup-running = 正在备份… { $files } 个文件
 backup-toast-started = 正在备份 { $label }…
 backup-toast-completed = 已备份 { $label }：{ $files } 个文件
 backup-toast-failed = 备份 { $label } 失败：{ $reason }
+# Phase 49e — per-source retention + prune.
+backup-retention = 保留
+backup-retention-keep-all = 全部保留
+backup-retention-last = 保留最近 { $n } 个
+backup-retention-days = 早于 { $days } 天
+backup-retention-gfs = GFS 轮换
+backup-prune-now = 立即清理
+backup-prune-none = 无需清理
+backup-prune-result = 已删除 { $removed } 个快照 · 已回收 { $bytes }
+# Phase 49f — per-source scheduling.
+backup-schedule = 计划
+backup-schedule-manual = 手动
+backup-schedule-hourly = 每小时
+backup-schedule-daily = 每天
+backup-schedule-weekly = 每周
+backup-next-run = 下次运行 { $when }
+backup-not-scheduled = 未计划
+# Phase 49g — source filters.
+backup-include-ph = 包含通配符（逗号分隔）
+backup-skip-hidden = 跳过隐藏项
+# Phase 49q — notifications.
+notify-title = 通知
+notify-on-success = 成功时
+notify-on-failure = 失败时
+notify-test = 发送测试
+notify-test-sent = 测试已发送到 { $n } 个目标
 
 # Phase 49d — 还原浏览器。
 restore-browse = 还原…
@@ -1231,5 +1283,64 @@ restore-toast-failed = 还原失败：{ $reason }
 snapshot-forget = 忘记
 snapshot-forget-toast = 已忘记快照 — 运行“回收空间”以释放
 library-reclaim = 回收空间
+# Phase 49i — full compaction.
+library-compact = 完全整理
+library-compact-started = 整理已开始 — 查看任务
+# Phase 49h — compression.
+library-stat-compression = 压缩节省
+storage-compression = 压缩
+storage-compression-off = 关闭
+storage-compression-auto = 自动（跳过不可压缩数据）
+storage-compression-always = 始终
+storage-compression-restart = 下次启动时生效
+# Phase 49j — tasks & progress center.
+footer-tasks = 任务
+tasks-title = 任务
+tasks-empty = 暂无任务
+tasks-running = 运行中
+tasks-recent = 最近
+tasks-cancel = 取消
+task-state-running = 运行中
+task-state-completed = 已完成
+task-state-failed = 失败
+task-state-cancelled = 已取消
+# Phase 49k — repository setup/connect wizard.
+repo-wizard-title = 连接仓库
+repo-wizard-create-tab = 新建
+repo-wizard-connect-tab = 连接现有
+repo-field-name = 名称
+repo-field-path = 位置
+repo-field-password = 口令（可选）
+repo-action-create = 创建
+repo-action-connect = 连接
+repo-action-browse = 浏览…
+repo-switcher-label = 仓库
+repo-action-forget = 忘记
+repo-action-change-pass = 更改口令…
+repo-password-old = 当前口令
+repo-password-new = 新口令
+repo-error-exists = 此位置已存在仓库
+repo-error-not-found = 在此位置找不到仓库
+repo-error-bad-pass = 口令不正确
+repo-note-no-encryption = 口令仅用于控制访问；静态加密将在后续版本中提供
+repo-confirm-forget = 从列表中移除 "{ $name }"？你的数据仍保留在磁盘上。
+repo-toast-created = 已创建仓库 "{ $name }"
+repo-toast-connected = 已连接到 "{ $name }"
+repo-toast-pass-changed = 口令已更新
+# Phase 49l — Sources dashboard.
+library-tab-overview = 概览
+library-source-empty = 暂无源
+library-source-unknown = （未指定源）
+library-source-snapshots = { $n } 个快照
+library-source-latest = 最新 { $when }
+# Phase 49n — verify & repair.
+repo-action-verify = 校验
+repo-action-verify-deep = 校验（读取所有数据）
+repo-action-repair = 修复…
+repo-verify-clean = 已校验 { $files } 个文件 / { $chunks } 个块 — 无损坏
+repo-verify-damaged = 缺失 { $missing } 个，损坏块 { $corrupt } 个
+repo-repair-confirm = 移除 { $n } 个无法再还原的快照？
+repo-repair-removed = 已移除 { $n } 个损坏的快照
+repo-repair-none = 无需修复 — 仓库正常
 repo-gc-done = 已回收 { $bytes }（{ $chunks } 个块）
 restore-toast-partial = 已还原 { $restored } 个，跳过 { $skipped } 个，失败 { $failed } 个

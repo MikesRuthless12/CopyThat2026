@@ -270,6 +270,19 @@ mod winfsp_body {
                 .map
                 .get(file_context as u64)
                 .ok_or(STATUS_OBJECT_NAME_NOT_FOUND)?;
+            // Phase 49m — snapshot files stream their range from the manifest.
+            if let crate::NodeKind::SnapshotFile { manifest } = &entry.kind {
+                let chunk_store = self.chunk_store.as_ref().ok_or(STATUS_END_OF_FILE)?;
+                let bytes =
+                    copythat_chunk::materialise_range(chunk_store, manifest, offset, buffer.len())
+                        .map_err(|_| STATUS_END_OF_FILE)?;
+                let n = bytes.len().min(buffer.len());
+                buffer[..n].copy_from_slice(&bytes[..n]);
+                if n == 0 {
+                    return Err(STATUS_END_OF_FILE);
+                }
+                return Ok(n);
+            }
             let crate::NodeKind::JobPlaceholder { job_row_id } = &entry.kind else {
                 return Err(STATUS_NOT_IMPLEMENTED);
             };

@@ -249,6 +249,29 @@ fn canned_args(key: &str) -> HashMap<&'static str, String> {
         "smb-compress-toast-saved" => {
             m.insert("bytes", "320 MiB".to_string());
         }
+        // Phase 49k — repository wizard (name placeable).
+        "repo-confirm-forget" | "repo-toast-created" | "repo-toast-connected" => {
+            m.insert("name", "Backup Drive".to_string());
+        }
+        // Phase 49l — sources dashboard placeables.
+        "library-source-snapshots" => {
+            m.insert("n", "12".to_string());
+        }
+        "library-source-latest" => {
+            m.insert("when", "2 hours ago".to_string());
+        }
+        // Phase 49n — verify & repair placeables.
+        "repo-verify-clean" => {
+            m.insert("files", "248".to_string());
+            m.insert("chunks", "31256".to_string());
+        }
+        "repo-verify-damaged" => {
+            m.insert("missing", "2".to_string());
+            m.insert("corrupt", "1".to_string());
+        }
+        "repo-repair-confirm" | "repo-repair-removed" => {
+            m.insert("n", "3".to_string());
+        }
         // Phase 42 — cloud-offload self-destruct countdown.
         "cloud-offload-self-destruct-warning" => {
             m.insert("minutes", "15".to_string());
@@ -317,6 +340,29 @@ fn canned_args(key: &str) -> HashMap<&'static str, String> {
         "library-snapshot-files" => {
             m.insert("n", "248".to_string());
         }
+        // Phase 49o — snapshot diff placeables.
+        "repo-diff-summary" => {
+            m.insert("added", "3".to_string());
+            m.insert("removed", "1".to_string());
+            m.insert("modified", "2".to_string());
+        }
+        "repo-diff-bytes-added" => {
+            m.insert("bytes", "4.2 MiB".to_string());
+        }
+        // Phase 49r — report placeables.
+        "report-dedup-ratio" => {
+            m.insert("pct", "63".to_string());
+        }
+        "report-exported" => {
+            m.insert("path", "C:/Users/me/report.md".to_string());
+        }
+        "report-file-versions" => {
+            m.insert("n", "12".to_string());
+        }
+        // Phase 49p — prune placeable.
+        "repo-prune-removed" => {
+            m.insert("n", "4".to_string());
+        }
         // Phase 49c — backup-source placeables.
         "backup-last-run" => {
             m.insert("when", "2026-06-30 14:03".to_string());
@@ -334,6 +380,25 @@ fn canned_args(key: &str) -> HashMap<&'static str, String> {
         "backup-toast-failed" => {
             m.insert("label", "Documents".to_string());
             m.insert("reason", "permission denied".to_string());
+        }
+        // Phase 49e — retention + prune placeables.
+        "backup-retention-last" => {
+            m.insert("n", "10".to_string());
+        }
+        "backup-retention-days" => {
+            m.insert("days", "30".to_string());
+        }
+        "backup-prune-result" => {
+            m.insert("removed", "5".to_string());
+            m.insert("bytes", "412 MiB".to_string());
+        }
+        // Phase 49f — scheduling placeable.
+        "backup-next-run" => {
+            m.insert("when", "2026-06-30 03:00".to_string());
+        }
+        // Phase 49q — notification test placeable.
+        "notify-test-sent" => {
+            m.insert("n", "2".to_string());
         }
         // Phase 49d — restore browser placeables.
         "restore-confirm" => {

@@ -1199,6 +1199,32 @@ repo-kind-copy = Kopya
 repo-kind-sync = Eşitleme
 repo-kind-version = Sürüm
 repo-kind-backup = Yedek
+# Phase 49o — snapshot diff / compare.
+library-tab-compare = Karşılaştır
+repo-change-added = Eklendi
+repo-change-removed = Kaldırıldı
+repo-change-modified = Değiştirildi
+repo-change-unchanged = Değişiklik yok
+repo-diff-summary = { $added } eklendi · { $removed } kaldırıldı · { $modified } değiştirildi
+repo-diff-bytes-added = { $bytes } yeni
+repo-diff-pick-two = Karşılaştırmak için iki anlık görüntü seçin
+# Phase 49r — statistics / reports.
+library-tab-reports = Raporlar
+report-growth-title = Depolama büyümesi
+report-by-kind-title = Türe göre
+report-top-files-title = Öne çıkan dosyalar
+report-dedup-ratio = %{ $pct } tekilleştirildi
+report-export = Raporu dışa aktar
+report-exported = Rapor { $path } konumuna kaydedildi
+report-file-versions = { $n } sürüm
+# Phase 49p — pinning / prune.
+repo-pin = Sabitle
+repo-unpin = Sabitlemeyi kaldır
+repo-pinned-badge = Sabitlendi
+repo-prune-title = Buda
+repo-prune-keep-last = En yenileri tut
+repo-prune-removed = { $n } anlık görüntü budandı
+repo-prune-none = Budanacak bir şey yok
 
 # Phase 49c — yedekleme kaynakları.
 library-tab-sources = Kaynaklar
@@ -1214,6 +1240,32 @@ backup-running = Yedekleniyor… { $files } dosya
 backup-toast-started = { $label } yedekleniyor…
 backup-toast-completed = { $label } yedeklendi: { $files } dosya
 backup-toast-failed = { $label } yedeklemesi başarısız: { $reason }
+# Phase 49e — per-source retention + prune.
+backup-retention = Saklama
+backup-retention-keep-all = Tümünü tut
+backup-retention-last = Son { $n } tanesini tut
+backup-retention-days = { $days } günden eski
+backup-retention-gfs = GFS döngüsü
+backup-prune-now = Şimdi buda
+backup-prune-none = Budanacak bir şey yok
+backup-prune-result = { $removed } anlık görüntü kaldırıldı · { $bytes } geri kazanıldı
+# Phase 49f — per-source scheduling.
+backup-schedule = Zamanlama
+backup-schedule-manual = Manuel
+backup-schedule-hourly = Saatlik
+backup-schedule-daily = Günlük
+backup-schedule-weekly = Haftalık
+backup-next-run = Sonraki çalıştırma { $when }
+backup-not-scheduled = Zamanlanmadı
+# Phase 49g — source filters.
+backup-include-ph = Dahil etme glob'ları (virgülle ayrılmış)
+backup-skip-hidden = Gizlileri atla
+# Phase 49q — notifications.
+notify-title = Bildirimler
+notify-on-success = Başarılı olduğunda
+notify-on-failure = Başarısız olduğunda
+notify-test = Test gönder
+notify-test-sent = { $n } hedefe test gönderildi
 
 # Phase 49d — geri yükleme tarayıcısı.
 restore-browse = Geri yükle…
@@ -1231,5 +1283,64 @@ restore-toast-failed = Geri yükleme başarısız: { $reason }
 snapshot-forget = Unut
 snapshot-forget-toast = Anlık görüntü unutuldu — boşaltmak için Alanı geri kazan'ı çalıştırın
 library-reclaim = Alanı geri kazan
+# Phase 49i — full compaction.
+library-compact = Tam birleştirme
+library-compact-started = Birleştirme başlatıldı — Görevler'i izleyin
+# Phase 49h — compression.
+library-stat-compression = Sıkıştırmayla kazanılan
+storage-compression = Sıkıştırma
+storage-compression-off = Kapalı
+storage-compression-auto = Otomatik (sıkıştırılamayanları atla)
+storage-compression-always = Her zaman
+storage-compression-restart = Sonraki başlatmada uygulanır
+# Phase 49j — tasks & progress center.
+footer-tasks = Görevler
+tasks-title = Görevler
+tasks-empty = Henüz görev yok
+tasks-running = Çalışıyor
+tasks-recent = Son
+tasks-cancel = İptal
+task-state-running = Çalışıyor
+task-state-completed = Tamamlandı
+task-state-failed = Başarısız
+task-state-cancelled = İptal edildi
+# Phase 49k — repository setup/connect wizard.
+repo-wizard-title = Depoya bağlan
+repo-wizard-create-tab = Yeni oluştur
+repo-wizard-connect-tab = Mevcuda bağlan
+repo-field-name = Ad
+repo-field-path = Konum
+repo-field-password = Parola (isteğe bağlı)
+repo-action-create = Oluştur
+repo-action-connect = Bağlan
+repo-action-browse = Gözat…
+repo-switcher-label = Depo
+repo-action-forget = Unut
+repo-action-change-pass = Parolayı değiştir…
+repo-password-old = Mevcut parola
+repo-password-new = Yeni parola
+repo-error-exists = Bu konumda zaten bir depo var
+repo-error-not-found = Bu konumda depo bulunamadı
+repo-error-bad-pass = Yanlış parola
+repo-note-no-encryption = Parola yalnızca erişimi denetler; durağan veri şifrelemesi sonraki bir sürümde gelecek
+repo-confirm-forget = "{ $name }" listeden kaldırılsın mı? Verileriniz diskte kalır.
+repo-toast-created = "{ $name }" deposu oluşturuldu
+repo-toast-connected = "{ $name }" deposuna bağlanıldı
+repo-toast-pass-changed = Parola güncellendi
+# Phase 49l — Sources dashboard.
+library-tab-overview = Genel bakış
+library-source-empty = Henüz kaynak yok
+library-source-unknown = (belirtilmemiş kaynak)
+library-source-snapshots = { $n } anlık görüntü
+library-source-latest = En son { $when }
+# Phase 49n — verify & repair.
+repo-action-verify = Doğrula
+repo-action-verify-deep = Doğrula (tüm verileri oku)
+repo-action-repair = Onar…
+repo-verify-clean = { $files } dosya / { $chunks } yığın doğrulandı — hasar yok
+repo-verify-damaged = { $missing } eksik, { $corrupt } bozuk yığın
+repo-repair-confirm = Artık geri yüklenemeyen { $n } anlık görüntü kaldırılsın mı?
+repo-repair-removed = { $n } hasarlı anlık görüntü kaldırıldı
+repo-repair-none = Onarılacak bir şey yok — depo temiz
 repo-gc-done = { $bytes } geri kazanıldı ({ $chunks } yığın)
 restore-toast-partial = { $restored } geri yüklendi, { $skipped } atlandı, { $failed } başarısız

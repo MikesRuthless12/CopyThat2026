@@ -12,11 +12,13 @@
     openErrorLogDrawer,
     openHistoryDrawer,
     openLibraryDrawer,
+    openTaskCenter,
     openSettings,
     openSyncDrawer,
     openTotalsDrawer,
     pushToast,
     setActiveTrayTarget,
+    tasks,
   } from "../stores";
 
   // `t()` reads from the locale store non-reactively. Svelte only
@@ -178,6 +180,22 @@
     >
       <Icon name="archive" size={14} />
       {t("footer-library")}
+    </button>
+    <!-- Phase 49j — Tasks & progress center. -->
+    <button
+      class="history"
+      type="button"
+      onclick={openTaskCenter}
+      aria-label={t("tasks-title")}
+    >
+      <Icon name="loader" size={14} />
+      {t("footer-tasks")}
+      {#if $tasks.filter((x) => x.state === "running").length > 0}
+        <span
+          style="margin-left:4px;font-size:0.7rem;background:var(--accent,#4c8bf5);color:#fff;border-radius:8px;padding:0 5px;"
+          >{$tasks.filter((x) => x.state === "running").length}</span
+        >
+      {/if}
     </button>
     <!--
       Phase 11b — Settings entry point. Icon-only button; the Footer

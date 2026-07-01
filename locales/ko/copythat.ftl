@@ -1117,6 +1117,32 @@ repo-kind-copy = 복사
 repo-kind-sync = 동기화
 repo-kind-version = 버전 관리
 repo-kind-backup = 백업
+# Phase 49o — snapshot diff / compare.
+library-tab-compare = 비교
+repo-change-added = 추가됨
+repo-change-removed = 제거됨
+repo-change-modified = 수정됨
+repo-change-unchanged = 변경 없음
+repo-diff-summary = { $added }개 추가 · { $removed }개 제거 · { $modified }개 수정
+repo-diff-bytes-added = 신규 { $bytes }
+repo-diff-pick-two = 비교할 스냅샷 두 개 선택
+# Phase 49r — statistics / reports.
+library-tab-reports = 보고서
+report-growth-title = 저장소 증가
+report-by-kind-title = 종류별
+report-top-files-title = 상위 파일
+report-dedup-ratio = { $pct }% 중복 제거됨
+report-export = 보고서 내보내기
+report-exported = 보고서를 { $path }에 저장함
+report-file-versions = { $n }개 버전
+# Phase 49p — pinning / prune.
+repo-pin = 고정
+repo-unpin = 고정 해제
+repo-pinned-badge = 고정됨
+repo-prune-title = 정리
+repo-prune-keep-last = 최신 항목 유지
+repo-prune-removed = 스냅샷 { $n }개 정리됨
+repo-prune-none = 정리할 항목 없음
 
 # Phase 46.6 — Settings → Plugins tab. The IPC layer in
 # `apps/copythat-ui/src-tauri/src/plugin_commands.rs` enumerates the
@@ -1214,6 +1240,32 @@ backup-running = 백업 중… { $files }개 파일
 backup-toast-started = { $label } 백업 중…
 backup-toast-completed = { $label } 백업 완료: { $files }개 파일
 backup-toast-failed = { $label } 백업 실패: { $reason }
+# Phase 49e — per-source retention + prune.
+backup-retention = 보존
+backup-retention-keep-all = 모두 보관
+backup-retention-last = 최근 { $n }개 보관
+backup-retention-days = { $days }일보다 오래됨
+backup-retention-gfs = GFS 순환
+backup-prune-now = 지금 정리
+backup-prune-none = 정리할 항목 없음
+backup-prune-result = { $removed }개 스냅샷 제거됨 · { $bytes } 확보
+# Phase 49f — per-source scheduling.
+backup-schedule = 예약
+backup-schedule-manual = 수동
+backup-schedule-hourly = 매시간
+backup-schedule-daily = 매일
+backup-schedule-weekly = 매주
+backup-next-run = 다음 실행 { $when }
+backup-not-scheduled = 예약 안 됨
+# Phase 49g — source filters.
+backup-include-ph = 포함 글로브 (쉼표로 구분)
+backup-skip-hidden = 숨김 건너뛰기
+# Phase 49q — notifications.
+notify-title = 알림
+notify-on-success = 성공 시
+notify-on-failure = 실패 시
+notify-test = 테스트 전송
+notify-test-sent = { $n }개 대상으로 테스트를 보냈습니다
 
 # Phase 49d — 복원 브라우저.
 restore-browse = 복원…
@@ -1231,5 +1283,64 @@ restore-toast-failed = 복원 실패: { $reason }
 snapshot-forget = 잊기
 snapshot-forget-toast = 스냅샷을 잊었습니다 — “공간 회수”를 실행하여 비우세요
 library-reclaim = 공간 회수
+# Phase 49i — full compaction.
+library-compact = 전체 컴팩션
+library-compact-started = 컴팩션을 시작했습니다 — 작업을 확인하세요
+# Phase 49h — compression.
+library-stat-compression = 압축 절약량
+storage-compression = 압축
+storage-compression-off = 끄기
+storage-compression-auto = 자동 (압축 불가 데이터 건너뛰기)
+storage-compression-always = 항상
+storage-compression-restart = 다음 실행 시 적용
+# Phase 49j — tasks & progress center.
+footer-tasks = 작업
+tasks-title = 작업
+tasks-empty = 아직 작업이 없습니다
+tasks-running = 실행 중
+tasks-recent = 최근
+tasks-cancel = 취소
+task-state-running = 실행 중
+task-state-completed = 완료
+task-state-failed = 실패
+task-state-cancelled = 취소됨
+# Phase 49k — repository setup/connect wizard.
+repo-wizard-title = 저장소 연결
+repo-wizard-create-tab = 새로 만들기
+repo-wizard-connect-tab = 기존 연결
+repo-field-name = 이름
+repo-field-path = 위치
+repo-field-password = 암호 (선택 사항)
+repo-action-create = 만들기
+repo-action-connect = 연결
+repo-action-browse = 찾아보기…
+repo-switcher-label = 저장소
+repo-action-forget = 연결 해제
+repo-action-change-pass = 암호 변경…
+repo-password-old = 현재 암호
+repo-password-new = 새 암호
+repo-error-exists = 이 위치에 이미 저장소가 있습니다
+repo-error-not-found = 이 위치에서 저장소를 찾을 수 없습니다
+repo-error-bad-pass = 암호가 올바르지 않습니다
+repo-note-no-encryption = 암호는 접근만 제어합니다. 저장 데이터 암호화는 향후 릴리스에서 제공됩니다
+repo-confirm-forget = "{ $name }"을(를) 목록에서 제거하시겠습니까? 데이터는 디스크에 그대로 남아 있습니다.
+repo-toast-created = 저장소 "{ $name }" 생성됨
+repo-toast-connected = "{ $name }"에 연결됨
+repo-toast-pass-changed = 암호가 업데이트됨
+# Phase 49l — Sources dashboard.
+library-tab-overview = 개요
+library-source-empty = 아직 원본이 없습니다
+library-source-unknown = (지정되지 않은 원본)
+library-source-snapshots = 스냅샷 { $n }개
+library-source-latest = 최신 { $when }
+# Phase 49n — verify & repair.
+repo-action-verify = 검증
+repo-action-verify-deep = 검증(모든 데이터 읽기)
+repo-action-repair = 복구…
+repo-verify-clean = { $files } 파일 / { $chunks } 청크 검증 — 손상 없음
+repo-verify-damaged = 누락 { $missing }개, 손상된 청크 { $corrupt }개
+repo-repair-confirm = 더 이상 복원할 수 없는 스냅샷 { $n }개를 제거할까요?
+repo-repair-removed = 손상된 스냅샷 { $n }개를 제거했습니다
+repo-repair-none = 복구할 항목이 없습니다 — 저장소가 정상입니다
 repo-gc-done = { $bytes } 회수됨 ({ $chunks } 청크)
 restore-toast-partial = { $restored }개 복원, { $skipped }개 건너뜀, { $failed }개 실패

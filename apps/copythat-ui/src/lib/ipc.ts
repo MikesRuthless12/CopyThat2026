@@ -948,7 +948,150 @@ export type RepositoryStatsDto = {
   snapshotCount: number;
   chunkCount: number;
   savedRatio: number;
+  physicalUniqueBytes: number;
+  compressionRatio: number;
 };
+
+/** At-rest compression policy (Phase 49h). Mirrors `RepoCompressionSettings`. */
+export type RepoCompressionSettings =
+  | { mode: "off" }
+  | { mode: "auto"; level: number }
+  | { mode: "always"; level: number };
+
+export async function repositoryCompressionGet(): Promise<RepoCompressionSettings> {
+  return invoke<RepoCompressionSettings>("repository_compression_get");
+}
+
+export async function repositoryCompressionSet(
+  compression: RepoCompressionSettings,
+): Promise<void> {
+  return invoke<void>("repository_compression_set", { compression });
+}
+
+/** One task in the Tasks & progress center (Phase 49j). Mirrors `TaskDto`. */
+export type TaskDto = {
+  id: number;
+  kind: string;
+  label: string;
+  state: "running" | "completed" | "failed" | "cancelled";
+  progress: number;
+  detail: string;
+  startedAtMs: number;
+  finishedAtMs: number | null;
+  error: string | null;
+};
+
+export async function tasksList(): Promise<TaskDto[]> {
+  return invoke<TaskDto[]>("tasks_list");
+}
+
+export async function taskGet(id: number): Promise<TaskDto | null> {
+  return invoke<TaskDto | null>("task_get", { id });
+}
+
+export async function taskCancel(id: number): Promise<boolean> {
+  return invoke<boolean>("task_cancel", { id });
+}
+
+/** Phase 49i — start a full compaction; returns the task id to watch in the center. */
+export async function repositoryCompact(): Promise<number> {
+  return invoke<number>("repository_compact");
+}
+
+/** One registered repository (Phase 49k). Mirrors `RepoEntryDto`. */
+export type RepoEntryDto = {
+  id: string;
+  name: string;
+  path: string;
+  createdAtMs: number;
+  active: boolean;
+  requiresPassphrase: boolean;
+};
+
+export async function repositoryList(): Promise<RepoEntryDto[]> {
+  return invoke<RepoEntryDto[]>("repository_list");
+}
+
+export async function repositoryActive(): Promise<RepoEntryDto | null> {
+  return invoke<RepoEntryDto | null>("repository_active");
+}
+
+export async function repositoryCreate(
+  name: string,
+  path: string,
+  password: string | null,
+): Promise<RepoEntryDto> {
+  return invoke<RepoEntryDto>("repository_create", { name, path, password });
+}
+
+export async function repositoryConnect(
+  name: string,
+  path: string,
+  password: string | null,
+): Promise<RepoEntryDto> {
+  return invoke<RepoEntryDto>("repository_connect", { name, path, password });
+}
+
+export async function repositorySetActive(
+  id: string,
+  password: string | null,
+): Promise<RepoEntryDto | null> {
+  return invoke<RepoEntryDto | null>("repository_set_active", { id, password });
+}
+
+export async function repositoryDisconnect(id: string): Promise<void> {
+  return invoke<void>("repository_disconnect", { id });
+}
+
+export async function repositoryChangePassword(
+  oldPass: string | null,
+  newPass: string,
+): Promise<void> {
+  return invoke<void>("repository_change_password", { old: oldPass, new: newPass });
+}
+
+/** One source-dashboard row (Phase 49l). Mirrors `RepoSourceDto`. */
+export type RepoSourceDto = {
+  source: string;
+  snapshotCount: number;
+  latestMs: number;
+  latestKind: string;
+  latestSize: number;
+  totalFiles: number;
+};
+
+export async function repositorySources(): Promise<RepoSourceDto[]> {
+  return invoke<RepoSourceDto[]>("repository_sources");
+}
+
+/** A verify pass result (Phase 49n). Mirrors `VerifyReportDto`. */
+export type VerifyReportDto = {
+  snapshotsChecked: number;
+  filesChecked: number;
+  chunksChecked: number;
+  isClean: boolean;
+  missing: number;
+  corrupt: number;
+  damage: { snapshotId: number; path: string; chunkHashHex: string; kind: string }[];
+};
+
+/** A repair (quarantine) result (Phase 49n). Mirrors `RepairReportDto`. */
+export type RepairReportDto = {
+  removedIds: number[];
+  bytesReclaimed: number;
+  applied: boolean;
+};
+
+export async function repositoryVerify(
+  snapshotId: number | null,
+  deep: boolean,
+): Promise<VerifyReportDto> {
+  return invoke<VerifyReportDto>("repository_verify", { snapshotId, deep });
+}
+
+export async function repositoryRepair(deep: boolean, apply: boolean): Promise<RepairReportDto> {
+  return invoke<RepairReportDto>("repository_repair", { deep, apply });
+}
 
 /** One row of the unified snapshot timeline. Mirrors `RepoSnapshotDto`. */
 export type RepositorySnapshotDto = {
@@ -958,6 +1101,8 @@ export type RepositorySnapshotDto = {
   label: string;
   fileCount: number;
   totalSize: number;
+  pinned: boolean;
+  description: string;
 };
 
 /** One Phase 42 per-file version. Mirrors `version_commands::VersionRecordDto`. */
@@ -981,12 +1126,120 @@ export async function repositorySnapshots(): Promise<RepositorySnapshotDto[]> {
   return invoke<RepositorySnapshotDto[]>("repository_snapshots");
 }
 
+/** One file's diff between two snapshots (Phase 49o). */
+export type FileDiffDto = {
+  path: string;
+  change: "added" | "removed" | "modified" | "unchanged";
+  oldSize: number | null;
+  newSize: number | null;
+  chunksShared: number;
+  chunksChanged: number;
+  bytesAdded: number;
+};
+
+/** Diff between two snapshots (Phase 49o). Mirrors `repository_commands::SnapshotDiffDto`. */
+export type SnapshotDiffDto = {
+  fromId: number;
+  toId: number;
+  files: FileDiffDto[];
+  added: number;
+  removed: number;
+  modified: number;
+  unchanged: number;
+  bytesAdded: number;
+};
+
+/** Compare two snapshots: per-file changes + incremental chunk cost. */
+export async function repositoryDiff(
+  fromId: number,
+  toId: number,
+): Promise<SnapshotDiffDto> {
+  return invoke<SnapshotDiffDto>("repository_diff", { fromId, toId });
+}
+
+/** Per-kind breakdown row (Phase 49r). */
+export type KindBreakdownDto = { kind: string; count: number; effectiveBytes: number };
+/** Storage-growth point (Phase 49r). */
+export type GrowthPointDto = {
+  tsMs: number;
+  cumulativeUniqueBytes: number;
+  snapshotCount: number;
+};
+/** Top-file row (Phase 49r). */
+export type TopFileDto = { path: string; versions: number; maxSize: number };
+
+/** Repository report (Phase 49r). Mirrors `repository_commands::RepoReportDto`. */
+export type RepoReportDto = {
+  stats: RepositoryStatsDto;
+  byKind: KindBreakdownDto[];
+  growth: GrowthPointDto[];
+  topFiles: TopFileDto[];
+  dedupRatio: number;
+};
+
+/** Compute the repository analytics report (top `topN` files). */
+export async function repositoryReport(topN: number): Promise<RepoReportDto> {
+  return invoke<RepoReportDto>("repository_report", { topN });
+}
+
+/** Export the report to `path` as `"md"` or `"json"`. */
+export async function repositoryExportReport(
+  path: string,
+  topN: number,
+  format: "md" | "json",
+): Promise<void> {
+  return invoke<void>("repository_export_report", { path, topN, format });
+}
+
+/** Pin/unpin a snapshot (pinned survives prune). Phase 49p. */
+export async function repositorySetPinned(snapshotId: number, pinned: boolean): Promise<boolean> {
+  return invoke<boolean>("repository_set_pinned", { snapshotId, pinned });
+}
+
+/** Rename a snapshot. Phase 49p. */
+export async function repositorySetLabel(snapshotId: number, label: string): Promise<boolean> {
+  return invoke<boolean>("repository_set_label", { snapshotId, label });
+}
+
+/** Set a snapshot's description. Phase 49p. */
+export async function repositorySetDescription(
+  snapshotId: number,
+  description: string,
+): Promise<boolean> {
+  return invoke<boolean>("repository_set_description", { snapshotId, description });
+}
+
+/** Set a snapshot's tags. Phase 49p. */
+export async function repositorySetTags(snapshotId: number, tags: string[]): Promise<boolean> {
+  return invoke<boolean>("repository_set_tags", { snapshotId, tags });
+}
+
+/** Global keep-last / keep-within prune (pinned protected); returns removed ids. */
+export async function repositoryPrunePolicy(
+  keepLast: number | null,
+  keepWithinMs: number | null,
+  nowMs: number,
+): Promise<number[]> {
+  return invoke<number[]>("repository_prune_policy", { keepLast, keepWithinMs, nowMs });
+}
+
 /** Per-file rolling versions (Phase 42) for a destination path. */
 export async function listVersions(
   dstPath: string,
 ): Promise<VersionRecordDto[]> {
   return invoke<VersionRecordDto[]>("list_versions", { dstPath });
 }
+
+/**
+ * A backup source's retention policy (Phase 49e). Mirrors
+ * `copythat_settings::RetentionSettings` — a serde tagged enum keyed on
+ * `kind`.
+ */
+export type RetentionSettings =
+  | { kind: "keep-all" }
+  | { kind: "last-n"; n: number }
+  | { kind: "older-than-days"; days: number }
+  | { kind: "gfs"; hourly: number; daily: number; weekly: number; monthly: number };
 
 /** One configured backup source. Mirrors `backup_commands::SourceConfigDto`. */
 export type SourceConfigDto = {
@@ -996,6 +1249,27 @@ export type SourceConfigDto = {
   excludeGlobs: string[];
   lastRunAt: string;
   lastSnapshotId: number | null;
+  retention: RetentionSettings;
+  schedule: string;
+  enabled: boolean;
+};
+
+/** Per-source schedule status (Phase 49f). Mirrors `backup_commands::BackupSourceStatusDto`. */
+export type BackupSourceStatusDto = {
+  id: string;
+  label: string;
+  enabled: boolean;
+  schedule: string;
+  lastRunMs: number;
+  nextRunMs: number | null;
+  due: boolean;
+};
+
+/** Outcome of a retention prune (Phase 49e). Mirrors `backup_commands::PruneReportDto`. */
+export type PruneReportDto = {
+  snapshotsRemoved: number;
+  chunksSwept: number;
+  bytesReclaimed: number;
 };
 
 /** List the configured backup sources (Phase 49c). */
@@ -1003,13 +1277,21 @@ export async function sourcesList(): Promise<SourceConfigDto[]> {
   return invoke<SourceConfigDto[]>("sources_list");
 }
 
-/** Add a backup source. */
+/** Add a backup source (Phase 49g: include/exclude globs + skip-hidden). */
 export async function sourcesAdd(
   label: string,
   path: string,
   excludeGlobs: string[],
+  includeGlobs: string[],
+  skipHidden: boolean,
 ): Promise<SourceConfigDto> {
-  return invoke<SourceConfigDto>("sources_add", { label, path, excludeGlobs });
+  return invoke<SourceConfigDto>("sources_add", {
+    label,
+    path,
+    excludeGlobs,
+    includeGlobs,
+    skipHidden,
+  });
 }
 
 /** Edit an existing backup source. */
@@ -1035,6 +1317,54 @@ export async function sourcesRemove(id: string): Promise<void> {
 /** Snapshot a source into the repository as a Backup; returns the new id. */
 export async function backupNow(id: string): Promise<number> {
   return invoke<number>("backup_now", { id });
+}
+
+/** Set a source's retention policy (Phase 49e). */
+export async function sourcesSetRetention(
+  id: string,
+  retention: RetentionSettings,
+): Promise<SourceConfigDto> {
+  return invoke<SourceConfigDto>("sources_set_retention", { id, retention });
+}
+
+/** Apply a source's retention policy now (forget + gc); returns the report. */
+export async function repositoryPrune(id: string, nowMs: number): Promise<PruneReportDto> {
+  return invoke<PruneReportDto>("repository_prune", { id, nowMs });
+}
+
+/** Preview which snapshot ids a source's retention policy would prune. */
+export async function repositoryPrunePreview(id: string, nowMs: number): Promise<number[]> {
+  return invoke<number[]>("repository_prune_preview", { id, nowMs });
+}
+
+/** Set a source's auto-run schedule + enabled flag (Phase 49f). */
+export async function sourcesSetSchedule(
+  id: string,
+  schedule: string,
+  enabled: boolean,
+): Promise<SourceConfigDto> {
+  return invoke<SourceConfigDto>("sources_set_schedule", { id, schedule, enabled });
+}
+
+/** Per-source schedule status (last/next run + due flag). */
+export async function backupSourcesStatus(): Promise<BackupSourceStatusDto[]> {
+  return invoke<BackupSourceStatusDto[]>("backup_sources_status");
+}
+
+/** Notification toggles (Phase 49q). Mirrors `notifications::NotificationSettingsDto`. */
+export type NotificationSettingsDto = { onSuccess: boolean; onFailure: boolean };
+
+export async function notificationsGet(): Promise<NotificationSettingsDto> {
+  return invoke<NotificationSettingsDto>("notifications_get");
+}
+
+export async function notificationsSet(onSuccess: boolean, onFailure: boolean): Promise<void> {
+  return invoke<void>("notifications_set", { onSuccess, onFailure });
+}
+
+/** Send a test notification to the configured webhooks; returns the count attempted. */
+export async function notificationsTest(): Promise<number> {
+  return invoke<number>("notifications_test");
 }
 
 /** One file in a snapshot's flat tree. Mirrors `SnapshotFileDto`. */

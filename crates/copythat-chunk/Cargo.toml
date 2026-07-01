@@ -69,6 +69,12 @@ thiserror = "2"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 # Pack-id generation. `uuid` is already workspace-direct from Phase 25.
 uuid = { version = "1", features = ["v4"] }
+# Direct OS-CSPRNG access for export key material + IVs (restic/Borg
+# exporters). Already the workspace standard (copythat-cloud / -helper /
+# -mobile / -recovery / -snapshot all use 0.3) and in the lockfile, so this
+# adds no new crate. Preferred over UUID-v4 byte fills, which fix 6 bits per
+# 16-byte block and would weaken generated key material.
+getrandom = "0.3"
 
 [dev-dependencies]
 rand = "0.9"
@@ -100,6 +106,92 @@ path = "../../tests/smoke/phase_49c_backup.rs"
 [[test]]
 name = "phase_49d_restore"
 path = "../../tests/smoke/phase_49d_restore.rs"
+
+# Phase 49e smoke — retention & GFS prune (prune_source + gc sweep + source
+# isolation; reuses the audited copythat-core select_for_pruning pruner).
+[[test]]
+name = "phase_49e_retention"
+path = "../../tests/smoke/phase_49e_retention.rs"
+
+# Phase 49g smoke — snapshot_source filtered streaming walk (dir-prune +
+# file-gate + include whitelist + restore + invalid-glob refusal).
+[[test]]
+name = "phase_49g_excludes"
+path = "../../tests/smoke/phase_49g_excludes.rs"
+
+# Phase 49o smoke — snapshot diff/compare (added/removed/modified +
+# chunk-level incremental cost; pure manifest math).
+[[test]]
+name = "phase_49o_diff"
+path = "../../tests/smoke/phase_49o_diff.rs"
+
+# Phase 49r smoke — repository statistics / report (per-kind, growth,
+# top-files, dedup ratio, markdown export).
+[[test]]
+name = "phase_49r_report"
+path = "../../tests/smoke/phase_49r_report.rs"
+
+# Phase 49p smoke — pinning / metadata edits + pin-protected global prune.
+[[test]]
+name = "phase_49p_pin"
+path = "../../tests/smoke/phase_49p_pin.rs"
+
+# Phase 49h smoke — chunk compression (codec round-trip, incompressible
+# fallback, dedup-hit keeps first writer's codec).
+[[test]]
+name = "phase_49h_compression"
+path = "../../tests/smoke/phase_49h_compression.rs"
+
+# Phase 49i smoke — pack compaction (gc drops dead packs, compact rewrites
+# half-dead packs, survivors restore byte-for-byte).
+[[test]]
+name = "phase_49i_compact"
+path = "../../tests/smoke/phase_49i_compact.rs"
+
+# Phase 49k smoke — repository create/connect lifecycle + passphrase gate.
+[[test]]
+name = "phase_49k_repo_lifecycle"
+path = "../../tests/smoke/phase_49k_repo_lifecycle.rs"
+
+# Phase 49l smoke — Sources dashboard fold (group snapshots by directory).
+[[test]]
+name = "phase_49l_sources"
+path = "../../tests/smoke/phase_49l_sources.rs"
+
+# Phase 49m smoke — chunk-range read (materialise_range) for snapshot mounts.
+[[test]]
+name = "phase_49m_range"
+path = "../../tests/smoke/phase_49m_range.rs"
+
+# Phase 49n smoke — snapshot verify (metadata + deep) + repair quarantine.
+[[test]]
+name = "phase_49n_verify"
+path = "../../tests/smoke/phase_49n_verify.rs"
+
+# Phase 50e smoke — restic/borg export round-trips through the importers.
+[[test]]
+name = "phase_50e_export"
+path = "../../tests/smoke/phase_50e_export.rs"
+
+# Phase 50f smoke — Rust CdrManifest checks the shared conformance corpus.
+[[test]]
+name = "phase_50f_conformance"
+path = "../../tests/smoke/phase_50f_conformance.rs"
+
+# Phase 50g smoke — BlobBackend contract + ChunkStore routing pack I/O through it.
+[[test]]
+name = "phase_50g_backend"
+path = "../../tests/smoke/phase_50g_backend.rs"
+
+# Phase 50h smoke — Repository::replicate_to (dedup push + idempotent + restore).
+[[test]]
+name = "phase_50h_replicate"
+path = "../../tests/smoke/phase_50h_replicate.rs"
+
+# Phase 50i smoke — multiple key slots + recovery key + per-slot revocation.
+[[test]]
+name = "phase_50i_keys"
+path = "../../tests/smoke/phase_50i_keys.rs"
 
 # Phase 50 smoke — CDR-0 manifest portability (canonical CBOR round-trip
 # + validation + spec-version refusal).

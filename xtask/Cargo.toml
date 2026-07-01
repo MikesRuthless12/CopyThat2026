@@ -30,5 +30,8 @@ copythat-platform = { path = "../crates/copythat-platform", version = "0.19" }
 # to wipe the bench destination files after a run, exercising the
 # same shredder the UI drives.
 copythat-secure-delete = { path = "../crates/copythat-secure-delete", version = "0.19" }
+# `xtask gen-conformance` builds the CDR-0 conformance corpus straight from
+# the reference `CdrManifest`, so the fixtures always match the impl.
+copythat-chunk = { path = "../crates/copythat-chunk", version = "0.19" }
 tempfile = "3"
 tokio = { version = "1", features = ["fs", "macros", "rt", "rt-multi-thread", "sync"] }

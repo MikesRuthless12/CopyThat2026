@@ -1199,6 +1199,32 @@ repo-kind-copy = Copia
 repo-kind-sync = Sincronizzazione
 repo-kind-version = Versione
 repo-kind-backup = Backup
+# Phase 49o — snapshot diff / compare.
+library-tab-compare = Confronta
+repo-change-added = Aggiunto
+repo-change-removed = Rimosso
+repo-change-modified = Modificato
+repo-change-unchanged = Nessuna modifica
+repo-diff-summary = { $added } aggiunti · { $removed } rimossi · { $modified } modificati
+repo-diff-bytes-added = { $bytes } nuovi
+repo-diff-pick-two = Seleziona due snapshot da confrontare
+# Phase 49r — statistics / reports.
+library-tab-reports = Report
+report-growth-title = Crescita dell'archiviazione
+report-by-kind-title = Per tipo
+report-top-files-title = File principali
+report-dedup-ratio = { $pct }% deduplicato
+report-export = Esporta report
+report-exported = Report salvato in { $path }
+report-file-versions = { $n } versioni
+# Phase 49p — pinning / prune.
+repo-pin = Fissa
+repo-unpin = Annulla fissaggio
+repo-pinned-badge = Fissato
+repo-prune-title = Sfoltisci
+repo-prune-keep-last = Mantieni i più recenti
+repo-prune-removed = { $n } snapshot sfoltiti
+repo-prune-none = Niente da sfoltire
 
 # Phase 49c — origini di backup.
 library-tab-sources = Origini
@@ -1214,6 +1240,32 @@ backup-running = Backup in corso… { $files } file
 backup-toast-started = Backup di { $label }…
 backup-toast-completed = Backup di { $label } completato: { $files } file
 backup-toast-failed = Backup di { $label } non riuscito: { $reason }
+# Phase 49e — per-source retention + prune.
+backup-retention = Conservazione
+backup-retention-keep-all = Mantieni tutto
+backup-retention-last = Mantieni gli ultimi { $n }
+backup-retention-days = Più vecchi di { $days } giorni
+backup-retention-gfs = Rotazione GFS
+backup-prune-now = Pota ora
+backup-prune-none = Niente da potare
+backup-prune-result = Rimosse { $removed } istantanee · recuperati { $bytes }
+# Phase 49f — per-source scheduling.
+backup-schedule = Pianificazione
+backup-schedule-manual = Manuale
+backup-schedule-hourly = Ogni ora
+backup-schedule-daily = Giornaliero
+backup-schedule-weekly = Settimanale
+backup-next-run = Prossima esecuzione { $when }
+backup-not-scheduled = Non pianificato
+# Phase 49g — source filters.
+backup-include-ph = Glob di inclusione (separati da virgole)
+backup-skip-hidden = Salta i nascosti
+# Phase 49q — notifications.
+notify-title = Notifiche
+notify-on-success = In caso di successo
+notify-on-failure = In caso di errore
+notify-test = Invia test
+notify-test-sent = Test inviato a { $n } destinazione/i
 
 # Phase 49d — browser di ripristino.
 restore-browse = Ripristina…
@@ -1231,5 +1283,64 @@ restore-toast-failed = Ripristino non riuscito: { $reason }
 snapshot-forget = Dimentica
 snapshot-forget-toast = Istantanea dimenticata — esegui Recupera spazio per liberarla
 library-reclaim = Recupera spazio
+# Phase 49i — full compaction.
+library-compact = Compattazione completa
+library-compact-started = Compattazione avviata — controlla Attività
+# Phase 49h — compression.
+library-stat-compression = Risparmiato con la compressione
+storage-compression = Compressione
+storage-compression-off = Disattivata
+storage-compression-auto = Automatico (salta gli incomprimibili)
+storage-compression-always = Sempre
+storage-compression-restart = Si applica al prossimo avvio
+# Phase 49j — tasks & progress center.
+footer-tasks = Attività
+tasks-title = Attività
+tasks-empty = Ancora nessuna attività
+tasks-running = In esecuzione
+tasks-recent = Recenti
+tasks-cancel = Annulla
+task-state-running = In esecuzione
+task-state-completed = Completato
+task-state-failed = Non riuscito
+task-state-cancelled = Annullato
+# Phase 49k — repository setup/connect wizard.
+repo-wizard-title = Connetti repository
+repo-wizard-create-tab = Crea nuovo
+repo-wizard-connect-tab = Connetti esistente
+repo-field-name = Nome
+repo-field-path = Posizione
+repo-field-password = Passphrase (facoltativa)
+repo-action-create = Crea
+repo-action-connect = Connetti
+repo-action-browse = Sfoglia…
+repo-switcher-label = Repository
+repo-action-forget = Dimentica
+repo-action-change-pass = Cambia passphrase…
+repo-password-old = Passphrase attuale
+repo-password-new = Nuova passphrase
+repo-error-exists = Esiste già un repository in questa posizione
+repo-error-not-found = Nessun repository trovato in questa posizione
+repo-error-bad-pass = Passphrase errata
+repo-note-no-encryption = La passphrase regola solo l'accesso; la crittografia a riposo arriverà in una versione successiva
+repo-confirm-forget = Rimuovere "{ $name }" dall'elenco? I tuoi dati restano sul disco.
+repo-toast-created = Repository "{ $name }" creato
+repo-toast-connected = Connesso a "{ $name }"
+repo-toast-pass-changed = Passphrase aggiornata
+# Phase 49l — Sources dashboard.
+library-tab-overview = Panoramica
+library-source-empty = Ancora nessuna origine
+library-source-unknown = (origine non specificata)
+library-source-snapshots = { $n } istantanee
+library-source-latest = Più recente { $when }
+# Phase 49n — verify & repair.
+repo-action-verify = Verifica
+repo-action-verify-deep = Verifica (leggi tutti i dati)
+repo-action-repair = Ripara…
+repo-verify-clean = Verificati { $files } file / { $chunks } blocchi — nessun danno
+repo-verify-damaged = { $missing } mancanti, { $corrupt } blocchi corrotti
+repo-repair-confirm = Rimuovere { $n } istantanee che non è più possibile ripristinare?
+repo-repair-removed = Rimosse { $n } istantanee danneggiate
+repo-repair-none = Niente da riparare — il repository è integro
 repo-gc-done = Recuperati { $bytes } ({ $chunks } blocchi)
 restore-toast-partial = Ripristinati { $restored }, saltati { $skipped }, falliti { $failed }

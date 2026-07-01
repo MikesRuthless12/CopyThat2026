@@ -56,6 +56,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::compress::ChunkCodec;
 use crate::types::{Blake3Hash, ChunkRef, Manifest};
 
 /// The CDR specification version this implementation understands.
@@ -108,8 +109,14 @@ pub struct CdrChunkRef {
     pub hash: Vec<u8>,
     /// Byte offset of this chunk in the reconstructed file.
     pub offset: u64,
-    /// Byte length of the chunk.
+    /// Byte length of the chunk (logical / plaintext).
     pub len: u32,
+    /// Phase 49h — codec the chunk's stored bytes use. `#[serde(default)]`
+    /// (CBOR is field-name-keyed) → a manifest written before 49h decodes
+    /// as `None`. A v0-compatible additive field; no `CDR_SPEC_VERSION`
+    /// bump (the chunk hash + logical len are unchanged).
+    #[serde(default)]
+    pub codec: ChunkCodec,
 }
 
 /// A file manifest in canonical CDR-0 form.
@@ -145,6 +152,7 @@ impl CdrManifest {
                     hash: c.hash.to_vec(),
                     offset: c.offset,
                     len: c.len,
+                    codec: c.codec,
                 })
                 .collect(),
         }
@@ -163,6 +171,7 @@ impl CdrManifest {
                     hash: vec_to_hash(&c.hash)?,
                     offset: c.offset,
                     len: c.len,
+                    codec: c.codec,
                 })
             })
             .collect::<std::result::Result<Vec<_>, CdrError>>()?;
@@ -286,11 +295,13 @@ mod tests {
                     hash: [1u8; 32],
                     offset: 0,
                     len: 100,
+                    codec: ChunkCodec::None,
                 },
                 ChunkRef {
                     hash: [2u8; 32],
                     offset: 100,
                     len: 200,
+                    codec: ChunkCodec::None,
                 },
             ],
         }

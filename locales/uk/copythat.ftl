@@ -1199,6 +1199,32 @@ repo-kind-copy = Копія
 repo-kind-sync = Синхронізація
 repo-kind-version = Версія
 repo-kind-backup = Резервна копія
+# Phase 49o — snapshot diff / compare.
+library-tab-compare = Порівняти
+repo-change-added = Додано
+repo-change-removed = Видалено
+repo-change-modified = Змінено
+repo-change-unchanged = Без змін
+repo-diff-summary = { $added } додано · { $removed } видалено · { $modified } змінено
+repo-diff-bytes-added = { $bytes } нових
+repo-diff-pick-two = Виберіть два знімки для порівняння
+# Phase 49r — statistics / reports.
+library-tab-reports = Звіти
+report-growth-title = Зростання сховища
+report-by-kind-title = За типом
+report-top-files-title = Топ файлів
+report-dedup-ratio = Дедупльовано { $pct }%
+report-export = Експорт звіту
+report-exported = Звіт збережено в { $path }
+report-file-versions = { $n } версій
+# Phase 49p — pinning / prune.
+repo-pin = Закріпити
+repo-unpin = Відкріпити
+repo-pinned-badge = Закріплено
+repo-prune-title = Очистити
+repo-prune-keep-last = Залишити найновіші
+repo-prune-removed = Очищено знімків: { $n }
+repo-prune-none = Немає чого очищати
 
 # Phase 49c — джерела резервних копій.
 library-tab-sources = Джерела
@@ -1214,6 +1240,32 @@ backup-running = Створення копії… { $files } файлів
 backup-toast-started = Створення копії { $label }…
 backup-toast-completed = { $label } скопійовано: { $files } файлів
 backup-toast-failed = Не вдалося створити копію { $label }: { $reason }
+# Phase 49e — per-source retention + prune.
+backup-retention = Зберігання
+backup-retention-keep-all = Зберігати все
+backup-retention-last = Зберігати останні { $n }
+backup-retention-days = Старші за { $days } днів
+backup-retention-gfs = Ротація GFS
+backup-prune-now = Очистити зараз
+backup-prune-none = Немає чого очищати
+backup-prune-result = Видалено { $removed } знімків · звільнено { $bytes }
+# Phase 49f — per-source scheduling.
+backup-schedule = Розклад
+backup-schedule-manual = Вручну
+backup-schedule-hourly = Щогодини
+backup-schedule-daily = Щоденно
+backup-schedule-weekly = Щотижня
+backup-next-run = Наступний запуск { $when }
+backup-not-scheduled = Не заплановано
+# Phase 49g — source filters.
+backup-include-ph = Включити шаблони (через кому)
+backup-skip-hidden = Пропускати приховані
+# Phase 49q — notifications.
+notify-title = Сповіщення
+notify-on-success = У разі успіху
+notify-on-failure = У разі помилки
+notify-test = Надіслати тест
+notify-test-sent = Тест надіслано до { $n } призначень
 
 # Phase 49d — браузер відновлення.
 restore-browse = Відновити…
@@ -1231,5 +1283,64 @@ restore-toast-failed = Помилка відновлення: { $reason }
 snapshot-forget = Забути
 snapshot-forget-toast = Знімок забуто — запустіть «Звільнити місце», щоб очистити
 library-reclaim = Звільнити місце
+# Phase 49i — full compaction.
+library-compact = Повне ущільнення
+library-compact-started = Ущільнення розпочато — дивіться Завдання
+# Phase 49h — compression.
+library-stat-compression = Зекономлено стисненням
+storage-compression = Стиснення
+storage-compression-off = Вимкнено
+storage-compression-auto = Авто (пропускати нестисливі)
+storage-compression-always = Завжди
+storage-compression-restart = Застосується під час наступного запуску
+# Phase 49j — tasks & progress center.
+footer-tasks = Завдання
+tasks-title = Завдання
+tasks-empty = Поки немає завдань
+tasks-running = Виконується
+tasks-recent = Нещодавні
+tasks-cancel = Скасувати
+task-state-running = Виконується
+task-state-completed = Завершено
+task-state-failed = Збій
+task-state-cancelled = Скасовано
+# Phase 49k — repository setup/connect wizard.
+repo-wizard-title = Підключити репозиторій
+repo-wizard-create-tab = Створити новий
+repo-wizard-connect-tab = Підключити наявний
+repo-field-name = Назва
+repo-field-path = Розташування
+repo-field-password = Парольна фраза (необов'язково)
+repo-action-create = Створити
+repo-action-connect = Підключити
+repo-action-browse = Огляд…
+repo-switcher-label = Репозиторій
+repo-action-forget = Забути
+repo-action-change-pass = Змінити парольну фразу…
+repo-password-old = Поточна парольна фраза
+repo-password-new = Нова парольна фраза
+repo-error-exists = У цьому розташуванні вже існує репозиторій
+repo-error-not-found = У цьому розташуванні репозиторій не знайдено
+repo-error-bad-pass = Неправильна парольна фраза
+repo-note-no-encryption = Парольна фраза керує лише доступом; шифрування даних у стані спокою з'явиться в наступному випуску
+repo-confirm-forget = Вилучити "{ $name }" зі списку? Ваші дані залишаться на диску.
+repo-toast-created = Репозиторій "{ $name }" створено
+repo-toast-connected = Підключено до "{ $name }"
+repo-toast-pass-changed = Парольну фразу оновлено
+# Phase 49l — Sources dashboard.
+library-tab-overview = Огляд
+library-source-empty = Поки немає джерел
+library-source-unknown = (джерело не вказано)
+library-source-snapshots = { $n } знімків
+library-source-latest = Останній { $when }
+# Phase 49n — verify & repair.
+repo-action-verify = Перевірити
+repo-action-verify-deep = Перевірити (читати всі дані)
+repo-action-repair = Виправити…
+repo-verify-clean = Перевірено { $files } файлів / { $chunks } блоків — пошкоджень немає
+repo-verify-damaged = { $missing } відсутні, { $corrupt } пошкоджених блоків
+repo-repair-confirm = Вилучити { $n } знімків, які більше не можна відновити?
+repo-repair-removed = Вилучено { $n } пошкоджених знімків
+repo-repair-none = Немає що виправляти — репозиторій чистий
 repo-gc-done = Звільнено { $bytes } ({ $chunks } блоків)
 restore-toast-partial = Відновлено { $restored }, пропущено { $skipped }, не вдалося { $failed }

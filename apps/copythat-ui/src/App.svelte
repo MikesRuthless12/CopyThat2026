@@ -30,6 +30,8 @@
   import ResumePromptModal from "./lib/components/ResumePromptModal.svelte";
   import SyncDrawer from "./lib/components/SyncDrawer.svelte";
   import LibraryDrawer from "./lib/components/LibraryDrawer.svelte";
+  import TaskCenter from "./lib/components/TaskCenter.svelte";
+  import RepositoryWizard from "./lib/components/RepositoryWizard.svelte";
   import Toast from "./lib/components/Toast.svelte";
 
   import { invoke } from "@tauri-apps/api/core";
@@ -42,6 +44,8 @@
     dropped,
     errorDisplayMode,
     initStores,
+    initTaskListeners,
+    refreshRepos,
     jobs,
     openSettings,
     pushToast,
@@ -110,6 +114,8 @@
     themeCleanup = initTheme();
     await initI18n();
     storesCleanup = await initStores();
+    void initTaskListeners();
+    void refreshRepos();
     window.addEventListener("keydown", onF2Keydown);
     f2KeyCleanup = () => window.removeEventListener("keydown", onF2Keydown);
     // Phase 20 — fetch the pending-resume list once at mount. The
@@ -302,6 +308,8 @@
 
   <!-- Phase 49: unified Library drawer (gates itself internally) -->
   <LibraryDrawer />
+  <TaskCenter />
+  <RepositoryWizard />
 
   <Toast />
 </main>

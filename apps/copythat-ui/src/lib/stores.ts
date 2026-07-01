@@ -18,7 +18,11 @@ import {
   queueGetPinned,
   queueList,
   queueSetF2Mode,
+  repositoryList,
   startCopy,
+  tasksList,
+  type RepoEntryDto,
+  type TaskDto,
 } from "./ipc";
 import {
   EVENTS,
@@ -293,6 +297,79 @@ export function openLibraryDrawer(): void {
 }
 export function closeLibraryDrawer(): void {
   libraryDrawerOpenStore.set(false);
+}
+
+// Phase 49k — Repository wizard + registered-repo list.
+const repositoryWizardOpenStore = writable<boolean>(false);
+export const repositoryWizardOpen: Readable<boolean> = {
+  subscribe: repositoryWizardOpenStore.subscribe,
+};
+export function openRepositoryWizard(): void {
+  repositoryWizardOpenStore.set(true);
+}
+export function closeRepositoryWizard(): void {
+  repositoryWizardOpenStore.set(false);
+}
+
+const reposStore = writable<RepoEntryDto[]>([]);
+export const repos: Readable<RepoEntryDto[]> = { subscribe: reposStore.subscribe };
+export async function refreshRepos(): Promise<void> {
+  try {
+    reposStore.set(await repositoryList());
+  } catch {
+    // advisory; ignore
+  }
+}
+
+// Phase 49j — Tasks & progress center.
+const taskCenterOpenStore = writable<boolean>(false);
+export const taskCenterOpen: Readable<boolean> = {
+  subscribe: taskCenterOpenStore.subscribe,
+};
+export function openTaskCenter(): void {
+  taskCenterOpenStore.set(true);
+}
+export function closeTaskCenter(): void {
+  taskCenterOpenStore.set(false);
+}
+
+const tasksStore = writable<TaskDto[]>([]);
+export const tasks: Readable<TaskDto[]> = { subscribe: tasksStore.subscribe };
+
+export async function refreshTasks(): Promise<void> {
+  try {
+    tasksStore.set(await tasksList());
+  } catch {
+    // advisory; ignore
+  }
+}
+
+let taskListenersStarted = false;
+/** Subscribe once at startup to task lifecycle events, upserting each
+ * emitted `TaskDto` into the store so the Footer badge + center stay live. */
+export async function initTaskListeners(): Promise<void> {
+  if (taskListenersStarted) return;
+  taskListenersStarted = true;
+  await refreshTasks();
+  const upsert = (dto: TaskDto) =>
+    tasksStore.update((list) => {
+      const i = list.findIndex((entry) => entry.id === dto.id);
+      if (i >= 0) {
+        const copy = list.slice();
+        copy[i] = dto;
+        return copy;
+      }
+      return [dto, ...list];
+    });
+  for (const ev of [
+    "task-started",
+    "task-progress",
+    "task-completed",
+    "task-failed",
+    "task-cancelled",
+  ]) {
+    await onEvent<TaskDto>(ev, upsert);
+  }
 }
 
 // Error display mode — readable + write-through setter. SettingsModal

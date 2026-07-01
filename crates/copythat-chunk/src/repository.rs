@@ -88,15 +88,19 @@ use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
+use copythat_core::filter::CompiledFilters;
+use copythat_core::versioning::{RetentionPolicy, VersionEntry, select_for_pruning};
 use redb::{Database, ReadableTable, ReadableTableMetadata, TableDefinition};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::chunker::Chunker;
+use crate::compress::{ChunkCodec, RepoCompression};
 use crate::error::{ChunkStoreError, Result};
+use crate::keyfile::KeySlotInfo;
 use crate::manifest::{chunk_into_store, materialise_file};
 use crate::store::{ChunkStore, default_chunk_store_path};
-use crate::types::{Blake3Hash, ChunkRef, Manifest};
+use crate::types::{Blake3Hash, ChunkRef, Manifest, hex_of};
 
 /// Snapshot catalog: snapshot id (`u64`) → JSON-serialised [`Snapshot`].
 const SNAPSHOTS: TableDefinition<'_, u64, &[u8]> = TableDefinition::new("snapshots");
@@ -183,6 +187,27 @@ pub struct Snapshot {
     pub created_at_ms: i64,
     /// Human-readable label (job description, source root, …).
     pub label: String,
+    /// Phase 49e — the backup source this snapshot belongs to (the
+    /// source's stable id), or `None` for ad-hoc copy/sync/version
+    /// snapshots. `#[serde(default)]` so existing on-disk rows load as
+    /// `None`; [`Repository::prune_source`] groups retention by this key.
+    #[serde(default)]
+    pub source_key: Option<String>,
+    /// Phase 49p — user-editable free-text description (`#[serde(default)]`
+    /// → old rows load empty).
+    #[serde(default)]
+    pub description: String,
+    /// Phase 49p — user tags.
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Phase 49p — pinned snapshots are never pruned, regardless of policy.
+    #[serde(default)]
+    pub pinned: bool,
+    /// Phase 49l — common directory prefix of this snapshot's files
+    /// (computed at record time), used to group the Sources dashboard.
+    /// `#[serde(default)]` → old rows load as `""` (unknown source).
+    #[serde(default)]
+    pub source: String,
     /// The files captured in this snapshot.
     pub files: Vec<FileEntry>,
 }
@@ -211,8 +236,46 @@ impl Snapshot {
             kind: self.kind,
             created_at_ms: self.created_at_ms,
             label: self.label.clone(),
+            source_key: self.source_key.clone(),
+            description: self.description.clone(),
+            tags: self.tags.clone(),
+            pinned: self.pinned,
             file_count: self.files.len() as u64,
             total_size: self.total_size(),
+            source: self.source.clone(),
+        }
+    }
+
+    /// Phase 49l — the longest common directory prefix of this snapshot's
+    /// file paths (handles both `/` and `\`), for the Sources dashboard.
+    /// Falls back to `label` when the files share no prefix or the snapshot
+    /// is empty.
+    fn compute_source(&self) -> String {
+        fn parts(p: &str) -> Vec<&str> {
+            p.split(['/', '\\']).filter(|s| !s.is_empty()).collect()
+        }
+        let mut files = self.files.iter();
+        let Some(first) = files.next() else {
+            return self.label.clone();
+        };
+        // Directory components of the first file (drop the file name).
+        let mut prefix: Vec<&str> = parts(&first.path);
+        prefix.pop();
+        for f in files {
+            let p = parts(&f.path);
+            let mut i = 0;
+            while i < prefix.len() && i + 1 < p.len() && prefix[i] == p[i] {
+                i += 1;
+            }
+            prefix.truncate(i);
+            if prefix.is_empty() {
+                break;
+            }
+        }
+        if prefix.is_empty() {
+            self.label.clone()
+        } else {
+            format!("/{}", prefix.join("/"))
         }
     }
 }
@@ -230,11 +293,47 @@ pub struct UnifiedSnapshot {
     pub created_at_ms: i64,
     /// Human-readable label.
     pub label: String,
+    /// Phase 49e — backup source id this snapshot belongs to (`None`
+    /// for ad-hoc copy/sync/version snapshots). Mirrors
+    /// [`Snapshot::source_key`]; `#[serde(default)]` for old rows.
+    #[serde(default)]
+    pub source_key: Option<String>,
+    /// Phase 49p — mirrors [`Snapshot::description`].
+    #[serde(default)]
+    pub description: String,
+    /// Phase 49p — mirrors [`Snapshot::tags`].
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Phase 49p — mirrors [`Snapshot::pinned`] (drives the pin badge + prune-protect).
+    #[serde(default)]
+    pub pinned: bool,
     /// Number of files captured.
     pub file_count: u64,
     /// Sum of logical file sizes (the effective bytes this snapshot
     /// represents, before dedup).
     pub total_size: u64,
+    /// Phase 49l — common directory prefix of the snapshot's files (mirrors
+    /// [`Snapshot::source`]). `#[serde(default)]` → old summaries load `""`.
+    #[serde(default)]
+    pub source: String,
+}
+
+/// Phase 49l — one row of the Sources dashboard, folded from summaries only
+/// (no pack/manifest I/O).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceSummary {
+    /// The source directory prefix (`""` = unknown/unspecified).
+    pub source: String,
+    /// How many snapshots reference this source.
+    pub snapshot_count: u64,
+    /// Capture time of the newest snapshot for this source.
+    pub latest_ms: i64,
+    /// Kind of the newest snapshot.
+    pub latest_kind: SnapshotKind,
+    /// `total_size` of the newest snapshot for this source.
+    pub latest_size: u64,
+    /// `file_count` of the newest snapshot for this source.
+    pub total_files: u64,
 }
 
 /// A single file resolved out of the timeline by [`Repository::snapshot_at`]
@@ -265,6 +364,10 @@ pub struct RepoStats {
     /// snapshot — the deduplicated logical size of the live content,
     /// independent of pack overhead. Always `<= effective_bytes`.
     pub unique_bytes: u64,
+    /// Phase 49h — sum of the ON-DISK (stored, possibly zstd-compressed)
+    /// sizes of those same distinct reachable chunks. `<= unique_bytes`;
+    /// [`Self::compression_ratio`] is derived from the two.
+    pub physical_unique_bytes: u64,
     /// Sum of logical file sizes across every snapshot (what the store
     /// would cost without dedup + history sharing).
     pub effective_bytes: u64,
@@ -292,6 +395,19 @@ impl RepoStats {
         let unique = self.unique_bytes.min(self.effective_bytes) as f64;
         1.0 - (unique / self.effective_bytes as f64)
     }
+
+    /// Phase 49h — fraction of unique logical bytes saved by COMPRESSION
+    /// (on-disk physical vs logical of the distinct live chunks), in
+    /// `0.0..=1.0`. Returns `0.0` when there's nothing stored or nothing
+    /// compressed. Orthogonal to [`Self::saved_ratio`] (which is dedup).
+    #[must_use]
+    pub fn compression_ratio(&self) -> f64 {
+        if self.unique_bytes == 0 {
+            return 0.0;
+        }
+        let phys = self.physical_unique_bytes.min(self.unique_bytes) as f64;
+        1.0 - (phys / self.unique_bytes as f64)
+    }
 }
 
 /// Outcome of a [`Repository::gc`] pass.
@@ -310,6 +426,137 @@ pub struct GcReport {
     /// deferred follow-up (see the module docs), so a GC that sweeps
     /// index entries out of the still-live active pack can legitimately
     /// report `chunks_swept > 0` with `bytes_reclaimed == 0`.
+    pub bytes_reclaimed: u64,
+}
+
+/// Outcome of a [`Repository::compact`] compaction pass (Phase 49i).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct CompactReport {
+    /// Below-threshold packs whose survivors were rewritten + deleted.
+    pub packs_compacted: u64,
+    /// Live chunks moved into the active pack during compaction.
+    pub chunks_moved: u64,
+    /// Disk bytes reclaimed by deleting the compacted pack files.
+    pub bytes_reclaimed: u64,
+}
+
+/// Outcome of a [`Repository::replicate_to`] pass (Phase 50h). A push of
+/// this repo's snapshots (and only the chunks the destination is missing)
+/// into another [`Repository`]. Re-running is idempotent — a snapshot whose
+/// content already exists in the destination is skipped, and a chunk the
+/// destination already holds is never re-sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct ReplicateReport {
+    /// Snapshots newly written into the destination.
+    pub snapshots_copied: u64,
+    /// Snapshots skipped because identical content was already present.
+    pub snapshots_skipped: u64,
+    /// Distinct chunks transferred (destination was missing them).
+    pub chunks_copied: u64,
+    /// Distinct referenced chunks the destination already held (deduped away).
+    pub chunks_present: u64,
+    /// Logical (plaintext) bytes transferred.
+    pub bytes_copied: u64,
+}
+
+/// Live progress for a maintenance pass (Phase 49i). `phase` is one of
+/// `"mark"`, `"sweep"`, `"compact"`; `done`/`total` are meaningful for the
+/// compaction phase.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MaintenanceProgress {
+    /// `"mark"` | `"sweep"` | `"compact"`.
+    pub phase: &'static str,
+    /// Items processed so far in this phase.
+    pub done: u64,
+    /// Total items in this phase (0 if not enumerable).
+    pub total: u64,
+}
+
+/// Options for [`Repository::compact`] (Phase 49i).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CompactOptions {
+    /// Compact a non-active pack only when its dead fraction is at least
+    /// this (default 0.5 = "≥50% dead"). `1.0` = only fully-dead packs;
+    /// `0.0` = rewrite every pack.
+    pub min_dead_ratio: f64,
+}
+
+impl Default for CompactOptions {
+    fn default() -> Self {
+        Self {
+            min_dead_ratio: 0.5,
+        }
+    }
+}
+
+/// Phase 49n — how deep [`Repository::verify`] checks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerifyLevel {
+    /// Index-only: every referenced chunk has a live index entry
+    /// (`ChunkStore::locate`). Fast, no pack reads.
+    Metadata,
+    /// Read every referenced chunk back (`ChunkStore::get` re-hashes BLAKE3
+    /// → `CorruptChunk` on bit-rot) AND verify each file: the concatenated
+    /// chunk bytes must BLAKE3 to `manifest.file_hash`.
+    ReadData,
+}
+
+/// Phase 49n — one damaged reference found by [`Repository::verify`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DamageKind {
+    /// The chunk has no index entry (garbage-collected / never stored).
+    Missing,
+    /// The chunk's bytes failed BLAKE3 verification on read-back.
+    Corrupt,
+    /// The file's concatenated chunk bytes don't hash to `file_hash`.
+    FileHashMismatch,
+}
+
+/// Phase 49n — one row of damage in a [`VerifyReport`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerifyDamage {
+    /// The snapshot the damaged file belongs to.
+    pub snapshot_id: u64,
+    /// The file path within the snapshot.
+    pub path: String,
+    /// Hex chunk hash (empty for a `FileHashMismatch`, which is file-level).
+    pub chunk_hash_hex: String,
+    /// What kind of damage.
+    pub kind: DamageKind,
+}
+
+/// Phase 49n — outcome of a verify pass.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct VerifyReport {
+    /// Snapshots inspected.
+    pub snapshots_checked: u64,
+    /// Files inspected.
+    pub files_checked: u64,
+    /// Chunk references inspected.
+    pub chunks_checked: u64,
+    /// Every damaged reference found (empty = clean).
+    pub damage: Vec<VerifyDamage>,
+}
+
+impl VerifyReport {
+    /// `true` when no damage was found.
+    #[must_use]
+    pub fn is_clean(&self) -> bool {
+        self.damage.is_empty()
+    }
+}
+
+/// Outcome of a [`Repository::prune_source`] retention pass — the
+/// catalog decision plus the [`Repository::gc`] it triggered to reclaim
+/// the now-orphaned chunks. (Phase 49e.)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct PruneReport {
+    /// Snapshots removed from the catalog by the retention policy.
+    pub snapshots_removed: u64,
+    /// Chunks swept by the follow-up [`Repository::gc`].
+    pub chunks_swept: u64,
+    /// Disk bytes reclaimed by deleting now-dead pack files.
     pub bytes_reclaimed: u64,
 }
 
@@ -349,6 +596,34 @@ pub struct RestoreReport {
     pub failed: u64,
 }
 
+/// Summary of a [`Repository::snapshot_source`] run (Phase 49g).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceSnapshotSummary {
+    /// The recorded snapshot's id.
+    pub id: SnapshotId,
+    /// Files captured (those that passed the filters).
+    pub files: u64,
+    /// Sum of the logical sizes of the captured files.
+    pub bytes: u64,
+    /// Symlinks + non-regular files skipped (counted, not captured).
+    pub skipped_non_regular: u64,
+}
+
+/// Phase 49p — a global keep-last / keep-within prune policy. Pinned
+/// snapshots are always retained regardless of these limits; a snapshot
+/// survives if it is pinned, among the `keep_last` newest, OR newer than
+/// the `keep_within_ms` cutoff (the limits union, restic-style). An
+/// all-`None` policy prunes nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PrunePolicy {
+    /// Keep the newest `n` snapshots across the whole repository.
+    /// `None` = no count limit.
+    pub keep_last: Option<u64>,
+    /// Keep snapshots newer than `now_ms - keep_within_ms`. `None` = no
+    /// age limit.
+    pub keep_within_ms: Option<i64>,
+}
+
 /// The Phase 49 unified repository: a [`ChunkStore`] plus a snapshot
 /// catalog and reference-counted garbage collection.
 pub struct Repository {
@@ -356,6 +631,10 @@ pub struct Repository {
     db: Database,
     chunker: Chunker,
     root: PathBuf,
+    /// Phase 49h — codec policy applied to chunks recorded via this
+    /// repository's snapshot paths (default `Off`). Existing chunks are
+    /// never rewritten (dedup-by-hash; the first writer's codec wins).
+    compression: RepoCompression,
     /// Mutators take a read lease; [`Repository::gc`] takes the write
     /// lease so it can never run while a snapshot is mid-record.
     gc_lock: RwLock<()>,
@@ -406,8 +685,103 @@ impl Repository {
             db,
             chunker: Chunker::default(),
             root,
+            compression: RepoCompression::default(),
             gc_lock: RwLock::new(()),
         })
+    }
+
+    /// Open at `root` with a chunk-compression policy (Phase 49h). Chunks
+    /// recorded via the snapshot paths use `compression`; `Off` matches
+    /// [`Self::open`]. Reads return plaintext regardless of codec.
+    pub fn open_with_compression(root: &Path, compression: RepoCompression) -> Result<Self> {
+        let mut repo = Self::open(root)?;
+        repo.compression = compression;
+        Ok(repo)
+    }
+
+    /// Set the chunk-compression policy for subsequent records (Phase 49h).
+    pub fn set_compression(&mut self, compression: RepoCompression) {
+        self.compression = compression;
+    }
+
+    /// The active chunk-compression policy.
+    #[must_use]
+    pub fn compression(&self) -> RepoCompression {
+        self.compression
+    }
+
+    /// Create a NEW repository at `root`. Errors [`ChunkStoreError::AlreadyExists`]
+    /// if one is already initialised there. Writes the CDR-0 descriptor
+    /// (`cdr.toml`) and, when `password` is given, a `repo-key.json` access
+    /// verifier. (Phase 49k.)
+    pub fn create(root: &Path, password: Option<&str>) -> Result<Self> {
+        if root.join("cdr.toml").is_file() || root.join("repository.redb").is_file() {
+            return Err(ChunkStoreError::AlreadyExists(root.to_path_buf()));
+        }
+        let store = Arc::new(ChunkStore::open(root)?);
+        let repo = Self::with_store(store)?;
+        crate::migrate::write_cdr_descriptor(root)
+            .map_err(|e| ChunkStoreError::Redb(format!("write descriptor: {e}")))?;
+        if let Some(pw) = password {
+            crate::keyfile::write(root, pw)?;
+        }
+        Ok(repo)
+    }
+
+    /// Open an EXISTING repository at `root`. Errors
+    /// [`ChunkStoreError::NotInitialised`] if neither `cdr.toml` nor
+    /// `repository.redb` exists; [`ChunkStoreError::Locked`] /
+    /// [`ChunkStoreError::BadPassphrase`] on the passphrase gate. (Phase 49k.)
+    pub fn open_existing(root: &Path, password: Option<&str>) -> Result<Self> {
+        if !root.join("cdr.toml").is_file() && !root.join("repository.redb").is_file() {
+            return Err(ChunkStoreError::NotInitialised(root.to_path_buf()));
+        }
+        crate::keyfile::verify(root, password)?;
+        Self::open(root)
+    }
+
+    /// True if a passphrase verifier exists at `root` (UI: show the unlock
+    /// field). Static — checkable before opening. (Phase 49k.)
+    #[must_use]
+    pub fn requires_passphrase(root: &Path) -> bool {
+        crate::keyfile::exists(root)
+    }
+
+    /// Rotate the access credential `old` authenticates to `new`, leaving
+    /// every *other* key slot intact. `old` must grant access (or be absent
+    /// when no gate is set). Gates ACCESS only — Phase 51 owns at-rest
+    /// encryption. (Phase 49k; slot-aware since Phase 50i.)
+    pub fn change_password(&self, old: Option<&str>, new: &str) -> Result<()> {
+        crate::keyfile::rotate(&self.root, old, new)
+    }
+
+    /// Phase 50i — the repository's key slots (labels + kinds; no secrets).
+    /// Empty when the repository has no passphrase gate.
+    pub fn list_keys(&self) -> Result<Vec<KeySlotInfo>> {
+        crate::keyfile::list_slots(&self.root)
+    }
+
+    /// Phase 50i — add a new password slot `label` unlocking with
+    /// `new_password`, so several people / devices can each open the repo.
+    /// `auth` must already grant access; errors if `label` is taken.
+    pub fn add_key(&self, auth: Option<&str>, new_password: &str, label: &str) -> Result<()> {
+        crate::keyfile::add_slot(&self.root, auth, new_password, label)
+    }
+
+    /// Phase 50i — remove the key slot named `label`. Returns `false` if no
+    /// such slot exists; errors if it is the last slot (removing it would
+    /// silently unlock the repository).
+    pub fn remove_key(&self, label: &str) -> Result<bool> {
+        crate::keyfile::remove_slot(&self.root, label)
+    }
+
+    /// Phase 50i — generate a recovery key, returned **once** (only its
+    /// verifier is stored; there is no way to recover the string later). It
+    /// unlocks the repo like any password and replaces any prior recovery
+    /// key. `auth` must already grant access.
+    #[must_use = "the recovery key is shown only once and cannot be retrieved later"]
+    pub fn generate_recovery_key(&self, auth: Option<&str>) -> Result<String> {
+        crate::keyfile::generate_recovery(&self.root, auth)
     }
 
     /// Open the repository at the default user-data location
@@ -466,13 +840,36 @@ impl Repository {
         let _lease = self.read_lease()?;
         let mut entries = Vec::with_capacity(files.len());
         for (path, bytes) in files {
-            let manifest = chunk_into_store(&self.store, &self.chunker, bytes)?.1;
+            let manifest = chunk_into_store(&self.store, &self.chunker, bytes, self.compression)?.1;
             entries.push(FileEntry {
                 path: (*path).to_string(),
                 manifest,
             });
         }
-        self.record_inner(kind, label, created_at_ms, entries)
+        self.record_inner(kind, label, None, created_at_ms, entries)
+    }
+
+    /// Like [`Self::snapshot_bytes`] but tags the snapshot with a backup
+    /// `source_key` for retention grouping (Phase 49e). In-memory
+    /// companion to [`Self::snapshot_files_with_source`].
+    pub fn snapshot_bytes_with_source(
+        &self,
+        kind: SnapshotKind,
+        label: &str,
+        source_key: &str,
+        created_at_ms: i64,
+        files: &[(&str, &[u8])],
+    ) -> Result<SnapshotId> {
+        let _lease = self.read_lease()?;
+        let mut entries = Vec::with_capacity(files.len());
+        for (path, bytes) in files {
+            let manifest = chunk_into_store(&self.store, &self.chunker, bytes, self.compression)?.1;
+            entries.push(FileEntry {
+                path: (*path).to_string(),
+                manifest,
+            });
+        }
+        self.record_inner(kind, label, Some(source_key), created_at_ms, entries)
     }
 
     /// Like [`Self::snapshot_bytes`] but **streams** each file from disk
@@ -498,7 +895,128 @@ impl Repository {
                 manifest,
             });
         }
-        self.record_inner(kind, label, created_at_ms, entries)
+        self.record_inner(kind, label, None, created_at_ms, entries)
+    }
+
+    /// Like [`Self::snapshot_files`] but tags the snapshot with a backup
+    /// `source_key` (the source's stable id), so [`Self::prune_source`]
+    /// can later apply a retention policy to just this source's
+    /// snapshots. The "Back up now" path uses this. (Phase 49e.)
+    pub fn snapshot_files_with_source(
+        &self,
+        kind: SnapshotKind,
+        label: &str,
+        source_key: &str,
+        created_at_ms: i64,
+        files: &[(&str, &Path)],
+    ) -> Result<SnapshotId> {
+        let _lease = self.read_lease()?;
+        let mut entries = Vec::with_capacity(files.len());
+        for (path, src) in files {
+            let file = File::open(src).map_err(|e| ChunkStoreError::Io {
+                path: src.to_path_buf(),
+                source: e,
+            })?;
+            let manifest = self.ingest_reader(BufReader::new(file))?;
+            entries.push(FileEntry {
+                path: (*path).to_string(),
+                manifest,
+            });
+        }
+        self.record_inner(kind, label, Some(source_key), created_at_ms, entries)
+    }
+
+    /// Phase 49g — walk `root`, apply gitignore-style `filters`, and
+    /// record ONE snapshot of the surviving files (each streamed through
+    /// the rolling chunker, so a multi-GB file never sits in memory).
+    ///
+    /// `filters.passes_dir(rel, meta)` prunes whole subtrees (e.g.
+    /// `**/node_modules`); `filters.passes_file(rel, meta)` gates files
+    /// (include whitelist, size/date range, hidden/system/readonly).
+    /// Logical paths are source-root-relative + forward-slashed (the same
+    /// convention the "Back up now" path uses, so the restore browser
+    /// resolves them). Symlinks + non-regular files are skipped and
+    /// counted; an unreadable directory is stepped over.
+    pub fn snapshot_source(
+        &self,
+        kind: SnapshotKind,
+        label: &str,
+        source_key: Option<&str>,
+        created_at_ms: i64,
+        root: &Path,
+        filters: &CompiledFilters,
+    ) -> Result<SourceSnapshotSummary> {
+        let _lease = self.read_lease()?;
+        let mut entries: Vec<FileEntry> = Vec::new();
+        let mut bytes = 0u64;
+        let mut skipped = 0u64;
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&dir) else {
+                continue; // unreadable dir — step over, like the GUI walker
+            };
+            for entry in rd.flatten() {
+                let Ok(ft) = entry.file_type() else {
+                    continue;
+                };
+                if ft.is_symlink() {
+                    skipped += 1;
+                    continue; // never follow symlinks
+                }
+                let abs = entry.path();
+                let Ok(rel) = abs.strip_prefix(root) else {
+                    continue;
+                };
+                let rel_key = rel.to_string_lossy().replace('\\', "/");
+                if rel_key.is_empty() {
+                    continue;
+                }
+                if ft.is_dir() {
+                    // Descend unless a dir filter prunes it. A metadata read
+                    // failure (transient sharing-lock, protected/reparse dir,
+                    // dir removed mid-walk) must NEVER silently drop a whole
+                    // subtree, so fail OPEN — descend — when metadata is
+                    // unavailable.
+                    let descend = match entry.metadata() {
+                        Ok(meta) => filters.passes_dir(Path::new(&rel_key), &meta),
+                        Err(_) => true,
+                    };
+                    if descend {
+                        stack.push(abs);
+                    }
+                } else if ft.is_file() {
+                    // Gate the file only when we can read its metadata; on a
+                    // metadata failure fail OPEN (include it) rather than
+                    // silently omit it from the backup — the ingest below
+                    // surfaces a real error if the file is truly unreadable.
+                    if let Ok(meta) = entry.metadata() {
+                        if !filters.passes_file(Path::new(&rel_key), &meta) {
+                            continue;
+                        }
+                    }
+                    let file = File::open(&abs).map_err(|e| ChunkStoreError::Io {
+                        path: abs.clone(),
+                        source: e,
+                    })?;
+                    let manifest = self.ingest_reader(BufReader::new(file))?;
+                    bytes += manifest.size;
+                    entries.push(FileEntry {
+                        path: rel_key,
+                        manifest,
+                    });
+                } else {
+                    skipped += 1; // block / char / fifo / socket
+                }
+            }
+        }
+        let files = entries.len() as u64;
+        let id = self.record_inner(kind, label, source_key, created_at_ms, entries)?;
+        Ok(SourceSnapshotSummary {
+            id,
+            files,
+            bytes,
+            skipped_non_regular: skipped,
+        })
     }
 
     /// Record a snapshot from already-built [`FileEntry`]s (the engine
@@ -511,7 +1029,136 @@ impl Repository {
         files: Vec<FileEntry>,
     ) -> Result<SnapshotId> {
         let _lease = self.read_lease()?;
-        self.record_inner(kind, label, created_at_ms, files)
+        self.record_inner(kind, label, None, created_at_ms, files)
+    }
+
+    /// Phase 50h — replicate this repository's snapshots into `dst`, sending
+    /// only the chunks `dst` is missing (content-addressed, so the transfer
+    /// is inherently deduplicated — a chunk `dst` already holds, from any
+    /// prior snapshot or source, is never re-sent).
+    ///
+    /// Idempotent: a snapshot whose *content* already exists in `dst` (same
+    /// kind / time / label / files / chunks — everything but the local id) is
+    /// skipped, so re-running only ships what changed since last time. Chunk
+    /// integrity is checked on read (`ChunkStore::get` re-hashes), so a
+    /// corrupt source pack aborts the replication rather than propagating.
+    ///
+    /// `dst` keeps its *own* compression policy: each copied chunk is
+    /// re-encoded per `dst`'s [`Repository::compression`], and the replicated
+    /// manifest's per-chunk codec is re-stamped to match how `dst` actually
+    /// stored it — so the destination stays self-consistent regardless of the
+    /// source's policy.
+    ///
+    /// The destination's GC lease is held for the whole pass, so `dst.gc()`
+    /// can never observe a chunk written for a snapshot whose catalog row has
+    /// not yet landed. The *source* needs no lease: replication only reads
+    /// chunks that a live snapshot references, and a concurrent `self.gc()`
+    /// only ever sweeps *unreferenced* chunks.
+    pub fn replicate_to(&self, dst: &Repository) -> Result<ReplicateReport> {
+        let _dst_lease = dst.read_lease()?;
+        let mut report = ReplicateReport::default();
+
+        // Content fingerprints already in the destination → idempotent re-runs.
+        let mut present: HashSet<[u8; 32]> = HashSet::new();
+        for s in dst.load_all_snapshots()? {
+            present.insert(content_fingerprint(&s));
+        }
+
+        // Codec each distinct chunk is stored under in `dst`, accumulated
+        // across the WHOLE replication so a chunk shared by many snapshots is
+        // transferred + counted exactly once — not once per snapshot it
+        // appears in (which over-reported `chunks_present`).
+        let mut codec_of: HashMap<Blake3Hash, ChunkCodec> = HashMap::new();
+        for snap in self.load_all_snapshots()? {
+            if !present.insert(content_fingerprint(&snap)) {
+                report.snapshots_skipped += 1;
+                continue;
+            }
+            // Transfer every distinct chunk the destination lacks, recording
+            // the codec `dst` stored each hash under (existing or fresh).
+            for f in &snap.files {
+                for c in &f.manifest.chunks {
+                    if codec_of.contains_key(&c.hash) {
+                        continue;
+                    }
+                    let codec = if let Some(loc) = dst.store().locate(&c.hash)? {
+                        report.chunks_present += 1;
+                        loc.codec
+                    } else {
+                        let bytes = self.store().get(&c.hash)?.ok_or_else(|| {
+                            ChunkStoreError::MissingChunk {
+                                hash: hex_of(&c.hash),
+                            }
+                        })?;
+                        report.chunks_copied += 1;
+                        report.bytes_copied += bytes.len() as u64;
+                        dst.store().put_chunk(c.hash, &bytes, dst.compression())?
+                    };
+                    codec_of.insert(c.hash, codec);
+                }
+            }
+            // Rebuild the files with destination-truthful codecs, then insert
+            // the snapshot into `dst` preserving all metadata (fresh dst id).
+            let files: Vec<FileEntry> = snap
+                .files
+                .iter()
+                .map(|f| FileEntry {
+                    path: f.path.clone(),
+                    manifest: Manifest {
+                        file_hash: f.manifest.file_hash,
+                        size: f.manifest.size,
+                        chunks: f
+                            .manifest
+                            .chunks
+                            .iter()
+                            .map(|c| ChunkRef {
+                                codec: codec_of.get(&c.hash).copied().unwrap_or(c.codec),
+                                ..*c
+                            })
+                            .collect(),
+                    },
+                })
+                .collect();
+            dst.insert_full_snapshot(&snap, files)?;
+            report.snapshots_copied += 1;
+        }
+        Ok(report)
+    }
+
+    /// Insert a snapshot into this repository preserving all of `template`'s
+    /// metadata (kind / time / label / source / tags / pin / description),
+    /// under a fresh local id, with the given `files`. The replication insert
+    /// path — unlike [`Self::record_inner`], which resets metadata for a
+    /// freshly-captured snapshot. Runs under the caller's held GC lease.
+    fn insert_full_snapshot(
+        &self,
+        template: &Snapshot,
+        files: Vec<FileEntry>,
+    ) -> Result<SnapshotId> {
+        let id = self.allocate_snapshot_id()?;
+        let snap = Snapshot {
+            id,
+            kind: template.kind,
+            created_at_ms: template.created_at_ms,
+            label: template.label.clone(),
+            source_key: template.source_key.clone(),
+            description: template.description.clone(),
+            tags: template.tags.clone(),
+            pinned: template.pinned,
+            source: template.source.clone(),
+            files,
+        };
+        let snap_bytes = serde_json::to_vec(&snap)?;
+        let summary_bytes = serde_json::to_vec(&snap.summary())?;
+        let txn = self.db.begin_write()?;
+        {
+            let mut snaps = txn.open_table(SNAPSHOTS)?;
+            snaps.insert(id, snap_bytes.as_slice())?;
+            let mut summaries = txn.open_table(SUMMARIES)?;
+            summaries.insert(id, summary_bytes.as_slice())?;
+        }
+        txn.commit()?;
+        Ok(SnapshotId(id))
     }
 
     /// Remove a snapshot from the catalog. Chunk bytes are **not** freed
@@ -531,20 +1178,183 @@ impl Repository {
         Ok(existed)
     }
 
+    /// Remove many snapshots in ONE atomic catalog transaction. Chunk
+    /// bytes are **not** freed here — run [`Self::gc`] afterwards (or use
+    /// [`Self::prune_source`], which does). Returns how many of `ids`
+    /// actually existed and were removed.
+    pub fn remove_snapshots(&self, ids: &[SnapshotId]) -> Result<u64> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let _lease = self.read_lease()?;
+        let txn = self.db.begin_write()?;
+        let mut removed = 0u64;
+        {
+            let mut snaps = txn.open_table(SNAPSHOTS)?;
+            let mut summaries = txn.open_table(SUMMARIES)?;
+            for id in ids {
+                if snaps.remove(id.0)?.is_some() {
+                    removed += 1;
+                }
+                summaries.remove(id.0)?;
+            }
+        }
+        txn.commit()?;
+        Ok(removed)
+    }
+
+    /// Phase 49p — load a snapshot, apply `f`, and rewrite both its
+    /// `SNAPSHOTS` row and its `SUMMARIES` index entry in one transaction
+    /// (so the summary index never drifts from the full row). Returns
+    /// `false` if the snapshot doesn't exist.
+    fn edit_snapshot(&self, id: SnapshotId, f: impl FnOnce(&mut Snapshot)) -> Result<bool> {
+        let _lease = self.read_lease()?;
+        let txn = self.db.begin_write()?;
+        let existed;
+        {
+            let mut snaps = txn.open_table(SNAPSHOTS)?;
+            let current = snaps.get(id.0)?.map(|v| v.value().to_vec());
+            if let Some(bytes) = current {
+                let mut snap: Snapshot = serde_json::from_slice(&bytes)?;
+                f(&mut snap);
+                let snap_bytes = serde_json::to_vec(&snap)?;
+                let summary_bytes = serde_json::to_vec(&snap.summary())?;
+                snaps.insert(id.0, snap_bytes.as_slice())?;
+                let mut summaries = txn.open_table(SUMMARIES)?;
+                summaries.insert(id.0, summary_bytes.as_slice())?;
+                existed = true;
+            } else {
+                existed = false;
+            }
+        }
+        txn.commit()?;
+        Ok(existed)
+    }
+
+    /// Phase 49p — set a snapshot's label. Returns `false` if absent.
+    pub fn set_label(&self, id: SnapshotId, label: &str) -> Result<bool> {
+        self.edit_snapshot(id, |s| s.label = label.to_string())
+    }
+
+    /// Phase 49p — set a snapshot's free-text description.
+    pub fn set_description(&self, id: SnapshotId, description: &str) -> Result<bool> {
+        self.edit_snapshot(id, |s| s.description = description.to_string())
+    }
+
+    /// Phase 49p — set a snapshot's tags.
+    pub fn set_tags(&self, id: SnapshotId, tags: Vec<String>) -> Result<bool> {
+        self.edit_snapshot(id, move |s| s.tags = tags)
+    }
+
+    /// Phase 49p — pin or unpin a snapshot. Pinned snapshots are never
+    /// removed by [`Self::prune`].
+    pub fn set_pinned(&self, id: SnapshotId, pinned: bool) -> Result<bool> {
+        self.edit_snapshot(id, |s| s.pinned = pinned)
+    }
+
+    /// Phase 49e — which of a backup source's snapshots a retention
+    /// `policy` would prune, **without** mutating anything. Drives the
+    /// "would remove N" preview. Reuses the audited
+    /// [`select_for_pruning`] pruner verbatim: the freshest snapshot is
+    /// always kept, and only this source's snapshots
+    /// (`source_key == Some(source_id)`) are considered.
+    pub fn plan_source_prune(
+        &self,
+        source_id: &str,
+        policy: &RetentionPolicy,
+        now_ms: i64,
+    ) -> Result<Vec<SnapshotId>> {
+        let entries: Vec<VersionEntry> = self
+            .snapshots()?
+            .into_iter()
+            .filter(|s| s.source_key.as_deref() == Some(source_id))
+            .map(|s| VersionEntry {
+                row_id: s.id as i64,
+                ts_ms: s.created_at_ms,
+                retained_until_ms: None,
+            })
+            .collect();
+        Ok(select_for_pruning(&entries, policy, now_ms)
+            .into_iter()
+            .map(|id| SnapshotId(id as u64))
+            .collect())
+    }
+
+    /// Phase 49e — apply a retention `policy` to ONE backup source's
+    /// snapshots, delete the losers in one atomic catalog transaction,
+    /// then [`Self::gc`] to reclaim the now-orphaned chunks.
+    ///
+    /// Two-step like restic's forget→prune: the catalog edit and the
+    /// physical sweep are separate, and a crash between them leaves
+    /// orphan chunks the next `gc()` reclaims (the existing
+    /// crash-consistency contract). The freshest snapshot of the source
+    /// is always retained; other sources and ad-hoc (`source_key: None`)
+    /// snapshots are never touched. A policy that selects nothing skips
+    /// the `gc()` entirely (a no-op `KeepAll` backup stays cheap).
+    pub fn prune_source(
+        &self,
+        source_id: &str,
+        policy: &RetentionPolicy,
+        now_ms: i64,
+    ) -> Result<PruneReport> {
+        let drop_ids = self.plan_source_prune(source_id, policy, now_ms)?;
+        if drop_ids.is_empty() {
+            return Ok(PruneReport::default());
+        }
+        let removed = self.remove_snapshots(&drop_ids)?;
+        let gc = self.gc()?;
+        Ok(PruneReport {
+            snapshots_removed: removed,
+            chunks_swept: gc.chunks_swept,
+            bytes_reclaimed: gc.bytes_reclaimed,
+        })
+    }
+
+    /// Phase 49p — prune snapshots across the WHOLE repository by a global
+    /// keep-last / keep-within policy, ALWAYS retaining pinned snapshots.
+    /// Returns the removed ids (the caller runs [`Self::gc`] to reclaim the
+    /// now-orphaned chunks). An all-`None` policy removes nothing.
+    pub fn prune(&self, policy: &PrunePolicy, now_ms: i64) -> Result<Vec<SnapshotId>> {
+        if policy.keep_last.is_none() && policy.keep_within_ms.is_none() {
+            return Ok(Vec::new());
+        }
+        let mut summaries = self.snapshots()?;
+        // Newest first so `keep_last` indexes the freshest snapshots.
+        summaries.sort_by_key(|s| std::cmp::Reverse((s.created_at_ms, s.id)));
+        let cutoff = policy.keep_within_ms.map(|w| now_ms.saturating_sub(w));
+        let mut remove = Vec::new();
+        for (idx, s) in summaries.iter().enumerate() {
+            if s.pinned {
+                continue; // pinned snapshots are never pruned
+            }
+            let within_keep_last = policy.keep_last.is_some_and(|n| (idx as u64) < n);
+            let within_time = cutoff.is_some_and(|c| s.created_at_ms >= c);
+            if !within_keep_last && !within_time {
+                remove.push(SnapshotId(s.id));
+            }
+        }
+        if !remove.is_empty() {
+            self.remove_snapshots(&remove)?;
+        }
+        Ok(remove)
+    }
+
     /// Stream a reader through the chunker into the store, returning the
     /// file's [`Manifest`]. Never buffers the whole input.
     fn ingest_reader<R: Read>(&self, reader: R) -> Result<Manifest> {
         let mut chunks = Vec::new();
         let mut offset = 0u64;
+        let comp = self.compression;
         // `chunk_reader` yields window-relative offsets; we track the
         // absolute offset ourselves and use the full-file hash it
         // returns so there's no extra pass over the bytes.
         let file_hash = self.chunker.chunk_reader(reader, |chunk, slice| {
-            self.store.put(chunk.hash, slice)?;
+            let codec = self.store.put_chunk(chunk.hash, slice, comp)?;
             chunks.push(ChunkRef {
                 hash: chunk.hash,
                 offset,
                 len: chunk.len,
+                codec,
             });
             offset += u64::from(chunk.len);
             Ok(())
@@ -562,17 +1372,25 @@ impl Repository {
         &self,
         kind: SnapshotKind,
         label: &str,
+        source_key: Option<&str>,
         created_at_ms: i64,
         files: Vec<FileEntry>,
     ) -> Result<SnapshotId> {
         let id = self.allocate_snapshot_id()?;
-        let snap = Snapshot {
+        let mut snap = Snapshot {
             id,
             kind,
             created_at_ms,
             label: label.to_string(),
+            source_key: source_key.map(str::to_string),
+            description: String::new(),
+            tags: Vec::new(),
+            pinned: false,
+            source: String::new(),
             files,
         };
+        // Phase 49l — derive + store the source prefix for the dashboard.
+        snap.source = snap.compute_source();
         let snap_bytes = serde_json::to_vec(&snap)?;
         let summary_bytes = serde_json::to_vec(&snap.summary())?;
 
@@ -597,6 +1415,36 @@ impl Repository {
             return Ok(None);
         };
         Ok(Some(serde_json::from_slice(v.value())?))
+    }
+
+    /// Phase 49l — fold the timeline summaries into one row per source
+    /// (newest snapshot wins the `latest_*` fields). `O(snapshots)`, reads
+    /// only the summaries index — no pack/manifest I/O.
+    pub fn sources(&self) -> Result<Vec<SourceSummary>> {
+        use std::collections::HashMap;
+        let mut map: HashMap<String, SourceSummary> = HashMap::new();
+        for s in self.snapshots()? {
+            let e = map
+                .entry(s.source.clone())
+                .or_insert_with(|| SourceSummary {
+                    source: s.source.clone(),
+                    snapshot_count: 0,
+                    latest_ms: i64::MIN,
+                    latest_kind: s.kind,
+                    latest_size: 0,
+                    total_files: 0,
+                });
+            e.snapshot_count += 1;
+            if s.created_at_ms >= e.latest_ms {
+                e.latest_ms = s.created_at_ms;
+                e.latest_kind = s.kind;
+                e.latest_size = s.total_size;
+                e.total_files = s.file_count;
+            }
+        }
+        let mut out: Vec<SourceSummary> = map.into_values().collect();
+        out.sort_by(|a, b| b.latest_ms.cmp(&a.latest_ms));
+        Ok(out)
     }
 
     /// The whole timeline as lightweight summaries, oldest first
@@ -763,9 +1611,23 @@ impl Repository {
             }
         }
         let unique_bytes = unique.values().map(|&l| u64::from(l)).sum();
+        // Phase 49h — physical (on-disk, possibly-compressed) size of the
+        // distinct reachable chunks, looked up from their locators.
+        let locators: HashMap<Blake3Hash, u32> = self
+            .store
+            .all_locators()?
+            .into_iter()
+            .map(|(h, loc)| (h, loc.stored_len))
+            .collect();
+        let physical_unique_bytes = unique
+            .keys()
+            .filter_map(|h| locators.get(h))
+            .map(|&sl| u64::from(sl))
+            .sum();
         Ok(RepoStats {
             stored_bytes: self.store.disk_usage_bytes()?,
             unique_bytes,
+            physical_unique_bytes,
             effective_bytes,
             snapshot_count: snaps.len() as u64,
             chunk_count: self.store.chunk_count()?,
@@ -803,11 +1665,28 @@ impl Repository {
     /// so it cannot run while a snapshot is mid-record (which would let
     /// it sweep chunks of a not-yet-committed snapshot).
     pub fn gc(&self) -> Result<GcReport> {
+        self.gc_with_progress(&mut |_| {})
+    }
+
+    /// Quick clean (mark-sweep) with progress callbacks (Phase 49i). Takes
+    /// the exclusive gc lease; deletes only fully-dead, non-active packs.
+    pub fn gc_with_progress(&self, cb: &mut dyn FnMut(MaintenanceProgress)) -> Result<GcReport> {
         let _lease = self
             .gc_lock
             .write()
             .map_err(|_| ChunkStoreError::Redb("repository gc lock poisoned".into()))?;
+        self.gc_locked(cb)
+    }
 
+    /// The mark-sweep body, assuming the caller already holds the gc write
+    /// lease (so [`Self::compact`] can reuse it — the `RwLock` write guard
+    /// is not reentrant).
+    fn gc_locked(&self, cb: &mut dyn FnMut(MaintenanceProgress)) -> Result<GcReport> {
+        cb(MaintenanceProgress {
+            phase: "mark",
+            done: 0,
+            total: 0,
+        });
         // --- Mark: every chunk reachable from any manifest source.
         let mut reachable: HashSet<Blake3Hash> = HashSet::new();
         for snap in self.load_all_snapshots()? {
@@ -826,6 +1705,11 @@ impl Repository {
         // --- Sweep: one pass collects orphans + classifies packs.
         let all = self.store.all_locators()?;
         let active = self.store.active_pack_id()?;
+        cb(MaintenanceProgress {
+            phase: "sweep",
+            done: 0,
+            total: all.len() as u64,
+        });
         let mut orphans: Vec<Blake3Hash> = Vec::new();
         let mut live_packs: HashSet<Uuid> = HashSet::new();
         let mut all_packs: HashSet<Uuid> = HashSet::new();
@@ -862,6 +1746,167 @@ impl Repository {
         Ok(report)
     }
 
+    /// Full compact: quick clean, then rewrite below-threshold packs to
+    /// reclaim the dead bytes inside partially-live packs (Phase 49i).
+    /// Holds the exclusive gc lease for its full duration, so it can never
+    /// interleave with a snapshot record. **Cancellation** is cooperative
+    /// (checked between packs + chunks); on cancel the store is left
+    /// consistent (moved chunks at their new home, the rest untouched).
+    pub fn compact(
+        &self,
+        opts: CompactOptions,
+        cancel: &dyn Fn() -> bool,
+        cb: &mut dyn FnMut(MaintenanceProgress),
+    ) -> Result<(GcReport, CompactReport)> {
+        let _lease = self
+            .gc_lock
+            .write()
+            .map_err(|_| ChunkStoreError::Redb("repository gc lock poisoned".into()))?;
+
+        // Quick clean first (removes fully-dead packs + orphan rows).
+        let gc = self.gc_locked(cb)?;
+
+        // Roll the active pack so ITS dead bytes also become compactable.
+        self.store.roll_active_pack()?;
+
+        // Pick the non-active packs that are at least `min_dead_ratio` dead.
+        let targets: Vec<Uuid> = self
+            .store
+            .pack_stats()?
+            .into_iter()
+            .filter(|p| !p.is_active && p.file_bytes > 0)
+            .filter(|p| {
+                let dead = p.file_bytes.saturating_sub(p.live_bytes);
+                dead as f64 >= p.file_bytes as f64 * opts.min_dead_ratio
+            })
+            .map(|p| p.pack_id)
+            .collect();
+
+        let mut report = CompactReport::default();
+        let total = targets.len() as u64;
+        for (i, pid) in targets.iter().enumerate() {
+            if cancel() {
+                break;
+            }
+            cb(MaintenanceProgress {
+                phase: "compact",
+                done: i as u64,
+                total,
+            });
+            let mut moved = 0u64;
+            let freed = self.store.compact_pack(*pid, cancel, &mut |m| moved = m)?;
+            report.chunks_moved += moved;
+            if freed > 0 {
+                report.packs_compacted += 1;
+                report.bytes_reclaimed += freed;
+            }
+        }
+        cb(MaintenanceProgress {
+            phase: "compact",
+            done: total,
+            total,
+        });
+        Ok((gc, report))
+    }
+
+    /// Phase 49n — verify all snapshots (or one). `Metadata` checks every
+    /// chunk has a live index entry; `ReadData` reads + re-hashes every
+    /// chunk AND checks each file's concatenated bytes hash to its
+    /// `file_hash`. Takes the shared read lease so a gc can't run mid-pass.
+    pub fn verify(&self, only: Option<SnapshotId>, level: VerifyLevel) -> Result<VerifyReport> {
+        let _lease = self.read_lease()?;
+        let mut report = VerifyReport::default();
+        for snap in self.load_all_snapshots()? {
+            if let Some(only) = only {
+                if snap.id != only.0 {
+                    continue;
+                }
+            }
+            report.snapshots_checked += 1;
+            for f in &snap.files {
+                report.files_checked += 1;
+                let mut hasher = blake3::Hasher::new();
+                let mut file_ok = true;
+                for c in &f.manifest.chunks {
+                    report.chunks_checked += 1;
+                    match level {
+                        VerifyLevel::Metadata => {
+                            if self.store.locate(&c.hash)?.is_none() {
+                                report.damage.push(VerifyDamage {
+                                    snapshot_id: snap.id,
+                                    path: f.path.clone(),
+                                    chunk_hash_hex: crate::types::hex_of(&c.hash),
+                                    kind: DamageKind::Missing,
+                                });
+                                file_ok = false;
+                            }
+                        }
+                        VerifyLevel::ReadData => match self.store.get(&c.hash) {
+                            Ok(Some(bytes)) => {
+                                hasher.update(&bytes);
+                            }
+                            Ok(None) => {
+                                report.damage.push(VerifyDamage {
+                                    snapshot_id: snap.id,
+                                    path: f.path.clone(),
+                                    chunk_hash_hex: crate::types::hex_of(&c.hash),
+                                    kind: DamageKind::Missing,
+                                });
+                                file_ok = false;
+                            }
+                            Err(_) => {
+                                report.damage.push(VerifyDamage {
+                                    snapshot_id: snap.id,
+                                    path: f.path.clone(),
+                                    chunk_hash_hex: crate::types::hex_of(&c.hash),
+                                    kind: DamageKind::Corrupt,
+                                });
+                                file_ok = false;
+                            }
+                        },
+                    }
+                }
+                // ReadData only: whole-file hash check (skipped when a chunk
+                // was already flagged — the file can't reconstruct anyway).
+                if level == VerifyLevel::ReadData
+                    && file_ok
+                    && hasher.finalize().as_bytes() != &f.manifest.file_hash
+                {
+                    report.damage.push(VerifyDamage {
+                        snapshot_id: snap.id,
+                        path: f.path.clone(),
+                        chunk_hash_hex: String::new(),
+                        kind: DamageKind::FileHashMismatch,
+                    });
+                }
+            }
+        }
+        Ok(report)
+    }
+
+    /// Phase 49n — repair = quarantine. Remove every snapshot with ANY
+    /// damage (so it can never mis-restore), then `gc()` to reclaim the
+    /// now-orphaned chunks. `apply == false` is a dry run (returns the
+    /// would-remove ids + an empty `GcReport`, changing nothing). Byte-level
+    /// chunk repair needs a redundancy source — out of scope; this is the
+    /// safe, feasible repair.
+    pub fn repair_remove_damaged(
+        &self,
+        report: &VerifyReport,
+        apply: bool,
+    ) -> Result<(Vec<SnapshotId>, GcReport)> {
+        let mut ids: Vec<u64> = report.damage.iter().map(|d| d.snapshot_id).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        let damaged: Vec<SnapshotId> = ids.into_iter().map(SnapshotId).collect();
+        if !apply || damaged.is_empty() {
+            return Ok((damaged, GcReport::default()));
+        }
+        self.remove_snapshots(&damaged)?;
+        let gc = self.gc()?;
+        Ok((damaged, gc))
+    }
+
     // ----- internals -------------------------------------------------
 
     /// Acquire the shared mutator lease (read side of the GC lock).
@@ -889,7 +1934,7 @@ impl Repository {
     }
 
     /// Load every snapshot (full, with manifests) from the catalog.
-    fn load_all_snapshots(&self) -> Result<Vec<Snapshot>> {
+    pub(crate) fn load_all_snapshots(&self) -> Result<Vec<Snapshot>> {
         let txn = self.db.begin_read()?;
         let snaps = txn.open_table(SNAPSHOTS)?;
         let mut out = Vec::with_capacity(snaps.len()? as usize);
@@ -899,6 +1944,40 @@ impl Repository {
         }
         Ok(out)
     }
+}
+
+/// Phase 50h — a stable CONTENT fingerprint of a snapshot for replication's
+/// "already present in the destination?" check. Two snapshots match iff their
+/// kind, capture time, and file content agree; the local id, the per-chunk
+/// storage codec, and every user-editable annotation (label / description /
+/// tags / pin / derived source) are normalised out, so neither a differing
+/// destination compression policy nor a post-replication metadata edit
+/// re-copies a snapshot. (`serde_json` emits struct fields + vec elements in a
+/// fixed order, so the serialization is deterministic.)
+fn content_fingerprint(snap: &Snapshot) -> [u8; 32] {
+    let mut probe = snap.clone();
+    probe.id = 0;
+    // Identity is CONTENT-only: normalise out every field a user can edit
+    // AFTER replication — label, description, tags, pin, and the derived
+    // source — so a later set_label/set_tags/set_pinned/set_description on
+    // either side never de-syncs the "already present" check and duplicates
+    // the snapshot on the next run.
+    probe.label = String::new();
+    probe.description = String::new();
+    probe.tags = Vec::new();
+    probe.pinned = false;
+    probe.source = String::new();
+    // The per-chunk `codec` is a *destination* storage detail — the same
+    // logical chunk is stored uncompressed in one repo and zstd in another —
+    // so normalize it out too. Otherwise a snapshot replicated into a
+    // differently-compressed destination would never match on re-run.
+    for f in &mut probe.files {
+        for c in &mut f.manifest.chunks {
+            c.codec = ChunkCodec::default();
+        }
+    }
+    let bytes = serde_json::to_vec(&probe).unwrap_or_default();
+    *blake3::hash(&bytes).as_bytes()
 }
 
 /// Map a snapshot's logical `path` to a SAFE relative path under the
