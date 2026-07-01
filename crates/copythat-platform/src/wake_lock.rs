@@ -150,7 +150,7 @@ mod backend_macos {
         pub fn acquire() -> Result<Self, WakeLockError> {
             let assertion_type = make_cfstring("PreventUserIdleDisplaySleep")
                 .ok_or_else(|| WakeLockError::Platform("CFString assertion-type".into()))?;
-            let assertion_name = make_cfstring("Copy That mobile companion")
+            let assertion_name = make_cfstring("Freally File Manager mobile companion")
                 .ok_or_else(|| WakeLockError::Platform("CFString name".into()))?;
             let mut id: IOPMAssertionID = 0;
             // SAFETY: IOPMAssertionCreateWithName is documented to
@@ -239,7 +239,7 @@ mod backend_linux {
             let proxy = ScreenSaverProxyBlocking::new(&conn)
                 .map_err(|e| WakeLockError::Unavailable(format!("ScreenSaver proxy: {e}")))?;
             let cookie = proxy
-                .inhibit("Copy That", "Mobile companion connected")
+                .inhibit("Freally File Manager", "Mobile companion connected")
                 .map_err(|e| WakeLockError::Platform(format!("Inhibit: {e}")))?;
             Ok(Self { conn, cookie })
         }

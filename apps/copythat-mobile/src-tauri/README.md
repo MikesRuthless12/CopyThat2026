@@ -1,4 +1,4 @@
-# Copy That Mobile — native Tauri target
+# Freally File Manager Mobile — native Tauri target
 
 Phase 37 follow-up #2. Wraps the Vite + Svelte 5 PWA at
 `apps/copythat-mobile/` in a Tauri 2 native shell so users on

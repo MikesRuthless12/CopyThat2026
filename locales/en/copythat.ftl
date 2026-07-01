@@ -1,5 +1,5 @@
-app-name = Copy That v0.19.84
-window-title = Copy That v0.19.84
+app-name = Freally File Manager v0.19.85
+window-title = Freally File Manager v0.19.85
 shred-ssd-advisory = Warning: this target lives on an SSD. Multi-pass overwrites do not reliably sanitize flash memory because wear-leveling and over-provisioning move data out from under the logical block address. For solid-state media, prefer ATA SECURE ERASE, NVMe Format with Secure Erase, or full-disk encryption with a discarded key.
 
 # Global aggregate states (header pill)
@@ -158,7 +158,7 @@ toast-move-queued = Move queued
 toast-error-resolved = Error resolved
 toast-collision-resolved = Collision resolved
 toast-elevated-unavailable = Elevated retry lands in Phase 17 — not available yet
-toast-clipboard-files-detected = Files on clipboard — press your paste shortcut to copy via Copy That
+toast-clipboard-files-detected = Files on clipboard — press your paste shortcut to copy via Freally File Manager
 toast-clipboard-no-files = Clipboard has no files to paste
 toast-error-log-exported = Error log exported
 
@@ -357,9 +357,9 @@ settings-error-display-drawer = Drawer (non-blocking)
 settings-error-display-mode-hint = Modal stops the queue until you decide. Drawer keeps the queue moving and lets you triage errors in the corner.
 settings-paste-shortcut = Paste files via global shortcut
 settings-paste-shortcut-combo = Shortcut combo
-settings-paste-shortcut-hint = Press this combo anywhere on your system to paste files copied from Explorer / Finder / Files via Copy That. CmdOrCtrl resolves to Cmd on macOS, Ctrl on Windows / Linux.
+settings-paste-shortcut-hint = Press this combo anywhere on your system to paste files copied from Explorer / Finder / Files via Freally File Manager. CmdOrCtrl resolves to Cmd on macOS, Ctrl on Windows / Linux.
 settings-clipboard-watcher = Watch clipboard for copied files
-settings-clipboard-watcher-hint = Show a toast when file URLs appear on the clipboard, hinting you can paste via Copy That. Polls every 500 ms while enabled.
+settings-clipboard-watcher-hint = Show a toast when file URLs appear on the clipboard, hinting you can paste via Freally File Manager. Polls every 500 ms while enabled.
 
 # Transfer tab
 settings-buffer-size = Buffer size
@@ -383,7 +383,7 @@ settings-force-parallel-chunks-hint = Splits each large copy into concurrent chu
 # Shell tab
 settings-context-menu = Enable shell context menu entries
 settings-intercept-copy = Intercept default copy handler (Windows)
-settings-intercept-copy-hint = When on, Explorer's Ctrl+C / Ctrl+V routes through Copy That. Registration lands in Phase 14.
+settings-intercept-copy-hint = When on, Explorer's Ctrl+C / Ctrl+V routes through Freally File Manager. Registration lands in Phase 14.
 settings-notify-completion = Notify on job completion
 
 # Secure delete tab
@@ -452,7 +452,7 @@ settings-filters-skip-system = Skip system files (Windows only)
 settings-filters-skip-readonly = Skip read-only files
 
 # Phase 15 — auto-update
-settings-updater-hint = Copy That checks for signed updates at most once a day. Updates install on the next app quit.
+settings-updater-hint = Freally File Manager checks for signed updates at most once a day. Updates install on the next app quit.
 settings-updater-auto-check = Check for updates on launch
 settings-updater-channel = Release channel
 settings-updater-channel-stable = Stable
@@ -488,17 +488,17 @@ settings-on-locked-ask = Ask the first time
 settings-on-locked-retry = Retry briefly, then surface the error
 settings-on-locked-skip = Skip the locked file
 settings-on-locked-snapshot = Use a filesystem snapshot
-settings-on-locked-hint = Eliminate "file in use by another process" errors. Copy That snapshots the source volume (VSS on Windows, ZFS/Btrfs on Linux, APFS on macOS) and reads from the snapshot copy.
+settings-on-locked-hint = Eliminate "file in use by another process" errors. Freally File Manager snapshots the source volume (VSS on Windows, ZFS/Btrfs on Linux, APFS on macOS) and reads from the snapshot copy.
 snapshot-prompt-title = This file is in use by another process
-snapshot-prompt-body = Another program has { $path } open for exclusive write. Choose how Copy That should handle this and similar files on the same volume.
+snapshot-prompt-body = Another program has { $path } open for exclusive write. Choose how Freally File Manager should handle this and similar files on the same volume.
 snapshot-source-active = 📷 Reading from { $kind } snapshot of { $volume }
 snapshot-create-failed = Could not create a snapshot of the source volume
-snapshot-vss-needs-elevation = Reading from a VSS snapshot requires Administrator permission. Copy That will ask you to allow it.
+snapshot-vss-needs-elevation = Reading from a VSS snapshot requires Administrator permission. Freally File Manager will ask you to allow it.
 snapshot-cleanup-failed = The snapshot helper reported a cleanup failure — a leftover shadow copy may remain on the volume.
 
 # Phase 20 — durable resume journal.
 resume-prompt-title = Resume previous transfers?
-resume-prompt-body = Copy That detected { $count } unfinished transfer(s) from a previous session. Choose what to do with each.
+resume-prompt-body = Freally File Manager detected { $count } unfinished transfer(s) from a previous session. Choose what to do with each.
 resume-prompt-resume = Resume
 resume-prompt-resume-all = Resume all
 resume-discard-one = Don't resume
@@ -681,7 +681,7 @@ dropstack-clear = Clear stack
 dropstack-remove-row = Remove from stack
 dropstack-path-missing-toast = Dropped { $path } — the file no longer exists.
 dropstack-always-on-top = Keep Drop Stack always on top
-dropstack-show-tray-icon = Show the Copy That tray icon
+dropstack-show-tray-icon = Show the Freally File Manager tray icon
 dropstack-open-on-start = Open Drop Stack automatically on app start
 dropstack-count = { $count } path
 
@@ -778,7 +778,7 @@ cloud-error-keychain = OS keychain access failed
 settings-tab-remotes = Remotes
 settings-tab-mobile = Mobile
 
-# Phase 33 — mount Copy That's chunk store + history archive as a
+# Phase 33 — mount Freally File Manager's chunk store + history archive as a
 # read-only filesystem (FUSE / WinFsp). Surfaced by the History tab
 # context menu's "Mount snapshot" action + the Settings → Advanced
 # "Mount latest on launch" toggle.
@@ -859,7 +859,7 @@ crypt-footer-compressed-badge = 📦 Compressed (zstd)
 # in English (engineering accessibility) but error / info / status
 # strings are localized so a localized desktop installation surfaces
 # CLI errors in the same language as the GUI.
-cli-help-tagline = Copy That CLI — byte-exact file copy, sync, verify and audit for CI/CD pipelines.
+cli-help-tagline = Freally File Manager CLI — byte-exact file copy, sync, verify and audit for CI/CD pipelines.
 cli-help-exit-codes = Exit codes: 0 success, 1 error, 2 pending, 3 collision, 4 verify-fail, 5 net, 6 perm, 7 disk-full, 8 cancel, 9 config.
 cli-error-bad-args = copy/move requires at least one source and a destination
 cli-error-unknown-algo = Unknown verify algorithm: { $algo }
@@ -887,7 +887,7 @@ cli-completions-emitted = Shell completions for { $shell } printed to stdout
 settings-mobile-heading = Mobile companion
 settings-mobile-hint = Pair an iPhone or Android phone to browse history, kick off saved profiles and Phase 36 jobspecs, and receive completion notifications.
 settings-mobile-pair-toggle = Allow new pairings
-settings-mobile-pair-active = Pair-server active — scan the QR with the Copy That mobile app
+settings-mobile-pair-active = Pair-server active — scan the QR with the Freally File Manager mobile app
 settings-mobile-pair-button = Start pairing
 settings-mobile-revoke-button = Revoke
 settings-mobile-no-pairings = No paired devices yet
@@ -905,7 +905,7 @@ push-toast-failed = Push to { $device } failed: { $reason }
 # Reflinked / 🔗 Hardlinked / 🧩 Chunk-shared / 📋 Copied) +
 # pre-pass dedup-scan modal.
 settings-dedup-heading = Destination dedup
-settings-dedup-hint = When the source and destination share a volume, Copy That can clone files at the filesystem level instead of copying bytes. Reflink is instant + safe; hardlink is faster but both names share state.
+settings-dedup-hint = When the source and destination share a volume, Freally File Manager can clone files at the filesystem level instead of copying bytes. Reflink is instant + safe; hardlink is faster but both names share state.
 settings-dedup-mode-auto = Auto ladder (reflink → hardlink → chunk → copy)
 settings-dedup-mode-reflink-only = Reflink only
 settings-dedup-mode-hardlink-aggressive = Aggressive (reflink + hardlink even on writable files)
@@ -1101,7 +1101,7 @@ err-pinned-destination-too-many = You've reached the limit of 50 tray destinatio
 # returned manifest + grant state.
 settings-tab-plugins = Plugins
 plugin-heading = Plugins
-plugin-hint = Sandboxed WASM plugins extend Copy That with custom hooks. Each plugin runs under per-call CPU and memory limits and only sees the host capabilities you grant it.
+plugin-hint = Sandboxed WASM plugins extend Freally File Manager with custom hooks. Each plugin runs under per-call CPU and memory limits and only sees the host capabilities you grant it.
 plugin-list-empty = No plugins installed yet.
 plugin-enabled = Enabled
 plugin-disabled = Disabled
@@ -1155,7 +1155,7 @@ diag-label = Diagnostics
 # Start / Stop control drives the live server via the `server_*` IPC
 # commands. `server-status-running` carries the bound `{ $addr }`.
 settings-tab-server = Server
-server-hint = Run Copy That as a headless file server. Pick the protocols to expose, set the address and the folder to serve, and optionally require authentication.
+server-hint = Run Freally File Manager as a headless file server. Pick the protocols to expose, set the address and the folder to serve, and optionally require authentication.
 server-protocols = Protocols
 server-bind-addr = Bind address
 server-root = Served folder

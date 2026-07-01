@@ -1,6 +1,6 @@
 [package]
 name = "copythat-perceptual"
-description = "Phase 42 — perceptual-hash + visual-similarity dedup for Copy That. Pure-Rust image-hasher integration; no ONNX, no model weights."
+description = "Phase 42 — perceptual-hash + visual-similarity dedup for Freally File Manager. Pure-Rust image-hasher integration; no ONNX, no model weights."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

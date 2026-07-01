@@ -10,7 +10,7 @@
 //!   ChaCha20-Poly1305 body, scrypt-derived KEK for passphrases).
 //! - [`compress::compressed_writer`] — wraps an inner `Write` in
 //!   zstd, either unconditionally or driven by a per-extension
-//!   deny heuristic that matches what a Copy That user actually
+//!   deny heuristic that matches what a Freally File Manager user actually
 //!   wants (skip `.jpg`, `.mp4`, `.zip`, … because they're already
 //!   compressed).
 //!
@@ -35,7 +35,7 @@
 //! The [original CRIME paper](https://en.wikipedia.org/wiki/CRIME)
 //! describes the technique in detail.
 //!
-//! Most Copy That deployments are not vulnerable — the plaintext is
+//! Most Freally File Manager deployments are not vulnerable — the plaintext is
 //! a whole file the user owns end-to-end, not a mix of attacker-
 //! supplied and secret bytes. We keep `compress-then-encrypt` as
 //! the default for the compression-effectiveness win on backups +
@@ -53,7 +53,7 @@
 //! bit-for-bit identical to `rage -r <recipient> <file>` or
 //! `rage -p <file>`; decryption with the matching `.age` identity
 //! file from <https://age-encryption.org> or the `rage` CLI
-//! round-trips without Copy That in the loop. Compressed files are
+//! round-trips without Freally File Manager in the loop. Compressed files are
 //! plain `.zst` streams with the magic number `0xFD2FB528` — any
 //! zstd decoder round-trips.
 //!

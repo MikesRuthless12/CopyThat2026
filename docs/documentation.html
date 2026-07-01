@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Copy That — Documentation</title>
+    <title>Freally File Manager — Documentation</title>
     <meta
       name="description"
-      content="Step-by-step help guide for Copy That 2026 — how to copy, move, securely delete, verify, and more."
+      content="Step-by-step help guide for Freally File Manager 2026 — how to copy, move, securely delete, verify, and more."
     />
     <link rel="icon" type="image/png" href="icon.png" />
     <link rel="apple-touch-icon" href="icon.png" />
@@ -79,9 +79,9 @@
   </head>
   <body>
     <header class="hero">
-      <img class="logo" src="icon.png" alt="Copy That icon" width="96" height="96" />
+      <img class="logo" src="icon.png" alt="Freally File Manager icon" width="96" height="96" />
       <h1>Documentation</h1>
-      <p class="sub">Step-by-step guides for everything in Copy That 2026.</p>
+      <p class="sub">Step-by-step guides for everything in Freally File Manager 2026.</p>
     </header>
 
     <div class="doc-layout">
@@ -90,7 +90,7 @@
       <aside class="doc-toc">
         <nav aria-label="Page sections">
           <span class="toc-label">On this page</span>
-          <a href="#install">Install Copy That</a>
+          <a href="#install">Install Freally File Manager</a>
           <a href="#copy">Copy files</a>
           <a href="#move">Move files</a>
           <a href="#secure-delete">Securely delete files</a>
@@ -114,7 +114,7 @@
 
         <!-- INSTALL -->
         <section id="install">
-          <h2>Install Copy That</h2>
+          <h2>Install Freally File Manager</h2>
           <ol>
             <li>Choose your platform's recommended installer from the table below.</li>
             <li>Run the one-liner in a terminal, or download the installer from the
@@ -136,7 +136,7 @@
               <code>chmod +x copythat-*.AppImage</code> then run it. On SELinux-enforcing systems
               this step is required before the file will launch.
             </li>
-            <li>Launch Copy That. The main window opens at 1120 × 640 by default (minimum 960 × 420).</li>
+            <li>Launch Freally File Manager. The main window opens at 1120 × 640 by default (minimum 960 × 420).</li>
           </ol>
           <table>
             <thead>
@@ -158,7 +158,7 @@
         <section id="copy">
           <h2>Copy files</h2>
           <ol>
-            <li>Launch Copy That 2026.</li>
+            <li>Launch Freally File Manager 2026.</li>
             <li>
               <strong>Add your source files</strong> — drag and drop one or more files or folders
               onto the window, <em>or</em> click <strong>Add files</strong> / <strong>Add folders</strong>
@@ -196,14 +196,14 @@
         <section id="move">
           <h2>Move files</h2>
           <ol>
-            <li>Launch Copy That 2026.</li>
+            <li>Launch Freally File Manager 2026.</li>
             <li>Drag and drop files or folders onto the window, or use <strong>Add files</strong> /
               <strong>Add folders</strong> in the toolbar.</li>
             <li>In the drop-staging dialog, set <strong>Operation → Move</strong>.</li>
             <li>Choose your <strong>Destination</strong> folder and set a <strong>Collision policy</strong>.</li>
             <li>Click <strong>Start moving</strong>.</li>
             <li>
-              Copy That copies each file to the destination first, then deletes the source only after
+              Freally File Manager copies each file to the destination first, then deletes the source only after
               the destination write succeeds. If a failure occurs mid-move, the source file is
               preserved and the row is marked <em>Failed</em> — no data is lost.
             </li>
@@ -212,7 +212,7 @@
           </ol>
           <div class="note-box">
             You can also trigger a move from Windows Explorer, macOS Finder, or your Linux file manager
-            using the right-click "Move with Copy That" entry — see
+            using the right-click "Move with Freally File Manager" entry — see
             <a href="#shell" style="color:var(--accent);text-decoration:none">Shell &amp; right-click menu</a>.
           </div>
         </section>
@@ -223,7 +223,7 @@
           <ol>
             <li>
               <strong>From your file manager (Windows / macOS / Linux):</strong> right-click the file
-              or folder and choose <strong>Secure delete with Copy That</strong>.
+              or folder and choose <strong>Secure delete with Freally File Manager</strong>.
               <br /><strong>From inside the app:</strong> right-click any completed job row in the queue
               and choose <strong>Secure delete source</strong>.
             </li>
@@ -235,7 +235,7 @@
             </li>
             <li>Click <strong>Shred</strong> (you may be asked to confirm a second time if
               <em>Require double confirmation</em> is enabled in Settings).</li>
-            <li>Copy That overwrites the file data according to the chosen method, then deletes it.
+            <li>Freally File Manager overwrites the file data according to the chosen method, then deletes it.
               The row shows <em>Done</em> when shredding is complete.</li>
           </ol>
           <table>
@@ -255,7 +255,7 @@
           </table>
           <div class="warn-box">
             <strong>SSD warning:</strong> multi-pass overwrite does <em>not</em> reliably sanitize flash
-            storage due to wear-leveling and over-provisioning. Copy That detects SSDs and shows an
+            storage due to wear-leveling and over-provisioning. Freally File Manager detects SSDs and shows an
             advisory toast. For true SSD sanitization, use ATA SECURE ERASE via your drive vendor's
             tool, or rely on full-disk encryption with key rotation.
           </div>
@@ -265,7 +265,7 @@
         <section id="batch">
           <h2>Organize &amp; batch operations</h2>
           <ol>
-            <li>Add multiple files and folders to Copy That in a single drag — or click
+            <li>Add multiple files and folders to Freally File Manager in a single drag — or click
               <strong>Add files</strong> / <strong>Add folders</strong> multiple times to build up a
               larger source list.</li>
             <li>
@@ -321,7 +321,7 @@
             </li>
             <li>Close Settings. The next copy job will automatically verify.</li>
             <li>
-              During a copy, Copy That hashes the source <em>during</em> the read pass — no second
+              During a copy, Freally File Manager hashes the source <em>during</em> the read pass — no second
               read of the source needed. After all bytes land at the destination, a dedicated post-pass
               hashes the destination file.
             </li>
@@ -351,18 +351,18 @@
               no separate step is needed.</li>
             <li>
               <strong>Windows:</strong> in File Explorer, right-click any file or folder. You will see
-              <strong>Copy with Copy That</strong> and <strong>Move with Copy That</strong> in the
+              <strong>Copy with Freally File Manager</strong> and <strong>Move with Freally File Manager</strong> in the
               context menu. These entries are provided by an <code>IExplorerCommand</code> shell
               extension registered during install.
             </li>
             <li>
               <strong>macOS:</strong> in Finder, right-click (or Control-click) a file or folder and
               look under <strong>Quick Actions</strong> or <strong>Services</strong> for
-              <strong>Copy with Copy That</strong>. The integration uses a Finder Sync extension plus
+              <strong>Copy with Freally File Manager</strong>. The integration uses a Finder Sync extension plus
               a macOS Services menu entry visible from any app that supports NSServices.
             </li>
             <li>
-              <strong>Linux (GNOME):</strong> right-click in Nautilus. The Copy That actions appear
+              <strong>Linux (GNOME):</strong> right-click in Nautilus. The Freally File Manager actions appear
               via a Nautilus Python extension installed to your user extensions folder.
             </li>
             <li>
@@ -374,7 +374,7 @@
               a Thunar Custom Action registered at install time.
             </li>
             <li>
-              Selecting any of these actions passes the selected paths to the running Copy That instance
+              Selecting any of these actions passes the selected paths to the running Freally File Manager instance
               (or launches it first if it isn't already open) and immediately opens the
               drop-staging dialog with those paths pre-filled.
             </li>
@@ -394,14 +394,14 @@
               more files normally — <kbd>Ctrl+C</kbd> on Windows/Linux or <kbd>Cmd+C</kbd> on macOS.
             </li>
             <li>
-              Switch to any other app or stay where you are — you don't need to go back to Copy That.
+              Switch to any other app or stay where you are — you don't need to go back to Freally File Manager.
             </li>
             <li>
               Press <strong>Ctrl + Shift + V</strong> (Windows / Linux) or
               <strong>Cmd + Shift + V</strong> (macOS) anywhere on your system.
             </li>
             <li>
-              Copy That reads the file paths from the OS clipboard and opens the
+              Freally File Manager reads the file paths from the OS clipboard and opens the
               <strong>drop-staging dialog</strong> with those sources already filled in.
             </li>
             <li>Choose a destination, confirm the operation, and click <strong>Start copying</strong>
@@ -434,7 +434,7 @@
               job kind, status, or a text search across paths.
             </li>
             <li>To <strong>re-run any past job</strong>, click the row to select it, then click
-              <strong>Re-run</strong> — Copy That queues the same source paths and destination
+              <strong>Re-run</strong> — Freally File Manager queues the same source paths and destination
               immediately, no dialog needed.</li>
             <li>To <strong>export the filtered list as a CSV</strong>, click <strong>Export CSV</strong>.
               The file follows RFC 4180 format (double-quoted fields, embedded-quote doubling,
@@ -461,7 +461,7 @@
         <section id="library">
           <h2>Library &mdash; your snapshot timeline</h2>
           <p>
-            The <strong>Library</strong> drawer is a unified view of Copy That's content-addressed
+            The <strong>Library</strong> drawer is a unified view of Freally File Manager's content-addressed
             repository: every copy, sync, and version checkpoint is stored once (deduplicated into
             content-defined chunks) and surfaced on a single timeline.
           </p>
@@ -499,9 +499,9 @@
 
         <!-- SERVER MODE -->
         <section id="server">
-          <h2>Run Copy That as a server</h2>
+          <h2>Run Freally File Manager as a server</h2>
           <p>
-            Copy That can run as a headless file server that exposes a folder over the network —
+            Freally File Manager can run as a headless file server that exposes a folder over the network —
             via <strong>WebDAV</strong>, plain <strong>HTTP</strong>, an <strong>S3</strong>-compatible
             API, or <strong>SFTP</strong> — with optional authentication and a Prometheus
             <code>/metrics</code> endpoint. You can drive it two ways: the
@@ -540,7 +540,7 @@
               Click <strong>Start server</strong>. The status line shows
               <strong>Running on &lt;address&gt;</strong>, and when WebDAV or HTTP is enabled a
               <strong>Metrics</strong> URL appears (a Prometheus <code>/metrics</code> endpoint). Click
-              <strong>Stop server</strong> to shut it down — the server also stops when you quit Copy That.
+              <strong>Stop server</strong> to shut it down — the server also stops when you quit Freally File Manager.
             </li>
           </ol>
           <table>
@@ -557,21 +557,21 @@
           <div class="note-box">
             <strong>Protocol combinations:</strong> WebDAV and HTTP share one address and can be on at
             the same time. S3 and SFTP each use their own transport, so enable only one of them at a
-            time on its own server — Copy That refuses to start if you combine S3 or SFTP with another
+            time on its own server — Freally File Manager refuses to start if you combine S3 or SFTP with another
             protocol on the same address. S3 also requires <em>Basic</em> or <em>None</em> auth (not
             Bearer), because it signs requests with AWS SigV4.
           </div>
           <div class="warn-box">
             <strong>Security:</strong> a server bound to anything other than <code>127.0.0.1</code> with
             authentication set to <em>None</em> is reachable — read/write unless <em>Read-only</em> — by
-            every device that can reach the address, and Copy That logs a loud warning. For anything
+            every device that can reach the address, and Freally File Manager logs a loud warning. For anything
             beyond your own machine, set <em>Bearer</em> or <em>Basic</em> auth, or put the server
             behind a reverse proxy that handles authentication.
           </div>
 
           <p><strong>From the command line</strong></p>
           <p>
-            Copy That also ships a command-line binary, <code>copythat</code>, for running a server on a
+            Freally File Manager also ships a command-line binary, <code>copythat</code>, for running a server on a
             headless machine or from a script. The flags mirror the panel:
           </p>
           <ol>
@@ -614,15 +614,15 @@
         <section id="migrate">
           <h2>Migrate from another backup tool</h2>
           <p>
-            Copy That's repository format is <strong>CDR-0</strong> (Common Dedup Repository v0), an
+            Freally File Manager's repository format is <strong>CDR-0</strong> (Common Dedup Repository v0), an
             open, public-domain specification so any compliant tool can read any compliant repository.
             The <code>copythat migrate</code> command imports another tool's repository into a CDR-0 repo.
           </p>
           <ol>
             <li>
               <strong>restic</strong>, <strong>Borg</strong>, and <strong>Kopia</strong> repositories
-              are all supported. Copy That decrypts the source, reconstructs every file, and re-ingests
-              it into a fresh CDR-0 repository &mdash; deduplicated with Copy That's own chunking:
+              are all supported. Freally File Manager decrypts the source, reconstructs every file, and re-ingests
+              it into a fresh CDR-0 repository &mdash; deduplicated with Freally File Manager's own chunking:
               <pre><code>copythat migrate restic /path/to/restic-repo /path/to/cdr-repo --password &lt;passphrase&gt;
 copythat migrate borg   /path/to/borg-repo   /path/to/cdr-repo --password &lt;passphrase&gt;
 copythat migrate kopia  /path/to/kopia-repo  /path/to/cdr-repo --password &lt;passphrase&gt;</code></pre>
@@ -694,7 +694,7 @@ copythat migrate kopia  /path/to/kopia-repo  /path/to/cdr-repo --password &lt;pa
               <tr><td>Home / End</td><td>Jump to the first or last row in the queue</td></tr>
               <tr><td>Ctrl + ↑ / Ctrl + ↓</td><td>Move focused row to the top or bottom of the list</td></tr>
               <tr><td>Shift + ↑ / Shift + ↓</td><td>Reorder rows one step up or down in the source list</td></tr>
-              <tr><td>Ctrl / Cmd + Shift + V</td><td>Paste files via Copy That (global hotkey — works system-wide)</td></tr>
+              <tr><td>Ctrl / Cmd + Shift + V</td><td>Paste files via Freally File Manager (global hotkey — works system-wide)</td></tr>
               <tr><td>Esc</td><td>Close the topmost modal or details drawer</td></tr>
             </tbody>
           </table>
@@ -706,7 +706,7 @@ copythat migrate kopia  /path/to/kopia-repo  /path/to/cdr-repo --password &lt;pa
           <ol>
             <li>
               <strong>"Path rejected — contains parent-directory (..) segments"</strong><br />
-              A relative path containing <code>..</code> was passed to Copy That. Retry the operation
+              A relative path containing <code>..</code> was passed to Freally File Manager. Retry the operation
               from your file manager using the shell integration. If you believe the path was valid,
               please
               <a href="https://github.com/MikesRuthless12/CopyThat2026/issues" style="color:var(--accent);text-decoration:none">file an issue</a>.
@@ -728,13 +728,13 @@ copythat migrate kopia  /path/to/kopia-repo  /path/to/cdr-repo --password &lt;pa
             </li>
             <li>
               <strong>"Low space on the destination" modal</strong><br />
-              Copy That detected that the source files won't fit at the destination. Click
+              Freally File Manager detected that the source files won't fit at the destination. Click
               <strong>Pick which to copy…</strong> to open the subset picker, then uncheck items
               until the size fits the available space.
             </li>
             <li>
               <strong>Windows: "File in use" error</strong><br />
-              Copy That opens source files with shared read access and retries automatically with
+              Freally File Manager opens source files with shared read access and retries automatically with
               exponential backoff on sharing-violation errors. If the retry loop is exhausted, the
               holding process is refusing all coexistence — close the application that has the file
               open and try again.
@@ -759,7 +759,7 @@ copythat migrate kopia  /path/to/kopia-repo  /path/to/cdr-repo --password &lt;pa
             <li>
               <strong>Getting more help</strong><br />
               <a href="https://github.com/MikesRuthless12/CopyThat2026/issues" style="color:var(--accent);text-decoration:none">Open an issue on GitHub</a>
-              with your OS version, Copy That version, and the text of any error message.
+              with your OS version, Freally File Manager version, and the text of any error message.
             </li>
           </ol>
         </section>
@@ -769,13 +769,13 @@ copythat migrate kopia  /path/to/kopia-repo  /path/to/cdr-repo --password &lt;pa
           <h2>Privacy</h2>
           <ol>
             <li>
-              <strong>No telemetry.</strong> Copy That never phones home. The telemetry field in
+              <strong>No telemetry.</strong> Freally File Manager never phones home. The telemetry field in
               settings is permanently disabled — it cannot be re-enabled by editing the settings file
               because the field is marked <code>#[serde(skip_deserializing)]</code> in the source code.
             </li>
             <li>
               <strong>No network calls during file operations.</strong> While copying, moving,
-              verifying, or securely deleting files, Copy That makes zero network requests.
+              verifying, or securely deleting files, Freally File Manager makes zero network requests.
             </li>
             <li>
               <strong>Update checks are opt-in.</strong> The launch update check can be turned off in

@@ -1,6 +1,6 @@
-//! Windows COM in-proc shell extension for Copy That v0.19.84.
+//! Windows COM in-proc shell extension for Freally File Manager v0.19.85.
 //!
-//! Adds "Copy with Copy That" and "Move with Copy That" entries to
+//! Adds "Copy with Freally File Manager" and "Move with Freally File Manager" entries to
 //! the Windows Explorer right-click menu for files and folders. Each
 //! verb invokes the `copythat` app binary with
 //! `--enqueue <verb> <paths…>`; the Phase 7a single-instance plumbing

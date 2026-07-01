@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0",
-  "productName": "Copy That Mobile",
+  "productName": "Freally File Manager Mobile",
   "version": "0.19.84",
   "identifier": "dev.copythat.mobile",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Copy That",
+        "title": "Freally File Manager",
         "width": 414,
         "height": 896,
         "resizable": true

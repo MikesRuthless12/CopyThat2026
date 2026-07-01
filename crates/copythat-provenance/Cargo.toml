@@ -1,6 +1,6 @@
 [package]
 name = "copythat-provenance"
-description = "Phase 43 — forensic chain-of-custody manifests + BLAKE3 verified streaming for Copy That. Ed25519 detached signing; canonical CBOR; opt-in RFC 3161 timestamping."
+description = "Phase 43 — forensic chain-of-custody manifests + BLAKE3 verified streaming for Freally File Manager. Ed25519 detached signing; canonical CBOR; opt-in RFC 3161 timestamping."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

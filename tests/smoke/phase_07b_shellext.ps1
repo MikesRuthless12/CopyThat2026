@@ -21,7 +21,7 @@
 
     No registry writes. No process spawns. No Explorer integration.
     The live end-to-end smoke (actually register the DLL, invoke
-    "Copy with Copy That" on a temp file via [Shell.Application],
+    "Copy with Freally File Manager" on a temp file via [Shell.Application],
     observe the running app enqueue the job) stays manual for 0.x
     because registering a COM DLL is an invasive operation and the
     CI Windows runner doesn't have a user-session Explorer to

@@ -1,7 +1,7 @@
-// Copy That v1.0.0 — macOS Services menu handler.
+// Freally File Manager v1.0.0 — macOS Services menu handler.
 //
 // Registers two entries in every app's `<AppName> ▸ Services` submenu:
-// "Copy with Copy That" and "Move with Copy That". They show up
+// "Copy with Freally File Manager" and "Move with Freally File Manager". They show up
 // whenever a selection on the pasteboard is a file path
 // (NSFilenamesPboardType or public.file-url).
 //
@@ -33,7 +33,7 @@ public final class CopyThatServiceHandler: NSObject {
     private static let binaryCandidates: [String] = [
         "/usr/local/bin/copythat",
         "/opt/homebrew/bin/copythat",
-        "/Applications/Copy That v1.0.0.app/Contents/MacOS/copythat",
+        "/Applications/Freally File Manager v1.0.0.app/Contents/MacOS/copythat",
     ]
 
     /// Register this handler with NSApplication so the selectors are
@@ -72,11 +72,11 @@ public final class CopyThatServiceHandler: NSObject {
     ) {
         let paths = collectPaths(from: pboard)
         guard !paths.isEmpty else {
-            error.pointee = "Copy That services handler: no file paths on the pasteboard" as NSString
+            error.pointee = "Freally File Manager services handler: no file paths on the pasteboard" as NSString
             return
         }
         guard let binary = resolveBinary() else {
-            error.pointee = "Copy That services handler: copythat binary not found" as NSString
+            error.pointee = "Freally File Manager services handler: copythat binary not found" as NSString
             return
         }
 
@@ -92,7 +92,7 @@ public final class CopyThatServiceHandler: NSObject {
         do {
             try process.run()
         } catch let spawnError {
-            error.pointee = "Copy That services handler: spawn failed: \(spawnError)" as NSString
+            error.pointee = "Freally File Manager services handler: spawn failed: \(spawnError)" as NSString
         }
     }
 

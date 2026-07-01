@@ -1,5 +1,5 @@
-app-name = Copy That v0.19.84
-window-title = Copy That v0.19.84
+app-name = Freally File Manager v0.19.85
+window-title = Freally File Manager v0.19.85
 shred-ssd-advisory = Waarschuwing: dit doel staat op een SSD. Meerdere overschrijfdoorgangen wissen flashgeheugen niet betrouwbaar, omdat wear-leveling en over-provisioning gegevens onder het logische blokadres vandaan verplaatsen. Gebruik voor solid-state media liever ATA SECURE ERASE, NVMe Format met Secure Erase of volledige-schijfversleuteling met een weggegooide sleutel.
 
 # Global aggregate states (header pill)
@@ -158,7 +158,7 @@ toast-move-queued = Verplaatsing in wachtrij
 toast-error-resolved = Fout opgelost
 toast-collision-resolved = Conflict opgelost
 toast-elevated-unavailable = Opnieuw proberen met verhoogde rechten komt in fase 17 — nog niet beschikbaar
-toast-clipboard-files-detected = Bestanden op klembord — druk op je plaksneltoets om te kopiëren via Copy That
+toast-clipboard-files-detected = Bestanden op klembord — druk op je plaksneltoets om te kopiëren via Freally File Manager
 toast-clipboard-no-files = Klembord bevat geen bestanden om te plakken
 toast-error-log-exported = Foutenlogboek geëxporteerd
 
@@ -357,9 +357,9 @@ settings-error-display-drawer = Lade (blokkeert niet)
 settings-error-display-mode-hint = Modaal stopt de wachtrij totdat je beslist. De lade houdt de wachtrij in beweging en laat je fouten in de hoek afhandelen.
 settings-paste-shortcut = Bestanden plakken via globale sneltoets
 settings-paste-shortcut-combo = Sneltoetscombinatie
-settings-paste-shortcut-hint = Druk deze combinatie ergens op je systeem in om bestanden te plakken die zijn gekopieerd uit Explorer / Finder / Files via Copy That. CmdOrCtrl wordt Cmd op macOS, Ctrl op Windows / Linux.
+settings-paste-shortcut-hint = Druk deze combinatie ergens op je systeem in om bestanden te plakken die zijn gekopieerd uit Explorer / Finder / Files via Freally File Manager. CmdOrCtrl wordt Cmd op macOS, Ctrl op Windows / Linux.
 settings-clipboard-watcher = Klembord bewaken op gekopieerde bestanden
-settings-clipboard-watcher-hint = Toon een melding wanneer bestands-URL's op het klembord verschijnen, met de hint dat je via Copy That kunt plakken. Controleert elke 500 ms wanneer ingeschakeld.
+settings-clipboard-watcher-hint = Toon een melding wanneer bestands-URL's op het klembord verschijnen, met de hint dat je via Freally File Manager kunt plakken. Controleert elke 500 ms wanneer ingeschakeld.
 
 # Transfer tab
 settings-buffer-size = Buffergrootte
@@ -383,7 +383,7 @@ settings-force-parallel-chunks-hint = Splitst elke grote kopie in gelijktijdige 
 # Shell tab
 settings-context-menu = Items in shell-contextmenu inschakelen
 settings-intercept-copy = Standaard kopieerafhandeling onderscheppen (Windows)
-settings-intercept-copy-hint = Wanneer ingeschakeld, lopen Ctrl+C / Ctrl+V van Explorer via Copy That. Registratie komt in fase 14.
+settings-intercept-copy-hint = Wanneer ingeschakeld, lopen Ctrl+C / Ctrl+V van Explorer via Freally File Manager. Registratie komt in fase 14.
 settings-notify-completion = Melden bij voltooiing van taak
 
 # Secure delete tab
@@ -452,7 +452,7 @@ settings-filters-skip-system = Systeembestanden overslaan (alleen Windows)
 settings-filters-skip-readonly = Alleen-lezen bestanden overslaan
 
 # Phase 15 — auto-update
-settings-updater-hint = Copy That controleert maximaal eenmaal per dag op ondertekende updates. Updates worden geïnstalleerd bij het volgende afsluiten van de app.
+settings-updater-hint = Freally File Manager controleert maximaal eenmaal per dag op ondertekende updates. Updates worden geïnstalleerd bij het volgende afsluiten van de app.
 settings-updater-auto-check = Bij opstarten controleren op updates
 settings-updater-channel = Releasekanaal
 settings-updater-channel-stable = Stabiel
@@ -488,17 +488,17 @@ settings-on-locked-ask = De eerste keer vragen
 settings-on-locked-retry = Kort opnieuw proberen en daarna de fout tonen
 settings-on-locked-skip = Het vergrendelde bestand overslaan
 settings-on-locked-snapshot = Een bestandssysteem-snapshot gebruiken
-settings-on-locked-hint = Voorkom "bestand in gebruik door een ander proces"-fouten. Copy That maakt een snapshot van het bronvolume (VSS op Windows, ZFS/Btrfs op Linux, APFS op macOS) en leest uit de snapshotkopie.
+settings-on-locked-hint = Voorkom "bestand in gebruik door een ander proces"-fouten. Freally File Manager maakt een snapshot van het bronvolume (VSS op Windows, ZFS/Btrfs op Linux, APFS op macOS) en leest uit de snapshotkopie.
 snapshot-prompt-title = Dit bestand wordt gebruikt door een ander proces
-snapshot-prompt-body = Een ander programma heeft { $path } geopend met exclusieve schrijftoegang. Kies hoe Copy That dit en soortgelijke bestanden op hetzelfde volume moet afhandelen.
+snapshot-prompt-body = Een ander programma heeft { $path } geopend met exclusieve schrijftoegang. Kies hoe Freally File Manager dit en soortgelijke bestanden op hetzelfde volume moet afhandelen.
 snapshot-source-active = 📷 Lezen uit { $kind }-snapshot van { $volume }
 snapshot-create-failed = Kon geen snapshot van het bronvolume maken
-snapshot-vss-needs-elevation = Lezen uit een VSS-snapshot vereist beheerdersrechten. Copy That vraagt je dit toe te staan.
+snapshot-vss-needs-elevation = Lezen uit een VSS-snapshot vereist beheerdersrechten. Freally File Manager vraagt je dit toe te staan.
 snapshot-cleanup-failed = De snapshothelper meldde een opschoonfout — er kan een achtergebleven schaduwkopie op het volume staan.
 
 # Phase 20 — durable resume journal.
 resume-prompt-title = Eerdere overdrachten hervatten?
-resume-prompt-body = Copy That heeft { $count } onvoltooide overdracht(en) van een vorige sessie gedetecteerd. Kies wat je met elke wilt doen.
+resume-prompt-body = Freally File Manager heeft { $count } onvoltooide overdracht(en) van een vorige sessie gedetecteerd. Kies wat je met elke wilt doen.
 resume-prompt-resume = Hervatten
 resume-prompt-resume-all = Alles hervatten
 resume-discard-one = Niet hervatten
@@ -681,7 +681,7 @@ dropstack-clear = Stapel wissen
 dropstack-remove-row = Uit stapel verwijderen
 dropstack-path-missing-toast = { $path } gesleept — het bestand bestaat niet meer.
 dropstack-always-on-top = Drop Stack altijd op de voorgrond houden
-dropstack-show-tray-icon = Het Copy That-systeemvakpictogram tonen
+dropstack-show-tray-icon = Het Freally File Manager-systeemvakpictogram tonen
 dropstack-open-on-start = Drop Stack automatisch openen bij starten van app
 dropstack-count = { $count } pad
 
@@ -778,7 +778,7 @@ cloud-error-keychain = Toegang tot sleutelhanger van besturingssysteem mislukt
 settings-tab-remotes = Externe opslag
 settings-tab-mobile = Mobiel
 
-# Phase 33 — mount Copy That's chunk store + history archive as a
+# Phase 33 — mount Freally File Manager's chunk store + history archive as a
 # read-only filesystem (FUSE / WinFsp). Surfaced by the History tab
 # context menu's "Mount snapshot" action + the Settings → Advanced
 # "Mount latest on launch" toggle.
@@ -859,7 +859,7 @@ crypt-footer-compressed-badge = 📦 Gecomprimeerd (zstd)
 # in English (engineering accessibility) but error / info / status
 # strings are localized so a localized desktop installation surfaces
 # CLI errors in the same language as the GUI.
-cli-help-tagline = Copy That CLI — byte-exacte bestandskopie, synchronisatie, verificatie en audit voor CI/CD-pijplijnen.
+cli-help-tagline = Freally File Manager CLI — byte-exacte bestandskopie, synchronisatie, verificatie en audit voor CI/CD-pijplijnen.
 cli-help-exit-codes = Exitcodes: 0 succes, 1 fout, 2 in behandeling, 3 conflict, 4 verificatie mislukt, 5 net, 6 rechten, 7 schijf vol, 8 annuleren, 9 config.
 cli-error-bad-args = copy/move vereist ten minste één bron en een bestemming
 cli-error-unknown-algo = Onbekend verificatiealgoritme: { $algo }
@@ -887,7 +887,7 @@ cli-completions-emitted = Shell-completions voor { $shell } afgedrukt naar stdou
 settings-mobile-heading = Mobiele metgezel
 settings-mobile-hint = Koppel een iPhone of Android-telefoon om de geschiedenis te doorbladeren, opgeslagen profielen en jobspecs uit fase 36 te starten en meldingen bij voltooiing te ontvangen.
 settings-mobile-pair-toggle = Nieuwe koppelingen toestaan
-settings-mobile-pair-active = Koppelserver actief — scan de QR met de Copy That mobiele app
+settings-mobile-pair-active = Koppelserver actief — scan de QR met de Freally File Manager mobiele app
 settings-mobile-pair-button = Koppelen starten
 settings-mobile-revoke-button = Intrekken
 settings-mobile-no-pairings = Nog geen gekoppelde apparaten
@@ -905,7 +905,7 @@ push-toast-failed = Pushmelding naar { $device } mislukt: { $reason }
 # Reflinked / 🔗 Hardlinked / 🧩 Chunk-shared / 📋 Copied) +
 # pre-pass dedup-scan modal.
 settings-dedup-heading = Bestemmingsdedup
-settings-dedup-hint = Wanneer de bron en bestemming een volume delen, kan Copy That bestanden op bestandssysteemniveau klonen in plaats van bytes te kopiëren. Reflink is direct + veilig; hardlink is sneller maar beide namen delen dan hun status.
+settings-dedup-hint = Wanneer de bron en bestemming een volume delen, kan Freally File Manager bestanden op bestandssysteemniveau klonen in plaats van bytes te kopiëren. Reflink is direct + veilig; hardlink is sneller maar beide namen delen dan hun status.
 settings-dedup-mode-auto = Automatische ladder (reflink → hardlink → chunk → kopie)
 settings-dedup-mode-reflink-only = Alleen reflink
 settings-dedup-mode-hardlink-aggressive = Agressief (reflink + hardlink, zelfs bij beschrijfbare bestanden)
@@ -1101,7 +1101,7 @@ err-pinned-destination-too-many = Je hebt de limiet van 50 systeemvakbestemminge
 # returned manifest + grant state.
 settings-tab-plugins = Plug-ins
 plugin-heading = Plug-ins
-plugin-hint = Sandboxed WASM-plug-ins breiden Copy That uit met aangepaste hooks. Elke plug-in draait onder CPU- en geheugenlimieten per aanroep en ziet alleen de hostcapabilities die je toekent.
+plugin-hint = Sandboxed WASM-plug-ins breiden Freally File Manager uit met aangepaste hooks. Elke plug-in draait onder CPU- en geheugenlimieten per aanroep en ziet alleen de hostcapabilities die je toekent.
 plugin-list-empty = Nog geen plug-ins geïnstalleerd.
 plugin-enabled = Ingeschakeld
 plugin-disabled = Uitgeschakeld
@@ -1148,7 +1148,7 @@ diag-label = Diagnostiek
 
 # Phase 48 — server mode + observability (Settings → Server).
 settings-tab-server = Server
-server-hint = Voer Copy That uit als headless bestandsserver. Kies de protocollen om beschikbaar te stellen, stel het adres en de te delen map in en vereis optioneel authenticatie.
+server-hint = Voer Freally File Manager uit als headless bestandsserver. Kies de protocollen om beschikbaar te stellen, stel het adres en de te delen map in en vereis optioneel authenticatie.
 server-protocols = Protocollen
 server-bind-addr = Bind-adres
 server-root = Gedeelde map

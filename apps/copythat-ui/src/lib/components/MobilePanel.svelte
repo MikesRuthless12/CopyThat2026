@@ -166,7 +166,7 @@
     {#if settings.mobile.autoConnect && settings.mobile.pairings.length === 0}
       <p class="hint warn">
         Auto-connect is on, but no phone is paired yet. Install the
-        Copy That mobile PWA on your phone (scan the QR below with
+        Freally File Manager mobile PWA on your phone (scan the QR below with
         your camera), then click "Start pairing" so the desktop
         knows where to dial.
       </p>

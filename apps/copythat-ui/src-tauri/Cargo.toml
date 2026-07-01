@@ -1,6 +1,6 @@
 [package]
 name = "copythat-ui"
-description = "Copy That v1.0.0 — Tauri 2.x application shell."
+description = "Freally File Manager v1.0.0 — Tauri 2.x application shell."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -199,7 +199,7 @@ tokio = { version = "1", features = [
 # Android / iOS — Tauri gates the plugin to desktop targets.
 [target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "2"
-# Post-Phase-12 — system-wide "paste files via Copy That" shortcut.
+# Post-Phase-12 — system-wide "paste files via Freally File Manager" shortcut.
 # Registers a configurable combo (default CmdOrCtrl+Shift+V) that
 # reads file URLs off the OS clipboard and routes them through the
 # same staging-dialog path the drag-drop and shell-extension flows

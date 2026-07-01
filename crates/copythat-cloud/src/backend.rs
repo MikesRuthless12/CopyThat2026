@@ -16,7 +16,7 @@ pub struct Backend {
     pub config: BackendConfig,
 }
 
-/// Twelve top-level backends Copy That surfaces in the Add-backend
+/// Twelve top-level backends Freally File Manager surfaces in the Add-backend
 /// wizard. The string identifiers in the `wire` attribute are stable
 /// — they round-trip through TOML and the IPC `BackendDto`.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]

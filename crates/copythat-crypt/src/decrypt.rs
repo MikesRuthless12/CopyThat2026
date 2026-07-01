@@ -62,7 +62,7 @@ impl Identity {
 
     /// Append an SSH identity from a raw OpenSSH private-key blob
     /// (plain-text PEM). Encrypted SSH keys surface
-    /// [`CryptError::IdentityLocked`] — Copy That's Settings UI
+    /// [`CryptError::IdentityLocked`] — Freally File Manager's Settings UI
     /// prompts the user for the passphrase + decrypts to an
     /// unencrypted blob before calling this helper. A future
     /// revision may plumb a passphrase callback through age's

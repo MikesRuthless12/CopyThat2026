@@ -1,6 +1,6 @@
 [package]
 name = "copythat-audit"
-description = "Phase 34 — enterprise-grade audit log export + WORM (write-once-read-many) tamper-evident logging for Copy That. Emits CSV / JSON-lines / Syslog RFC 5424 / ArcSight CEF / QRadar LEEF records with a rolling chain hash."
+description = "Phase 34 — enterprise-grade audit log export + WORM (write-once-read-many) tamper-evident logging for Freally File Manager. Emits CSV / JSON-lines / Syslog RFC 5424 / ArcSight CEF / QRadar LEEF records with a rolling chain hash."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

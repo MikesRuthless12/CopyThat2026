@@ -1,5 +1,5 @@
-app-name = Copy That v0.19.84
-window-title = Copy That v0.19.84
+app-name = Freally File Manager v0.19.85
+window-title = Freally File Manager v0.19.85
 shred-ssd-advisory = Peringatan: target ini berada di SSD. Penimpaan multi-lintasan tidak dapat membersihkan memori flash secara andal karena wear-leveling dan over-provisioning memindahkan data keluar dari alamat blok logis. Untuk media solid-state, gunakan ATA SECURE ERASE, NVMe Format dengan Secure Erase, atau enkripsi seluruh disk dengan kunci yang dibuang.
 
 # Global aggregate states (header pill)
@@ -158,7 +158,7 @@ toast-move-queued = Pemindahan diantrekan
 toast-error-resolved = Galat teratasi
 toast-collision-resolved = Tabrakan teratasi
 toast-elevated-unavailable = Coba ulang dengan hak istimewa hadir di Fase 17 — belum tersedia
-toast-clipboard-files-detected = Ada berkas di papan klip — tekan pintasan tempel untuk menyalin lewat Copy That
+toast-clipboard-files-detected = Ada berkas di papan klip — tekan pintasan tempel untuk menyalin lewat Freally File Manager
 toast-clipboard-no-files = Papan klip tidak punya berkas untuk ditempel
 toast-error-log-exported = Log galat diekspor
 
@@ -357,9 +357,9 @@ settings-error-display-drawer = Laci (tidak memblokir)
 settings-error-display-mode-hint = Modal menghentikan antrean sampai Anda memutuskan. Laci membuat antrean tetap berjalan dan membiarkan Anda memilah galat di pojok.
 settings-paste-shortcut = Tempel berkas lewat pintasan global
 settings-paste-shortcut-combo = Kombinasi pintasan
-settings-paste-shortcut-hint = Tekan kombinasi ini di mana pun pada sistem Anda untuk menempel berkas yang disalin dari Explorer / Finder / Files lewat Copy That. CmdOrCtrl menjadi Cmd di macOS, Ctrl di Windows / Linux.
+settings-paste-shortcut-hint = Tekan kombinasi ini di mana pun pada sistem Anda untuk menempel berkas yang disalin dari Explorer / Finder / Files lewat Freally File Manager. CmdOrCtrl menjadi Cmd di macOS, Ctrl di Windows / Linux.
 settings-clipboard-watcher = Pantau papan klip untuk berkas yang disalin
-settings-clipboard-watcher-hint = Tampilkan toast saat URL berkas muncul di papan klip, mengisyaratkan Anda bisa menempel lewat Copy That. Memantau setiap 500 md saat aktif.
+settings-clipboard-watcher-hint = Tampilkan toast saat URL berkas muncul di papan klip, mengisyaratkan Anda bisa menempel lewat Freally File Manager. Memantau setiap 500 md saat aktif.
 
 # Transfer tab
 settings-buffer-size = Ukuran buffer
@@ -383,7 +383,7 @@ settings-force-parallel-chunks-hint = Membagi setiap salinan besar menjadi poton
 # Shell tab
 settings-context-menu = Aktifkan entri menu konteks shell
 settings-intercept-copy = Cegat penangan salin bawaan (Windows)
-settings-intercept-copy-hint = Saat aktif, Ctrl+C / Ctrl+V di Explorer dialihkan lewat Copy That. Pendaftaran hadir di Fase 14.
+settings-intercept-copy-hint = Saat aktif, Ctrl+C / Ctrl+V di Explorer dialihkan lewat Freally File Manager. Pendaftaran hadir di Fase 14.
 settings-notify-completion = Beri tahu saat tugas selesai
 
 # Secure delete tab
@@ -452,7 +452,7 @@ settings-filters-skip-system = Lewati berkas sistem (Windows saja)
 settings-filters-skip-readonly = Lewati berkas hanya-baca
 
 # Phase 15 — auto-update
-settings-updater-hint = Copy That memeriksa pembaruan bertanda tangan paling banyak sekali sehari. Pembaruan terpasang saat aplikasi berikutnya ditutup.
+settings-updater-hint = Freally File Manager memeriksa pembaruan bertanda tangan paling banyak sekali sehari. Pembaruan terpasang saat aplikasi berikutnya ditutup.
 settings-updater-auto-check = Periksa pembaruan saat diluncurkan
 settings-updater-channel = Kanal rilis
 settings-updater-channel-stable = Stabil
@@ -488,17 +488,17 @@ settings-on-locked-ask = Tanya pertama kali
 settings-on-locked-retry = Coba ulang sebentar, lalu munculkan galat
 settings-on-locked-skip = Lewati berkas yang terkunci
 settings-on-locked-snapshot = Gunakan snapshot sistem berkas
-settings-on-locked-hint = Hilangkan galat "berkas sedang digunakan oleh proses lain". Copy That membuat snapshot volume sumber (VSS di Windows, ZFS/Btrfs di Linux, APFS di macOS) dan membaca dari salinan snapshot.
+settings-on-locked-hint = Hilangkan galat "berkas sedang digunakan oleh proses lain". Freally File Manager membuat snapshot volume sumber (VSS di Windows, ZFS/Btrfs di Linux, APFS di macOS) dan membaca dari salinan snapshot.
 snapshot-prompt-title = Berkas ini sedang digunakan oleh proses lain
-snapshot-prompt-body = Program lain membuka { $path } untuk penulisan eksklusif. Pilih cara Copy That menangani berkas ini dan yang serupa di volume yang sama.
+snapshot-prompt-body = Program lain membuka { $path } untuk penulisan eksklusif. Pilih cara Freally File Manager menangani berkas ini dan yang serupa di volume yang sama.
 snapshot-source-active = 📷 Membaca dari snapshot { $kind } pada { $volume }
 snapshot-create-failed = Tidak dapat membuat snapshot volume sumber
-snapshot-vss-needs-elevation = Membaca dari snapshot VSS memerlukan izin Administrator. Copy That akan meminta Anda mengizinkannya.
+snapshot-vss-needs-elevation = Membaca dari snapshot VSS memerlukan izin Administrator. Freally File Manager akan meminta Anda mengizinkannya.
 snapshot-cleanup-failed = Helper snapshot melaporkan kegagalan pembersihan — salinan bayangan sisa mungkin masih ada di volume.
 
 # Phase 20 — durable resume journal.
 resume-prompt-title = Lanjutkan transfer sebelumnya?
-resume-prompt-body = Copy That mendeteksi { $count } transfer yang belum selesai dari sesi sebelumnya. Pilih tindakan untuk masing-masing.
+resume-prompt-body = Freally File Manager mendeteksi { $count } transfer yang belum selesai dari sesi sebelumnya. Pilih tindakan untuk masing-masing.
 resume-prompt-resume = Lanjutkan
 resume-prompt-resume-all = Lanjutkan semua
 resume-discard-one = Jangan lanjutkan
@@ -681,7 +681,7 @@ dropstack-clear = Bersihkan tumpukan
 dropstack-remove-row = Hapus dari tumpukan
 dropstack-path-missing-toast = { $path } dijatuhkan — berkas tidak ada lagi.
 dropstack-always-on-top = Jaga Drop Stack selalu di atas
-dropstack-show-tray-icon = Tampilkan ikon baki Copy That
+dropstack-show-tray-icon = Tampilkan ikon baki Freally File Manager
 dropstack-open-on-start = Buka Drop Stack otomatis saat aplikasi dimulai
 dropstack-count = { $count } jalur
 
@@ -778,7 +778,7 @@ cloud-error-keychain = Akses keychain OS gagal
 settings-tab-remotes = Jarak jauh
 settings-tab-mobile = Seluler
 
-# Phase 33 — mount Copy That's chunk store + history archive as a
+# Phase 33 — mount Freally File Manager's chunk store + history archive as a
 # read-only filesystem (FUSE / WinFsp). Surfaced by the History tab
 # context menu's "Mount snapshot" action + the Settings → Advanced
 # "Mount latest on launch" toggle.
@@ -859,7 +859,7 @@ crypt-footer-compressed-badge = 📦 Terkompresi (zstd)
 # in English (engineering accessibility) but error / info / status
 # strings are localized so a localized desktop installation surfaces
 # CLI errors in the same language as the GUI.
-cli-help-tagline = Copy That CLI — penyalinan, sinkronisasi, verifikasi, dan audit berkas byte-exact untuk pipeline CI/CD.
+cli-help-tagline = Freally File Manager CLI — penyalinan, sinkronisasi, verifikasi, dan audit berkas byte-exact untuk pipeline CI/CD.
 cli-help-exit-codes = Kode keluar: 0 berhasil, 1 galat, 2 tertunda, 3 tabrakan, 4 verify-fail, 5 net, 6 perm, 7 disk-full, 8 batal, 9 config.
 cli-error-bad-args = copy/move memerlukan setidaknya satu sumber dan satu tujuan
 cli-error-unknown-algo = Algoritma verifikasi tidak diketahui: { $algo }
@@ -887,7 +887,7 @@ cli-completions-emitted = Penyelesaian shell untuk { $shell } dicetak ke stdout
 settings-mobile-heading = Pendamping seluler
 settings-mobile-hint = Pasangkan iPhone atau ponsel Android untuk menelusuri riwayat, memulai profil tersimpan dan jobspec Fase 36, serta menerima notifikasi penyelesaian.
 settings-mobile-pair-toggle = Izinkan pemasangan baru
-settings-mobile-pair-active = Server pasangan aktif — pindai QR dengan aplikasi seluler Copy That
+settings-mobile-pair-active = Server pasangan aktif — pindai QR dengan aplikasi seluler Freally File Manager
 settings-mobile-pair-button = Mulai pemasangan
 settings-mobile-revoke-button = Cabut
 settings-mobile-no-pairings = Belum ada perangkat berpasangan
@@ -905,7 +905,7 @@ push-toast-failed = Push ke { $device } gagal: { $reason }
 # Reflinked / 🔗 Hardlinked / 🧩 Chunk-shared / 📋 Copied) +
 # pre-pass dedup-scan modal.
 settings-dedup-heading = Dedup tujuan
-settings-dedup-hint = Saat sumber dan tujuan berbagi volume, Copy That dapat mengklona berkas di tingkat sistem berkas alih-alih menyalin bita. Reflink instan + aman; hardlink lebih cepat tetapi kedua nama berbagi keadaan.
+settings-dedup-hint = Saat sumber dan tujuan berbagi volume, Freally File Manager dapat mengklona berkas di tingkat sistem berkas alih-alih menyalin bita. Reflink instan + aman; hardlink lebih cepat tetapi kedua nama berbagi keadaan.
 settings-dedup-mode-auto = Tangga otomatis (reflink → hardlink → chunk → salin)
 settings-dedup-mode-reflink-only = Reflink saja
 settings-dedup-mode-hardlink-aggressive = Agresif (reflink + hardlink bahkan pada berkas yang dapat ditulis)
@@ -1101,7 +1101,7 @@ err-pinned-destination-too-many = Anda telah mencapai batas 50 tujuan baki. Hapu
 # returned manifest + grant state.
 settings-tab-plugins = Plugin
 plugin-heading = Plugin
-plugin-hint = Plugin WASM tersandbox memperluas Copy That dengan hook khusus. Setiap plugin berjalan di bawah batas CPU dan memori per panggilan dan hanya melihat kapabilitas host yang Anda berikan.
+plugin-hint = Plugin WASM tersandbox memperluas Freally File Manager dengan hook khusus. Setiap plugin berjalan di bawah batas CPU dan memori per panggilan dan hanya melihat kapabilitas host yang Anda berikan.
 plugin-list-empty = Belum ada plugin terpasang.
 plugin-enabled = Aktif
 plugin-disabled = Nonaktif
@@ -1148,7 +1148,7 @@ diag-label = Diagnostik
 
 # Phase 48 — server mode + observability (Settings → Server).
 settings-tab-server = Server
-server-hint = Jalankan Copy That sebagai server berkas tanpa antarmuka. Pilih protokol yang akan diekspos, atur alamat dan folder yang akan dilayani, dan secara opsional wajibkan autentikasi.
+server-hint = Jalankan Freally File Manager sebagai server berkas tanpa antarmuka. Pilih protokol yang akan diekspos, atur alamat dan folder yang akan dilayani, dan secara opsional wajibkan autentikasi.
 server-protocols = Protokol
 server-bind-addr = Alamat bind
 server-root = Folder yang dilayani

@@ -40,7 +40,7 @@ type Bundle = Record<string, string>;
 
 const BUNDLES: Record<Locale, Bundle> = {
   en: {
-    "title": "Copy That",
+    "title": "Freally File Manager",
     "header.exit": "Exit",
     "pair.heading": "Pair with desktop",
     "pair.continue": "Continue",

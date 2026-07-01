@@ -534,7 +534,7 @@ pub async fn mobile_send_test_push(
         None => HttpDispatcher::new(),
     };
     let payload = PushPayload {
-        title: "Copy That".into(),
+        title: "Freally File Manager".into(),
         body: "Test push from Settings → Mobile".into(),
         icon: None,
         deep_link: None,

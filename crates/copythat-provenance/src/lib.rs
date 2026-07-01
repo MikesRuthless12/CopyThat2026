@@ -1,4 +1,4 @@
-//! Phase 43 — forensic chain-of-custody manifests for Copy That.
+//! Phase 43 — forensic chain-of-custody manifests for Freally File Manager.
 //!
 //! `copythat-provenance` ships:
 //!

@@ -1,4 +1,4 @@
-//! System-wide "paste files via Copy That" hotkey.
+//! System-wide "paste files via Freally File Manager" hotkey.
 //!
 //! Registers the user-configured combo (default `CmdOrCtrl+Shift+V`)
 //! via `tauri-plugin-global-shortcut`. When the combo fires the

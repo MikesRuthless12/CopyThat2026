@@ -15,7 +15,7 @@ pub const MIN_BUFFER_SIZE: usize = 64 * 1024;
 /// Mirror of `copythat_core::options::MAX_BUFFER_SIZE` (16 MiB).
 pub const MAX_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
-/// Default system-wide hotkey for "paste files via Copy That".
+/// Default system-wide hotkey for "paste files via Freally File Manager".
 /// Tauri's `global-shortcut` plugin resolves `CmdOrCtrl` to Cmd on
 /// macOS and Ctrl on Windows / Linux, so one spelling covers all three
 /// hosts. `Shift` avoids colliding with the platform-native paste

@@ -523,7 +523,7 @@ pub async fn dropstack_toggle_window(app: AppHandle) -> Result<(), String> {
     }
     let url = WebviewUrl::App("dropstack.html".into());
     let builder = WebviewWindowBuilder::new(&app, DROPSTACK_WINDOW_LABEL, url)
-        .title("Drop Stack — Copy That")
+        .title("Drop Stack — Freally File Manager")
         .inner_size(380.0, 520.0)
         .min_inner_size(320.0, 240.0)
         .resizable(true)

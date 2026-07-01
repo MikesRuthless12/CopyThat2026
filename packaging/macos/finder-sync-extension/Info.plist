@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Info.plist for the Copy That v1.0.0 Finder Sync Extension.
+  Info.plist for the Freally File Manager v1.0.0 Finder Sync Extension.
 
   This file defines the .appex bundle that macOS Finder loads when
   the main app is installed. The principal class is resolved by
@@ -18,7 +18,7 @@
 
   The .appex sits inside the main app bundle:
 
-    Copy That v1.0.0.app/
+    Freally File Manager v1.0.0.app/
       Contents/
         PlugIns/
           CopyThatFinderSync.appex/
@@ -30,7 +30,7 @@
     <string>en</string>
 
     <key>CFBundleDisplayName</key>
-    <string>Copy That Finder Sync</string>
+    <string>Freally File Manager Finder Sync</string>
 
     <key>CFBundleExecutable</key>
     <string>CopyThatFinderSync</string>

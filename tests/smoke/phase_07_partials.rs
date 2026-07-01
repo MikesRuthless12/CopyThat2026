@@ -65,7 +65,7 @@ fn macos_services_plist_declares_both_selectors() {
     // Both items should be on the same NSPortName so the OS routes
     // them to the running app.
     assert!(body.contains("<key>NSPortName</key>"));
-    assert!(body.contains("Copy That"));
+    assert!(body.contains("Freally File Manager"));
 }
 
 #[test]

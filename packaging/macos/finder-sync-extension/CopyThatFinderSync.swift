@@ -1,6 +1,6 @@
-// Copy That v1.0.0 — Finder Sync Extension.
+// Freally File Manager v1.0.0 — Finder Sync Extension.
 //
-// Registers "Copy with Copy That" and "Move with Copy That" in the
+// Registers "Copy with Freally File Manager" and "Move with Freally File Manager" in the
 // Finder context menu (right-click on a selection) and in the Finder
 // toolbar. Every action spawns the app binary with the same argv the
 // Phase 7a CLI parser expects:
@@ -8,7 +8,7 @@
 //     copythat --enqueue <copy|move> -- <paths…>
 //
 // The extension lives in a .appex bundle embedded inside the main
-// `Copy That v1.0.0.app` (see packaging/macos/scripts/bundle-appex.sh).
+// `Freally File Manager v1.0.0.app` (see packaging/macos/scripts/bundle-appex.sh).
 // macOS loads the bundle in a sandboxed XPC process; the spawned
 // `copythat` child runs in the user's session, and the Phase 7a
 // single-instance plumbing hands its argv to the live app instance.
@@ -25,7 +25,7 @@ import FinderSync
 private let copyThatBinaryCandidates: [String] = [
     "/usr/local/bin/copythat",
     "/opt/homebrew/bin/copythat",
-    "/Applications/Copy That v1.0.0.app/Contents/MacOS/copythat",
+    "/Applications/Freally File Manager v1.0.0.app/Contents/MacOS/copythat",
 ]
 
 /// Root the sync watches. `/` covers every local volume; macOS scopes
@@ -49,11 +49,11 @@ final class CopyThatFinderSync: FIFinderSync {
     // MARK: - Menu builder
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
-        let menu = NSMenu(title: "Copy That")
+        let menu = NSMenu(title: "Freally File Manager")
         switch menuKind {
         case .contextualMenuForItems, .contextualMenuForContainer, .toolbarItemMenu:
             let copyItem = NSMenuItem(
-                title: "Copy with Copy That",
+                title: "Copy with Freally File Manager",
                 action: #selector(copyAction(_:)),
                 keyEquivalent: ""
             )
@@ -63,7 +63,7 @@ final class CopyThatFinderSync: FIFinderSync {
             )
 
             let moveItem = NSMenuItem(
-                title: "Move with Copy That",
+                title: "Move with Freally File Manager",
                 action: #selector(moveAction(_:)),
                 keyEquivalent: ""
             )
@@ -99,7 +99,7 @@ final class CopyThatFinderSync: FIFinderSync {
 
     // MARK: - Private
 
-    /// Resolve the Copy That binary and launch it detached with the
+    /// Resolve the Freally File Manager binary and launch it detached with the
     /// current selection.
     private func spawn(verb: String) {
         let controller = FIFinderSyncController.default()

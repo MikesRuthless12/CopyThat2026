@@ -1,4 +1,4 @@
-//! Phase 33 — mount Copy That's chunk store + history archive as a
+//! Phase 33 — mount Freally File Manager's chunk store + history archive as a
 //! read-only filesystem.
 //!
 //! # Phase 33a scope (this crate, today)

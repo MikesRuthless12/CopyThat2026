@@ -97,7 +97,7 @@ pub async fn notifications_test(state: tauri::State<'_, AppState>) -> Result<usi
         sinks,
         JobNotification {
             kind: "test".into(),
-            title: "Copy That".into(),
+            title: "Freally File Manager".into(),
             body: "Test notification".into(),
             ok: true,
         },

@@ -150,7 +150,7 @@ fn compute(ctx_bytes: &[u8]) -> HookOutcome {
         payload: DiscordPayload {
             content: summary.clone(),
             embeds: [DiscordEmbed {
-                title: "Copy That — job complete",
+                title: "Freally File Manager — job complete",
                 description: summary,
                 color: if files_failed == 0 { 0x57F287 } else { 0xED4245 },
                 fields: vec![

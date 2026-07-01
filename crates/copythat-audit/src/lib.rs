@@ -2,7 +2,7 @@
 //!
 //! # Scope
 //!
-//! Copy That's existing footer-drawer error log is an in-memory list
+//! Freally File Manager's existing footer-drawer error log is an in-memory list
 //! useful for a sysadmin watching a single desktop job. It does not
 //! satisfy the enterprise requirements auditors actually ask for —
 //! persistent, tamper-evident, machine-ingestible logs in a format

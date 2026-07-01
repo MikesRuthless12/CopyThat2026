@@ -82,8 +82,8 @@
     }}
   >
     <div class="modal">
-      <img src="/icons/icon-128.png" alt="Copy That" class="logo" />
-      <h2 id="mobile-onboarding-title">Get the Copy That mobile companion</h2>
+      <img src="/icons/icon-128.png" alt="Freally File Manager" class="logo" />
+      <h2 id="mobile-onboarding-title">Get the Freally File Manager mobile companion</h2>
       <p class="hint">
         Drive your desktop's copy / move / sync / secure-delete jobs
         from your phone over a private WebRTC link. Scan the QR

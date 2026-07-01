@@ -78,7 +78,7 @@ def main():
         )
         labels = sorted(i.get_property("label") for i in items)
         check(
-            labels == ["Copy with Copy That", "Move with Copy That"],
+            labels == ["Copy with Freally File Manager", "Move with Freally File Manager"],
             "unexpected menu item labels: {}".format(labels),
         )
 

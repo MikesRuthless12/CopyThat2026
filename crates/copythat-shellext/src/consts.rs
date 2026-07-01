@@ -8,13 +8,13 @@
 //!
 //! The GUIDs were generated for this project — they are not
 //! recycled from any Microsoft sample; the `0xA7D2_C001` / `C002`
-//! prefix is a mnemonic ("Copy That class 01 / 02").
+//! prefix is a mnemonic ("Freally File Manager class 01 / 02").
 
-/// CLSID for the "Copy with Copy That" `IExplorerCommand`.
+/// CLSID for the "Copy with Freally File Manager" `IExplorerCommand`.
 /// `{A7D2C001-C097-4C96-8F7A-5C970C097001}`.
 pub const CLSID_COPY_STR: &str = "{A7D2C001-C097-4C96-8F7A-5C970C097001}";
 
-/// CLSID for the "Move with Copy That" `IExplorerCommand`.
+/// CLSID for the "Move with Freally File Manager" `IExplorerCommand`.
 /// `{A7D2C002-C097-4C96-8F7A-5C970C097002}`.
 pub const CLSID_MOVE_STR: &str = "{A7D2C002-C097-4C96-8F7A-5C970C097002}";
 
@@ -30,16 +30,16 @@ pub const VERB_MOVE: &str = "CopyThat.Move";
 /// verb. English; Windows does not yet read a `MUIVerb` resource
 /// from us — a future phase can thread localised variants through a
 /// `MUIVerb` / `SubCommands` registration.
-pub const DISPLAY_COPY: &str = "Copy with Copy That";
+pub const DISPLAY_COPY: &str = "Copy with Freally File Manager";
 
 /// Display string for the move verb. See [`DISPLAY_COPY`].
-pub const DISPLAY_MOVE: &str = "Move with Copy That";
+pub const DISPLAY_MOVE: &str = "Move with Freally File Manager";
 
 /// ProgID-style friendly names under `HKCR\CLSID\{guid}\(default)`.
-pub const PROG_COPY: &str = "Copy That v0.19.84 — Copy command";
+pub const PROG_COPY: &str = "Freally File Manager v0.19.85 — Copy command";
 
 /// See [`PROG_COPY`].
-pub const PROG_MOVE: &str = "Copy That v0.19.84 — Move command";
+pub const PROG_MOVE: &str = "Freally File Manager v0.19.85 — Move command";
 
 /// Name of the target binary the verbs invoke. Resolved via PATH;
 /// Phase 16 packaging puts `copythat.exe` there (on Windows today,

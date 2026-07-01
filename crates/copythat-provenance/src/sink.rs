@@ -68,7 +68,7 @@ pub struct SinkConfig {
     /// Username recorded in the manifest. Defaults to
     /// `whoami::username`; callers can override.
     pub user: String,
-    /// Copy That version recorded in the manifest. Defaults to the
+    /// Freally File Manager version recorded in the manifest. Defaults to the
     /// current crate's `CARGO_PKG_VERSION`.
     pub copythat_version: String,
 }

@@ -149,26 +149,26 @@ pub fn all_registration_keys(scope: InstallScope, dll_path: &str) -> Vec<(String
     out.extend(class_registration_keys(
         scope,
         CLSID_COPY_STR,
-        "Copy That v0.19.84 — Copy command",
+        "Freally File Manager v0.19.85 — Copy command",
         dll_path,
     ));
     out.extend(class_registration_keys(
         scope,
         CLSID_MOVE_STR,
-        "Copy That v0.19.84 — Move command",
+        "Freally File Manager v0.19.85 — Move command",
         dll_path,
     ));
     out.extend(verb_registration_keys(
         scope,
         VERB_COPY,
         CLSID_COPY_STR,
-        "Copy with Copy That",
+        "Copy with Freally File Manager",
     ));
     out.extend(verb_registration_keys(
         scope,
         VERB_MOVE,
         CLSID_MOVE_STR,
-        "Move with Copy That",
+        "Move with Freally File Manager",
     ));
     out
 }
@@ -417,7 +417,13 @@ mod tests {
         let keys = all_registration_keys(InstallScope::PerUser, r"C:\copythat-shellext.dll");
         // 2 classes × 3 tuples + 2 verbs × 6 tuples = 18.
         assert_eq!(keys.len(), 18);
-        assert!(keys.iter().any(|(_, _, v)| v == "Copy with Copy That"));
-        assert!(keys.iter().any(|(_, _, v)| v == "Move with Copy That"));
+        assert!(
+            keys.iter()
+                .any(|(_, _, v)| v == "Copy with Freally File Manager")
+        );
+        assert!(
+            keys.iter()
+                .any(|(_, _, v)| v == "Move with Freally File Manager")
+        );
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "copythat-mount"
-description = "Phase 33 — mount Copy That's chunk store + history archive as a read-only filesystem (FUSE on Unix, WinFsp on Windows)."
+description = "Phase 33 — mount Freally File Manager's chunk store + history archive as a read-only filesystem (FUSE on Unix, WinFsp on Windows)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -24,7 +24,7 @@ workspace = true
 #   on Windows; no-op elsewhere. This replaces the initial
 #   `winfsp-sys` candidate, which is GPL-3.0 and violates the
 #   workspace's permissive-only `deny.toml` allowlist. `winfsp_wrs`
-#   re-implements the FFI surface under MIT so Copy That stays
+#   re-implements the FFI surface under MIT so Freally File Manager stays
 #   commercially shippable.
 #
 # The `winfsp` feature also requires the WinFsp driver installed

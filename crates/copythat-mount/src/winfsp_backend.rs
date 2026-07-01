@@ -82,7 +82,7 @@ mod winfsp_body {
     //! the live path once those are set up.
     //!
     //! **Deferred to Phase 34-ish**: write paths (create /
-    //! overwrite / rename / delete). Copy That's mount surface is
+    //! overwrite / rename / delete). Freally File Manager's mount surface is
     //! read-only by design: users browse snapshots, not modify
     //! them. Write-through to the chunk store + history would
     //! need a full re-architecture that's a separate milestone.

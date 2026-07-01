@@ -7,8 +7,8 @@
   <metadata>
     <id>copythat</id>
     <version>1.0.0</version>
-    <title>Copy That v1.0.0</title>
-    <authors>Copy That Contributors</authors>
+    <title>Freally File Manager v1.0.0</title>
+    <authors>Freally File Manager Contributors</authors>
     <projectUrl>https://github.com/MikesRuthless12/CopyThat2026</projectUrl>
     <licenseUrl>https://github.com/MikesRuthless12/CopyThat2026/blob/main/LICENSE</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
@@ -19,7 +19,7 @@
     <tags>copy file-copy teracopy verify rust tauri admin</tags>
     <summary>Byte-exact cross-platform file copier (Rust + Tauri 2).</summary>
     <description><![CDATA[
-Copy That v1.0.0 is a lightweight, cross-platform, async, byte-exact
+Freally File Manager v1.0.0 is a lightweight, cross-platform, async, byte-exact
 file and folder copier. Matches every TeraCopy feature while staying
 as fast as — or faster than — Explorer, Finder, cp, and rsync for
 typical desktop workloads.
@@ -27,7 +27,7 @@ typical desktop workloads.
 Features include:
 - Verify after copy (CRC32 / MD5 / SHA-1/256/512 / xxHash3 / BLAKE3)
 - Reflink clones on Btrfs / XFS / APFS / ReFS
-- Shell integration (right-click → Copy with Copy That)
+- Shell integration (right-click → Copy with Freally File Manager)
 - SQLite history + totals dashboard
 - Multi-pass secure delete
 - 18-language UI

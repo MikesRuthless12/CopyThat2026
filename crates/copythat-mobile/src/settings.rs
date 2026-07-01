@@ -23,7 +23,7 @@ pub struct MobileSettings {
     pub pair_enabled: bool,
     /// "Always connect to mobile app" — when `true`, the runner
     /// registers the persisted `desktop_peer_id` with the PeerJS
-    /// broker every time Copy That launches, so already-paired
+    /// broker every time Freally File Manager launches, so already-paired
     /// phones can connect anytime the desktop is running.
     ///
     /// **Auto-connect requires at least one paired device.** If

@@ -13,7 +13,7 @@
   <h2>Desktop unreachable</h2>
   <p class="muted">{message}</p>
   <p>
-    Open Copy That on your desktop or laptop and confirm Settings →
+    Open Freally File Manager on your desktop or laptop and confirm Settings →
     Mobile shows the toggle as <em>active</em>, then retry below.
   </p>
   <button type="button" onclick={onRetry}>Retry connection</button>

@@ -7,7 +7,7 @@
 //! the path list and the current paste-shortcut combo. The frontend
 //! turns that into a subtle toast:
 //!
-//! > "3 files on clipboard — ⌘⇧V to paste via Copy That"
+//! > "3 files on clipboard — ⌘⇧V to paste via Freally File Manager"
 //!
 //! No polling happens when the setting is off. A second toggle to
 //! the on state spawns a fresh task; the previous task has already
@@ -20,7 +20,7 @@
 //! - **macOS** has no push-style clipboard notification — polling
 //!   `NSPasteboard.changeCount` is the documented pattern.
 //! - **Linux Wayland** sandboxes clipboard access to the focused
-//!   window; polling only sees our own reads when Copy That has
+//!   window; polling only sees our own reads when Freally File Manager has
 //!   focus. That's the expected Wayland behaviour.
 
 use std::sync::Arc;

@@ -1,4 +1,4 @@
-# Copy That mobile companion (PWA)
+# Freally File Manager mobile companion (PWA)
 
 Phase 37 — phone-side companion app. Connects to the desktop's
 PeerJS peer-id over WebRTC and drives the full `/control` surface

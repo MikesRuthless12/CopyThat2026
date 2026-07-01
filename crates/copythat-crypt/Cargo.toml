@@ -1,6 +1,6 @@
 [package]
 name = "copythat-crypt"
-description = "Phase 35 — transparent destination encryption via `age` (X25519 / passphrase / SSH recipients) + smart on-the-fly zstd compression with a per-extension deny heuristic. Feeds Copy That's engine pipeline: source → compress → encrypt → dest."
+description = "Phase 35 — transparent destination encryption via `age` (X25519 / passphrase / SSH recipients) + smart on-the-fly zstd compression with a per-extension deny heuristic. Feeds Freally File Manager's engine pipeline: source → compress → encrypt → dest."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

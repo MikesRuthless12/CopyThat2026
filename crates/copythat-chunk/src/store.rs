@@ -746,7 +746,7 @@ fn decode_locator(bytes: &[u8]) -> Result<ChunkLocator> {
 }
 
 /// Default path: `<data-dir>/chunks/`. Sits next to `history.db` +
-/// `copythat-journal.redb` under the Copy That project dir.
+/// `copythat-journal.redb` under the Freally File Manager project dir.
 pub fn default_chunk_store_path() -> Result<PathBuf> {
     let dirs = directories::ProjectDirs::from("com", "CopyThat", "CopyThat2026")
         .ok_or(ChunkStoreError::NoDataDir)?;

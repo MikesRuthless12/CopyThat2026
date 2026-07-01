@@ -28,7 +28,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 #[command(
     name = "copythat",
     bin_name = "copythat",
-    about = "Copy That CLI — byte-exact file copy, sync, verify and audit for CI/CD pipelines.",
+    about = "Freally File Manager CLI — byte-exact file copy, sync, verify and audit for CI/CD pipelines.",
     version,
     propagate_version = true,
     after_help = "Exit codes: 0 success, 1 error, 2 pending, 3 collision, 4 verify-fail, 5 net, 6 perm, 7 disk-full, 8 cancel, 9 config."

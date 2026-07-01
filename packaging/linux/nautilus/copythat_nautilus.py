@@ -1,6 +1,6 @@
-# Copy That v1.0.0 — Nautilus extension.
+# Freally File Manager v1.0.0 — Nautilus extension.
 #
-# Adds "Copy with Copy That" and "Move with Copy That" entries to the
+# Adds "Copy with Freally File Manager" and "Move with Freally File Manager" entries to the
 # right-click menu on selected files and folders in GNOME Files
 # (Nautilus 3.30+). Phase 7a ships this as a skeleton resource; the
 # packaging step (Phase 16, deb/rpm/AppImage postinst) drops it into
@@ -35,7 +35,7 @@ def _spawn_copythat(verb: str, paths: list) -> None:
 
     Detached so Nautilus doesn't wait on the GUI: stdin/stdout/stderr
     go to /dev/null, close_fds=True keeps Nautilus's fds private, and
-    start_new_session puts Copy That in its own process group so a
+    start_new_session puts Freally File Manager in its own process group so a
     later Nautilus restart does not take it down.
     """
     argv = ["copythat", "--enqueue", verb, "--", *paths]
@@ -58,8 +58,8 @@ def _spawn_copythat(verb: str, paths: list) -> None:
 
 
 class CopyThatMenuProvider(GObject.GObject, Nautilus.MenuProvider):
-    """Menu provider contributing "Copy with Copy That" and
-    "Move with Copy That" to file/folder selections."""
+    """Menu provider contributing "Copy with Freally File Manager" and
+    "Move with Freally File Manager" to file/folder selections."""
 
     def get_file_items(self, window, files):
         paths = [_uri_to_path(f.get_uri()) for f in files]
@@ -69,15 +69,15 @@ class CopyThatMenuProvider(GObject.GObject, Nautilus.MenuProvider):
 
         copy_item = Nautilus.MenuItem(
             name="CopyThatMenuProvider::Copy",
-            label="Copy with Copy That",
-            tip="Queue a copy job with Copy That v1.0.0",
+            label="Copy with Freally File Manager",
+            tip="Queue a copy job with Freally File Manager v1.0.0",
         )
         copy_item.connect("activate", self._on_copy, paths)
 
         move_item = Nautilus.MenuItem(
             name="CopyThatMenuProvider::Move",
-            label="Move with Copy That",
-            tip="Queue a move job with Copy That v1.0.0",
+            label="Move with Freally File Manager",
+            tip="Queue a move job with Freally File Manager v1.0.0",
         )
         move_item.connect("activate", self._on_move, paths)
 

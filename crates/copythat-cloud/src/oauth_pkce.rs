@@ -204,9 +204,9 @@ pub fn run_pkce_redirect_listener(
 
     // Send a minimal success page before returning.
     let body = if code.is_none() {
-        "<h1>Copy That — authorization failed</h1><p>Please return to the app.</p>"
+        "<h1>Freally File Manager — authorization failed</h1><p>Please return to the app.</p>"
     } else {
-        "<h1>Copy That — authorization complete</h1><p>You can close this window.</p>"
+        "<h1>Freally File Manager — authorization complete</h1><p>You can close this window.</p>"
     };
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",

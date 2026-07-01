@@ -10,7 +10,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "LicenseRef-AllRightsReserved"
-authors = ["Copy That Contributors"]
+authors = ["Freally File Manager Contributors"]
 description = "Phase 46.5 sample plugin: rehome copied files under YYYY/MM/ based on EXIF DateTaken."
 publish = false
 

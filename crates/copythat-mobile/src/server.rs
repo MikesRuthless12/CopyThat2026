@@ -265,7 +265,7 @@ pub enum RemoteResponse {
     /// Desktop is exiting (user closed the window, OS shutdown,
     /// crash recovery). Streamed to every connected phone right
     /// before the data channel closes so the PWA can render an
-    /// explicit "Desktop exited — reconnect when Copy That is
+    /// explicit "Desktop exited — reconnect when Freally File Manager is
     /// running" screen instead of a generic disconnect.
     ServerShuttingDown { reason: String },
     /// Reply to `GetLocale`. Empty string = "auto-detect"; the PWA

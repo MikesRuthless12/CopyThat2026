@@ -1,6 +1,6 @@
 [package]
 name = "copythat-cloud"
-description = "Phase 32 — cloud backend matrix for Copy That. Wraps OpenDAL with a typed Backend / BackendKind / CopyTarget surface and OS-keychain credential storage."
+description = "Phase 32 — cloud backend matrix for Freally File Manager. Wraps OpenDAL with a typed Backend / BackendKind / CopyTarget surface and OS-keychain credential storage."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

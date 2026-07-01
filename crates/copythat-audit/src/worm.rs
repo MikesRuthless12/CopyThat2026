@@ -4,7 +4,7 @@
 //!
 //! - **Linux** — the ext4 / xfs / btrfs "append-only" inode flag
 //!   (`FS_APPEND_FL`, `a` in `lsattr`). Setting it requires
-//!   CAP_LINUX_IMMUTABLE; when Copy That runs unprivileged this
+//!   CAP_LINUX_IMMUTABLE; when Freally File Manager runs unprivileged this
 //!   layer surfaces [`WormError::Apply`] with a clear message and
 //!   the Settings UI disables the toggle.
 //! - **macOS** — the `chflags uappnd` user-level append-only flag

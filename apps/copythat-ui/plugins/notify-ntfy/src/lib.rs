@@ -115,7 +115,7 @@ fn compute(ctx_bytes: &[u8]) -> HookOutcome {
         job_id
     );
     let mut headers: BTreeMap<&'static str, String> = BTreeMap::new();
-    headers.insert("Title", "Copy That — job complete".to_string());
+    headers.insert("Title", "Freally File Manager — job complete".to_string());
     headers.insert("Priority", priority.to_string());
     headers.insert(
         "Tags",

@@ -360,8 +360,8 @@ pub(crate) async fn parallel_chunk_copy(
 ///
 /// Security note: an admin user using this acknowledges that the
 /// pre-allocated extent contains whatever bytes were on those
-/// clusters before. Copy That guarantees the workers write valid
-/// data over every byte, so the risk is bounded to the Copy That
+/// clusters before. Freally File Manager guarantees the workers write valid
+/// data over every byte, so the risk is bounded to the Freally File Manager
 /// process — there's no cross-process data exposure.
 #[cfg(windows)]
 fn try_skip_zero_fill(file: &File, size: u64) -> bool {

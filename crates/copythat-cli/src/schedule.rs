@@ -384,7 +384,7 @@ fn render_systemd_user(spec: &JobSpec, spec_path: &Path, schedule: &ScheduleSpec
     // path the stanza belongs in. The whole output is one String for
     // the existing `RenderedSchedule.body` shape.
     format!(
-        "# ===== ~/.config/systemd/user/copythat-scheduled-job.service =====\n[Unit]\nDescription=Copy That scheduled job\n\n[Service]\nType=oneshot\nExecStart={exec}\n\n# ===== ~/.config/systemd/user/copythat-scheduled-job.timer =====\n{note_block}[Unit]\nDescription=Copy That scheduled job timer\n\n[Timer]\nOnCalendar={on_calendar}\nPersistent=true\nUnit=copythat-scheduled-job.service\n\n[Install]\nWantedBy=timers.target\n"
+        "# ===== ~/.config/systemd/user/copythat-scheduled-job.service =====\n[Unit]\nDescription=Freally File Manager scheduled job\n\n[Service]\nType=oneshot\nExecStart={exec}\n\n# ===== ~/.config/systemd/user/copythat-scheduled-job.timer =====\n{note_block}[Unit]\nDescription=Freally File Manager scheduled job timer\n\n[Timer]\nOnCalendar={on_calendar}\nPersistent=true\nUnit=copythat-scheduled-job.service\n\n[Install]\nWantedBy=timers.target\n"
     )
 }
 

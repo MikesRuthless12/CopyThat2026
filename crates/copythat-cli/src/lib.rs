@@ -1,4 +1,4 @@
-//! `copythat-cli` — Phase 36 command-line surface for Copy That.
+//! `copythat-cli` — Phase 36 command-line surface for Freally File Manager.
 //!
 //! Goal: a `copythat` binary suitable for CI/CD pipelines, automation
 //! scripts, and headless servers. Stable JSON-Lines output (`--json`),

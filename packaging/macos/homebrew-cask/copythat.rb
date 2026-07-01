@@ -1,4 +1,4 @@
-# Homebrew cask for Copy That v1.0.0.
+# Homebrew cask for Freally File Manager v1.0.0.
 #
 # Lives in a dedicated `copythat-homebrew` tap (free to create and
 # host on GitHub). Users install with:
@@ -21,7 +21,7 @@ cask "copythat" do
     url "https://github.com/MikesRuthless12/CopyThat2026/releases/download/v#{version}/CopyThat_#{version}_x64.dmg"
   end
 
-  name "Copy That v1.0.0"
+  name "Freally File Manager v1.0.0"
   desc "Byte-exact cross-platform file copier (Rust + Tauri 2)"
   homepage "https://github.com/MikesRuthless12/CopyThat2026"
 
@@ -32,7 +32,7 @@ cask "copythat" do
 
   depends_on macos: ">= :monterey"
 
-  app "Copy That v1.0.0.app"
+  app "Freally File Manager v1.0.0.app"
 
   zap trash: [
     "~/Library/Application Support/CopyThat2026",

@@ -1,5 +1,5 @@
-app-name = Copy That v0.19.84
-window-title = Copy That v0.19.84
+app-name = Freally File Manager v0.19.85
+window-title = Freally File Manager v0.19.85
 shred-ssd-advisory = 警告：此目标位于 SSD 上。多次覆写无法可靠清除闪存数据，因为磨损均衡和预留空间会将数据从逻辑块地址下移走。对于固态存储介质，请优先使用 ATA SECURE ERASE、带安全擦除的 NVMe Format，或使用全盘加密并丢弃密钥。
 
 # Global aggregate states (header pill)
@@ -158,7 +158,7 @@ toast-move-queued = 移动已排队
 toast-error-resolved = 错误已解决
 toast-collision-resolved = 冲突已解决
 toast-elevated-unavailable = 提权重试将在第 17 阶段推出 — 目前尚不可用
-toast-clipboard-files-detected = 剪贴板上有文件 — 按下粘贴快捷键即可通过 Copy That 复制
+toast-clipboard-files-detected = 剪贴板上有文件 — 按下粘贴快捷键即可通过 Freally File Manager 复制
 toast-clipboard-no-files = 剪贴板中没有可粘贴的文件
 toast-error-log-exported = 错误日志已导出
 
@@ -357,9 +357,9 @@ settings-error-display-drawer = 抽屉（非阻塞）
 settings-error-display-mode-hint = 模态框会让队列暂停直到你做出决定。抽屉则让队列继续运行，并允许你在角落里逐一处理错误。
 settings-paste-shortcut = 通过全局快捷键粘贴文件
 settings-paste-shortcut-combo = 快捷键组合
-settings-paste-shortcut-hint = 在系统任意位置按下此组合键，即可通过 Copy That 粘贴从 Explorer / Finder / Files 复制的文件。CmdOrCtrl 在 macOS 上解析为 Cmd，在 Windows / Linux 上解析为 Ctrl。
+settings-paste-shortcut-hint = 在系统任意位置按下此组合键，即可通过 Freally File Manager 粘贴从 Explorer / Finder / Files 复制的文件。CmdOrCtrl 在 macOS 上解析为 Cmd，在 Windows / Linux 上解析为 Ctrl。
 settings-clipboard-watcher = 监视剪贴板中复制的文件
-settings-clipboard-watcher-hint = 当文件 URL 出现在剪贴板上时显示提示，提醒你可通过 Copy That 粘贴。启用时每 500 毫秒轮询一次。
+settings-clipboard-watcher-hint = 当文件 URL 出现在剪贴板上时显示提示，提醒你可通过 Freally File Manager 粘贴。启用时每 500 毫秒轮询一次。
 
 # Transfer tab
 settings-buffer-size = 缓冲区大小
@@ -383,7 +383,7 @@ settings-force-parallel-chunks-hint = 将每个大文件复制拆分为并发块
 # Shell tab
 settings-context-menu = 启用 shell 右键菜单项
 settings-intercept-copy = 拦截默认复制处理程序（Windows）
-settings-intercept-copy-hint = 启用后，Explorer 的 Ctrl+C / Ctrl+V 会经由 Copy That 处理。注册功能将在第 14 阶段推出。
+settings-intercept-copy-hint = 启用后，Explorer 的 Ctrl+C / Ctrl+V 会经由 Freally File Manager 处理。注册功能将在第 14 阶段推出。
 settings-notify-completion = 任务完成时通知
 
 # Secure delete tab
@@ -452,7 +452,7 @@ settings-filters-skip-system = 跳过系统文件（仅限 Windows）
 settings-filters-skip-readonly = 跳过只读文件
 
 # Phase 15 — auto-update
-settings-updater-hint = Copy That 最多每天检查一次签名更新。更新会在下次退出应用时安装。
+settings-updater-hint = Freally File Manager 最多每天检查一次签名更新。更新会在下次退出应用时安装。
 settings-updater-auto-check = 启动时检查更新
 settings-updater-channel = 发布渠道
 settings-updater-channel-stable = 稳定版
@@ -488,17 +488,17 @@ settings-on-locked-ask = 首次询问
 settings-on-locked-retry = 短暂重试，然后报出错误
 settings-on-locked-skip = 跳过被锁定的文件
 settings-on-locked-snapshot = 使用文件系统快照
-settings-on-locked-hint = 消除“文件正被其他进程使用”的错误。Copy That 会对源卷拍摄快照（Windows 上为 VSS，Linux 上为 ZFS/Btrfs，macOS 上为 APFS），并从快照副本读取。
+settings-on-locked-hint = 消除“文件正被其他进程使用”的错误。Freally File Manager 会对源卷拍摄快照（Windows 上为 VSS，Linux 上为 ZFS/Btrfs，macOS 上为 APFS），并从快照副本读取。
 snapshot-prompt-title = 此文件正被另一个进程使用
-snapshot-prompt-body = 另一个程序已以独占写入方式打开 { $path }。请选择 Copy That 应如何处理此文件以及同一卷上的类似文件。
+snapshot-prompt-body = 另一个程序已以独占写入方式打开 { $path }。请选择 Freally File Manager 应如何处理此文件以及同一卷上的类似文件。
 snapshot-source-active = 📷 正在从 { $volume } 的 { $kind } 快照读取
 snapshot-create-failed = 无法为源卷创建快照
-snapshot-vss-needs-elevation = 从 VSS 快照读取需要管理员权限。Copy That 将请求你的授权。
+snapshot-vss-needs-elevation = 从 VSS 快照读取需要管理员权限。Freally File Manager 将请求你的授权。
 snapshot-cleanup-failed = 快照帮助程序报告了清理失败 — 卷上可能残留了多余的卷影副本。
 
 # Phase 20 — durable resume journal.
 resume-prompt-title = 恢复之前的传输？
-resume-prompt-body = Copy That 检测到上一会话中有 { $count } 项未完成的传输。请选择对每一项的处理方式。
+resume-prompt-body = Freally File Manager 检测到上一会话中有 { $count } 项未完成的传输。请选择对每一项的处理方式。
 resume-prompt-resume = 恢复
 resume-prompt-resume-all = 全部恢复
 resume-discard-one = 不恢复
@@ -681,7 +681,7 @@ dropstack-clear = 清空堆栈
 dropstack-remove-row = 从堆栈中移除
 dropstack-path-missing-toast = 已拖入 { $path } — 该文件已不存在。
 dropstack-always-on-top = 让 Drop Stack 始终置顶
-dropstack-show-tray-icon = 显示 Copy That 托盘图标
+dropstack-show-tray-icon = 显示 Freally File Manager 托盘图标
 dropstack-open-on-start = 应用启动时自动打开 Drop Stack
 dropstack-count = { $count } 个路径
 
@@ -778,7 +778,7 @@ cloud-error-keychain = 操作系统密钥串访问失败
 settings-tab-remotes = 远程
 settings-tab-mobile = 移动端
 
-# Phase 33 — mount Copy That's chunk store + history archive as a
+# Phase 33 — mount Freally File Manager's chunk store + history archive as a
 # read-only filesystem (FUSE / WinFsp). Surfaced by the History tab
 # context menu's "Mount snapshot" action + the Settings → Advanced
 # "Mount latest on launch" toggle.
@@ -859,7 +859,7 @@ crypt-footer-compressed-badge = 📦 已压缩（zstd）
 # in English (engineering accessibility) but error / info / status
 # strings are localized so a localized desktop installation surfaces
 # CLI errors in the same language as the GUI.
-cli-help-tagline = Copy That CLI — 面向 CI/CD 流水线的字节精确文件复制、同步、校验与审计。
+cli-help-tagline = Freally File Manager CLI — 面向 CI/CD 流水线的字节精确文件复制、同步、校验与审计。
 cli-help-exit-codes = 退出代码：0 成功，1 错误，2 待处理，3 冲突，4 校验失败，5 网络，6 权限，7 磁盘已满，8 取消，9 配置。
 cli-error-bad-args = copy/move 至少需要一个源和一个目标
 cli-error-unknown-algo = 未知的校验算法：{ $algo }
@@ -887,7 +887,7 @@ cli-completions-emitted = { $shell } 的 shell 补全已打印到 stdout
 settings-mobile-heading = 移动端伴侣
 settings-mobile-hint = 配对 iPhone 或 Android 手机，以浏览历史、启动已保存的配置文件和第 36 阶段的 jobspec，并接收完成通知。
 settings-mobile-pair-toggle = 允许新配对
-settings-mobile-pair-active = 配对服务器已激活 — 用 Copy That 移动应用扫描二维码
+settings-mobile-pair-active = 配对服务器已激活 — 用 Freally File Manager 移动应用扫描二维码
 settings-mobile-pair-button = 开始配对
 settings-mobile-revoke-button = 撤销
 settings-mobile-no-pairings = 尚无已配对设备
@@ -905,7 +905,7 @@ push-toast-failed = 向 { $device } 推送失败：{ $reason }
 # Reflinked / 🔗 Hardlinked / 🧩 Chunk-shared / 📋 Copied) +
 # pre-pass dedup-scan modal.
 settings-dedup-heading = 目标去重
-settings-dedup-hint = 当源与目标共享同一卷时，Copy That 可以在文件系统级别克隆文件，而无需复制字节。Reflink 即时且安全；hardlink 更快，但两个名称会共享同一状态。
+settings-dedup-hint = 当源与目标共享同一卷时，Freally File Manager 可以在文件系统级别克隆文件，而无需复制字节。Reflink 即时且安全；hardlink 更快，但两个名称会共享同一状态。
 settings-dedup-mode-auto = 自动阶梯（reflink → hardlink → 块 → 复制）
 settings-dedup-mode-reflink-only = 仅 reflink
 settings-dedup-mode-hardlink-aggressive = 激进（即使是可写文件也使用 reflink + hardlink）
@@ -1151,7 +1151,7 @@ repo-prune-none = 没有可清理的内容
 # returned manifest + grant state.
 settings-tab-plugins = 插件
 plugin-heading = 插件
-plugin-hint = 沙盒化的 WASM 插件以自定义钩子扩展 Copy That。每个插件在每次调用的 CPU 和内存限制下运行，且只能看到你授予它的主机能力。
+plugin-hint = 沙盒化的 WASM 插件以自定义钩子扩展 Freally File Manager。每个插件在每次调用的 CPU 和内存限制下运行，且只能看到你授予它的主机能力。
 plugin-list-empty = 尚未安装任何插件。
 plugin-enabled = 已启用
 plugin-disabled = 已禁用
@@ -1198,7 +1198,7 @@ diag-label = 诊断
 
 # Phase 48 — server mode + observability (Settings → Server).
 settings-tab-server = 服务器
-server-hint = 将 Copy That 作为无界面文件服务器运行。选择要公开的协议，设置地址和要提供的文件夹，并可选择要求身份验证。
+server-hint = 将 Freally File Manager 作为无界面文件服务器运行。选择要公开的协议，设置地址和要提供的文件夹，并可选择要求身份验证。
 server-protocols = 协议
 server-bind-addr = 绑定地址
 server-root = 提供的文件夹

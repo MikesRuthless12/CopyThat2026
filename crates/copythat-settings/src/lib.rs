@@ -293,7 +293,7 @@ pub struct GeneralSettings {
     /// prompt is always modal; only error prompts honour this toggle.
     pub error_display_mode: ErrorDisplayMode,
     /// Register a system-wide hotkey that reads files from the OS
-    /// clipboard and pipes them through Copy That's staging dialog.
+    /// clipboard and pipes them through Freally File Manager's staging dialog.
     /// Enabled by default because it costs nothing until the user
     /// presses the combo — no pasteboard polling, no permission asks.
     pub paste_shortcut_enabled: bool,
@@ -315,7 +315,7 @@ pub struct GeneralSettings {
     /// who prefer a prompt can flip it back via Settings -> General.
     pub auto_resume_interrupted: bool,
     /// Phase 37 follow-up #2 — has the user dismissed the
-    /// first-launch "install the Copy That mobile companion PWA"
+    /// first-launch "install the Freally File Manager mobile companion PWA"
     /// modal? Default `false` — fresh installs see the modal once
     /// and either pair a phone or click "Maybe later" (which flips
     /// this to `true` so the modal doesn't reappear). Re-pairing
@@ -698,7 +698,7 @@ pub enum ReflinkPreference {
 #[serde(default, rename_all = "kebab-case")]
 pub struct ShellSettings {
     /// Register the OS context-menu entries (right-click → "Copy with
-    /// Copy That"). Phase 7 ships the actual COM / Finder Sync / GIO
+    /// Freally File Manager"). Phase 7 ships the actual COM / Finder Sync / GIO
     /// wiring; Phase 12 adds a user-level on/off flag that the
     /// installer respects on first run and subsequent launches honour.
     pub context_menu_enabled: bool,
@@ -1255,7 +1255,7 @@ pub enum RepoCompressionSettings {
     },
 }
 
-/// The chunk store is always optional — Copy That works identically
+/// The chunk store is always optional — Freally File Manager works identically
 /// with it disabled. When enabled, every copy ingests its source
 /// files into the store so that (a) a retry of the same copy only
 /// re-writes the chunks that actually changed, and (b) within one
@@ -1270,7 +1270,7 @@ pub struct ChunkStoreSettings {
     pub enabled: bool,
     /// Absolute path to the chunk-store root. Empty string = "use
     /// `copythat_chunk::default_chunk_store_path` at runtime", which
-    /// resolves to `<data-dir>/chunks/` under the Copy That project
+    /// resolves to `<data-dir>/chunks/` under the Freally File Manager project
     /// dir.
     pub location_override: String,
     /// Maximum store size in bytes. `0` disables the cap (unbounded).
@@ -1423,7 +1423,7 @@ pub enum RetentionSettings {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct DropStackSettings {
-    /// Show the tray icon on app start. Default `true` — Copy That
+    /// Show the tray icon on app start. Default `true` — Freally File Manager
     /// has had a tray icon since Phase 16; the Drop Stack-specific
     /// menu items extend the existing tray surface.
     pub show_tray_icon: bool,
@@ -2140,7 +2140,7 @@ pub struct AuditSettings {
     /// time.
     pub file_path: String,
     /// Kebab-case WORM state (`"off"` / `"on"`). Default `"off"`.
-    /// When `on`, Copy That applies the platform's append-only flag
+    /// When `on`, Freally File Manager applies the platform's append-only flag
     /// after every create / rotation.
     pub worm: String,
     /// Rotation threshold in bytes. Zero = no rotation. Default

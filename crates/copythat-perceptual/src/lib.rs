@@ -1,6 +1,6 @@
 //! Phase 42 — perceptual-hash + visual-similarity dedup.
 //!
-//! Pure-Rust integration of the [`image-hasher`] crate so Copy That
+//! Pure-Rust integration of the [`image-hasher`] crate so Freally File Manager
 //! can warn the user before a copy clobbers a "visually identical"
 //! file at the destination. The hash is a 64-bit fingerprint computed
 //! over the image's perceptual content (not the byte stream); two

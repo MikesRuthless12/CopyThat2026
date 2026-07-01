@@ -26,11 +26,11 @@ use windows_implement::implement;
 use crate::consts::{CLSID_COPY, CLSID_MOVE, DISPLAY_COPY, DISPLAY_MOVE};
 use crate::spawn::{Verb, spawn_detached};
 
-/// "Copy with Copy That" — queues a copy job per selected item.
+/// "Copy with Freally File Manager" — queues a copy job per selected item.
 #[implement(IExplorerCommand)]
 pub struct CopyCommand;
 
-/// "Move with Copy That" — queues a move job per selected item.
+/// "Move with Freally File Manager" — queues a move job per selected item.
 #[implement(IExplorerCommand)]
 pub struct MoveCommand;
 

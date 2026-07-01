@@ -157,7 +157,7 @@ fn class_registration_separates_threading_model_from_default() {
     let keys = class_registration_keys(
         InstallScope::PerUser,
         CLSID_MOVE_STR,
-        "Copy That v0.19.84 — Move command",
+        "Freally File Manager v0.19.85 — Move command",
         r"C:\x.dll",
     );
     // Three tuples: class-key default + InprocServer32 default + InprocServer32 ThreadingModel.

@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use crate::error::ProvenanceError;
 
-/// Default filename Copy That writes inside `<dst-root>/` after a
+/// Default filename Freally File Manager writes inside `<dst-root>/` after a
 /// provenance-enabled job. Surfaces in the Settings UI ("Show
 /// manifest after each job") and the CLI.
 pub const DEFAULT_MANIFEST_FILENAME: &str = ".copythat-provenance.cbor";
@@ -124,7 +124,7 @@ pub struct ProvenanceManifest {
     /// User account the job ran as (`whoami::username`; "unknown" on
     /// failure).
     pub user: String,
-    /// Copy That version that produced the manifest. Matches
+    /// Freally File Manager version that produced the manifest. Matches
     /// `env!("CARGO_PKG_VERSION")` of the crate that called
     /// `finalize_to_path`.
     pub copythat_version: String,

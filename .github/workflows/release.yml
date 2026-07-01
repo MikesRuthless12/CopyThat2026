@@ -286,7 +286,7 @@ jobs:
 
           out = {
               "version": version,
-              "notes": f"Copy That {tag}. See CHANGELOG.md for details.",
+              "notes": f"Freally File Manager {tag}. See CHANGELOG.md for details.",
               "pub_date": "",
               "platforms": platforms,
           }

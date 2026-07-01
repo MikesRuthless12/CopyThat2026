@@ -1,5 +1,5 @@
 <!--
-  Copy That mobile companion — root component.
+  Freally File Manager mobile companion — root component.
 
   States:
   - "unpaired" — show pair-from-QR screen.
@@ -29,7 +29,7 @@
   let pair = $state<StoredPair | null>(loadStoredPair());
   /// Set when the desktop emits a `server_shutting_down` event
   /// just before exiting. Surfaces the explicit "Desktop exited
-  /// — reconnect when Copy That is running again" message instead
+  /// — reconnect when Freally File Manager is running again" message instead
   /// of the generic disconnect copy.
   let shutdownReason = $state<string | null>(null);
 
@@ -102,8 +102,8 @@
 </script>
 
 <header class="header">
-  <img src="/icons/icon-128.png" alt="Copy That" class="logo" />
-  <span class="title">Copy That</span>
+  <img src="/icons/icon-128.png" alt="Freally File Manager" class="logo" />
+  <span class="title">Freally File Manager</span>
   {#if pair}
     <button type="button" class="secondary exit" onclick={handleExit}>
       Exit
@@ -121,7 +121,7 @@
   {:else if status.kind === "error" || status.kind === "disconnected"}
     <Unreachable
       message={shutdownReason
-        ? `Desktop exited (${shutdownReason}). Reconnect to your Copy That desktop app to resume control.`
+        ? `Desktop exited (${shutdownReason}). Reconnect to your Freally File Manager desktop app to resume control.`
         : status.kind === "error"
           ? status.message
           : "Disconnected from desktop."}

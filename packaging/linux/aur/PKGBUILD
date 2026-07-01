@@ -1,6 +1,6 @@
-# Maintainer: Copy That Contributors <https://github.com/MikesRuthless12/CopyThat2026>
+# Maintainer: Freally File Manager Contributors <https://github.com/MikesRuthless12/CopyThat2026>
 #
-# AUR binary package that installs the .deb-converted Copy That v1.0.0
+# AUR binary package that installs the .deb-converted Freally File Manager v1.0.0
 # on Arch-family distributions. Free to publish to aur.archlinux.org.
 # The `sha256sums` array is a placeholder; the release helper rewrites
 # it from the freshly-built .deb at publish time.

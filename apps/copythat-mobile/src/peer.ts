@@ -69,7 +69,7 @@ export class PeerLink {
 
     this.peer.on("error", (err) => {
       const message = err && (err as { type?: string }).type === "peer-unavailable"
-        ? "Desktop is not online — start Copy That on your computer."
+        ? "Desktop is not online — start Freally File Manager on your computer."
         : `${err}`;
       this.setStatus({ kind: "error", message });
     });

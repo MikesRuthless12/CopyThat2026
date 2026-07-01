@@ -131,10 +131,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     # This job does two full workspace compiles (clippy --all-targets, then
     # cargo test --workspace --no-fail-fast) plus the heavy phase_18_e2e suite,
-    # so it legitimately runs ~30-40 min. Cap at 50 so a genuine hang still
-    # fails fast without killing a healthy run — the old 30-min cap was right at
-    # the real workload's edge and was timing the job out.
-    timeout-minutes: 50
+    # so it legitimately runs ~30-40 min warm — or ~50-55 min COLD, e.g. the
+    # first run after a stable-toolchain bump (rust 1.94 -> 1.96) evicts every
+    # Swatinem/rust-cache entry and forces a full recompile. Cap at 65 so a
+    # genuine hang still fails fast without cancelling a healthy cold run (the
+    # 50-min cap cancelled the ubuntu leg mid-Test on the 1.96 bump).
+    timeout-minutes: 65
     strategy:
       fail-fast: false
       matrix:

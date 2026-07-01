@@ -169,7 +169,7 @@
 <div class="panel">
   <h2>Pair with desktop</h2>
   <p class="muted">
-    Open Copy That on your desktop, click <em>Settings → Mobile → Start
+    Open Freally File Manager on your desktop, click <em>Settings → Mobile → Start
     pairing</em>, and scan the QR with your camera. Then paste or scan
     the resulting URL here.
   </p>

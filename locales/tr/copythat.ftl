@@ -1,5 +1,5 @@
-app-name = Copy That v0.19.84
-window-title = Copy That v0.19.84
+app-name = Freally File Manager v0.19.85
+window-title = Freally File Manager v0.19.85
 shred-ssd-advisory = Uyarı: bu hedef bir SSD üzerinde bulunuyor. Çok geçişli üzerine yazmalar flash belleği güvenilir şekilde temizlemez; çünkü aşınma dengeleme ve fazla yer ayırma, verileri mantıksal blok adresinin altından taşır. Katı hal ortamları için ATA SECURE ERASE, Güvenli Silmeli NVMe Format veya anahtarı imha edilen tam disk şifrelemesini tercih edin.
 
 # Global aggregate states (header pill)
@@ -158,7 +158,7 @@ toast-move-queued = Taşıma kuyruğa alındı
 toast-error-resolved = Hata çözüldü
 toast-collision-resolved = Çakışma çözüldü
 toast-elevated-unavailable = Yükseltilmiş yeniden deneme Aşama 17'de gelecek — henüz kullanılamıyor
-toast-clipboard-files-detected = Panoda dosyalar var — Copy That ile kopyalamak için yapıştırma kısayolunuza basın
+toast-clipboard-files-detected = Panoda dosyalar var — Freally File Manager ile kopyalamak için yapıştırma kısayolunuza basın
 toast-clipboard-no-files = Panoda yapıştırılacak dosya yok
 toast-error-log-exported = Hata günlüğü dışa aktarıldı
 
@@ -357,9 +357,9 @@ settings-error-display-drawer = Çekmece (engellemez)
 settings-error-display-mode-hint = Kalıcı pencere, siz karar verene kadar kuyruğu durdurur. Çekmece kuyruğu sürdürür ve hataları köşede ayıklamanıza olanak tanır.
 settings-paste-shortcut = Dosyaları genel kısayolla yapıştır
 settings-paste-shortcut-combo = Kısayol birleşimi
-settings-paste-shortcut-hint = Explorer / Finder / Files'tan kopyalanan dosyaları Copy That ile yapıştırmak için bu birleşime sisteminizin herhangi bir yerinde basın. CmdOrCtrl, macOS'ta Cmd, Windows / Linux'ta Ctrl olarak çözümlenir.
+settings-paste-shortcut-hint = Explorer / Finder / Files'tan kopyalanan dosyaları Freally File Manager ile yapıştırmak için bu birleşime sisteminizin herhangi bir yerinde basın. CmdOrCtrl, macOS'ta Cmd, Windows / Linux'ta Ctrl olarak çözümlenir.
 settings-clipboard-watcher = Kopyalanan dosyalar için panoyu izle
-settings-clipboard-watcher-hint = Panoda dosya URL'leri belirdiğinde, Copy That ile yapıştırabileceğinizi belirten bir bildirim göster. Etkinken her 500 ms'de bir yoklar.
+settings-clipboard-watcher-hint = Panoda dosya URL'leri belirdiğinde, Freally File Manager ile yapıştırabileceğinizi belirten bir bildirim göster. Etkinken her 500 ms'de bir yoklar.
 
 # Transfer tab
 settings-buffer-size = Arabellek boyutu
@@ -383,7 +383,7 @@ settings-force-parallel-chunks-hint = Her büyük kopyalamayı eşzamanlı parç
 # Shell tab
 settings-context-menu = Kabuk bağlam menüsü girişlerini etkinleştir
 settings-intercept-copy = Varsayılan kopyalama işleyicisini yakala (Windows)
-settings-intercept-copy-hint = Açıkken Explorer'ın Ctrl+C / Ctrl+V işlemleri Copy That üzerinden yönlendirilir. Kayıt Aşama 14'te gelir.
+settings-intercept-copy-hint = Açıkken Explorer'ın Ctrl+C / Ctrl+V işlemleri Freally File Manager üzerinden yönlendirilir. Kayıt Aşama 14'te gelir.
 settings-notify-completion = İş tamamlandığında bildir
 
 # Secure delete tab
@@ -452,7 +452,7 @@ settings-filters-skip-system = Sistem dosyalarını atla (yalnızca Windows)
 settings-filters-skip-readonly = Salt okunur dosyaları atla
 
 # Phase 15 — auto-update
-settings-updater-hint = Copy That, imzalı güncellemeleri günde en fazla bir kez denetler. Güncellemeler uygulamadan sonraki çıkışta yüklenir.
+settings-updater-hint = Freally File Manager, imzalı güncellemeleri günde en fazla bir kez denetler. Güncellemeler uygulamadan sonraki çıkışta yüklenir.
 settings-updater-auto-check = Başlangıçta güncellemeleri denetle
 settings-updater-channel = Sürüm kanalı
 settings-updater-channel-stable = Kararlı
@@ -488,17 +488,17 @@ settings-on-locked-ask = İlk seferinde sor
 settings-on-locked-retry = Kısa süre yeniden dene, sonra hatayı bildir
 settings-on-locked-skip = Kilitli dosyayı atla
 settings-on-locked-snapshot = Bir dosya sistemi anlık görüntüsü kullan
-settings-on-locked-hint = "Dosya başka bir işlem tarafından kullanılıyor" hatalarını ortadan kaldırır. Copy That, kaynak birimin anlık görüntüsünü alır (Windows'ta VSS, Linux'ta ZFS/Btrfs, macOS'ta APFS) ve anlık görüntü kopyasından okur.
+settings-on-locked-hint = "Dosya başka bir işlem tarafından kullanılıyor" hatalarını ortadan kaldırır. Freally File Manager, kaynak birimin anlık görüntüsünü alır (Windows'ta VSS, Linux'ta ZFS/Btrfs, macOS'ta APFS) ve anlık görüntü kopyasından okur.
 snapshot-prompt-title = Bu dosya başka bir işlem tarafından kullanılıyor
-snapshot-prompt-body = Başka bir program { $path } dosyasını özel yazma için açık tutuyor. Copy That'in bu ve aynı birimdeki benzer dosyaları nasıl ele alacağını seçin.
+snapshot-prompt-body = Başka bir program { $path } dosyasını özel yazma için açık tutuyor. Freally File Manager'in bu ve aynı birimdeki benzer dosyaları nasıl ele alacağını seçin.
 snapshot-source-active = 📷 { $volume } biriminin { $kind } anlık görüntüsünden okunuyor
 snapshot-create-failed = Kaynak birimin anlık görüntüsü oluşturulamadı
-snapshot-vss-needs-elevation = Bir VSS anlık görüntüsünden okumak Yönetici izni gerektirir. Copy That sizden buna izin vermenizi isteyecek.
+snapshot-vss-needs-elevation = Bir VSS anlık görüntüsünden okumak Yönetici izni gerektirir. Freally File Manager sizden buna izin vermenizi isteyecek.
 snapshot-cleanup-failed = Anlık görüntü yardımcısı bir temizleme hatası bildirdi — birimde kalıntı bir gölge kopya kalmış olabilir.
 
 # Phase 20 — durable resume journal.
 resume-prompt-title = Önceki aktarımlar sürdürülsün mü?
-resume-prompt-body = Copy That, önceki bir oturumdan { $count } tamamlanmamış aktarım algıladı. Her biri için ne yapılacağını seçin.
+resume-prompt-body = Freally File Manager, önceki bir oturumdan { $count } tamamlanmamış aktarım algıladı. Her biri için ne yapılacağını seçin.
 resume-prompt-resume = Devam et
 resume-prompt-resume-all = Tümünü sürdür
 resume-discard-one = Devam etme
@@ -681,7 +681,7 @@ dropstack-clear = Yığını temizle
 dropstack-remove-row = Yığından kaldır
 dropstack-path-missing-toast = { $path } bırakıldı — dosya artık yok.
 dropstack-always-on-top = Drop Stack'i her zaman üstte tut
-dropstack-show-tray-icon = Copy That tepsi simgesini göster
+dropstack-show-tray-icon = Freally File Manager tepsi simgesini göster
 dropstack-open-on-start = Uygulama başlangıcında Drop Stack'i otomatik aç
 dropstack-count = { $count } yol
 
@@ -778,7 +778,7 @@ cloud-error-keychain = İşletim sistemi anahtar zinciri erişimi başarısız o
 settings-tab-remotes = Uzak konumlar
 settings-tab-mobile = Mobil
 
-# Phase 33 — mount Copy That's chunk store + history archive as a
+# Phase 33 — mount Freally File Manager's chunk store + history archive as a
 # read-only filesystem (FUSE / WinFsp). Surfaced by the History tab
 # context menu's "Mount snapshot" action + the Settings → Advanced
 # "Mount latest on launch" toggle.
@@ -859,7 +859,7 @@ crypt-footer-compressed-badge = 📦 Sıkıştırıldı (zstd)
 # in English (engineering accessibility) but error / info / status
 # strings are localized so a localized desktop installation surfaces
 # CLI errors in the same language as the GUI.
-cli-help-tagline = Copy That CLI — CI/CD ardışık düzenleri için bayt düzeyinde tam dosya kopyalama, eşitleme, doğrulama ve denetim.
+cli-help-tagline = Freally File Manager CLI — CI/CD ardışık düzenleri için bayt düzeyinde tam dosya kopyalama, eşitleme, doğrulama ve denetim.
 cli-help-exit-codes = Çıkış kodları: 0 başarı, 1 hata, 2 bekliyor, 3 çakışma, 4 doğrulama-başarısız, 5 ağ, 6 izin, 7 disk-dolu, 8 iptal, 9 yapılandırma.
 cli-error-bad-args = copy/move en az bir kaynak ve bir hedef gerektirir
 cli-error-unknown-algo = Bilinmeyen doğrulama algoritması: { $algo }
@@ -887,7 +887,7 @@ cli-completions-emitted = { $shell } için kabuk tamamlamaları stdout'a yazdır
 settings-mobile-heading = Mobil yardımcı
 settings-mobile-hint = Geçmişe göz atmak, kaydedilmiş profilleri ve Aşama 36 jobspec'lerini başlatmak ve tamamlanma bildirimleri almak için bir iPhone veya Android telefon eşleştirin.
 settings-mobile-pair-toggle = Yeni eşleştirmelere izin ver
-settings-mobile-pair-active = Eşleştirme sunucusu etkin — QR'yi Copy That mobil uygulamasıyla tarayın
+settings-mobile-pair-active = Eşleştirme sunucusu etkin — QR'yi Freally File Manager mobil uygulamasıyla tarayın
 settings-mobile-pair-button = Eşleştirmeyi başlat
 settings-mobile-revoke-button = İptal et
 settings-mobile-no-pairings = Henüz eşleştirilmiş cihaz yok
@@ -905,7 +905,7 @@ push-toast-failed = { $device } cihazına push başarısız: { $reason }
 # Reflinked / 🔗 Hardlinked / 🧩 Chunk-shared / 📋 Copied) +
 # pre-pass dedup-scan modal.
 settings-dedup-heading = Hedef yinelenenleri ayıklama
-settings-dedup-hint = Kaynak ve hedef aynı birimi paylaştığında Copy That, baytları kopyalamak yerine dosyaları dosya sistemi düzeyinde klonlayabilir. Reflink anlık ve güvenlidir; hardlink daha hızlıdır ama her iki ad da durumu paylaşır.
+settings-dedup-hint = Kaynak ve hedef aynı birimi paylaştığında Freally File Manager, baytları kopyalamak yerine dosyaları dosya sistemi düzeyinde klonlayabilir. Reflink anlık ve güvenlidir; hardlink daha hızlıdır ama her iki ad da durumu paylaşır.
 settings-dedup-mode-auto = Otomatik merdiven (reflink → hardlink → yığın → kopya)
 settings-dedup-mode-reflink-only = Yalnızca reflink
 settings-dedup-mode-hardlink-aggressive = Agresif (yazılabilir dosyalarda bile reflink + hardlink)
@@ -1101,7 +1101,7 @@ err-pinned-destination-too-many = 50 tepsi hedefi sınırına ulaştınız. Baş
 # returned manifest + grant state.
 settings-tab-plugins = Eklentiler
 plugin-heading = Eklentiler
-plugin-hint = Yalıtılmış WASM eklentileri Copy That'i özel kancalarla genişletir. Her eklenti çağrı başına CPU ve bellek sınırları altında çalışır ve yalnızca verdiğiniz ana bilgisayar yeteneklerini görür.
+plugin-hint = Yalıtılmış WASM eklentileri Freally File Manager'i özel kancalarla genişletir. Her eklenti çağrı başına CPU ve bellek sınırları altında çalışır ve yalnızca verdiğiniz ana bilgisayar yeteneklerini görür.
 plugin-list-empty = Henüz yüklü eklenti yok.
 plugin-enabled = Etkin
 plugin-disabled = Devre dışı
@@ -1148,7 +1148,7 @@ diag-label = Tanılama
 
 # Phase 48 — server mode + observability (Settings → Server).
 settings-tab-server = Sunucu
-server-hint = Copy That'i arayüzsüz bir dosya sunucusu olarak çalıştırın. Sunulacak protokolleri seçin, adresi ve sunulacak klasörü ayarlayın ve isteğe bağlı olarak kimlik doğrulaması isteyin.
+server-hint = Freally File Manager'i arayüzsüz bir dosya sunucusu olarak çalıştırın. Sunulacak protokolleri seçin, adresi ve sunulacak klasörü ayarlayın ve isteğe bağlı olarak kimlik doğrulaması isteyin.
 server-protocols = Protokoller
 server-bind-addr = Bağlama adresi
 server-root = Sunulan klasör

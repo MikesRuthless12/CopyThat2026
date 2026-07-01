@@ -83,7 +83,7 @@ pub enum CliError {
 /// Short CLI help text printed by `--help` / `-h`. Not localised; see
 /// [`CliError`] note above.
 pub const HELP: &str = "\
-Copy That v0.19.84 — shell-integration CLI
+Freally File Manager v0.19.85 — shell-integration CLI
 
 Usage:
     copythat                                  Launch the GUI

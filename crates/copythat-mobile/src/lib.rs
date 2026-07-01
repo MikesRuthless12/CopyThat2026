@@ -1,6 +1,6 @@
 //! `copythat-mobile` — Phase 37 desktop-side mobile companion.
 //!
-//! Goal: a phone running the Copy That mobile PWA can pair with the
+//! Goal: a phone running the Freally File Manager mobile PWA can pair with the
 //! desktop over a PeerJS WebRTC data channel, browse the Phase 9
 //! history (read-only), trigger Phase 12 saved profiles plus Phase
 //! 36 TOML jobspecs, drive every active job (pause / resume /

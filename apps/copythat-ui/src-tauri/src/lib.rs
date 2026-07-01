@@ -1,4 +1,4 @@
-//! Copy That v0.19.84 — Tauri 2.x application shell.
+//! Freally File Manager v0.19.85 — Tauri 2.x application shell.
 //!
 //! The Rust side wires the Phase 1–4 engines to the Svelte frontend:
 //!
@@ -791,7 +791,7 @@ pub fn run() {
             };
             let menu = build_tray_menu(&app.handle().clone(), &pinned_initial)?;
             let _tray = TrayIconBuilder::with_id(TRAY_ICON_ID)
-                .tooltip("Copy That v0.19.84")
+                .tooltip("Freally File Manager v0.19.85")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -1033,7 +1033,7 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running Copy That v0.19.84");
+        .expect("error while running Freally File Manager v0.19.85");
 }
 
 /// Wave-2 observability — install the process-wide tracing

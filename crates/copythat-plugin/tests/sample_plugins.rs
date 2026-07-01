@@ -202,7 +202,10 @@ async fn notify_discord_emits_webhook_envelope() {
         "content must summarise files copied, got: {}",
         payload["content"]
     );
-    assert_eq!(payload["embeds"][0]["title"], "Copy That — job complete");
+    assert_eq!(
+        payload["embeds"][0]["title"],
+        "Freally File Manager — job complete"
+    );
 }
 
 #[tokio::test]
@@ -272,7 +275,10 @@ async fn notify_ntfy_emits_topic_envelope() {
     assert_eq!(envelope["target"], "ntfy");
     assert_eq!(envelope["url"], "https://ntfy.sh/copythat-mike");
     assert_eq!(envelope["headers"]["Priority"], "high");
-    assert_eq!(envelope["headers"]["Title"], "Copy That — job complete");
+    assert_eq!(
+        envelope["headers"]["Title"],
+        "Freally File Manager — job complete"
+    );
     let body = envelope["body"].as_str().expect("body is string");
     assert!(body.contains("7 files"), "body summarises files: {body}");
     assert!(body.contains("test-job-003"), "body carries job id: {body}");
